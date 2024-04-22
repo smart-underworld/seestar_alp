@@ -1,0 +1,37 @@
+https://git-scm.com/book/en/v2/Git-Basics-Recording-Changes-to-the-Repository
+
+On linux:
+
+navigate to https://github.com/usebruno/bruno
+select download bruno: https://www.usebruno.com/downloads
+I selected the Ubuntu/Debian binary to download (about 71MB .deb file) and installed
+
+I forked the project on github
+Then I cloned it locally.
+
+edited device/config.toml to use 
+  name = "Seestar MattC"
+  ip_address = "seestar.local"
+
+installed relevant packages in requirements.txt using pip3 at the command line
+
+Navigated to the device folder of seestar api and ran python3 app.py
+
+In Bruno, I needed to open the Seestar folder below 'bruno' folder, *Not* import the .json in the root
+Under "Environment" in upper right, I selected "Device 1" as there is only one unit active.
+
+Quick start to test running an existing command:
+On left, expanded "Get info" and selected action-get_device_state
+Then ctrl-enter to run the command
+
+To create a new command:
+- Can clone an existing one and rename/redit it by right-clicking on it in the left column
+- Click "+" in window on right.  This creates a new tab and brings up a dialog box
+- Add a new name and select "Put" from dropdown.
+- In field next to "Put" add: {{base_url}}/api/v1/telescope/{{dev_num}}/action
+- Under Body add 4 parameters with Key names of Action, Parameters, ClientID, ClientTransactionID
+- For values for each use method_sync, <a seestar json packet>, 1, 999
+- Under Headers add 2 headers with Name Content-Type and Accept.
+- For Value, use application/x-www-form-urlencoded and application/json
+- Ctrl-E or the -> arrow in the upper right will run the command.
+
