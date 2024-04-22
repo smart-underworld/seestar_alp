@@ -1,0 +1,23 @@
+meta {
+  name: http get image file
+  type: http
+  seq: 5
+}
+
+get {
+  url: http://192.168.110.30/MyWorks/Algol-sub/Light_Algol_90.0s_LP_20240319-225247.jpg
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+  Accept: application/json
+}
+
+body:form-urlencoded {
+  Action: method_sync
+  Parameters: {"method":"get_albums"}
+  ClientID: 1
+  ClientTransactionID: 999
+}

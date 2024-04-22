@@ -1,0 +1,40 @@
+{{! Alpaca Docstring Template - Derived from Google by Bob Denny 10-Apr-2022}}
+{{! We always want raises and remarks sections, no Yields}}
+{{summaryPlaceholder}}
+
+{{extendedSummaryPlaceholder}}
+{{#parametersExist}}
+
+Args:
+{{#args}}
+    {{var}} ({{typePlaceholder}}): {{descriptionPlaceholder}}
+{{/args}}
+{{#kwargs}}
+    {{var}} ({{typePlaceholder}}, optional): {{descriptionPlaceholder}}. Defaults to {{&default}}.
+{{/kwargs}}
+{{/parametersExist}}
+{{#returnsExist}}
+
+Returns:
+{{#returns}}
+    {{typePlaceholder}}: {{descriptionPlaceholder}}
+{{/returns}}
+{{/returnsExist}}
+
+Raises:
+{{#exceptionsExist}}
+{{#exceptions}}
+    {{type}}: {{descriptionPlaceholder}}
+{{/exceptions}}
+{{/exceptionsExist}}
+    {{descriptionPlaceholder}}Exception: {{descriptionPlaceholder}}
+    {{descriptionPlaceholder}}Exception: {{descriptionPlaceholder}}
+    DriverException: An error occurred that is not described by
+        one of the more specific ASCOM exceptions.
+        The device did not *successfully* complete the request.
+{{#placeholder}}
+Notes:
+    * {{descriptionPlaceholder}}
+    * {{descriptionPlaceholder}}
+    * {{descriptionPlaceholder}}
+{{/placeholder}}

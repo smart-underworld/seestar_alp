@@ -1,0 +1,23 @@
+meta {
+  name: action-is_stacked
+  type: http
+  seq: 22
+}
+
+put {
+  url: {{base_url}}/api/v1/telescope/{{dev_num}}/action
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+  Accept: application/json
+}
+
+body:form-urlencoded {
+  Action: method_sync
+  Parameters: {"method":"is_stacked"}
+  ClientID: 1
+  ClientTransactionID: 999
+}

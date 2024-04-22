@@ -1,0 +1,23 @@
+meta {
+  name: action-method_sync
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{base_url}}/api/v1/telescope/{{dev_num}}/action
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+  Accept: application/json
+}
+
+body:form-urlencoded {
+  Action: method_sync
+  Parameters: {"method":"scope_sync","params":[18.688661378045424,53.014484911168545]}
+  ClientID: 1
+  ClientTransactionID: 999
+}

@@ -1,0 +1,23 @@
+meta {
+  name: action-start_exposure
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{base_url}}/api/v1/telescope/{{dev_num}}/action
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+  Accept: application/json
+}
+
+body:form-urlencoded {
+  Action: method_sync
+  Parameters: {"method":"start_exposure","params":["light",false]}
+  ClientID: 1
+  ClientTransactionID: 999
+}

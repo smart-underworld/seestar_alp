@@ -1,0 +1,23 @@
+meta {
+  name: action-get_focuser_position_param
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{base_url}}/api/v1/telescope/{{dev_num}}/action
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+  Accept: application/json
+}
+
+body:form-urlencoded {
+  Action: method_sync
+  Parameters: {"method":"get_focuser_position","params":{"ret_obj":true}}
+  ClientID: 1
+  ClientTransactionID: 999
+}

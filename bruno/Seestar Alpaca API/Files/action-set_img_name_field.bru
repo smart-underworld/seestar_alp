@@ -1,0 +1,23 @@
+meta {
+  name: action-set_img_name_field
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{base_url}}/api/v1/telescope/{{dev_num}}/action
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+  Accept: application/json
+}
+
+body:form-urlencoded {
+  Action: method_sync
+  Parameters: {"method":"set_img_name_field", "params":{ "bin": true, "date_time": true,  "temp": true, "gain": true, "camera_name": false}}
+  ClientID: 1
+  ClientTransactionID: 999
+}

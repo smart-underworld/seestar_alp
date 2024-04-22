@@ -1,0 +1,217 @@
+====  during preview, does this work when stacking too? ====
+
+2024-04-01T07:41:58.952 INFO 127.0.0.1 -> PUT /api/v1/telescope/1/action
+2024-04-01T07:41:58.953 INFO 127.0.0.1 -> {'Action': 'method_sync', 'Parameters': '{"method":"start_solve"}', 'ClientID': '1', 'ClientTransactionID': '999'}
+2024-04-01T07:41:58.954 INFO Seestar Alpha sending: {"method": "start_solve", "id": 10011}
+2024-04-01T07:41:58.977 INFO Seestar Alpha received : {"jsonrpc":"2.0","Timestamp":"4514.655594001","method":"start_solve","result":0,"code":0,"id":10011}
+
+2024-04-01T07:41:58.983 INFO Seestar Alpha : {'jsonrpc': '2.0', 'Timestamp': '4514.655594001', 'method': 'start_solve', 'result': 0, 'code': 0, 'id': 10011}
+2024-04-01T07:41:59.055 INFO Seestar Alpha response is {'jsonrpc': '2.0', 'Timestamp': '4514.655594001', 'method': 'start_solve', 'result': 0, 'code': 0, 'id': 10011}
+2024-04-01T07:41:59.058 INFO 127.0.0.1 <- {'jsonrpc': '2.0', 'Timestamp': '4514.655594001', 'method': 'start_solve', 'result': 0, 'code': 0, 'id': 10011}
+2024-04-01T07:41:59.087 INFO Seestar Alpha received : {"Event":"PlateSolve","Timestamp":"4514.656863620","state":"working","lapse_ms":0,"route":[]}
+{"Event":"PlateSolve","Timestamp":"4514.658582154","page":"focus","state":"start"}
+
+2024-04-01T07:41:59.090 INFO Seestar Alpha : {'Event': 'PlateSolve', 'Timestamp': '4514.656863620', 'state': 'working', 'lapse_ms': 0, 'route': []}
+2024-04-01T07:41:59.094 INFO Seestar Alpha : {'Event': 'PlateSolve', 'Timestamp': '4514.658582154', 'page': 'focus', 'state': 'start'}
+2024-04-01T07:41:59.375 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=4925&ClientID=63968
+2024-04-01T07:41:59.377 INFO 127.0.0.1 <- 12.194722
+2024-04-01T07:41:59.383 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=4926&ClientID=63968
+2024-04-01T07:41:59.384 INFO 127.0.0.1 <- 5.171667
+2024-04-01T07:41:59.563 INFO Seestar Alpha received : {"Event":"PiStatus","Timestamp":"4515.241781720","temp":44.500000}
+
+2024-04-01T07:41:59.566 INFO Seestar Alpha : {'Event': 'PiStatus', 'Timestamp': '4515.241781720', 'temp': 44.5}
+2024-04-01T07:42:00.388 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=4927&ClientID=63968
+2024-04-01T07:42:00.389 INFO 127.0.0.1 <- 12.194722
+2024-04-01T07:42:00.396 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=4928&ClientID=63968
+2024-04-01T07:42:00.398 INFO 127.0.0.1 <- 5.171667
+2024-04-01T07:42:01.094 INFO Seestar Alpha received : {"Event":"PlateSolve","Timestamp":"4516.762074531","page":"focus","state":"solving","star_number":1150}
+
+2024-04-01T07:42:01.096 INFO Seestar Alpha : {'Event': 'PlateSolve', 'Timestamp': '4516.762074531', 'page': 'focus', 'state': 'solving', 'star_number': 1150}
+2024-04-01T07:42:01.193 INFO Seestar Alpha sending: {"id": 10012, "method": "scope_get_equ_coord"}
+2024-04-01T07:42:01.392 INFO Seestar Alpha received : {"jsonrpc":"2.0","Timestamp":"4516.883218924","method":"scope_get_equ_coord","result":{"ra":12.194722,"dec":5.171667},"code":0,"id":10012}
+
+2024-04-01T07:42:01.393 INFO Seestar Alpha : {'jsonrpc': '2.0', 'Timestamp': '4516.883218924', 'method': 'scope_get_equ_coord', 'result': {'ra': 12.194722, 'dec': 5.171667}, 'code': 0, 'id': 10012}
+
+
+
+==========
+
+2024-04-01T08:03:28.092 INFO Seestar Alpha : {'jsonrpc': '2.0', 'Timestamp': '5803.784886132', 'method': 'start_solve', 'result': 0, 'code': 0, 'id': 10057}
+2024-04-01T08:03:28.093 INFO Seestar Alpha : {'Event': 'PlateSolve', 'Timestamp': '5803.785412880', 'state': 'working', 'lapse_ms': 0, 'route': []}
+2024-04-01T08:03:28.185 INFO Seestar Alpha response is {'jsonrpc': '2.0', 'Timestamp': '5803.784886132', 'method': 'start_solve', 'result': 0, 'code': 0, 'id': 10057}
+2024-04-01T08:03:28.189 INFO 127.0.0.1 <- {'jsonrpc': '2.0', 'Timestamp': '5803.784886132', 'method': 'start_solve', 'result': 0, 'code': 0, 'id': 10057}
+2024-04-01T08:03:28.194 INFO Seestar Alpha received : {"Event":"PlateSolve","Timestamp":"5803.786230709","page":"focus","state":"start"}
+
+2024-04-01T08:03:28.198 INFO Seestar Alpha : {'Event': 'PlateSolve', 'Timestamp': '5803.786230709', 'page': 'focus', 'state': 'start'}
+2024-04-01T08:03:28.651 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=7049&ClientID=63968
+2024-04-01T08:03:28.652 INFO 127.0.0.1 <- 12.190556
+2024-04-01T08:03:28.656 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=7050&ClientID=63968
+2024-04-01T08:03:28.657 INFO 127.0.0.1 <- 3.510278
+2024-04-01T08:03:29.128 INFO Seestar Alpha received : {"Event":"PiStatus","Timestamp":"5804.822674860","temp":43.099998}
+
+2024-04-01T08:03:29.130 INFO Seestar Alpha : {'Event': 'PiStatus', 'Timestamp': '5804.822674860', 'temp': 43.099998}
+2024-04-01T08:03:29.725 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=7051&ClientID=63968
+2024-04-01T08:03:29.730 INFO 127.0.0.1 <- 12.190556
+2024-04-01T08:03:29.737 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=7052&ClientID=63968
+2024-04-01T08:03:29.740 INFO 127.0.0.1 <- 3.510278
+2024-04-01T08:03:30.214 INFO Seestar Alpha received : {"Event":"PlateSolve","Timestamp":"5805.908791920","page":"focus","state":"solving","star_number":1267}
+
+2024-04-01T08:03:30.217 INFO Seestar Alpha : {'Event': 'PlateSolve', 'Timestamp': '5805.908791920', 'page': 'focus', 'state': 'solving', 'star_number': 1267}
+2024-04-01T08:03:30.463 INFO Seestar Alpha sending: {"id": 10058, "method": "scope_get_equ_coord"}
+2024-04-01T08:03:30.656 INFO Seestar Alpha received : {"jsonrpc":"2.0","Timestamp":"5806.167401720","method":"scope_get_equ_coord","result":{"ra":12.190556,"dec":3.510278},"code":0,"id":10058}
+
+2024-04-01T08:03:30.658 INFO Seestar Alpha : {'jsonrpc': '2.0', 'Timestamp': '5806.167401720', 'method': 'scope_get_equ_coord', 'result': {'ra': 12.190556, 'dec': 3.510278}, 'code': 0, 'id': 10058}
+2024-04-01T08:03:30.659 INFO Seestar Alpha updated equ coordinate: 12.190556, 3.510278
+2024-04-01T08:03:30.789 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=7053&ClientID=63968
+2024-04-01T08:03:30.791 INFO 127.0.0.1 <- 12.190556
+2024-04-01T08:03:30.795 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=7054&ClientID=63968
+2024-04-01T08:03:30.796 INFO 127.0.0.1 <- 3.510278
+2024-04-01T08:03:31.803 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=7055&ClientID=63968
+2024-04-01T08:03:31.806 INFO 127.0.0.1 <- 12.190556
+2024-04-01T08:03:31.813 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=7056&ClientID=63968
+2024-04-01T08:03:31.814 INFO 127.0.0.1 <- 3.510278
+2024-04-01T08:03:32.890 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=7057&ClientID=63968
+2024-04-01T08:03:32.892 INFO 127.0.0.1 <- 12.190556
+2024-04-01T08:03:32.896 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=7058&ClientID=63968
+2024-04-01T08:03:32.897 INFO 127.0.0.1 <- 3.510278
+2024-04-01T08:03:33.467 INFO Seestar Alpha sending: {"id": 10059, "method": "scope_get_equ_coord"}
+2024-04-01T08:03:33.661 INFO Seestar Alpha received : {"jsonrpc":"2.0","Timestamp":"5809.171854082","method":"scope_get_equ_coord","result":{"ra":12.190556,"dec":3.510278},"code":0,"id":10059}
+
+2024-04-01T08:03:33.662 INFO Seestar Alpha : {'jsonrpc': '2.0', 'Timestamp': '5809.171854082', 'method': 'scope_get_equ_coord', 'result': {'ra': 12.190556, 'dec': 3.510278}, 'code': 0, 'id': 10059}
+2024-04-01T08:03:33.664 INFO Seestar Alpha updated equ coordinate: 12.190556, 3.510278
+2024-04-01T08:03:33.896 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=7059&ClientID=63968
+2024-04-01T08:03:33.897 INFO 127.0.0.1 <- 12.190556
+2024-04-01T08:03:33.901 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=7060&ClientID=63968
+2024-04-01T08:03:33.901 INFO 127.0.0.1 <- 3.510278
+2024-04-01T08:03:34.141 INFO Seestar Alpha received : {"Event":"PiStatus","Timestamp":"5809.836027256","temp":44.500000}
+
+2024-04-01T08:03:34.145 INFO Seestar Alpha : {'Event': 'PiStatus', 'Timestamp': '5809.836027256', 'temp': 44.5}
+2024-04-01T08:03:34.976 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=7061&ClientID=63968
+2024-04-01T08:03:34.978 INFO 127.0.0.1 <- 12.190556
+2024-04-01T08:03:34.981 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=7062&ClientID=63968
+2024-04-01T08:03:34.982 INFO 127.0.0.1 <- 3.510278
+2024-04-01T08:03:36.011 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=7063&ClientID=63968
+2024-04-01T08:03:36.012 INFO 127.0.0.1 <- 12.190556
+2024-04-01T08:03:36.015 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=7064&ClientID=63968
+2024-04-01T08:03:36.016 INFO 127.0.0.1 <- 3.510278
+2024-04-01T08:03:36.473 INFO Seestar Alpha sending: {"id": 10060, "method": "scope_get_equ_coord"}
+2024-04-01T08:03:36.683 INFO Seestar Alpha received : {"jsonrpc":"2.0","Timestamp":"5812.190104842","method":"scope_get_equ_coord","result":{"ra":12.190556,"dec":3.510278},"code":0,"id":10060}
+
+2024-04-01T08:03:36.686 INFO Seestar Alpha : {'jsonrpc': '2.0', 'Timestamp': '5812.190104842', 'method': 'scope_get_equ_coord', 'result': {'ra': 12.190556, 'dec': 3.510278}, 'code': 0, 'id': 10060}
+2024-04-01T08:03:36.689 INFO Seestar Alpha updated equ coordinate: 12.190556, 3.510278
+2024-04-01T08:03:37.093 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=7065&ClientID=63968
+2024-04-01T08:03:37.094 INFO 127.0.0.1 <- 12.190556
+2024-04-01T08:03:37.098 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=7066&ClientID=63968
+2024-04-01T08:03:37.098 INFO 127.0.0.1 <- 3.510278
+2024-04-01T08:03:38.131 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=7067&ClientID=63968
+2024-04-01T08:03:38.133 INFO 127.0.0.1 <- 12.190556
+2024-04-01T08:03:38.139 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=7068&ClientID=63968
+2024-04-01T08:03:38.140 INFO 127.0.0.1 <- 3.510278
+2024-04-01T08:03:39.204 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=7069&ClientID=63968
+2024-04-01T08:03:39.206 INFO 127.0.0.1 <- 12.190556
+2024-04-01T08:03:39.210 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=7070&ClientID=63968
+2024-04-01T08:03:39.211 INFO 127.0.0.1 <- 3.510278
+2024-04-01T08:03:39.492 INFO Seestar Alpha sending: {"id": 10061, "method": "scope_get_equ_coord"}
+2024-04-01T08:03:39.692 INFO Seestar Alpha received : {"jsonrpc":"2.0","Timestamp":"5815.200702594","method":"scope_get_equ_coord","result":{"ra":12.190556,"dec":3.510278},"code":0,"id":10061}
+
+2024-04-01T08:03:39.699 INFO Seestar Alpha : {'jsonrpc': '2.0', 'Timestamp': '5815.200702594', 'method': 'scope_get_equ_coord', 'result': {'ra': 12.190556, 'dec': 3.510278}, 'code': 0, 'id': 10061}
+2024-04-01T08:03:39.738 INFO Seestar Alpha updated equ coordinate: 12.190556, 3.510278
+2024-04-01T08:03:40.255 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=7071&ClientID=63968
+2024-04-01T08:03:40.256 INFO 127.0.0.1 <- 12.190556
+2024-04-01T08:03:40.260 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=7072&ClientID=63968
+2024-04-01T08:03:40.261 INFO 127.0.0.1 <- 3.510278
+2024-04-01T08:03:41.292 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=7073&ClientID=63968
+2024-04-01T08:03:41.292 INFO 127.0.0.1 <- 12.190556
+2024-04-01T08:03:41.297 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=7074&ClientID=63968
+2024-04-01T08:03:41.299 INFO 127.0.0.1 <- 3.510278
+2024-04-01T08:03:41.315 INFO Seestar Alpha received : {"Event":"PlateSolve","Timestamp":"5817.010406238","page":"focus","state":"complete","result":{"ra_dec":[12.192673,3.531950],"fov":[0.711440,1.265285],"focal_len":252.135208,"angle":-177.787994,"image_id":65535,"star_number":1267,"duration_ms":13223}}
+
+2024-04-01T08:03:41.316 INFO Seestar Alpha : {'Event': 'PlateSolve', 'Timestamp': '5817.010406238', 'page': 'focus', 'state': 'complete', 'result': {'ra_dec': [12.192673, 3.53195], 'fov': [0.71144, 1.265285], 'focal_len': 252.135208, 'angle': -177.787994, 'image_id': 65535, 'star_number': 1267, 'duration_ms': 13223}}
+2024-04-01T08:03:41.417 INFO Seestar Alpha received : {"Event":"PlateSolve","Timestamp":"5817.011109444","state":"complete","lapse_ms":13226,"route":[]}
+
+2024-04-01T08:03:41.418 INFO Seestar Alpha : {'Event': 'PlateSolve', 'Timestamp': '5817.011109444', 'state': 'complete', 'lapse_ms': 13226, 'route': []}
+2024-04-01T08:03:42.164 INFO Seestar Alpha received : {"Event":"PiStatus","Timestamp":"5817.858811159","temp":42.200001}
+
+2024-04-01T08:03:42.166 INFO Seestar Alpha : {'Event': 'PiStatus', 'Timestamp': '5817.858811159', 'temp': 42.200001}
+2024-04-01T08:03:42.327 INFO 127.0.0.1 -> GET /api/v1/telescope/1/rightascension?ClientTransactionID=7075&ClientID=63968
+2024-04-01T08:03:42.327 INFO 127.0.0.1 <- 12.190556
+2024-04-01T08:03:42.331 INFO 127.0.0.1 -> GET /api/v1/telescope/1/declination?ClientTransactionID=7076&ClientID=63968
+2024-04-01T08:03:42.331 INFO 127.0.0.1 <- 3.510278
+2024-04-01T08:03:42.498 INFO Seestar Alpha sending: {"id": 10062, "method": "scope_get_equ_coord"}
+2024-04-01T08:03:42.694 INFO Seestar Alpha received : {"jsonrpc":"2.0","Timestamp":"5818.202913173","method":"scope_get_equ_coord","result":{"ra":12.190556,"dec":3.510278},"code":0,"id":10062}
+
+===============
+
+failed below horizon
+
+2024-04-01T08:17:20.944 INFO 127.0.0.1 -> PUT /api/v1/telescope/1/action
+2024-04-01T08:17:20.946 INFO 127.0.0.1 -> {'Action': 'scope_goto_below_horizon', 'Parameters': '{"target_name":"test_target","ra":-1, "dec":-56.0}', 'ClientID': '1', 'ClientTransactionID': '999'}
+2024-04-01T08:17:34.851 INFO Seestar Alpha sending: {"id": 10010, "method": "scope_get_equ_coord"}
+2024-04-01T08:17:34.852 INFO Seestar Alpha received : {"Event":"PiStatus","Timestamp":"6641.452304760","temp":43.599998}
+
+2024-04-01T08:17:55.181 INFO Seestar Alpha : {'Event': 'PiStatus', 'Timestamp': '6641.452304760', 'temp': 43.599998}
+2024-04-01T08:17:55.183 INFO Seestar Alpha sending: {"method": "scope_goto", "params": [14.1286460322007, 19.081389], "id": 10011}
+2024-04-01T08:17:55.186 INFO Seestar Alpha sending: {"method": "scope_sync", "params": [14.1286460322007, 64.92425652439451], "id": 10012}
+2024-04-01T08:17:55.285 INFO Seestar Alpha received : {"Event":"Version","Timestamp":"6655.636558477","name":"ASI AIR imager","svr_ver_string":"1.0","svr_ver_int":29,"firmware_ver_int":2225,"firmware_ver_string":"2.25","is_verified":true}
+{"Event":"PiStatus","Timestamp":"6670.597972256","temp":43.599998}
+
+2024-04-01T08:17:55.287 INFO Seestar Alpha : {'Event': 'Version', 'Timestamp': '6655.636558477', 'name': 'ASI AIR imager', 'svr_ver_string': '1.0', 'svr_ver_int': 29, 'firmware_ver_int': 2225, 'firmware_ver_string': '2.25', 'is_verified': True}
+2024-04-01T08:17:55.288 INFO Seestar Alpha : {'Event': 'PiStatus', 'Timestamp': '6670.597972256', 'temp': 43.599998}
+2024-04-01T08:17:55.396 INFO Seestar Alpha received : {"jsonrpc":"2.0","Timestamp":"6670.896373467","method":"scope_get_equ_coord","result":{"ra":14.266944,"dec":19.081389},"code":0,"id":10010}
+
+2024-04-01T08:17:55.400 INFO Seestar Alpha : {'jsonrpc': '2.0', 'Timestamp': '6670.896373467', 'method': 'scope_get_equ_coord', 'result': {'ra': 14.266944, 'dec': 19.081389}, 'code': 0, 'id': 10010}
+2024-04-01T08:17:55.403 INFO Seestar Alpha updated equ coordinate: 14.266944, 19.081389
+2024-04-01T08:17:55.638 INFO Seestar Alpha received : {"jsonrpc":"2.0","Timestamp":"6671.087397143","method":"scope_goto","result":0,"code":0,"id":10011}
+
+2024-04-01T08:17:55.640 INFO Seestar Alpha : {'jsonrpc': '2.0', 'Timestamp': '6671.087397143', 'method': 'scope_goto', 'result': 0, 'code': 0, 'id': 10011}
+2024-04-01T08:17:55.848 INFO Seestar Alpha received : {"jsonrpc":"2.0","Timestamp":"6671.332490709","method":"scope_sync","error":"fail to operate","code":207,"id":10012}
+
+2024-04-01T08:17:55.851 INFO Seestar Alpha : {'jsonrpc': '2.0', 'Timestamp': '6671.332490709', 'method': 'scope_sync', 'error': 'fail to operate', 'code': 207, 'id': 10012}
+2024-04-01T08:17:56.133 INFO Seestar Alpha received : {"Event":"ScopeTrack","Timestamp":"6671.802175556","state":"off","tracking":false,"manual":false,"route":[]}
+
+2024-04-01T08:17:56.137 INFO Seestar Alpha : {'Event': 'ScopeTrack', 'Timestamp': '6671.802175556', 'state': 'off', 'tracking': False, 'manual': False, 'route': []}
+2024-04-01T08:17:56.188 INFO Seestar Alpha sending: {"method": "scope_goto", "params": [14.1286460322007, 19.081389], "id": 10013}
+2024-04-01T08:17:56.190 INFO Seestar Alpha sending: {"method": "set_sequence_setting", "params": [{"group_name": "test_target"}], "id": 10014}
+2024-04-01T08:17:56.240 INFO Seestar Alpha received : {"jsonrpc":"2.0","Timestamp":"6671.902200750","method":"scope_goto","error":"equipment is moving","code":203,"id":10013}
+{"jsonrpc":"2.0","Timestamp":"6671.908944637","method":"set_sequence_setting","result":0,"code":0,"id":10014}
+
+2024-04-01T08:17:56.241 INFO Seestar Alpha : {'jsonrpc': '2.0', 'Timestamp': '6671.902200750', 'method': 'scope_goto', 'error': 'equipment is moving', 'code': 203, 'id': 10013}
+2024-04-01T08:17:56.243 INFO Seestar Alpha : {'jsonrpc': '2.0', 'Timestamp': '6671.908944637', 'method': 'set_sequence_setting', 'result': 0, 'code': 0, 'id': 10014}
+2024-04-01T08:17:56.292 INFO Seestar Alpha response is {'jsonrpc': '2.0', 'Timestamp': '6671.908944637', 'method': 'set_sequence_setting', 'result': 0, 'code': 0, 'id': 10014}
+2024-04-01T08:17:56.295 INFO 127.0.0.1 <- Success
+
+
+
+========
+
+Solution: After move below horizon, call start solve and repeat!
+
+2024-04-01T08:37:18.954 INFO Seestar Alpha : {'Event': 'PlateSolve', 'Timestamp': '7834.670522408', 'page': 'focus', 'state': 'complete', 'result': {'ra_dec': [13.304056, -41.307101], 'fov': [0.712233, 1.272177], 'focal_len': 250.769333, 'angle': -176.854004, 'image_id': 65535, 'star_number': 1041, 'duration_ms': 7206}}
+2024-04-01T08:37:18.955 INFO Seestar Alpha : {'Event': 'PlateSolve', 'Timestamp': '7834.671352779', 'state': 'complete', 'lapse_ms': 7211, 'route': []}
+2024-04-01T08:37:19.086 INFO Seestar Alpha sending: {"id": 10072, "method": "scope_get_equ_coord"}
+2024-04-01T08:37:19.240 INFO Seestar Alpha received : {"Event":"PiStatus","Timestamp":"7834.954955180","temp":42.700001}
+
+2024-04-01T08:37:19.254 INFO Seestar Alpha : {'Event': 'PiStatus', 'Timestamp': '7834.954955180', 'temp': 42.700001}
+2024-04-01T08:37:19.356 INFO Seestar Alpha received : {"jsonrpc":"2.0","Timestamp":"7834.813109209","method":"scope_get_equ_coord","result":{"ra":13.443333,"dec":19.081389},"code":0,"id":10072}
+
+or  failed:
+
+2024-04-01T08:49:56.647 INFO Seestar Alpha received : {"Event":"PlateSolve","Timestamp":"8592.367917727","page":"focus","error":"solve failed","code":251,"state":"fail","result":{"star_number":1004,"duration_ms":31038}}
+{"Event":"PlateSolve","Timestamp":"8592.368420849","state":"fail","error":"solve failed","code":251,"lapse_ms":31043,"route":[]}
+
+2024-04-01T08:49:56.657 INFO Seestar Alpha : {'Event': 'PlateSolve', 'Timestamp': '8592.367917727', 'page': 'focus', 'error': 'solve failed', 'code': 251, 'state': 'fail', 'result': {'star_number': 1004, 'duration_ms': 31038}}
+2024-04-01T08:49:56.658 INFO Seestar Alpha : {'Event': 'PlateSolve', 'Timestamp': '8592.368420849', 'state': 'fail', 'error': 'solve failed', 'code': 251, 'lapse_ms': 31043, 'route': []}
+
+
+============
+
+04/01/2024
+
+TODO: 
+debug loop for auto center below horizon
+after a below horizon, the next one need to go back to above horizon for proper slew
+use a thread, and treat just like auto-goto, so we can stop slew with a separate command
+for stacking, need to take into account the stacking parameters like exposures, dither, gain, and filter used
+for preview, take into account the exposures
+
+

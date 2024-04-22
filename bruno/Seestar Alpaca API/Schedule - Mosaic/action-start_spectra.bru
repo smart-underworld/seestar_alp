@@ -1,0 +1,23 @@
+meta {
+  name: action-start_spectra
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{base_url}}/api/v1/telescope/{{dev_num}}/action
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+  Accept: application/json
+}
+
+body:form-urlencoded {
+  Action: start_spectra
+  Parameters: {"target_name":"kai_Algol3", "ra":-1.0, "dec":-1.0, "gain":120, "session_time_sec":600,"grating_lines":300}
+  ClientID: 1
+  ClientTransactionID: 999
+}

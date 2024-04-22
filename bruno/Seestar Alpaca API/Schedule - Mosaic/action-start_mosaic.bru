@@ -1,0 +1,23 @@
+meta {
+  name: action-start_mosaic
+  type: http
+  seq: 1
+}
+
+put {
+  url: {{base_url}}/api/v1/telescope/{{dev_num}}/action
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+  Accept: application/json
+}
+
+body:form-urlencoded {
+  Action: start_mosaic
+  Parameters: {"target_name":"kai32_NGC2244", "ra":-1.0, "dec":-1.0, "is_use_lp_filter":true, "session_time_sec":3600, "ra_num": 2, "dec_num": 2, "ra_offset_mult": 1.0, "dec_offset_mult": 1.0, "gain": 80}
+  ClientID: 1
+  ClientTransactionID: 999
+}

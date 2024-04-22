@@ -1,0 +1,23 @@
+meta {
+  name: action-iscope_stop_view_dark
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{base_url}}/api/v1/telescope/{{dev_num}}/action
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+  Accept: application/json
+}
+
+body:form-urlencoded {
+  Action: method_sync
+  Parameters: {"method":"iscope_stop_view","params":{"stage":"DarkLibrary"}}
+  ClientID: 1
+  ClientTransactionID: 999
+}

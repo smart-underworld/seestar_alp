@@ -1,0 +1,12 @@
+.git
+.pytest_cache
+.venv
+.venv2
+__pycache__
+device/__pycache__
+rotator.log*
+docs/build
+docs/refs
+alpycadevice.code-workspace
+skeletons/AlpycaDeviceSkeletons.code-workspace
+alpyca.log*

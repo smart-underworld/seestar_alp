@@ -1,0 +1,23 @@
+meta {
+  name: action-set_setting_dithering
+  type: http
+  seq: 1
+}
+
+put {
+  url: {{base_url}}/api/v1/telescope/{{dev_num}}/action
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+  Accept: application/json
+}
+
+body:form-urlencoded {
+  Action: method_sync
+  Parameters: {"method":"set_setting", "params":{"stack_dither": {   "pix": 50,   "interval": 15,   "enable": true}}}
+  ClientID: 1
+  ClientTransactionID: 999
+}

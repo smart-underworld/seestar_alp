@@ -1,0 +1,40 @@
+title = "Alpaca Sample Driver (Rotator)"
+
+[network]
+ip_address = '127.0.0.1'             # Any address
+port = 5555
+
+[server]
+location = 'Anywhere on Earth'  # Anything you want here
+verbose_driver_exceptions = true
+
+[device]
+can_reverse = true
+step_size = 1.0
+steps_per_sec = 6
+
+[logging]
+log_level = 'INFO'
+log_to_stdout = false
+max_size_mb = 5
+num_keep_logs = 10
+
+#[[seestars]]
+#name = "Seestar Alpha"
+#ip_address = "192.168.110.30"
+#device_num = 1
+
+
+[[seestars]]
+name = "Seestar Beta"
+ip_address = "192.168.110.36"
+#ip_address = "192.168.8.150"
+device_num = 2
+
+
+#[[seestars]]
+#name = "Seestar Gamma"
+#ip_address = "192.168.110.238"
+#ip_address = "192.168.8.117"
+#device_num = 3
+

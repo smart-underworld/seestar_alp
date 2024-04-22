@@ -1,0 +1,18 @@
+[
+  {
+    "_id": "e2eb6a74-b20d-4023-91ab-1cbc5380fc67",
+    "colName": "Alpaca Device Testing (Rotator)",
+    "created": "2022-12-17T17:17:32.992Z",
+    "sortNum": 10000,
+    "folders": [],
+    "settings": {}
+  },
+  {
+    "_id": "81596e36-20ed-4044-a647-e4309ec97c2d",
+    "colName": "Management",
+    "created": "2022-12-20T18:48:21.668Z",
+    "sortNum": 20000,
+    "folders": [],
+    "settings": {}
+  }
+]

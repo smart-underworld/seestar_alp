@@ -1,0 +1,365 @@
+[
+  {
+    "_id": "fd6449a5-e89b-44b5-bdad-df7a60fca8c6",
+    "colId": "81596e36-20ed-4044-a647-e4309ec97c2d",
+    "containerId": "",
+    "name": "Management API Versions",
+    "url": "http://192.168.0.42:5555/management/apiversions?ClientId=123&ClientTransactionID=321",
+    "method": "GET",
+    "sortNum": 10000,
+    "created": "2022-12-17T20:47:58.190Z",
+    "modified": "2022-12-20T18:50:07.852Z",
+    "headers": [],
+    "params": [
+      {
+        "name": "ClientId",
+        "value": "123",
+        "isPath": false
+      },
+      {
+        "name": "ClientTransactionID",
+        "value": "321",
+        "isPath": false
+      }
+    ],
+    "tests": []
+  },
+  {
+    "_id": "7c992e7b-10e2-4bf9-a9bc-d6cdd9346ad4",
+    "colId": "81596e36-20ed-4044-a647-e4309ec97c2d",
+    "containerId": "",
+    "name": "Management Description",
+    "url": "http://192.168.0.50:5555/management/v1/description?ClientId=123&ClientTransactionID=321",
+    "method": "GET",
+    "sortNum": 20000,
+    "created": "2022-12-17T20:50:44.080Z",
+    "modified": "2023-05-23T22:00:43.666Z",
+    "headers": [],
+    "params": [
+      {
+        "name": "ClientId",
+        "value": "123",
+        "isPath": false
+      },
+      {
+        "name": "ClientTransactionID",
+        "value": "321",
+        "isPath": false
+      }
+    ],
+    "tests": []
+  },
+  {
+    "_id": "8789fb6f-5738-4328-bde8-4a57833930e5",
+    "colId": "81596e36-20ed-4044-a647-e4309ec97c2d",
+    "containerId": "",
+    "name": "Management Configured Devices",
+    "url": "http://192.168.0.50:5555/management/v1/configureddevices?ClientId=123&ClientTransactionID=321",
+    "method": "GET",
+    "sortNum": 30000,
+    "created": "2022-12-17T20:58:35.601Z",
+    "modified": "2023-05-23T22:01:01.299Z",
+    "headers": [],
+    "params": [
+      {
+        "name": "ClientId",
+        "value": "123",
+        "isPath": false
+      },
+      {
+        "name": "ClientTransactionID",
+        "value": "321",
+        "isPath": false
+      }
+    ],
+    "tests": []
+  },
+  {
+    "_id": "fbb859e2-619f-43e1-97b5-9700207ecb4f",
+    "colId": "e2eb6a74-b20d-4023-91ab-1cbc5380fc67",
+    "containerId": "",
+    "name": "DriverVersion",
+    "url": "http://192.168.0.42:5555/api/v1/rotator/0/driverversion?ClientID=123&ClientTransactionID=321",
+    "method": "GET",
+    "sortNum": 40000,
+    "created": "2022-12-17T21:05:09.748Z",
+    "modified": "2022-12-30T23:17:56.221Z",
+    "headers": [],
+    "params": [
+      {
+        "name": "ClientID",
+        "value": "123",
+        "isPath": false
+      },
+      {
+        "name": "ClientTransactionID",
+        "value": "321",
+        "isPath": false
+      }
+    ],
+    "tests": []
+  },
+  {
+    "_id": "b75f4890-9dc4-49c9-a6e6-a2de7a9aaa2b",
+    "colId": "e2eb6a74-b20d-4023-91ab-1cbc5380fc67",
+    "containerId": "",
+    "name": "MoveAbsolute()",
+    "url": "http://localhost:5555/api/v1/rotator/0/moveabsolute",
+    "method": "PUT",
+    "sortNum": 30000,
+    "created": "2022-12-17T21:11:51.326Z",
+    "modified": "2023-05-30T00:42:39.260Z",
+    "headers": [],
+    "params": [],
+    "body": {
+      "type": "formencoded",
+      "raw": "",
+      "form": [
+        {
+          "name": "position",
+          "value": "120"
+        },
+        {
+          "name": "ClientID",
+          "value": "123"
+        },
+        {
+          "name": "ClientTransactionID",
+          "value": "321"
+        }
+      ]
+    },
+    "tests": []
+  },
+  {
+    "_id": "9314312e-1bc4-450b-af3b-e1195a1552a8",
+    "colId": "e2eb6a74-b20d-4023-91ab-1cbc5380fc67",
+    "containerId": "",
+    "name": "Connected",
+    "url": "http://localhost:5555/api/v1/rotator/0/connected",
+    "method": "PUT",
+    "sortNum": 20000,
+    "created": "2022-12-17T21:38:32.673Z",
+    "modified": "2023-05-30T22:42:24.346Z",
+    "headers": [],
+    "params": [],
+    "body": {
+      "type": "formencoded",
+      "raw": "",
+      "form": [
+        {
+          "name": "Connected",
+          "value": "True"
+        },
+        {
+          "name": "ClientID",
+          "value": "123"
+        },
+        {
+          "name": "ClientTransactionID",
+          "value": "321"
+        }
+      ]
+    },
+    "tests": []
+  },
+  {
+    "_id": "652dcf10-adbf-402c-b5b6-f05b7707babb",
+    "colId": "e2eb6a74-b20d-4023-91ab-1cbc5380fc67",
+    "containerId": "",
+    "name": "Reverse",
+    "url": "http://localhost:5555/api/v1/rotator/0/reverse",
+    "method": "PUT",
+    "sortNum": 50000,
+    "created": "2022-12-20T19:01:36.105Z",
+    "modified": "2023-05-30T23:46:07.115Z",
+    "headers": [],
+    "params": [],
+    "body": {
+      "type": "formencoded",
+      "raw": "",
+      "form": [
+        {
+          "name": "Reverse",
+          "value": "False"
+        },
+        {
+          "name": "ClientID",
+          "value": "123"
+        },
+        {
+          "name": "ClientTransactionid",
+          "value": "123456"
+        }
+      ]
+    },
+    "tests": []
+  },
+  {
+    "_id": "786fae39-5226-4ec4-a346-bc7dc612e60c",
+    "colId": "e2eb6a74-b20d-4023-91ab-1cbc5380fc67",
+    "containerId": "",
+    "name": "Position",
+    "url": "http://192.168.0.42:5555/api/v1/rotator/0/position?ClientID=123&ClientTransactionID=321",
+    "method": "GET",
+    "sortNum": 60000,
+    "created": "2022-12-20T19:05:27.170Z",
+    "modified": "2022-12-20T19:38:26.759Z",
+    "headers": [],
+    "params": [
+      {
+        "name": "ClientID",
+        "value": "123",
+        "isPath": false
+      },
+      {
+        "name": "ClientTransactionID",
+        "value": "321",
+        "isPath": false
+      }
+    ],
+    "tests": []
+  },
+  {
+    "_id": "cf41060e-8156-4d24-9249-04f76df1420e",
+    "colId": "e2eb6a74-b20d-4023-91ab-1cbc5380fc67",
+    "containerId": "",
+    "name": "MechanicalPosition",
+    "url": "http://192.168.0.42:5555/api/v1/rotator/0/mechanicalposition?ClientID=123&ClientTransactionID=321",
+    "method": "GET",
+    "sortNum": 70000,
+    "created": "2022-12-20T19:10:48.222Z",
+    "modified": "2022-12-20T19:38:16.090Z",
+    "headers": [],
+    "params": [
+      {
+        "name": "ClientID",
+        "value": "123",
+        "isPath": false
+      },
+      {
+        "name": "ClientTransactionID",
+        "value": "321",
+        "isPath": false
+      }
+    ],
+    "tests": []
+  },
+  {
+    "_id": "b41a7c9e-61d2-4049-ad80-06700e80cfe5",
+    "colId": "e2eb6a74-b20d-4023-91ab-1cbc5380fc67",
+    "containerId": "",
+    "name": "IsMoving",
+    "url": "http://192.168.0.42:5555/api/v1/rotator/0/ismoving?ClientID=123&ClientTransactionID=321",
+    "method": "GET",
+    "sortNum": 80000,
+    "created": "2022-12-20T20:11:14.649Z",
+    "modified": "2022-12-20T20:11:14.649Z",
+    "headers": [],
+    "params": [
+      {
+        "name": "ClientID",
+        "value": "123",
+        "isPath": false
+      },
+      {
+        "name": "ClientTransactionID",
+        "value": "321",
+        "isPath": false
+      }
+    ],
+    "tests": []
+  },
+  {
+    "_id": "6bbf43bb-3894-4cc0-9b87-ac37039c3a9d",
+    "colId": "e2eb6a74-b20d-4023-91ab-1cbc5380fc67",
+    "containerId": "",
+    "name": "Halt",
+    "url": "http://192.168.0.42:5555/api/v1/rotator/0/halt",
+    "method": "PUT",
+    "sortNum": 90000,
+    "created": "2022-12-20T21:06:29.397Z",
+    "modified": "2022-12-31T03:02:22.625Z",
+    "headers": [],
+    "params": [],
+    "body": {
+      "type": "formencoded",
+      "raw": "",
+      "form": [
+        {
+          "name": "ClientID",
+          "value": "123"
+        },
+        {
+          "name": "ClientTransactionID",
+          "value": "321"
+        }
+      ]
+    },
+    "tests": []
+  },
+  {
+    "_id": "a3a28831-2c47-421b-9f14-cf0186f652fa",
+    "colId": "e2eb6a74-b20d-4023-91ab-1cbc5380fc67",
+    "containerId": "",
+    "name": "CommandBool",
+    "url": "http://192.168.0.42:5555/api/v1/rotator/0/commandbool?ClientID=123&ClientTransactionID=321",
+    "method": "PUT",
+    "sortNum": 100000,
+    "created": "2022-12-27T16:53:44.357Z",
+    "modified": "2022-12-27T17:05:00.669Z",
+    "headers": [],
+    "params": [
+      {
+        "name": "ClientID",
+        "value": "123",
+        "isPath": false
+      },
+      {
+        "name": "ClientTransactionID",
+        "value": "321",
+        "isPath": false
+      }
+    ],
+    "body": {
+      "type": "formencoded",
+      "raw": "",
+      "form": [
+        {
+          "name": "Command",
+          "value": "\"foo\""
+        },
+        {
+          "name": "Raw",
+          "value": "false"
+        }
+      ]
+    },
+    "tests": []
+  },
+  {
+    "_id": "ff233d08-54c4-4d2e-9887-768b0acedf29",
+    "colId": "e2eb6a74-b20d-4023-91ab-1cbc5380fc67",
+    "containerId": "",
+    "name": "Connected",
+    "url": "http://localhost:5555/api/v1/rotator/0/connected?ClientID=123&ClientTransactionID=321",
+    "method": "GET",
+    "sortNum": 25000,
+    "created": "2023-05-29T22:22:29.996Z",
+    "modified": "2023-05-29T22:26:58.982Z",
+    "headers": [],
+    "params": [
+      {
+        "name": "ClientID",
+        "value": "123",
+        "isPath": false
+      },
+      {
+        "name": "ClientTransactionID",
+        "value": "321",
+        "isPath": false
+      }
+    ],
+    "tests": []
+  }
+]

@@ -1,0 +1,5733 @@
+{
+  "name": "Seestar Alpaca API",
+  "version": "1",
+  "items": [
+    {
+      "type": "http",
+      "name": "action-method_async",
+      "seq": 1,
+      "request": {
+        "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+        "method": "PUT",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "enabled": true
+          },
+          {
+            "name": "Accept",
+            "value": "application/json",
+            "enabled": true
+          }
+        ],
+        "body": {
+          "mode": "formUrlEncoded",
+          "formUrlEncoded": [
+            {
+              "name": "Action",
+              "value": "method_async",
+              "enabled": true
+            },
+            {
+              "name": "Parameters",
+              "value": "{\"method\":\"get_focuser_position\", \"params\":{\"ret_obj\":true}}",
+              "enabled": true
+            },
+            {
+              "name": "ClientID",
+              "value": "1",
+              "enabled": true
+            },
+            {
+              "name": "ClientTransactionID",
+              "value": "999",
+              "enabled": true
+            }
+          ],
+          "multipartForm": []
+        },
+        "auth": {
+          "mode": "none",
+          "basic": {
+            "username": "",
+            "password": ""
+          },
+          "bearer": {
+            "token": ""
+          }
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "query": []
+      }
+    },
+    {
+      "type": "http",
+      "name": "action-method_sync",
+      "seq": 2,
+      "request": {
+        "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+        "method": "PUT",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "enabled": true
+          },
+          {
+            "name": "Accept",
+            "value": "application/json",
+            "enabled": true
+          }
+        ],
+        "body": {
+          "mode": "formUrlEncoded",
+          "formUrlEncoded": [
+            {
+              "name": "Action",
+              "value": "method_sync",
+              "enabled": true
+            },
+            {
+              "name": "Parameters",
+              "value": "{\"method\":\"scope_sync\",\"params\":[18.688661378045424,53.014484911168545]}",
+              "enabled": true
+            },
+            {
+              "name": "ClientID",
+              "value": "1",
+              "enabled": true
+            },
+            {
+              "name": "ClientTransactionID",
+              "value": "999",
+              "enabled": true
+            }
+          ],
+          "multipartForm": []
+        },
+        "auth": {
+          "mode": "none",
+          "basic": {
+            "username": "",
+            "password": ""
+          },
+          "bearer": {
+            "token": ""
+          }
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "query": []
+      }
+    },
+    {
+      "type": "json",
+      "name": "bruno",
+      "seq": 1
+    },
+    {
+      "type": "folder",
+      "name": "Actions",
+      "items": [
+        {
+          "type": "http",
+          "name": "action-heater",
+          "seq": 2,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"pi_output_set2\", \"params\":{\"heater\":{\"state\":true,\"value\":90}}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-play_sound",
+          "seq": 1,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "play_sound",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"id\":81}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        }
+      ]
+    },
+    {
+      "type": "folder",
+      "name": "camera",
+      "items": [
+        {
+          "type": "http",
+          "name": "action-set_controls_gain",
+          "seq": 1,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"set_control_value\", \"params\":[\"gain\",80]}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-set_setting_ae_brightness",
+          "seq": 5,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"set_setting\",\"params\":{\"ae_bri_percent\":90}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-set_setting_exposures",
+          "seq": 4,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"set_setting\",",
+                  "enabled": true
+                },
+                {
+                  "name": "\"params\"",
+                  "value": "{  \"exp_ms\": {\"stack_l\": 10000,\"continuous\": 500}}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-start_exposure",
+          "seq": 2,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"start_exposure\",\"params\":[\"light\",false]}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-stop_exposure",
+          "seq": 3,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"stop_exposure\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        }
+      ]
+    },
+    {
+      "type": "folder",
+      "name": "Focuser",
+      "items": [
+        {
+          "type": "http",
+          "name": "action-get_focuser_position",
+          "seq": 3,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_focuser_position\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_focuser_position_param",
+          "seq": 4,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_focuser_position\",\"params\":{\"ret_obj\":true}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-start_auto_focus",
+          "seq": 1,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"start_auto_focuse\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-stop_auto_focus",
+          "seq": 2,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"stop_auto_focuse\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        }
+      ]
+    },
+    {
+      "type": "folder",
+      "name": "Files",
+      "items": [
+        {
+          "type": "http",
+          "name": "action-get_albums",
+          "seq": 1,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_albums\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_img_name_field",
+          "seq": 3,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_img_name_field\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_last_image",
+          "seq": 2,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "get_last_image",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"is_subframe\":true, \"is_thumb\":false}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-set_img_name_field",
+          "seq": 4,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"set_img_name_field\", \"params\":{ \"bin\": true, \"date_time\": true,  \"temp\": true, \"gain\": true, \"camera_name\": false}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-set_sequence_group_name",
+          "seq": 6,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"set_sequence_setting\", \"params\":[{\"group_name\":\"test_group_again\"}]}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "http get image file",
+          "seq": 5,
+          "request": {
+            "url": "http://192.168.110.30/MyWorks/Algol-sub/Light_Algol_90.0s_LP_20240319-225247.jpg",
+            "method": "GET",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_albums\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        }
+      ]
+    },
+    {
+      "type": "folder",
+      "name": "Filter Wheel",
+      "items": [
+        {
+          "type": "http",
+          "name": "action-lenhance",
+          "seq": 5,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"set_setting\",\"params\":{\"stack_lenhance\":true}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "get_wheel_position",
+          "seq": 3,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_wheel_position\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "get_wheel_setting",
+          "seq": 1,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_wheel_setting\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "get_wheel_state",
+          "seq": 2,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_wheel_state\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "set_wheel_position",
+          "seq": 4,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"set_wheel_position\",\"params\":[1]}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        }
+      ]
+    },
+    {
+      "type": "folder",
+      "name": "Get info",
+      "items": [
+        {
+          "type": "http",
+          "name": "action-get_annotated_result",
+          "seq": 14,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_annotate_result\",\"params\":{\"image_id\":3457}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_app_ap",
+          "seq": 24,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"pi_get_ap\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_camera_exp_and_bin",
+          "seq": 18,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_camera_exp_and_bin\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_camera_info",
+          "seq": 19,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_camera_info\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_camera_state",
+          "seq": 20,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_camera_state\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_control",
+          "seq": 6,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_controls\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_control_value_exposure",
+          "seq": 8,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_control_value\", \"params\":[\"exposure\"]}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_device_state",
+          "seq": 1,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_device_state\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_control_value_gain",
+          "seq": 7,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_control_value\", \"params\":[\"Gain\"]}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_disk_volume",
+          "seq": 21,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_disk_volume\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_image_save_path",
+          "seq": 16,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_image_save_path\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_img_name_field",
+          "seq": 17,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_img_name_field\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_last_solve_result",
+          "seq": 15,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_last_solve_result\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_setting",
+          "seq": 5,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_setting\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_stack_info",
+          "seq": 3,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_stack_info\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_stack_setting",
+          "seq": 2,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_stack_setting\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_test_setting",
+          "seq": 23,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_test_setting\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_user_location",
+          "seq": 10,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_user_location\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_view_state",
+          "seq": 4,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_view_state\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-iscope_get_app_state",
+          "seq": 25,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"iscope_get_app_state\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-is_stacked",
+          "seq": 22,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"is_stacked\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-pi_get_time",
+          "seq": 13,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"pi_get_time\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-scope_get_equ_coord",
+          "seq": 11,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"scope_get_equ_coord\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-scope_get_ra_dec",
+          "seq": 12,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"scope_get_ra_dec\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-scope_get_track_state",
+          "seq": 9,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"scope_get_track_state\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "get_app_setting",
+          "seq": 28,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_app_setting\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "get_sequence_setting",
+          "seq": 29,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_sequence_setting\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "set_app_setting_goto_target_name",
+          "seq": 27,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"set_app_setting\",\"params\":[{\"goto_target_name\":\"Kai_goto_target_name\"}]}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "set_sequence_setting",
+          "seq": 26,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"set_sequence_setting\",\"params\":[{\"group_name\":\"kai_Sombrerro\"}]}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        }
+      ]
+    },
+    {
+      "type": "folder",
+      "name": "GettingStarted",
+      "items": [
+        {
+          "type": "http",
+          "name": "action-pi_shutdown",
+          "seq": 3,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"pi_shutdown\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-start_mosaic",
+          "seq": 2,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "start_mosaic",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"target_name\":\"kai32_NGC2244\", \"ra\":-1.0, \"dec\":-1.0, \"is_use_lp_filter\":true, \"session_time_sec\":3600, \"ra_num\": 2, \"dec_num\": 2, \"ra_offset_mult\": 1.0, \"dec_offset_mult\": 1.0, \"gain\": 80}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action_start_up_sequence",
+          "seq": 1,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "action_start_up_sequence",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"lat\":0, \"lon\":0}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        }
+      ]
+    },
+    {
+      "type": "folder",
+      "name": "Mount and Platesolving",
+      "items": [
+        {
+          "type": "http",
+          "name": "action-get_last_solve_result",
+          "seq": 7,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_last_solve_result\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_solve_result",
+          "seq": 8,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"get_solve_result\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-scope_park",
+          "seq": 5,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"scope_park\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-scope_set_track_state",
+          "seq": 4,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"scope_set_track_state\", \"params\":true}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-set_setting_dithering",
+          "seq": 1,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"set_setting\", \"params\":{\"stack_dither\": {   \"pix\": 50,   \"interval\": 15,   \"enable\": true}}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-set_setting_horizontalCal",
+          "seq": 3,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"set_setting\", \"params\":{\"auto_3ppa_calib\": true}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-set_stack_setting",
+          "seq": 2,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"set_stack_setting\", \"params\":{  \"save_discrete_frame\": true,  \"save_discrete_ok_frame\": true,  \"light_duration_min\": -1}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-start_solve",
+          "seq": 6,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"start_solve\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "folder",
+          "name": "Move",
+          "items": [
+            {
+              "type": "http",
+              "name": "action-scope_speed_move_fast",
+              "seq": 2,
+              "request": {
+                "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+                "method": "PUT",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "application/x-www-form-urlencoded",
+                    "enabled": true
+                  },
+                  {
+                    "name": "Accept",
+                    "value": "application/json",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "formUrlEncoded",
+                  "formUrlEncoded": [
+                    {
+                      "name": "Action",
+                      "value": "method_sync",
+                      "enabled": true
+                    },
+                    {
+                      "name": "Parameters",
+                      "value": "{\"method\":\"scope_speed_move\",\"params\":{\"speed\":1000,\"angle\":90,\"dur_sec\":4}}",
+                      "enabled": true
+                    },
+                    {
+                      "name": "ClientID",
+                      "value": "1",
+                      "enabled": true
+                    },
+                    {
+                      "name": "ClientTransactionID",
+                      "value": "999",
+                      "enabled": true
+                    }
+                  ],
+                  "multipartForm": []
+                },
+                "auth": {
+                  "mode": "none",
+                  "basic": {
+                    "username": "",
+                    "password": ""
+                  },
+                  "bearer": {
+                    "token": ""
+                  }
+                },
+                "script": {},
+                "vars": {},
+                "assertions": [],
+                "tests": "",
+                "query": []
+              }
+            },
+            {
+              "type": "http",
+              "name": "action-scope_speed_move_slow_right",
+              "seq": 1,
+              "request": {
+                "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+                "method": "PUT",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "application/x-www-form-urlencoded",
+                    "enabled": true
+                  },
+                  {
+                    "name": "Accept",
+                    "value": "application/json",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "formUrlEncoded",
+                  "formUrlEncoded": [
+                    {
+                      "name": "Action",
+                      "value": "method_sync",
+                      "enabled": true
+                    },
+                    {
+                      "name": "Parameters",
+                      "value": "{\"method\":\"scope_speed_move\",\"params\":{\"speed\":10,\"angle\":180,\"dur_sec\":1}}",
+                      "enabled": true
+                    },
+                    {
+                      "name": "ClientID",
+                      "value": "1",
+                      "enabled": true
+                    },
+                    {
+                      "name": "ClientTransactionID",
+                      "value": "999",
+                      "enabled": true
+                    }
+                  ],
+                  "multipartForm": []
+                },
+                "auth": {
+                  "mode": "none",
+                  "basic": {
+                    "username": "",
+                    "password": ""
+                  },
+                  "bearer": {
+                    "token": ""
+                  }
+                },
+                "script": {},
+                "vars": {},
+                "assertions": [],
+                "tests": "",
+                "query": []
+              }
+            },
+            {
+              "type": "http",
+              "name": "action-scope_speed_stop",
+              "seq": 3,
+              "request": {
+                "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+                "method": "PUT",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "application/x-www-form-urlencoded",
+                    "enabled": true
+                  },
+                  {
+                    "name": "Accept",
+                    "value": "application/json",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "formUrlEncoded",
+                  "formUrlEncoded": [
+                    {
+                      "name": "Action",
+                      "value": "method_sync",
+                      "enabled": true
+                    },
+                    {
+                      "name": "Parameters",
+                      "value": "{\"method\":\"scope_speed_move\",\"params\":{\"speed\":0,\"angle\":0,\"dur_sec\":3}}",
+                      "enabled": true
+                    },
+                    {
+                      "name": "ClientID",
+                      "value": "1",
+                      "enabled": true
+                    },
+                    {
+                      "name": "ClientTransactionID",
+                      "value": "999",
+                      "enabled": true
+                    }
+                  ],
+                  "multipartForm": []
+                },
+                "auth": {
+                  "mode": "none",
+                  "basic": {
+                    "username": "",
+                    "password": ""
+                  },
+                  "bearer": {
+                    "token": ""
+                  }
+                },
+                "script": {},
+                "vars": {},
+                "assertions": [],
+                "tests": "",
+                "query": []
+              }
+            },
+            {
+              "type": "http",
+              "name": "goto_target",
+              "seq": 4,
+              "request": {
+                "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+                "method": "PUT",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "application/x-www-form-urlencoded",
+                    "enabled": true
+                  },
+                  {
+                    "name": "Accept",
+                    "value": "application/json",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "formUrlEncoded",
+                  "formUrlEncoded": [
+                    {
+                      "name": "Action",
+                      "value": "goto_target",
+                      "enabled": true
+                    },
+                    {
+                      "name": "Parameters",
+                      "value": "{\"target_name\":\"test_target\",\"ra\":-1, \"dec\":-56.0}",
+                      "enabled": true
+                    },
+                    {
+                      "name": "ClientID",
+                      "value": "1",
+                      "enabled": true
+                    },
+                    {
+                      "name": "ClientTransactionID",
+                      "value": "999",
+                      "enabled": true
+                    }
+                  ],
+                  "multipartForm": []
+                },
+                "auth": {
+                  "mode": "none",
+                  "basic": {
+                    "username": "",
+                    "password": ""
+                  },
+                  "bearer": {
+                    "token": ""
+                  }
+                },
+                "script": {},
+                "vars": {},
+                "assertions": [],
+                "tests": "",
+                "query": []
+              }
+            },
+            {
+              "type": "http",
+              "name": "set_below_horizon_dec_offset",
+              "seq": 5,
+              "request": {
+                "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+                "method": "PUT",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "application/x-www-form-urlencoded",
+                    "enabled": true
+                  },
+                  {
+                    "name": "Accept",
+                    "value": "application/json",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "formUrlEncoded",
+                  "formUrlEncoded": [
+                    {
+                      "name": "Action",
+                      "value": "set_below_horizon_dec_offset",
+                      "enabled": true
+                    },
+                    {
+                      "name": "Parameters",
+                      "value": "{\"offset\":0}",
+                      "enabled": true
+                    },
+                    {
+                      "name": "ClientID",
+                      "value": "1",
+                      "enabled": true
+                    },
+                    {
+                      "name": "ClientTransactionID",
+                      "value": "999",
+                      "enabled": true
+                    }
+                  ],
+                  "multipartForm": []
+                },
+                "auth": {
+                  "mode": "none",
+                  "basic": {
+                    "username": "",
+                    "password": ""
+                  },
+                  "bearer": {
+                    "token": ""
+                  }
+                },
+                "script": {},
+                "vars": {},
+                "assertions": [],
+                "tests": "",
+                "query": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "folder",
+      "name": "Schedule - Mosaic",
+      "items": [
+        {
+          "type": "http",
+          "name": "action-add_schedule_item_auto_focus",
+          "seq": 10,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "add_schedule_item",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"action\":\"auto_focus\", \"params\":{\"ry_count\":2}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-add_schedule_item_mosaic",
+          "seq": 7,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "add_schedule_item",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"action\":\"start_mosaic\", \"params\":{\"target_name\":\"kai_Capella\", \"ra\":-1.0, \"dec\":-1.0,",
+                  "enabled": true
+                },
+                {
+                  "name": "\"is_use_lp_filter\"",
+                  "value": "false, \"session_time_sec\":500, \"ra_num\": 1, \"dec_num\": 1, \"ra_offset_mult\": 1.0, \"dec_offset_mult\": 1.0, \"gain\": 80}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-add_schedule_item_shutdown",
+          "seq": 11,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "add_schedule_item",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"action\":\"shutdown\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-add_schedule_item_wait_until_time",
+          "seq": 8,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "add_schedule_item",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"action\":\"wait_until\", \"params\":{\"local_time\":\"23:00\"}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-add_schedule_item_wait_until_timer",
+          "seq": 9,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "add_schedule_item",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"action\":\"wait_for\", \"params\":{\"timer_sec\":60}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-create-schedule",
+          "seq": 6,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "create_schedule",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-get_schedule",
+          "seq": 3,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "get_schedule",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-start_mosaic",
+          "seq": 1,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "start_mosaic",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"target_name\":\"kai32_NGC2244\", \"ra\":-1.0, \"dec\":-1.0, \"is_use_lp_filter\":true, \"session_time_sec\":3600, \"ra_num\": 2, \"dec_num\": 2, \"ra_offset_mult\": 1.0, \"dec_offset_mult\": 1.0, \"gain\": 80}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-start_scheduler",
+          "seq": 4,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "start_scheduler",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-start_spectra",
+          "seq": 2,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "start_spectra",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"target_name\":\"kai_Algol3\", \"ra\":-1.0, \"dec\":-1.0, \"gain\":120, \"session_time_sec\":600,\"grating_lines\":300}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-stop_scheduler",
+          "seq": 5,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Parameters",
+                  "value": "{}",
+                  "enabled": true
+                },
+                {
+                  "name": "Action",
+                  "value": "stop_scheduler",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        }
+      ]
+    },
+    {
+      "type": "folder",
+      "name": "Startup and Shutdown",
+      "items": [
+        {
+          "type": "http",
+          "name": "action-pi_reboot",
+          "seq": 4,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"pi_reboot\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-pi_shutdown",
+          "seq": 3,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"pi_shutdown\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-verify",
+          "seq": 1,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"pi_is_verified\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action_start_up_sequence",
+          "seq": 2,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "action_start_up_sequence",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"lat\":0, \"lon\":0}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        }
+      ]
+    },
+    {
+      "type": "folder",
+      "name": "Sync and Goto",
+      "items": [
+        {
+          "type": "http",
+          "name": "action-iscope_start_stack_with_gain",
+          "seq": 2,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "start_stack",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"gain\":80, \"restart\": true}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-iscope_stop_view",
+          "seq": 6,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"iscope_stop_view\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-iscope_stop_view_goto",
+          "seq": 3,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"iscope_stop_view\",\"params\":{\"stage\":\"AutoGoto\"}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-iscope_stop_view_stack",
+          "seq": 4,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"iscope_stop_view\",\"params\":{\"stage\":\"AutoGoto\"}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-iscope_stop_view_dark",
+          "seq": 5,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"iscope_stop_view\",\"params\":{\"stage\":\"DarkLibrary\"}}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
+          "name": "action-sync_scope",
+          "seq": 1,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"scope_sync\",\"params\":[18.63,30.8]}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        }
+      ]
+    }
+  ],
+  "activeEnvironmentUid": "PFX9fmBj9xUIB1VdBCxr9",
+  "environments": [
+    {
+      "variables": [
+        {
+          "name": "base_url",
+          "value": "http://localhost:5555",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "dev_num",
+          "value": "1",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        }
+      ],
+      "name": "Device 1"
+    },
+    {
+      "variables": [
+        {
+          "name": "base_url",
+          "value": "http://localhost:5555",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "dev_num",
+          "value": "2",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        }
+      ],
+      "name": "Device 2"
+    },
+    {
+      "variables": [
+        {
+          "name": "base_url",
+          "value": "http://localhost:5555",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "dev_num",
+          "value": "3",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        }
+      ],
+      "name": "Device 3"
+    }
+  ]
+}
