@@ -13,7 +13,8 @@ You can add as many Seestars as you like.
 Install python required libraries:
 pip install -r requirements.txt
 
-Install bruno and import the API commands from "Seestar Alpaca API.json"
+Install bruno and open the collection inside Bruno folder.
+
 bruno is a simple GUI for calling Seestar Alpaca API commands.
 
 Run seestar_alp by navigating to the device folder and issue the command:
