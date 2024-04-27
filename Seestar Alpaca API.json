@@ -418,12 +418,7 @@
                 },
                 {
                   "name": "Parameters",
-                  "value": "{\"method\":\"set_setting\",",
-                  "enabled": true
-                },
-                {
-                  "name": "\"params\"",
-                  "value": "{  \"exp_ms\": {\"stack_l\": 10000,\"continuous\": 500}}}",
+                  "value": "{\"method\":\"set_setting\", \"params\":{  \"exp_ms\": {\"stack_l\": 10000,\"continuous\": 500}}}",
                   "enabled": true
                 },
                 {
@@ -4439,12 +4434,7 @@
                 },
                 {
                   "name": "Parameters",
-                  "value": "{\"action\":\"start_mosaic\", \"params\":{\"target_name\":\"kai_Capella\", \"ra\":-1.0, \"dec\":-1.0,",
-                  "enabled": true
-                },
-                {
-                  "name": "\"is_use_lp_filter\"",
-                  "value": "false, \"session_time_sec\":500, \"ra_num\": 1, \"dec_num\": 1, \"ra_offset_mult\": 1.0, \"dec_offset_mult\": 1.0, \"gain\": 80}}",
+                  "value": "{\"action\":\"start_mosaic\", \"params\":{\"target_name\":\"kai_Capella\", \"ra\":-1.0, \"dec\":-1.0, \"is_use_lp_filter\":false, \"session_time_sec\":500, \"ra_num\": 1, \"dec_num\": 1, \"ra_offset_mult\": 1.0, \"dec_offset_mult\": 1.0, \"gain\": 80}}",
                   "enabled": true
                 },
                 {
