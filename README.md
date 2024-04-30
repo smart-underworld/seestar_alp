@@ -1,6 +1,6 @@
 # Seestar_Alp
 
-## Version 1.0a1, April 22, 2024 (experimental)
+## Version 1.0a2, April 30, 2024 (experimental)
 
 This project, based on AlpacaDevice, is a lightweight Python framework to control and automate all aspect of Seestar S50.
 It implements and extends the Alpaca protocol and ASCOM Standards
