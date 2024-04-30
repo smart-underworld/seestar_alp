@@ -1,0 +1,16 @@
+Change Log
+
+version 1.0.0a2 - April 30, 2024
+----------------
+Added support for J2000
+Updated logic for Mosaic Panel Overlap
+- base on overlap percentage
+- spacing depends on dec position for more accurate spacing
+- added more API examples
+- bug fixes
+
+
+
+version 1.0.0a1
+----------------
+initial release

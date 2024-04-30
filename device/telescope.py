@@ -1570,7 +1570,7 @@ class slewtocoordinates:
         ### RANGE CHECK AS NEEDED ###       # Raise Alpaca InvalidValueException with details!
         try:
             # -----------------------------
-            seestar_dev[devnum].goto_target({'ra':rightascension, 'dec':declination, 'target_name':"unknown"})
+            seestar_dev[devnum].goto_target({'ra':rightascension, 'dec':declination, 'is_j2000': False, 'target_name':"unknown"})
             # -----------------------------
             resp.text = MethodResponse(req).json
         except Exception as ex:
@@ -1603,7 +1603,7 @@ class slewtocoordinatesasync:
         ### RANGE CHECK AS NEEDED ###       # Raise Alpaca InvalidValueException with details!
         try:
             # -----------------------------
-            seestar_dev[devnum].goto_target({'ra':rightascension, 'dec':declination, 'target_name':"unknown"})
+            seestar_dev[devnum].goto_target({'ra':rightascension, 'dec':declination, 'is_j2000': False, 'target_name':"unknown"})
             # -----------------------------
             resp.text = MethodResponse(req).json
         except Exception as ex:
@@ -1620,7 +1620,7 @@ class slewtotarget:
             return
         try:
             # -----------------------------
-            seestar_dev[devnum].goto_target({'ra':seestar_dev[devnum].target_ra, 'dec':seestar_dev[devnum].target_dec, 'target_name':"unknown"})
+            seestar_dev[devnum].goto_target({'ra':seestar_dev[devnum].target_ra, 'dec':seestar_dev[devnum].target_dec, 'is_j2000': False, 'target_name':"unknown"})
             # -----------------------------
             resp.text = MethodResponse(req).json
         except Exception as ex:
@@ -1637,7 +1637,7 @@ class slewtotargetasync:
             return
         try:
             # -----------------------------
-            seestar_dev[devnum].goto_target({'ra':seestar_dev[devnum].target_ra, 'dec':seestar_dev[devnum].target_dec, 'target_name':"unknown"})
+            seestar_dev[devnum].goto_target({'ra':seestar_dev[devnum].target_ra, 'dec':seestar_dev[devnum].target_dec, 'is_j2000': False, 'target_name':"unknown"})
             # -----------------------------
             resp.text = MethodResponse(req).json
         except Exception as ex:

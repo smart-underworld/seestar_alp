@@ -1,5 +1,5 @@
 meta {
-  name: action-start_spectra
+  name: action-start_mosaic_j2000
   type: http
   seq: 2
 }
@@ -16,8 +16,8 @@ headers {
 }
 
 body:form-urlencoded {
-  Action: start_spectra
-  Parameters: {"target_name":"kai_Algol3", "ra":-1.0, "dec":-1.0, "is_j2000": false, "gain":120, "session_time_sec":600,"grating_lines":300}
+  Action: start_mosaic
+  Parameters: {"target_name":"kai32_NGC2244", "ra":"6h31m54.23s", "dec":"+4d56m26.4s", "is_j2000":true, "is_use_lp_filter":true, "session_time_sec":3600, "ra_num": 2, "dec_num": 2, "panel_overlap_percent": 20, "gain": 80}
   ClientID: 1
   ClientTransactionID: 999
 }

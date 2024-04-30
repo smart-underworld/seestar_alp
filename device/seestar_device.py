@@ -4,9 +4,10 @@ import time
 from datetime import datetime
 import threading
 import sys, os
+import math
 
 import tzlocal
-import geocoder
+from seestar_util import Util
 
 class Seestar:
     def __new__(cls, *args, **kwargs):
@@ -197,8 +198,12 @@ class Seestar:
 
 
     def goto_target(self, params):
+        is_j2000 = params['is_j2000']
         in_ra = params['ra']
         in_dec = params['dec']
+        parsed_coord = Util.parse_coordinate(is_j2000, in_ra, in_dec)
+        in_ra = parsed_coord.ra.hour
+        in_dec = parsed_coord.dec.deg
         target_name = params['target_name']
         print(self.device_name, ": going to target...", target_name, in_ra, in_dec, ", with dec offset ", self.below_horizon_dec_offset)   
         if self.is_goto():
@@ -441,13 +446,6 @@ class Seestar:
             result_url = result_url.partition("_thn.jpg")[0] + ".jpg"
         return {"url":"http://"+ self.host + "/"+parent_folder+"/" + result_url, 
                 "name":result_name}
-    
-    def get_current_gps_coordinates(self):
-        g = geocoder.ip('me') #this function is used to find the current information using our IP Add
-        if g.latlng is not None: #g.latlng tells if the coordiates are found or not
-            return g.latlng
-        else:
-            return None
 
     # move from -90 to this latitude
     # speed 1000 for 20 seconds is 90 degrees
@@ -485,7 +483,7 @@ class Seestar:
         loc_param = {}
         # special loc for south pole: (-90, 0)
         if params['lat'] == 0 and params['lon'] == 0:     # special case of (0,0,) will use the ip address to estimate the location
-            coordinates = self.get_current_gps_coordinates()
+            coordinates = Util.get_current_gps_coordinates()
             if coordinates is not None:
                 latitude, longitude = coordinates
                 print(f"Your current GPS coordinates are:")
@@ -530,12 +528,17 @@ class Seestar:
 
         center_RA = params["ra"]
         center_Dec = params["dec"]
+        is_j2000 = params['is_j2000']
         target_name = params["target_name"]
         session_length = params["session_time_sec"]
         stack_params =  {"gain":params["gain"], "restart": True}
         spacing = [5.3,   6.2,   6.5,  7.1,   8.0,   8.9,   9.2,  9.8]
         is_LP =   [False, False, True, False, False, False, True, False]
         num_segments = len(spacing)
+
+        parsed_coord = Util.parse_coordinate(is_j2000, center_RA, center_Dec)
+        center_RA = parsed_coord.ra.hour
+        center_Dec = parsed_coord.dec.deg
 
         # 60s for the star
         exposure_time_per_segment = round((session_length - 60.0) / num_segments)
@@ -601,13 +604,11 @@ class Seestar:
         self.mosaic_thread.start()
 
     
-    def mosaic_thread_fn(self, target_name, center_RA, center_Dec, is_use_LP_filter, session_time, nRA, nDec, mRA, mDec, gain):   
-        delta_RA = 0.04
-        delta_Dec = 0.9
-        
-        delta_RA *= mRA
-        delta_Dec *= mDec
-        
+    def mosaic_thread_fn(self, target_name, center_RA, center_Dec, is_use_LP_filter, session_time, nRA, nDec, overlap_percent, gain):   
+        spacing_result = Util.mosaic_next_center_spacing(center_RA, center_Dec, overlap_percent)
+        delta_RA = spacing_result[0]
+        delta_Dec = spacing_result[1]
+
         # adjust mosaic center if num panels is even
         if nRA % 2 == 0:
             center_RA += delta_RA/2
@@ -615,11 +616,13 @@ class Seestar:
             center_Dec += delta_Dec/2
                 
         sleep_time_per_panel = round(session_time/nRA/nDec)
-        mosaic_index = 0
-        cur_ra = center_RA-int(nRA/2)*delta_RA
-        for index_ra in range(nRA):
-            cur_dec = center_Dec-int(nDec/2)*delta_Dec
-            for index_dec in range(nDec):
+
+        cur_dec = center_Dec-int(nDec/2)*delta_Dec
+        for index_dec in range(nDec):
+            spacing_result = Util.mosaic_next_center_spacing(center_RA, cur_dec, overlap_percent)
+            delta_RA = spacing_result[0]
+            cur_ra = center_RA-int(nRA/2)*spacing_result[0]
+            for index_ra in range(nRA):
                 if self.scheduler_state != "Running":
                     print("Mosaic mode was requested to stop. Stopping")
                     self.scheduler_state = "Stopped"
@@ -633,7 +636,7 @@ class Seestar:
                 # set_settings(x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, heater_enable):
                 # TODO: Need to set correct parameters
                 self.send_message_param_sync({"method":"set_setting","params":{"stack_lenhance":False}})
-                self.goto_target({'ra':cur_ra, 'dec':cur_dec, 'target_name':save_target_name})
+                self.goto_target({'ra':cur_ra, 'dec':cur_dec, 'is_j2000': False, 'target_name':save_target_name})
                 result = self.wait_end_op("AutoGoto")
                 print("Goto operation finished")
                 
@@ -661,9 +664,8 @@ class Seestar:
                 else:
                     print("Goto failed.")
                     
-                cur_dec += delta_Dec
-                mosaic_index += 1
-            cur_ra += delta_RA
+                cur_ra += delta_RA  
+            cur_dec += delta_Dec
         print("Finished mosaic.")
         self.scheduler_item_state = "Stopped"
 
@@ -676,13 +678,14 @@ class Seestar:
         target_name = params['target_name']
         center_RA = params['ra']
         center_Dec = params['dec']
+        is_j2000 = params['is_j2000']
         is_use_LP_filter = params['is_use_lp_filter']
         session_time = params['session_time_sec']
         nRA = params['ra_num']
         nDec = params['dec_num']
-        mRA = params['ra_offset_mult']
-        mDec = params['dec_offset_mult']
+        overlap_percent = params['panel_overlap_percent']
         gain = params['gain']
+        
 
         # verify mosaic pattern
         if nRA < 1 or nDec < 0:
@@ -690,13 +693,15 @@ class Seestar:
             self.scheduler_item_state = "Stopped"
             return
 
-        if center_RA < 0:
-            if self.last_sync_RA >= 0:
-                center_RA = self.ra
-                center_Dec = self.dec
-            else:
-                center_RA = self.ra
-                center_Dec = self.dec            
+        if not isinstance(center_RA, str) and center_RA < 0:
+            center_RA = self.ra
+            center_Dec = self.dec
+            is_j2000 = False
+
+        parsed_coord = Util.parse_coordinate(is_j2000, center_RA, center_Dec)
+        center_RA = parsed_coord.ra.hour
+        center_Dec = parsed_coord.dec.deg
+
             
         # print input requests
         print("received parameters:")
@@ -707,11 +712,10 @@ class Seestar:
         print("  session time  : ", session_time)
         print("  RA num panels : ", nRA)
         print("  Dec num panels: ", nDec)
-        print("  RA offset x   : ", mRA)
-        print("  Dec offset x  : ", mDec)
+        print("  overlap %     : ", overlap_percent)
         print("  gain          : ", gain)
 
-        self.mosaic_thread = threading.Thread(target=lambda: self.mosaic_thread_fn(target_name, center_RA, center_Dec, is_use_LP_filter, session_time, nRA, nDec, mRA, mDec, gain))
+        self.mosaic_thread = threading.Thread(target=lambda: self.mosaic_thread_fn(target_name, center_RA, center_Dec, is_use_LP_filter, session_time, nRA, nDec, overlap_percent, gain))
         self.mosaic_thread.start()
 
     def get_schedule(self):
@@ -731,9 +735,11 @@ class Seestar:
             return "scheduler is still active"
         if params['action'] == 'start_mosaic':
             mosaic_params = params['params']
-            if mosaic_params['ra'] < 0:
-                mosaic_params['ra'] = self.ra
-                mosaic_params['dec'] = self.dec
+            if not isinstance(mosaic_params['ra'], str):
+                if mosaic_params['ra'] < 0:
+                    mosaic_params['ra'] = self.ra
+                    mosaic_params['dec'] = self.dec
+                    mosaic_params['is_j2000'] = False
         self.schedule['list'].append(params)
         return self.schedule
     
