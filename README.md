@@ -10,6 +10,11 @@ It implements and extends the Alpaca protocol and ASCOM Standards
 Configure the list of Seestars you will be controlling by updating the last portion of the config file device/config.toml.
 You can add as many Seestars as you like.
 
+Install python3 for your system.
+
+For Windows, you will need to install the build tool as well. Follow this link for detailed steps:
+https://stackoverflow.com/questions/64261546/how-to-solve-error-microsoft-visual-c-14-0-or-greater-is-required-when-inst
+
 Install python required libraries:
 pip install -r requirements.txt
 
