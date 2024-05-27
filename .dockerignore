@@ -1,0 +1,4 @@
+docker/**
+device/config.toml
+!docker/entrypoint.sh
+

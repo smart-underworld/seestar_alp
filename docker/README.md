@@ -1,0 +1,26 @@
+# seestar_alp on docker
+Docker provides a portable way to run the application on any OS and architecture.  It's been tested on various Linux distributions and architectures, Mac OS (Apple Silicon, but should also work on Intel), and Windows 11 with WSL 2.
+
+# Install docker
+This should work with any version of docker (e.g. Docker Desktop, docker.io, docker-ce, etc.).
+
+If you don't have docker installed and don't have a preference, then [follow the official instructions](https://docs.docker.com/get-docker/).
+
+# Configuration
+Copy `docker/config.toml.example` to `docker/config.toml` and edit it for your Seestar array.
+
+# Run
+To run, simply run the following command from a terminal:
+```
+./docker/run.sh
+```
+
+# Build
+If the image doesn't exist, then it will be built automatically.  Otherwise, if you want to rebuild it, then run the following:
+```
+./docker/run.sh -b
+```
+OR
+```
+./docker/run.sh --build
+```
