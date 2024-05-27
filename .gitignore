@@ -10,3 +10,5 @@ docs/refs
 alpycadevice.code-workspace
 skeletons/AlpycaDeviceSkeletons.code-workspace
 alpyca.log*
+docker/config.toml
+docker/getopts_long
