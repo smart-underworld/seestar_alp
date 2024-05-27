@@ -65,6 +65,11 @@ main() {
         SEESTAR_ALP_IMAGE_FULL \
         "${SCRIPT_DIR}/../"
 
+    if [ ! -f "${SCRIPT_DIR}/config.toml" ]; then
+        echo "S{SCRIPT_DIR}/config.toml doesn't exist.  Copy and customize ${SCRIPT_DIR}/config.toml.example."
+        return 1
+    fi
+
     read -d '' DOCKER_RUN_OPTIONS <<EOM
         --mount type=bind,source="${SCRIPT_DIR}/config.toml",target="/home/seestar/seestar_alp/device/config.toml" \
         -p 5555:5555
