@@ -1,5 +1,5 @@
 # seestar_alp on docker
-Docker provides a portable way to run the application on any OS and architecture.
+Docker provides a portable way to run the application on any OS and architecture.  It's been tested on various Linux distributions and architectures, Mac OS (Apple Silicon, but should also work on Intel), and Windows 11 with WSL 2.
 
 # Install docker
 This should work with any version of docker (e.g. Docker Desktop, docker.io, docker-ce, etc.).
