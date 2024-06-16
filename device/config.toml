@@ -14,15 +14,21 @@ step_size = 1.0
 steps_per_sec = 6
 
 [logging]
-log_level = 'INFO'
+log_level = 'INFO'   #'WARN' only if trouble    #'INFO' to output more logging      #'DEBUG' still more output
 log_to_stdout = false
 max_size_mb = 5
 num_keep_logs = 10
 
 [[seestars]]
 name = "Seestar Alpha"
-ip_address = "seestar.local"
-device_num = 1
+ip_address = "seestar.local"  
+device_num = 0
+
+
+#[[seestars]]
+#name = "Seestar Alpha"
+#ip_address = "seestar.local"  
+#device_num = 1
 
 
 #[[seestars]]

@@ -40,6 +40,10 @@
 import sys
 import toml
 import logging
+### rwr
+from os import path
+import os
+### end rwr
 
 #
 # This slimy hack is for Sphinx which, despite the toml.load() being
@@ -48,7 +52,14 @@ import logging
 # here, it will also choke Sphinx. This cost me a day.
 #
 _dict = {}
-_dict = toml.load(f'{sys.path[0]}/config.toml')    # Errors here are fatal.
+### RWR Added
+if getattr(sys, "frozen",  False):
+    path_to_dat = os.path.abspath(os.path.join(sys._MEIPASS, "config.toml"))
+else:
+    path_to_dat = path.abspath(path.join(path.dirname(__file__), 'config.toml'))
+print(path_to_dat)
+### RWR _dict = toml.load(f'{sys.path[0]}/config.toml')    # Errors here are fatal.
+_dict = toml.load(path_to_dat)    # Errors here are fatal.
 def get_toml(sect: str, item: str):
     if not _dict is {}:
         return _dict[sect][item]
