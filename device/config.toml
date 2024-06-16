@@ -22,13 +22,7 @@ num_keep_logs = 10
 [[seestars]]
 name = "Seestar Alpha"
 ip_address = "seestar.local"  
-device_num = 0
-
-
-#[[seestars]]
-#name = "Seestar Alpha"
-#ip_address = "seestar.local"  
-#device_num = 1
+device_num = 1
 
 
 #[[seestars]]
