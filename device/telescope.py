@@ -20,6 +20,7 @@ from exceptions import *        # Nothing but exception classes
 from seestar_device import Seestar
 from alpaca.telescope import *
 import json
+from seestar_util import Util    # RWR
 
 logger: Logger = None
 
@@ -961,6 +962,15 @@ class sitelatitude:
                             NotConnectedException()).json
             return
         try:
+            ### RWR Added
+            if seestar_dev[devnum].site_latitude == 0:
+                coordinates = Util.get_current_gps_coordinates()
+                if coordinates is not None:
+                    latitude, longitude = coordinates
+                    seestar_dev[devnum].site_longitude = longitude
+                    seestar_dev[devnum].site_latitude = latitude
+            ### RWR end added
+
             # ----------------------
             val = seestar_dev[devnum].site_latitude
             # ----------------------
@@ -1000,6 +1010,15 @@ class sitelongitude:
                             NotConnectedException()).json
             return
         try:
+            ### RWR added
+            if seestar_dev[devnum].site_longitude == 0:
+                coordinates = Util.get_current_gps_coordinates()
+                if coordinates is not None:
+                    latitude, longitude = coordinates
+                    seestar_dev[devnum].site_longitude = longitude
+                    seestar_dev[devnum].site_latitude = latitude
+            ### RWR end add
+
             # ----------------------
             val = seestar_dev[devnum].site_longitude
             # ----------------------
@@ -1247,7 +1266,8 @@ class trackingrates:
             return
         try:
             # ----------------------
-            val = {0}
+            #val = {0}
+            val = 0      # above caused error, this works
             # ----------------------
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
