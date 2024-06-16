@@ -7,7 +7,10 @@ This should work with any version of docker (e.g. Docker Desktop, docker.io, doc
 If you don't have docker installed and don't have a preference, then [follow the official instructions](https://docs.docker.com/get-docker/).
 
 # Configuration
-Copy `docker/config.toml.example` to `docker/config.toml` and edit it for your Seestar array.
+Copy `docker/config.toml.example` to `docker/config.toml` and edit it for your Seestar array.  
+
+Edit `run.sh` and set `TIME_ZONE` to your local time zone using one of the `TZ identifier` options listed [here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones). For example:  
+`TIME_ZONE="America/Vancouver"`
 
 # Run
 To run, simply run the following command from a terminal:
