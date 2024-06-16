@@ -1,5 +1,8 @@
 Change Log
 
+Version 1.0.0.a3 - June 16, 2024
+made changes to supprt use of pyinstaller to simplify distrubution - rrowley
+
 version 1.0.0a2 - April 30, 2024
 ----------------
 Added support for J2000
