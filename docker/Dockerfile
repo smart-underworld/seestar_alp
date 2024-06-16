@@ -20,11 +20,14 @@ RUN groupadd -g ${SEESTAR_UID} ${SEESTAR_USER} && \
 ###
 ### Install dependencies.
 ###
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TZ=Etc/UTC
 RUN apt-get update && \
     apt-get install -y \
         python3 \
         python3-pip \
-        vim && \
+        vim \
+        tzdata && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
