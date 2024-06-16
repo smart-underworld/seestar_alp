@@ -12,6 +12,10 @@ SEESTAR_ALP_IMAGE_FULL=${SEESTAR_ALP_REGISTRY}/${SEESTAR_ALP_IMAGE_NAME}:${SEEST
 # Arguments
 DOCKER_BUILD_IMAGE="false"
 
+# Set local time zone - choose from TZ identifier listed at 
+# https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+TIME_ZONE="America/Vancouver"  
+
 source "${SCRIPT_DIR}/util.sh"
 
 
@@ -70,6 +74,11 @@ main() {
         return 1
     fi
 
+    if [ -z "${TIME_ZONE}" ]; then
+        echo "TIME_ZONE has not been set - see arguments in run.sh"
+        return 1
+    fi
+    
     read -d '' DOCKER_RUN_OPTIONS <<EOM
         --mount type=bind,source="${SCRIPT_DIR}/config.toml",target="/home/seestar/seestar_alp/device/config.toml" \
         -p 5555:5555
@@ -78,6 +87,7 @@ EOM
     docker_run \
         SEESTAR_ALP_IMAGE_NAME \
         SEESTAR_ALP_IMAGE_FULL \
+        "${TIME_ZONE}" \
         DOCKER_RUN_OPTIONS
 }
 

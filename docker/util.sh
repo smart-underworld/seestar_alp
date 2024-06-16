@@ -34,10 +34,12 @@ EOM
 docker_run() {
     local -n docker_run_IMAGE_NAME="${1:?}"
     local -n docker_run_IMAGE_FULL="${2:?}"
+    local time_zone="${3:?}"
 
     read -d '' DOCKER_RUN_COMMAND <<EOM
 docker run -it --rm \
     --name "${docker_run_IMAGE_NAME}" \
+    -e "TZ=${time_zone}" \
     ${DOCKER_RUN_OPTIONS} \
     "${docker_run_IMAGE_FULL}"
 EOM
