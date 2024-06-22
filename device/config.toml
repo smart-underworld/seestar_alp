@@ -1,6 +1,7 @@
 title = "Alpaca Sample Driver (Rotator)"
 
 [network]
+# ip_address should not have to be changed
 ip_address = '127.0.0.1'             # Any address
 port = 5555
 
@@ -21,6 +22,7 @@ num_keep_logs = 10
 
 [[seestars]]
 name = "Seestar Alpha"
+# ip_address should not have to be changed unless you have more than 1 seestar
 ip_address = "seestar.local"  
 device_num = 1
 
