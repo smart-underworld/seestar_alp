@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block header %}
+    <h1>{% block title %}Mosaic{% endblock %}</h1>
+{% endblock %}
+
+{% block content %}
+    <h3 class="mb-2">Current Schedule</h3>
+
+    {% include 'schedule_list.html' with context %}
+
+    <h3 class="mb-2">Enter a new mosaic</h3>
+
+    <p>Creates and immediately runs a mosaic. For scheduling a mosaic, see <a href="/schedule">scheduler</a>.</p>
+
+    {% include 'mosaic_create.html' with context %}
+{% endblock %}
+
+{#    # {"target_name":"kai32_NGC2244", "ra":"6h31m54.23s", "dec":"+4d56m26.4s", #}
+{#"is_j2000": true, "is_use_lp_filter":true, "session_time_sec":3600, "ra_num": 2, "dec_num": 2, "panel_overlap_percent": 20, "gain": 80}#}
+

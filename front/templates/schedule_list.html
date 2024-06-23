@@ -1,0 +1,52 @@
+<div class="mb-5">
+    <div>
+        <span>State: {{ state }}</span>
+        <span>{% include 'toggle_scheduler.html' %}</span>
+    </div>
+
+    <table class="table table-striped">
+        <thead>
+        <tr>
+            <th>Action</th>
+            <th>Target</th>
+            <th>Coords</th>
+            <th>Panels</th>
+            <th>Overlap</th>
+            <th>J2000?</th>
+            <th>Total Exp (sec)</th>
+            <th>Gain</th>
+            <th>LP filter?</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for item in schedule %}
+            <tr>
+                {% if item["action"] == 'wait_until' %}
+                    <td colspan="9">Wait Until {{ item["params"]["local_time"] }}</td>
+                {% elif item["action"] == 'wait_for' %}
+                    <td colspan="9">Wait For {{ item["params"]["timer_sec"] }} seconds</td>
+                {% elif item["action"] == 'auto_focus' %}
+                    <td colspan="9">Autofocus</td>
+                {% elif item["action"] == 'set_setting_exposures' %}
+                    <td colspan="9">Set exposure ...</td>
+                {% elif item["action"] == 'shutdown' %}
+                    <td colspan="9">Shutdown</td>
+                {% elif item["action"] == 'start_mosaic' %}
+                    <td>{{ item["action"] }}</td>
+                    <td>{{ item["params"]["target_name"] }}</td>
+                    <td>{{ item["params"]["ra"] }} / {{ item["params"]["dec"] }}</td>
+                    <td>{{ item["params"]["ra_num"] }} / {{ item["params"]["dec_num"] }}</td>
+                    {#                    <td>{{ item["params"]["ra_offset_mult"] }} / {{ item["params"]["dec_offset_mult"] }}</td>#}
+                    <td>{{ item["params"]["panel_overlap_percent"] }}</td>
+                    <td>{{ item["params"]["is_j2000"] }}</td>
+                    <td>{{ item["params"]["session_time_sec"] }}</td>
+                    <td>{{ item["params"]["gain"] }}</td>
+                    <td>{{ item["params"]["is_use_lp_filter"] }}</td>
+                {% else %}
+                    <td>Unrecognized schedule item: {{ item }}</td>
+                {% endif %}
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
