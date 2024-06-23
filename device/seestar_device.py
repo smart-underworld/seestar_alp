@@ -605,7 +605,7 @@ class Seestar:
         self.mosaic_thread.start()
 
     
-    def mosaic_thread_fn(self, target_name, center_RA, center_Dec, is_use_LP_filter, session_time, nRA, nDec, overlap_percent, gain):   
+    def mosaic_thread_fn(self, target_name, center_RA, center_Dec, is_use_LP_filter, session_time, nRA, nDec, overlap_percent, gain, is_use_autofocus):   
         spacing_result = Util.mosaic_next_center_spacing(center_RA, center_Dec, overlap_percent)
         delta_RA = spacing_result[0]
         delta_Dec = spacing_result[1]
@@ -646,7 +646,10 @@ class Seestar:
                 if result == True:
                     self.send_message_param_sync({"method":"set_setting","params":{"stack_lenhance":is_use_LP_filter}})
 
-                    result = self.try_auto_focus(2)
+                    if is_use_autofocus == True:
+                        result = self.try_auto_focus(2)
+                    else:
+                        result = True
                     if result == True:
                         time.sleep(4)
                         if not self.start_stack({"gain":gain, "restart": True}):
@@ -686,6 +689,7 @@ class Seestar:
         nDec = params['dec_num']
         overlap_percent = params['panel_overlap_percent']
         gain = params['gain']
+        is_use_autofocus = params['is_use_autofocus']
         
 
         # verify mosaic pattern
@@ -715,8 +719,9 @@ class Seestar:
         print("  Dec num panels: ", nDec)
         print("  overlap %     : ", overlap_percent)
         print("  gain          : ", gain)
+        print("  use autofocus : ", is_use_autofocus)
 
-        self.mosaic_thread = threading.Thread(target=lambda: self.mosaic_thread_fn(target_name, center_RA, center_Dec, is_use_LP_filter, session_time, nRA, nDec, overlap_percent, gain))
+        self.mosaic_thread = threading.Thread(target=lambda: self.mosaic_thread_fn(target_name, center_RA, center_Dec, is_use_LP_filter, session_time, nRA, nDec, overlap_percent, gain, is_use_autofocus))
         self.mosaic_thread.start()
 
     def get_schedule(self):
@@ -724,8 +729,10 @@ class Seestar:
         return self.schedule
     
     def create_schedule(self):
-        if self.scheduler_state != "Stopped":
-            return "scheduler is still active"       
+        if self.scheduler_state == "Running":
+            return "scheduler is still active"
+        if self.scheduler_state == "Stopping":
+            self.scheduler_state = "Stopped"
         self.schedule = {}
         self.schedule['state'] = self.scheduler_state
         self.schedule['list'] = []
@@ -839,7 +846,7 @@ class Seestar:
     #     while stacking_timer < in_sleep_time:         # stacking time per segment
     #         stacking_timer += 1
     #         time.sleep(1)
-    #         print(self.device_name, ": session elapsed ", str(stacking_timer) + "s of " + str(in_sleep_time) + "s", end= "\r")
+    #         print(self.device_name, ": session elapsed ", str(stacking_timer) + "s of " + str(in_sleep_time) + "s", end= "")
 
     # def parse_ra_to_float(self, ra_string):
     #     # Split the RA string into hours, minutes, and seconds

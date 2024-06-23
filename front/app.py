@@ -23,10 +23,15 @@ def do_action(action, parameters):
 
 
 def do_schedule_action(action, parameters):
-    return do_action("add_schedule_item", {
-        "action": action,
-        "params": parameters
-    })
+    if parameters:
+        return do_action("add_schedule_item", {
+            "action": action,
+            "params": parameters
+        })
+    else:
+        return do_action("add_schedule_item", {
+            "action": action
+        })
 
 
 def check_response(response):
@@ -143,10 +148,11 @@ def schedule_mosaic():
     values = do_create_mosaic(request.form, True)
     return redirect("/schedule")
 
-
 @app.route('/schedule/shutdown', methods=["POST"])
 def schedule_shutdown():
-    pass
+    response = do_schedule_action("shutdown","")
+    check_response(response)
+    return redirect("/schedule")
 
 @app.route("/schedule/toggle", methods=["POST"])
 def schedule_toggle():
