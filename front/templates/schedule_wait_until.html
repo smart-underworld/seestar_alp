@@ -1,0 +1,14 @@
+<form method="post" action="/schedule/wait-until">
+    <div class="card border-primary mb-3">
+        <div class="card-body">
+            <div class="mb-3">
+                <label for="targetName" class="form-label">Wait until time</label>
+                <input type="text" class="form-control" id="waitUntil" name="waitUntil"
+                       aria-describedby="waitUntilHelp" required>
+                <div id="waitUntilHelp" class="form-text">Specify the local time to wait until.  (e.g. 23:00)</div>
+            </div>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Submit</button>
+</form>
