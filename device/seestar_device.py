@@ -846,7 +846,7 @@ class Seestar:
     #     while stacking_timer < in_sleep_time:         # stacking time per segment
     #         stacking_timer += 1
     #         time.sleep(1)
-    #         print(self.device_name, ": session elapsed ", str(stacking_timer) + "s of " + str(in_sleep_time) + "s", end= "")
+    #         print(self.device_name, ": session elapsed ", str(stacking_timer) + "s of " + str(in_sleep_time) + "s", end= "\r")
 
     # def parse_ra_to_float(self, ra_string):
     #     # Split the RA string into hours, minutes, and seconds
