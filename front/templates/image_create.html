@@ -1,0 +1,88 @@
+<form method="post" action="{{ action }}">
+    <div class="card border-primary mb-3">
+        <div class="card-body">
+            <h5 class="card-title">Target</h5>
+
+            <div class="mb-3">
+                <label for="targetName" class="form-label">Target Name</label>
+                <input type="text" class="form-control" id="targetName" name="targetName"
+                       aria-describedby="targetNameHelp" value="{{ values.target_name }}" required>
+                <div id="targetNameHelp" class="form-text">Enter a descriptive name for the target. (e.g. ...)</div>
+            </div>
+
+            <div class="mb-3 row">
+                <div class="col">
+                    <label for="ra" class="form-label">Right Ascension</label>
+                    <input type="text" class="form-control" id="ra" name="ra" aria-describedby="raHelp"
+                           value="{{ values.ra }}" required>
+                    <div id="raHelp" class="form-text">Mosaic center in decimal degrees or minutes (e.g. -1.2 or
+                        6h32m32.5s)
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="mb-3 row">
+                <div class="col">
+                    <label for="dec" class="form-label">Declination</label>
+                    <input type="text" class="form-control" id="dec" name="dec" aria-describedby="decHelp"
+                           value="{{ values.dec }}" required>
+                    <div id="decHelp" class="form-text">Mosaic center in decimal degrees or minutes (e.g. -1.2 or
+                        +6h32m32.5s)
+                    </div>
+                </div>
+
+            </div>
+          
+            <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="useJ2000" name="useJ2000">
+                    <label class="form-check-label" for="useJ2000">
+                        Use J2000?
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-primary mb-3">
+        <div class="card-body">
+            <h5 class="card-title">Exposure</h5>
+
+            <div class="mb-3">
+                <label for="sessionTime" class="form-label">Total Session Time</label>
+                <input type="text" class="form-control" id="sessionTime" name="sessionTime"
+                       aria-describedby="sessionTimeHelp" value="{{ values.session_time_sec }}" required>
+                <div id="sessionTimeHelp" class="form-text">Total elapsed session time (in sec). Rejected frames
+                    count.
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <input type="text" class="form-control" id="gain" name="gain" aria-describedby="gainHelp"
+                       value="{{ values.gain }}" required>
+                <div id="gainHelp" class="form-text">Gain. (ex: 80)</div>
+            </div>
+
+            <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="useLpFilter" name="useLpFilter">
+                    <label class="form-check-label" for="useLpFilter">
+                        Use Light Pollution Filter?
+                    </label>
+                </div>
+            </div>
+            <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="useAutoFocus" name="useAutoFocus">
+                    <label class="form-check-label" for="useAutoFocus">
+                        Use Auto Focus on every frame?
+                    </label>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Submit</button>
+</form>
