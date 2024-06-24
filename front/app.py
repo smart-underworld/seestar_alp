@@ -23,10 +23,15 @@ def do_action(action, parameters):
 
 
 def do_schedule_action(action, parameters):
-    return do_action("add_schedule_item", {
-        "action": action,
-        "params": parameters
-    })
+    if parameters:
+        return do_action("add_schedule_item", {
+            "action": action,
+            "params": parameters
+        })
+    else:
+        return do_action("add_schedule_item", {
+            "action": action
+        })
 
 
 def check_response(response):
@@ -52,6 +57,7 @@ def do_create_mosaic(form, schedule):
     useJ2000 = request.form.get("useJ2000") == "on"
     sessionTime = request.form["sessionTime"]
     useLpfilter = request.form.get("useLpFilter") == "on"
+    useAutoFocus = request.form.get("useAutoFocus") == "on"
     gain = request.form["gain"]
     values = {
         "target_name": targetName,
@@ -63,7 +69,8 @@ def do_create_mosaic(form, schedule):
         "ra_num": int(raPanels),
         "dec_num": int(decPanels),
         "panel_overlap_percent": int(panelOverlap),
-        "gain": int(gain)
+        "gain": int(gain),
+        "is_use_autofocus": useAutoFocus
     }
 
     # print("values:", values)
@@ -143,10 +150,11 @@ def schedule_mosaic():
     values = do_create_mosaic(request.form, True)
     return redirect("/schedule")
 
-
 @app.route('/schedule/shutdown', methods=["POST"])
 def schedule_shutdown():
-    pass
+    response = do_schedule_action("shutdown","")
+    check_response(response)
+    return redirect("/schedule")
 
 @app.route("/schedule/toggle", methods=["POST"])
 def schedule_toggle():
