@@ -875,17 +875,29 @@ class Seestar:
         if self.is_connected:
             return
         else:
-            self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.s.connect((self.host, self.port))
+            i = 10
+            while i > 0:
+                try: 
+                    self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    self.s.connect((self.host, self.port))
 
-            self.is_watch_events = True
-            self.op_watch = ""
-            self.get_msg_thread = threading.Thread(target=self.receieve_message_thread_fn)
-            self.get_msg_thread.start()
-            
-            self.heartbeat_msg_thread = threading.Thread(target=self.heartbear_message_thread_fn)
-            self.heartbeat_msg_thread.start()
-            self.is_connected = True
+                    self.is_watch_events = True
+                    self.op_watch = ""
+                    self.get_msg_thread = threading.Thread(target=self.receieve_message_thread_fn)
+                    self.get_msg_thread.start()
+                        
+                    self.heartbeat_msg_thread = threading.Thread(target=self.heartbear_message_thread_fn)
+                    self.heartbeat_msg_thread.start()
+                    self.is_connected = True
+                    print('Connected')
+                    break
+                except Exception as ex:
+                    print('Connection Failed, is Seestar turned on?', i)
+                    time.sleep(6)
+                i-=1
+            else:
+                print('could not extablish connection')
+                exit()
         
     def end_watch_thread(self):
         if self.is_connected == True:
