@@ -16,6 +16,7 @@
             <th>Total Exp (sec)</th>
             <th>Gain</th>
             <th>LP filter?</th>
+			<th>AutoFocus</th>
         </tr>
         </thead>
         <tbody>
@@ -42,6 +43,7 @@
                     <td>{{ item["params"]["session_time_sec"] }}</td>
                     <td>{{ item["params"]["gain"] }}</td>
                     <td>{{ item["params"]["is_use_lp_filter"] }}</td>
+					<td>{{ item["params"]["is_use_autofocus"] }}</td>
                 {% else %}
                     <td>Unrecognized schedule item: {{ item }}</td>
                 {% endif %}

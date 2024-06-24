@@ -57,6 +57,7 @@ def do_create_mosaic(form, schedule):
     useJ2000 = request.form.get("useJ2000") == "on"
     sessionTime = request.form["sessionTime"]
     useLpfilter = request.form.get("useLpFilter") == "on"
+    useAutoFocus = request.form.get("useAutoFocus") == "on"
     gain = request.form["gain"]
     values = {
         "target_name": targetName,
@@ -68,7 +69,8 @@ def do_create_mosaic(form, schedule):
         "ra_num": int(raPanels),
         "dec_num": int(decPanels),
         "panel_overlap_percent": int(panelOverlap),
-        "gain": int(gain)
+        "gain": int(gain),
+        "is_use_autofocus": useAutoFocus
     }
 
     # print("values:", values)
