@@ -87,7 +87,44 @@ def do_create_mosaic(form, schedule):
 
     return values
 
+def do_create_image(form, schedule):
+    targetName = request.form["targetName"]
+    ra, raPanels = request.form["ra"], 1
+    dec, decPanels = request.form["dec"], 1
+    panelOverlap = 100
+    useJ2000 = request.form.get("useJ2000") == "on"
+    sessionTime = request.form["sessionTime"]
+    useLpfilter = request.form.get("useLpFilter") == "on"
+    useAutoFocus = request.form.get("useAutoFocus") == "on"
+    gain = request.form["gain"]
+    values = {
+        "target_name": targetName,
+        "is_j2000": useJ2000,
+        "ra": float(ra),
+        "dec": float(dec),
+        "is_use_lp_filter": useLpfilter,
+        "session_time_sec": int(sessionTime),
+        "ra_num": int(raPanels),
+        "dec_num": int(decPanels),
+        "panel_overlap_percent": int(panelOverlap),
+        "gain": int(gain),
+        "is_use_autofocus": useAutoFocus
+    }
 
+    # print("values:", values)
+    if schedule:
+        response = do_action("add_schedule_item", {
+            "action": "start_mosaic",
+            "params": values
+        })
+        print("POST scheduled request", values, response)
+        check_response(response)
+    else:
+        response = do_action("start_mosaic", values)
+        print("POST immediate request", values, response)
+
+    return values
+    
 @app.route('/')
 def home_page():
     return render_template('index.html')
@@ -102,6 +139,16 @@ def live_page():
     ip = state["station"]["ip"]
     return render_template('live.html', mode=f"{result} {mode}.  stream=rtps://{ip}:4554/stream")
 
+@app.route('/image', methods=["POST", "GET"])
+def image_page():
+    values = {}
+    if request.method == 'POST':
+        values = do_create_image(request.form, True)
+    current = do_action("get_schedule", {})
+    state = current["Value"]["state"]
+    schedule = current["Value"]["list"]
+    # remove values=values to stop remembering values
+    return render_template('image.html', state=state, schedule=schedule, values=values, action="/image")
 
 @app.route('/mosaic', methods=["POST", "GET"])
 def mosaic_page():
@@ -166,6 +213,18 @@ def schedule_toggle():
     else:
         do_action("stop_scheduler", {})
         flash("Stopping scheduler")
+    return redirect(f"/schedule?{ time.time() }")
+
+@app.route("/schedule/clear", methods=["POST"])
+def schedule_clear():
+    current = do_action("get_schedule", {})
+    state = current["Value"]["state"]
+    if state == "Running":
+        do_action("stop_scheduler", {})
+        flash("Stopping scheduler")
+    
+    do_action("create_schedule", {})
+    flash("Created New Schedule")
     return redirect(f"/schedule?{ time.time() }")
 
 
