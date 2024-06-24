@@ -16,18 +16,32 @@ For Windows, you will need to install the build tool as well. Follow this link f
 https://stackoverflow.com/questions/64261546/how-to-solve-error-microsoft-visual-c-14-0-or-greater-is-required-when-inst
 
 Install python required libraries:
+
+```shell
 pip install -r requirements.txt
+```
 
 Install bruno and open the collection inside Bruno folder.
 
 bruno is a simple GUI for calling Seestar Alpaca API commands.
 
 Run seestar_alp by navigating to the device folder and issue the command:
+
+```shell
 python3 app.py
+``` 
 
 Use bruno to test out control of your seestar using the "GettingStarted" section
 Be sure to set your environment to target your specfic Seestar.
 
+To run the new experimental web interface, make sure seestar_alp is already running, and 
+navigate to the `front` folder and run the following command:
+
+```shell
+python3 app.py
+```
+
+The web interface should be available at <http://localhost:5432/>.
 
 ## How to get Support
 
