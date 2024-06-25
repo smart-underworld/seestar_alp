@@ -48,6 +48,25 @@ def method_sync(method):
     out = do_action("method_sync", {"method": method})
     return out["Value"]["result"]
 
+def get_device_state():
+    result = method_sync("get_device_state")
+    device = result["device"]
+    settings = result["setting"]
+    pi_status = result["pi_status"]
+    stats = {
+        "Firmware Version": device["firmware_ver_string"],
+        "Focal Position": settings["focal_pos"],
+        "Auto Power Off": settings["auto_power_off"],
+        "Heater?": settings["heater_enable"],
+        "Free Storage (MB)": result["storage"]["storage_volume"][0]["freeMB"],
+        "Balance Sensor (angle)": result["balance_sensor"]["data"]["angle"],
+        "Compass Sensor (direction)": result["compass_sensor"]["data"]["direction"],
+        "Temperature Sensor": pi_status["temp"],
+        "Charge Status": pi_status["charger_status"],
+        "Battery %": pi_status["battery_capacity"],
+        "Battery Temp": pi_status["battery_temp"],
+    }
+    return stats
 
 def do_create_mosaic(form, schedule):
     targetName = request.form["targetName"]
@@ -127,7 +146,8 @@ def do_create_image(form, schedule):
     
 @app.route('/')
 def home_page():
-    return render_template('index.html')
+    stats = get_device_state()
+    return render_template('index.html', stats=stats)
 
 
 @app.route('/live')
@@ -238,23 +258,7 @@ def schedule_clear():
 
 @app.route('/stats')
 def stats_page():
-    result = method_sync("get_device_state")
-    device = result["device"]
-    settings = result["setting"]
-    pi_status = result["pi_status"]
-    stats = {
-        "Firmware Version": device["firmware_ver_string"],
-        "Focal Position": settings["focal_pos"],
-        "Auto Power Off": settings["auto_power_off"],
-        "Heater?": settings["heater_enable"],
-        "Free Storage (MB)": result["storage"]["storage_volume"][0]["freeMB"],
-        "Balance Sensor (angle)": result["balance_sensor"]["data"]["angle"],
-        "Compass Sensor (direction)": result["compass_sensor"]["data"]["direction"],
-        "Temperature Sensor": pi_status["temp"],
-        "Charge Status": pi_status["charger_status"],
-        "Battery %": pi_status["battery_capacity"],
-        "Battery Temp": pi_status["battery_temp"],
-    }
+    stats = get_device_state()
     return render_template('stats.html', stats=stats)
 
 
