@@ -187,11 +187,15 @@ def schedule_wait_for():
     check_response(response)
     return redirect("/schedule")
 
-
 @app.route('/schedule/autofocus', methods=["POST"])
 def schedule_autofocus():
     pass
 
+@app.route('/schedule/image', methods=["POST"])
+def schedule_image():
+    values = do_create_image(request.form, True)
+    return redirect("/image")
+    
 @app.route('/schedule/mosaic', methods=["POST"])
 def schedule_mosaic():
     values = do_create_mosaic(request.form, True)
