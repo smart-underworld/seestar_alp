@@ -20,19 +20,6 @@
                     </div>
                 </div>
 
-                <div class="col">
-                    <label for="raPanels" class="form-label">&nbsp;</label>
-                    <input type="text" class="form-control" id="raPanels" name="raPanels"
-                           aria-describedby="raPanelsHelp" value="{{ values.ra_num }}" required>
-                    <div id="raPanelsHelp" class="form-text">Number of RA panels</div>
-                </div>
-
-                {#                    <div class="col">#}
-                {#                        <label for="raMult" class="form-label">&nbsp;</label>#}
-                {#                        <input type="text" class="form-control" id="raMult" name="raMult"#}
-                {#                               aria-describedby="raMultHelp" value="{{ values.ra_offset_mult }}" required>#}
-                {#                        <div id="raMultHelp" class="form-text">RA multiplier (usu. between 0 and 1)</div>#}
-                {#                    </div>#}
             </div>
 
             <div class="mb-3 row">
@@ -45,28 +32,8 @@
                     </div>
                 </div>
 
-                <div class="col">
-                    <label for="decPanels" class="form-label">&nbsp;</label>
-                    <input type="text" class="form-control" id="decPanels" name="decPanels"
-                           aria-describedby="decPanelsHelp" value="{{ values.dec_num }}" required>
-                    <div id="decPanelsHelp" class="form-text">Number of Dec panels</div>
-                </div>
-
-                {#                    <div class="col">#}
-                {#                        <label for="decMult" class="form-label">&nbsp;</label>#}
-                {#                        <input type="text" class="form-control" id="decOverlap" name="decMult"#}
-                {#                               aria-describedby="decMultHelp" value="{{ values.dec_offset_mult }}" required>#}
-                {#                        <div id="decMultHelp" class="form-text">Dec multiplier (usu. between 0 and 1)</div>#}
-                {#                    </div>#}
             </div>
-
-            <div class="mb-3">
-                <label for="panelOverlap" class="form-label">Panel Overlap (%)</label>
-                <input type="text" class="form-control" id="panelOverlap" name="panelOverlap"
-                       aria-describedby="panelOverlapHelp" value="{{ values.panel_overlap_percent }}" required>
-                <div id="panelOverlapHelp" class="form-text">Overlap of panels in percentage</div>
-            </div>
-
+          
             <div class="mb-3">
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="useJ2000" name="useJ2000">
@@ -109,7 +76,7 @@
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="useAutoFocus" name="useAutoFocus">
                     <label class="form-check-label" for="useAutoFocus">
-                        Use Auto Focus on every panel?
+                        Use Auto Focus?
                     </label>
                 </div>
             </div>

@@ -6,6 +6,16 @@
 
 {% block content %}
     <p>Welcome to the Simple Seestar (Web) Controller.</p>
+    <table class="table table-striped">
+        <tbody>
+        {% for key, value in stats.items() %}
+            <tr>
+                <th class="col">{{ key }}</th>
+                <td>{{ value }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
 {% endblock %}
 
 {#  <form method="post">#}
@@ -15,3 +25,7 @@
 {#    <input type="password" name="password" id="password" required>#}
 {#    <input type="submit" value="Register">#}
 {#  </form>#}
+
+{% block html_header %}
+    <meta http-equiv="refresh" content="15">
+{% endblock %}

@@ -9,6 +9,7 @@
 
     {% include 'schedule_list.html' with context %}
 
+    <p></p>
     <p>Schedule page. Pick an item to schedule, and Submit to add to the schedule.</p>
 
     <div>
@@ -28,6 +29,11 @@
                 <button class="nav-link" id="auto-focus-tab" data-bs-toggle="tab" data-bs-target="#auto-focus"
                         type="button"
                         role="tab" aria-controls="auto-focus" aria-selected="false">Auto Focus
+                </button>
+            </li>
+			<li class="nav-item" role="presentation">
+                <button class="nav-link" id="image-tab" data-bs-toggle="tab" data-bs-target="#image" type="button"
+                        role="tab" aria-controls="image" aria-selected="false">Image
                 </button>
             </li>
             <li class="nav-item" role="presentation">
@@ -56,10 +62,16 @@
                     {% include 'mosaic_create.html' with context %}
                 {% endwith %}
             </div>
+			<div class="tab-pane fade" id="image" role="tabpanel" aria-labelledby="image-tab">
+                {% with action="/schedule/image" %}
+                    {% include 'image_create.html' with context %}
+                {% endwith %}
+            </div>
             <div class="tab-pane fade" id="shutdown" role="tabpanel" aria-labelledby="shutdown-tab">
                 {% include 'schedule_shutdown.html' with context %}
             </div>
         </div>
+		
     </div>
     {#    <div>#}
     {#        <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseExample"#}
