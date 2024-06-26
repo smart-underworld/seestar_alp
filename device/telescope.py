@@ -85,7 +85,7 @@ class action:
                 resp.text = MethodResponse(req).json
             elif action_name == "method_sync":
                 result = cur_dev.send_message_param_sync(params)
-                if params["method"] == 'pi_shutdown':
+                if params["method"] == 'pi_shutdown': 
                     print('Seestar has been shut down')
                     end_seestar_device(devnum)
                 resp.text = MethodResponse(req, value = result).json
