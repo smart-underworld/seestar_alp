@@ -263,4 +263,4 @@ def stats_page():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5432)
+    app.run(debug=True, port=5432, host= '0.0.0.0')

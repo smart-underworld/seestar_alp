@@ -14,7 +14,7 @@ DOCKER_BUILD_IMAGE="false"
 
 # Set local time zone - choose from TZ identifier listed at 
 # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
-TIME_ZONE="America/Vancouver"  
+if [ -z "${TIME_ZONE}" ]; then TIME_ZONE="America/Vancouver"; fi
 
 source "${SCRIPT_DIR}/util.sh"
 
@@ -27,8 +27,9 @@ define_usage() {
 Usage: ${define_usage_SCRIPT_NAME} [OPTIONS]
 
 Options:
-    -b, --build     Build the image before running.
-    -h, --help      Print help and exit.
+    -t <TZ>, --timezone=<TZ>    Set the timezone (default: ${TIME_ZONE})
+    -b, --build                 Build the image before running.
+    -h, --help                  Print help and exit.
 
 EOM
 }
@@ -36,10 +37,16 @@ EOM
 parse_args() {
     local OPTIND
 
-    while getopts_long "bh build help" option "${@}"; do
+    while getopts_long "bht: build help timezone:" option "${@}"; do
         case "${option}" in
+            "t" | "timezone")
+                TIME_ZONE="$2"
+                echo "TIME_ZONE set to ${TIME_ZONE}"
+                shift 2
+                ;;
             "b" | "build")
                 DOCKER_BUILD_IMAGE="true"
+                shift
                 ;;
             "h" | "help")
                 help_exit "true"
@@ -81,6 +88,7 @@ main() {
     
     read -d '' DOCKER_RUN_OPTIONS <<EOM
         --mount type=bind,source="${SCRIPT_DIR}/config.toml",target="/home/seestar/seestar_alp/device/config.toml" \
+        -p 5432:5432 \
         -p 5555:5555
 EOM
 
