@@ -875,8 +875,7 @@ class Seestar:
         if self.is_connected:
             return
         else:
-            i = 10
-            while i > 0:
+            for i in range(10,0,-1):
                 try: 
                     self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     self.s.connect((self.host, self.port))
@@ -894,9 +893,8 @@ class Seestar:
                 except Exception as ex:
                     print('Connection Failed, is Seestar turned on?', i)
                     time.sleep(6)
-                i-=1
             else:
-                print('could not extablish connection')
+                print('could not establish connection')
                 exit()
         
     def end_watch_thread(self):
