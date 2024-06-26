@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import falcon
 from falcon import HTTPTemporaryRedirect, HTTPFound
 from jinja2 import Template, Environment, FileSystemLoader
@@ -9,9 +11,8 @@ dev_num = 1
 base_url = "http://localhost:5555"
 
 
-def flash(resp, message=None):
-    if message:
-        resp.set_cookie('flash_cookie', message, path='/')
+def flash(resp, message):
+    resp.set_cookie('flash_cookie', message, path='/')
 
 
 def get_flash_cookie(req, resp):
@@ -180,7 +181,8 @@ class HomeResource:
     @staticmethod
     def on_get(req, resp):
         stats = get_device_state()
-        render_template(req, resp, 'index.html', stats=stats)
+        now = datetime.now()
+        render_template(req, resp, 'index.html', stats=stats, now=now)
 
 
 class ImageResource:
@@ -329,16 +331,16 @@ class StatsResource:
     @staticmethod
     def on_get(req, resp):
         stats = get_device_state()
-        render_template(req, resp, 'stats.html', stats=stats)
+        now = datetime.now()
+        render_template(req, resp, 'stats.html', stats=stats, now=now)
 
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
 
     def log_message(self, format: str, *args):
-        if args[1] != '200':  # Log this only on non-200 responses
-            print(f'{self.client_address[0]} <- {format % args}')
-        pass
+        # if args[1] != '200':  # Log this only on non-200 responses
+        print(f'{datetime.now()} {self.client_address[0]} <- {format % args}')
 
 
 def main():

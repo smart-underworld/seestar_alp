@@ -24,15 +24,15 @@
         {% for item in schedule %}
             <tr>
                 {% if item["action"] == 'wait_until' %}
-                    <td colspan="9">Wait Until {{ item["params"]["local_time"] }}</td>
+                    <td colspan="10">Wait Until {{ item["params"]["local_time"] }}</td>
                 {% elif item["action"] == 'wait_for' %}
-                    <td colspan="9">Wait For {{ item["params"]["timer_sec"] }} seconds</td>
+                    <td colspan="10">Wait For {{ item["params"]["timer_sec"] }} seconds</td>
                 {% elif item["action"] == 'auto_focus' %}
-                    <td colspan="9">Autofocus</td>
+                    <td colspan="10">Autofocus</td>
                 {% elif item["action"] == 'set_setting_exposures' %}
-                    <td colspan="9">Set exposure ...</td>
+                    <td colspan="10">Set exposure ...</td>
                 {% elif item["action"] == 'shutdown' %}
-                    <td colspan="9">Shutdown</td>
+                    <td colspan="10">Shutdown</td>
                 {% elif item["action"] == 'start_mosaic' %}
                     <td>{{ item["action"] }}</td>
                     <td>{{ item["params"]["target_name"] }}</td>
