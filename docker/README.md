@@ -13,9 +13,10 @@ Edit `run.sh` and set `TIME_ZONE` to your local time zone using one of the `TZ i
 `TIME_ZONE="America/Vancouver"`
 
 # Run
-To run, simply run the following command from a terminal:
+To run, simply run the following command from a terminal, setting your local time zone using one of the `TZ identifier` options listed [here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones). For example:  
+`TIME_ZONE="America/Vancouver"`
 ```
-./docker/run.sh
+./docker/run.sh -t "America/Vancouver"
 ```
 
 # Build
