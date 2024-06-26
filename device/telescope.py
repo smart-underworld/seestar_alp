@@ -84,18 +84,10 @@ class action:
                 cur_dev.play_sound(params['id'])
                 resp.text = MethodResponse(req).json
             elif action_name == "method_sync":
-                if params["method"] == "pi_shutdown":
-                    host = cur_dev.host
-                    port = cur_dev.port
-                    name = cur_dev.device_name
-                    num = cur_dev.device_num    
-                    debug = cur_dev.is_debug
                 result = cur_dev.send_message_param_sync(params)
-                ######
-                ### put test to see if user wants to restart here
                 if params["method"] == 'pi_shutdown':
+                    print('Seestar has been shut down')
                     end_seestar_device(devnum)
-                    start_seestar_device(logger, name, host, port, num)
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "method_async":
                 result = cur_dev.send_message_param(params)
