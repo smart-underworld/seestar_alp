@@ -85,6 +85,9 @@ class action:
                 resp.text = MethodResponse(req).json
             elif action_name == "method_sync":
                 result = cur_dev.send_message_param_sync(params)
+                if params["method"] == 'pi_shutdown':
+                    print('Seestar has been shut down')
+                    end_seestar_device(devnum)
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "method_async":
                 result = cur_dev.send_message_param(params)
@@ -1424,7 +1427,7 @@ class moveaxis:
         ### RANGE CHECK AS NEEDED ###         # Raise Alpaca InvalidValueException with details!
         try:
             # -----------------------------
-            seestar_dev[devnum].move_scope(0, rate)
+            seestar_dev[devnum].move_scope(axis, rate)
             # -----------------------------
             resp.text = MethodResponse(req).json
         except Exception as ex:
