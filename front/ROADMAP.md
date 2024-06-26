@@ -3,7 +3,7 @@ A brain dump of some possible things to add:
 Higher priority items:
 - [X] 1 / 1 mosaic: make it default to 100% overlap
 - [X] default to status page
-- [ ] rewrite front/app.py to use Falcon
+- [X] rewrite front/app.py to use Falcon
 - [ ] lookup coordinates in Sinbad; checkbox to use existing coordinates
 - [ ] correctly handling and/or parse different formats for DEC / RA
 - [ ] implement more of the API!
