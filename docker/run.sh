@@ -29,6 +29,7 @@ Usage: ${define_usage_SCRIPT_NAME} [OPTIONS]
 
 Options:
     -t <TZ>, --timezone=<TZ>    Set the timezone (default: ${TIME_ZONE})
+    -i, --indi                  Enable INDI server.
     -b, --build                 Build the image before running.
     -h, --help                  Print help and exit.
 
@@ -41,16 +42,16 @@ parse_args() {
     while getopts_long "biht: build indi help timezone:" option "${@}"; do
         case "${option}" in
             "t" | "timezone")
-                TIME_ZONE="$2"
+                TIME_ZONE=${OPTARG}
                 echo "TIME_ZONE set to ${TIME_ZONE}"
-                shift 2
                 ;;
             "i" | "indi")
             	ASTRO_PLATFORM="INDI"
+            	echo "INDI support enabled"
             	;;
             "b" | "build")
                 DOCKER_BUILD_IMAGE="true"
-                shift
+                echo "Docker build enabled"
                 ;;
             "h" | "help")
                 help_exit "true"
