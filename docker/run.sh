@@ -11,6 +11,7 @@ SEESTAR_ALP_IMAGE_FULL=${SEESTAR_ALP_REGISTRY}/${SEESTAR_ALP_IMAGE_NAME}:${SEEST
 
 # Arguments
 DOCKER_BUILD_IMAGE="false"
+ASTRO_PLATFORM="ALPACA"
 
 # Set local time zone - choose from TZ identifier listed at 
 # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
@@ -37,13 +38,16 @@ EOM
 parse_args() {
     local OPTIND
 
-    while getopts_long "bht: build help timezone:" option "${@}"; do
+    while getopts_long "biht: build indi help timezone:" option "${@}"; do
         case "${option}" in
             "t" | "timezone")
                 TIME_ZONE="$2"
                 echo "TIME_ZONE set to ${TIME_ZONE}"
                 shift 2
                 ;;
+            "i" | "indi")
+            	ASTRO_PLATFORM="INDI"
+            	;;
             "b" | "build")
                 DOCKER_BUILD_IMAGE="true"
                 shift
@@ -74,6 +78,7 @@ main() {
         "true" \
         "${SCRIPT_DIR}/Dockerfile" \
         SEESTAR_ALP_IMAGE_FULL \
+        ASTRO_PLATFORM \
         "${SCRIPT_DIR}/../"
 
     if [ ! -f "${SCRIPT_DIR}/config.toml" ]; then
@@ -89,7 +94,8 @@ main() {
     read -d '' DOCKER_RUN_OPTIONS <<EOM
         --mount type=bind,source="${SCRIPT_DIR}/config.toml",target="/home/seestar/seestar_alp/device/config.toml" \
         -p 5432:5432 \
-        -p 5555:5555
+        -p 5555:5555 \
+        -p 7624:7624
 EOM
 
     docker_run \
