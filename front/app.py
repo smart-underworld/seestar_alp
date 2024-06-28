@@ -6,6 +6,7 @@ from jinja2 import Template, Environment, FileSystemLoader
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 import requests
 import json
+import re
 
 dev_num = 1
 base_url = "http://localhost:5555"
@@ -83,7 +84,23 @@ def get_device_state():
     }
     return stats
 
-
+def check_ra_value(raString):
+    valid = [
+        r"^\d+h\d+m[0-9.]+s$", 
+        r"^\d+\.\d+$", 
+        r"^\d+\s+\d+\s+[0-9.]+$"
+    ]
+    return any(re.search(pattern, raString) for pattern in valid)
+    
+def check_dec_value(decString):
+    
+    valid = [
+        r"^[+-]\d+d\s*\d+m\s*[0-9.]+s$", 
+        r"^[+-]\d+\.\d+$", 
+        r"^[+-]\d+\s+\d+\s+[0-9.]+$"
+    ]
+    return any(re.search(pattern, decString) for pattern in valid)
+    
 def do_create_mosaic(req, resp, schedule):
     form = req.media
     targetName = form["targetName"]
@@ -95,11 +112,12 @@ def do_create_mosaic(req, resp, schedule):
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
+    errors = {}
     values = {
         "target_name": targetName,
         "is_j2000": useJ2000,
-        "ra": float(ra),
-        "dec": float(dec),
+        "ra": ra,
+        "dec": dec,
         "is_use_lp_filter": useLpfilter,
         "session_time_sec": int(sessionTime),
         "ra_num": int(raPanels),
@@ -108,8 +126,21 @@ def do_create_mosaic(req, resp, schedule):
         "gain": int(gain),
         "is_use_autofocus": useAutoFocus
     }
+    
+    if not check_ra_value(ra):
+        print("Bad RA")
+        flash(resp, "Invalid RA value")
+        errors["ra"] = ra
+        
+    if not check_dec_value(dec):
+        print("Bad DEC")
+        flash(resp, "Invalid DEC Value")
+        errors["dec"] = dec
+        
+    if errors:
+        print("ERROR detected", errors)
+        return values, errors
 
-    # print("values:", values)
     if schedule:
         response = do_action("add_schedule_item", {
             "action": "start_mosaic",
@@ -121,7 +152,7 @@ def do_create_mosaic(req, resp, schedule):
         response = do_action("start_mosaic", values)
         print("POST immediate request", values, response)
 
-    return values
+    return values, errors
 
 
 def do_create_image(req, resp, schedule):
@@ -205,19 +236,19 @@ class ImageResource:
 
 class MosaicResource:
     def on_get(self, req, resp):
-        self.mosaic(req, resp, {})
+        self.mosaic(req, resp, {}, {})
 
     def on_post(self, req, resp):
-        values = do_create_mosaic(req, resp, False)
-        self.mosaic(req, resp, values)
+        values, errors = do_create_mosaic(req, resp, False)
+        self.mosaic(req, resp, values, errors)
 
     @staticmethod
-    def mosaic(req, resp, values):
+    def mosaic(req, resp, values, errors):
         current = do_action("get_schedule", {})
         state = current["Value"]["state"]
         schedule = current["Value"]["list"]
         # remove values=values to stop remembering values
-        render_template(req, resp, 'mosaic.html', state=state, schedule=schedule, values=values, action="/mosaic")
+        render_template(req, resp, 'mosaic.html', state=state, schedule=schedule, values=values, errors=errors, action="/mosaic")
 
 
 class ScheduleResource:
@@ -232,7 +263,7 @@ class ScheduleResource:
         current = do_action("get_schedule", {})
         state = current["Value"]["state"]
         schedule = current["Value"]["list"]
-        render_template(req, resp, 'schedule.html', schedule=schedule, state=state, values={})
+        render_template(req, resp, 'schedule.html', schedule=schedule, state=state, errors={}, values={})
 
 
 class ScheduleWaitUntilResource:
@@ -289,7 +320,7 @@ class ScheduleToggleResource:
         state = current["Value"]["state"]
         if state == "Stopped":
             do_action("start_scheduler", {})
-            flash(resp, "Starting scheduler")
+            
         else:
             do_action("stop_scheduler", {})
             flash(resp, "Stopping scheduler")

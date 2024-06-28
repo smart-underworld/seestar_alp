@@ -15,8 +15,11 @@
                     <label for="ra" class="form-label">Right Ascension</label>
                     <input type="text" class="form-control" id="ra" name="ra" aria-describedby="raHelp"
                            value="{{ values.ra }}" required>
-                    <div id="raHelp" class="form-text">Mosaic center in decimal degrees or minutes (e.g. -1.2 or
+                    <div id="raHelp" class="form-text">Mosaic center in decimal hours or hours/minutes/seconds (e.g. -1.2 or
                         6h32m32.5s)
+						{% if errors.ra %}
+						   <div id="raError" class="form-text" style="color:red;">The RA value you provided {{errors.ra}} is not valid.
+						{% endif %}
                     </div>
                 </div>
 
@@ -40,8 +43,11 @@
                     <label for="dec" class="form-label">Declination</label>
                     <input type="text" class="form-control" id="dec" name="dec" aria-describedby="decHelp"
                            value="{{ values.dec }}" required>
-                    <div id="decHelp" class="form-text">Mosaic center in decimal degrees or minutes (e.g. -1.2 or
-                        +6h32m32.5s)
+                    <div id="decHelp" class="form-text">Mosaic center in decimal degrees or degrees/minutes/seconds (e.g. -1.2 or
+                        +6d32m32.5s)
+						{% if errors.dec %}
+							<div id="raError" class="form-text" style="color:red;">The DEC value you provided {{errors.dec}} is not valid.
+						{% endif %}
                     </div>
                 </div>
 
