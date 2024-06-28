@@ -86,8 +86,8 @@ def get_device_state():
 
 def check_ra_value(raString):
     valid = [
-        r"^\d+h\d+m[0-9.]+s$", 
-        r"^\d+\.\d+$", 
+        r"^\d+h\s*\d+m\s*([0-9.]+s)?$",
+        r"^\d+(\.\d+)?$",
         r"^\d+\s+\d+\s+[0-9.]+$"
     ]
     return any(re.search(pattern, raString) for pattern in valid)
@@ -95,9 +95,9 @@ def check_ra_value(raString):
 def check_dec_value(decString):
     
     valid = [
-        r"^[+-]\d+d\s*\d+m\s*[0-9.]+s$", 
-        r"^[+-]\d+\.\d+$", 
-        r"^[+-]\d+\s+\d+\s+[0-9.]+$"
+        r"^[+-]?\d+d\s*\d+m\s*([0-9.]+s)?$",
+        r"^[+-]?\d+(\.\d+)?$",
+        r"^[+-]?\d+\s+\d+\s+[0-9.]+$"
     ]
     return any(re.search(pattern, decString) for pattern in valid)
     

@@ -16,3 +16,7 @@ Lower priority / blue sky items:
 - [ ] add config flag to enable UI under /ui
 - [ ] Show current position using Aladin.  https://aladin.cds.unistra.fr/AladinLite/doc/
 - [ ] Click to slew?
+- [ ] Pull live stack, if possible
+- [ ] Pull latest images
+- [ ] Image library viewing
+- [ ] have a mock API
