@@ -27,9 +27,10 @@ To run on a Mac with INDI, include the `-i` option:
 # Build
 If the image doesn't exist, then it will be built automatically.  Otherwise, if you want to rebuild it, then run the following:
 ```
-./docker/run.sh -b
+./docker/run.sh -b -t "America/Vancouver"
 ```
-OR
+OR to build the INDI version
 ```
-./docker/run.sh --build
+./docker/run.sh -b -i -t "America/Vancouver"
 ```
+
