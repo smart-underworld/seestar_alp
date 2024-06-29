@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block header %}
-  <h1>{% block title %}Simple Seestar Controller{% endblock %}</h1>
+    <h1>{% block title %}Simple Seestar Controller{% endblock %}</h1>
 {% endblock %}
 
 {% block content %}
@@ -16,6 +16,9 @@
         {% endfor %}
         </tbody>
     </table>
+    <footer class="bg-body-tertiary text-center">
+        Last updated: {{ now }}
+    </footer>
 {% endblock %}
 
 {#  <form method="post">#}
