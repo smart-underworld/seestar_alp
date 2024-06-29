@@ -3,7 +3,7 @@ A brain dump of some possible things to add:
 Higher priority items:
 - [X] 1 / 1 mosaic: make it default to 100% overlap
 - [X] default to status page
-- [ ] rewrite front/app.py to use Falcon
+- [X] rewrite front/app.py to use Falcon
 - [ ] lookup coordinates in Sinbad; checkbox to use existing coordinates
 - [ ] correctly handling and/or parse different formats for DEC / RA
 - [ ] implement more of the API!
@@ -16,3 +16,7 @@ Lower priority / blue sky items:
 - [ ] add config flag to enable UI under /ui
 - [ ] Show current position using Aladin.  https://aladin.cds.unistra.fr/AladinLite/doc/
 - [ ] Click to slew?
+- [ ] Pull live stack, if possible
+- [ ] Pull latest images
+- [ ] Image library viewing
+- [ ] have a mock API
