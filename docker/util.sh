@@ -5,7 +5,8 @@ docker_build() {
     local docker_build_PROGRESS="${2:?}"
     local docker_build_DOCKERFILE_PATH="${3:?}"
     local -n docker_build_IMAGE_NAME="${4:?}"
-    local docker_build_CONTEXT_PATH="${5:?}"
+    local -n docker_build_ASTRO_PLATFORM="${5:?}"
+    local docker_build_CONTEXT_PATH="${6:?}"
 
     # Build if the image doesn't exist or if requested.
     if [ "${docker_build_BUILD}" != "true" ]; then
@@ -24,6 +25,7 @@ docker_build() {
 docker build \
     ${docker_build_PROGRESS} \
     -f "${docker_build_DOCKERFILE_PATH}" \
+    --build-arg ASTRO_PLATFORM=${docker_build_ASTRO_PLATFORM} \
     -t "${docker_build_IMAGE_NAME}" \
     "${docker_build_CONTEXT_PATH}"
 EOM

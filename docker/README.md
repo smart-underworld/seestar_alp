@@ -13,18 +13,24 @@ Edit `run.sh` and set `TIME_ZONE` to your local time zone using one of the `TZ i
 `TIME_ZONE="America/Vancouver"`
 
 # Run
-To run, simply run the following command from a terminal, setting your local time zone using one of the `TZ identifier` options listed [here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones). For example:  
+To run on Windows with Alpaca, simply run the following command from a terminal, setting your local time zone using one of the `TZ identifier` options listed [here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones). For example:  
 `TIME_ZONE="America/Vancouver"`
 ```
 ./docker/run.sh -t "America/Vancouver"
 ```
 
+To run on a Mac with INDI, include the `-i` option:
+```
+./docker/run.sh -i -t "America/Vancouver"
+```
+
 # Build
 If the image doesn't exist, then it will be built automatically.  Otherwise, if you want to rebuild it, then run the following:
 ```
-./docker/run.sh -b
+./docker/run.sh -b -t "America/Vancouver"
 ```
-OR
+OR to build the INDI version
 ```
-./docker/run.sh --build
+./docker/run.sh -b -i -t "America/Vancouver"
 ```
+
