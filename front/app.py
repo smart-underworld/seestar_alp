@@ -89,6 +89,7 @@ def check_ra_value(raString):
         r"^\d+h\s*\d+m\s*([0-9.]+s)?$",
         r"^\d+(\.\d+)?$",
         r"^\d+\s+\d+\s+[0-9.]+$"
+        r"^-1$",
     ]
     return any(re.search(pattern, raString) for pattern in valid)
     
