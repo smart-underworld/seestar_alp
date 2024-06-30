@@ -129,17 +129,15 @@ def do_create_mosaic(req, resp, schedule):
     }
     
     if not check_ra_value(ra):
-        print("Bad RA")
         flash(resp, "Invalid RA value")
         errors["ra"] = ra
         
     if not check_dec_value(dec):
-        print("Bad DEC")
         flash(resp, "Invalid DEC Value")
         errors["dec"] = dec
         
     if errors:
-        print("ERROR detected", errors)
+        flash(resp, "ERROR detected in Coordinates")
         return values, errors
 
     if schedule:
@@ -167,11 +165,12 @@ def do_create_image(req, resp, schedule):
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
+    errors = {}
     values = {
         "target_name": targetName,
         "is_j2000": useJ2000,
-        "ra": float(ra),
-        "dec": float(dec),
+        "ra": ra,
+        "dec": dec,
         "is_use_lp_filter": useLpfilter,
         "session_time_sec": int(sessionTime),
         "ra_num": int(raPanels),
@@ -181,6 +180,18 @@ def do_create_image(req, resp, schedule):
         "is_use_autofocus": useAutoFocus
     }
 
+    if not check_ra_value(ra):
+        flash(resp, "Invalid RA value")
+        errors["ra"] = ra
+        
+    if not check_dec_value(dec):
+        flash(resp, "Invalid DEC Value")
+        errors["dec"] = dec
+        
+    if errors:
+        flash(resp, "ERROR detected in Coordinates")
+        return values, errors
+        
     # print("values:", values)
     if schedule:
         response = do_action("add_schedule_item", {
@@ -193,7 +204,7 @@ def do_create_image(req, resp, schedule):
         response = do_action("start_mosaic", values)
         print("POST immediate request", values, response)
 
-    return values
+    return values, errors
 
 
 def redirect(location):
@@ -220,19 +231,19 @@ class HomeResource:
 class ImageResource:
     def on_get(self, req, resp):
         values = {}
-        self.image(req, resp, values)
+        self.image(req, resp, {}, {})
 
     def on_post(self, req, resp):
         values = do_create_image(req, resp, True)
-        self.image(req, resp, {})
+        self.image(req, resp, values, errors)
 
     @staticmethod
-    def image(req, resp, values):
+    def image(req, resp, values, errors):
         current = do_action("get_schedule", {})
         state = current["Value"]["state"]
         schedule = current["Value"]["list"]
         # remove values=values to stop remembering values
-        render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, action="/image")
+        render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors, action="/image")
 
 
 class MosaicResource:
@@ -287,10 +298,15 @@ class ScheduleWaitForResource:
         redirect("/schedule")
 
 
-class ScheduleAutofocusResource:
-    def on_post(self, req, resp):
-        pass
-
+class ScheduleAutoFocusResource:
+    @staticmethod
+    def on_post(req, resp):
+        autoFocus = req.media["autoFocus"]
+        response = do_schedule_action("auto_focus", {"try_count": int(autoFocus)})
+        print("POST scheduled request", response)
+        check_response(resp, response)
+        redirect("/schedule")
+        
 
 class ScheduleImageResource:
     @staticmethod
@@ -389,6 +405,7 @@ def main():
     app.add_route('/schedule/toggle', ScheduleToggleResource())
     app.add_route('/schedule/wait-until', ScheduleWaitUntilResource())
     app.add_route('/schedule/wait-for', ScheduleWaitForResource())
+    app.add_route('/schedule/auto-focus', ScheduleAutoFocusResource())
     app.add_route('/stats', StatsResource())
     try:
         # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:

@@ -19,7 +19,9 @@
                         6h32m32.5s)
                     </div>
                 </div>
-
+				{% if errors.ra %}
+				   <div id="raError" class="form-text" style="color:red;">The RA value you provided {{errors.ra}} is not valid.
+				{% endif %}
             </div>
 
             <div class="mb-3 row">
@@ -31,7 +33,9 @@
                         +6h32m32.5s)
                     </div>
                 </div>
-
+				{% if errors.dec %}
+					<div id="raError" class="form-text" style="color:red;">The DEC value you provided {{errors.dec}} is not valid.
+				{% endif %}
             </div>
           
             <div class="mb-3">
