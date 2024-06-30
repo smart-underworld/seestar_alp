@@ -20,15 +20,10 @@ log_to_stdout = false
 max_size_mb = 5
 num_keep_logs = 10
 
+[[seestars]]
+name = "Seestar Alpha"
 # ip_address should not have to be changed unless you have more than 1 seestar
-[[seestars]]
-name = "SeestarA"
-ip_address = "192.168.42.250"
-device_num = 2
-
-[[seestars]]
-name = "SeestarB"
-ip_address = "192.168.42.251"
+ip_address = "seestar.local"
 device_num = 1
 
 
@@ -44,4 +39,3 @@ device_num = 1
 #ip_address = "192.168.110.238"
 #ip_address = "192.168.8.117"
 #device_num = 3
-
