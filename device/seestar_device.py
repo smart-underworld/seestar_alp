@@ -437,9 +437,11 @@ class Seestar:
         parent_folder = album_result["path"]
         first_list = album_result["list"][0]
         is_subframe = params["is_subframe"]
+        result_url = ""
+        result_name = None
         print("first_list: ", first_list)
         for files in first_list["files"]:
-            if (is_subframe and files["name"].endswith("-sub")) or (not is_subframe and not files["name"].ends_with("-sub")):
+            if (is_subframe and files["name"].endswith("-sub")) or (not is_subframe and not files["name"].endswith("-sub")):
                 result_url = files["thn"]
                 result_name = files["name"]
                 break
