@@ -23,7 +23,7 @@ num_keep_logs = 10
 [[seestars]]
 name = "Seestar Alpha"
 # ip_address should not have to be changed unless you have more than 1 seestar
-ip_address = "seestar.local"  
+ip_address = "seestar.local"
 device_num = 1
 
 
@@ -39,4 +39,3 @@ device_num = 1
 #ip_address = "192.168.110.238"
 #ip_address = "192.168.8.117"
 #device_num = 3
-

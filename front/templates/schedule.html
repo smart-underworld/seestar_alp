@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block header %}
-    <h1>{% block title %}Schedule Page{% endblock %}</h1>
+    <h1>{% block title %}Schedule Page{% endblock %} - {{ telescope["name"] }} ({{ telescope["ip_address"] }})</h1>
 {% endblock %}
 
 {% block content %}
@@ -17,7 +17,7 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="wait-until-tab" data-bs-toggle="tab" data-bs-target="#wait-until"
                         type="button"
-                        role="tab" aria-controls="wait-until" aria-selected="true">Wait Until
+                        role="tab" aria-controls="wait-until" aria-selected="false">Wait Until
                 </button>
             </li>
             <li class="nav-item" role="presentation">
@@ -31,7 +31,7 @@
                         role="tab" aria-controls="auto-focus" aria-selected="false">Auto Focus
                 </button>
             </li>
-			<li class="nav-item" role="presentation">
+            <li class="nav-item" role="presentation">
                 <button class="nav-link" id="image-tab" data-bs-toggle="tab" data-bs-target="#image" type="button"
                         role="tab" aria-controls="image" aria-selected="false">Image
                 </button>
@@ -55,15 +55,16 @@
             <div class="tab-pane fade" id="wait-for" role="tabpanel" aria-labelledby="wait-for-tab">
                 {% include 'schedule_wait_for.html' with context %}
             </div>
-            <div class="tab-pane fade" id="auto-focus" role="tabpanel" aria-labelledby="auto-focus-tab">auto focus tab
+            <div class="tab-pane fade" id="auto-focus" role="tabpanel" aria-labelledby="auto-focus-tab">
+				{% include 'schedule_auto_focus.html' with context %}
             </div>
             <div class="tab-pane fade" id="mosaic" role="tabpanel" aria-labelledby="mosaic-tab">
-                {% with action="/schedule/mosaic" %}
+                {% with action=root ~ "/schedule/mosaic" %}
                     {% include 'mosaic_create.html' with context %}
                 {% endwith %}
             </div>
-			<div class="tab-pane fade" id="image" role="tabpanel" aria-labelledby="image-tab">
-                {% with action="/schedule/image" %}
+            <div class="tab-pane fade" id="image" role="tabpanel" aria-labelledby="image-tab">
+                {% with action=root ~ "/schedule/image" %}
                     {% include 'image_create.html' with context %}
                 {% endwith %}
             </div>
@@ -71,7 +72,6 @@
                 {% include 'schedule_shutdown.html' with context %}
             </div>
         </div>
-		
     </div>
     {#    <div>#}
     {#        <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseExample"#}

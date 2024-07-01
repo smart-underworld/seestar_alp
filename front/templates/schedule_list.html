@@ -28,7 +28,7 @@
                 {% elif item["action"] == 'wait_for' %}
                     <td colspan="10">Wait For {{ item["params"]["timer_sec"] }} seconds</td>
                 {% elif item["action"] == 'auto_focus' %}
-                    <td colspan="10">Autofocus</td>
+                    <td colspan="10">Auto Focus {{ item["params"]["try_count"] }} attempts</td>
                 {% elif item["action"] == 'set_setting_exposures' %}
                     <td colspan="10">Set exposure ...</td>
                 {% elif item["action"] == 'shutdown' %}

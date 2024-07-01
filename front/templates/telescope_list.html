@@ -1,0 +1,24 @@
+<div class="mb-5">
+    <table class="table table-striped">
+        <thead>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Battery</th>
+            <th>Space</th>
+            <th>Last Image</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for item in telescopes %}
+            <tr>
+            <td>{{ items["id"] }}</td>
+            <td>{{ items["name"] }}</td>
+            <td>{{ items["battery"] }}</td>
+            <td>{{ items["space"] }}</td>
+            <td></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
