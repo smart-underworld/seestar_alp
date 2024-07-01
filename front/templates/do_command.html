@@ -1,0 +1,47 @@
+
+<form method="post" action="{{ action }}">
+	<div style="margin-bottom:5px;font-weight:bold">
+		<label for="dropdown">Startup / Shutdown</label>
+	</div>
+	<select id="dropdown" name="command">
+		<option value="start_up_sequence">Start-Up Sequence</option>
+		<option value="scope_park">Scope Park</option>
+		<option value="pi_reboot">Scope Reboot</option>
+		<option value="pi_shutdown">Scope Shutdown</option>
+	</select>
+	<button type="submit" class="btn btn-primary">Execute</button>
+</form>
+<form method="post" action="{{ action }}">	
+	<div style="margin-bottom:5px;font-weight:bold">
+		<label for="dropdown">AutoFocus</label>
+	</div>
+	<select id="dropdown" name="command">
+		<option value="start_auto_focus">Start AutoFocus</option>
+		<option value="stop_auto_focus">Stop AutoFocus</option>
+		<option value="get_focuser_position">Get Current Focuser Position</option>
+		<option value="get_last_focuser_position">Get Last Focuser Position</option>
+	</select>
+	<button type="submit" class="btn btn-primary">Execute</button>
+</form>
+<form method="post" action="{{ action }}">	
+	<div style="margin-bottom:5px;font-weight:bold">
+		<label for="dropdown">Filter</label>
+	</div>
+	<select id="dropdown" name="command">
+		<option value="get_wheel_position">Get Wheel Position</option>
+		<option value="get_wheel_state">Get Wheel State</option>
+		<option value="get_wheel_setting">Get Wheel Setting</option>
+	</select>
+	<button type="submit" class="btn btn-primary">Execute</button>
+</form>
+<form method="post" action="{{ action }}">	
+	<div style="margin-bottom:5px;font-weight:bold">
+		<label for="dropdown">Plate Solve</label>
+	</div>
+	<select id="dropdown" name="command">
+		<option value="start_solve">Start Plate Solve</option>
+		<option value="get_solve_result">Get Current Plate Solve Result</option>
+		<option value="get_last_solve_result">Get Last Plate Solve Result</option>
+	</select>
+	<button type="submit" class="btn btn-primary">Execute</button>
+</form>

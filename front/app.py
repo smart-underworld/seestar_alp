@@ -9,6 +9,7 @@ import requests
 import json
 import re
 import toml
+import os
 
 base_url = "http://localhost:5555"
 
@@ -38,9 +39,17 @@ def get_root(telescope_id):
         telescope = list(filter(lambda tel: tel['device_num'] == telescope_id, telescopes))[0]
         if telescope:
             root = f"/{telescope['device_num']}"
-            print("root:", root)
             return root
     return ""
+
+
+def get_context(telescope_id, req):
+    # probably a better way of doing this...
+    telescope = get_telescope(telescope_id)
+    telescopes = get_telescopes()
+    root = get_root(telescope_id)
+    partial_path = "/".join(req.relative_uri.split("/", 2)[2:])
+    return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path}
 
 
 def get_flash_cookie(req, resp):
@@ -88,7 +97,11 @@ def check_response(resp, response):
 
 def method_sync(method, telescope_id=1):
     out = do_action_device("method_sync", telescope_id, {"method": method})
-    return out["Value"]["result"]
+    
+    if out["Value"].get("error"):
+        return out["Value"]["error"]
+    else:
+        return out["Value"]["result"]
 
 
 def get_device_state(telescope_id=1):
@@ -244,6 +257,58 @@ def do_create_image(req, resp, schedule, telescope_id):
     return values, errors
 
 
+def do_command(req, resp, telescope_id):
+    form = req.media
+    #print("Form: ", form)
+    value = form["command"]
+    #print ("Selected command: ", value)
+    match value:
+        case "start_up_sequence":
+            output = do_action_device("action_start_up_sequence", telescope_id, {"lat":0,"lon":0})
+            return None
+        case "scope_park":
+            output = method_sync("scope_park", telescope_id)
+            return None
+        case "pi_reboot":
+            output = method_sync("pi_reboot", telescope_id)
+            return None
+        case "pi_shutdown":
+            output = method_sync("pi_shutdown", telescope_id)
+            return None
+        case "start_auto_focus":
+            output = method_sync("start_auto_focus", telescope_id)
+            return None
+        case "stop_auto_focus":
+            output = method_sync("stop_auto_focus", telescope_id)
+            return None
+        case "get_focuser_position":
+            output = method_sync("get_focuser_position", telescope_id)
+            return output
+        case "get_last_focuser_position":
+            output = method_sync("get_focuser_position", telescope_id)
+            return output
+        case "start_solve":
+            output = method_sync("start_solve", telescope_id)
+            return None
+        case "get_solve_result":
+            output = method_sync("get_solve_result", telescope_id)
+            return output
+        case "get_last_solve_result":
+            output = method_sync("get_last_solve_result", telescope_id)
+            return output
+        case "get_wheel_position":
+            output = method_sync("get_wheel_position", telescope_id)
+            return output
+        case "get_wheel_state":
+            output = method_sync("get_wheel_state", telescope_id)
+            return output
+        case "get_wheel_setting":
+            output = method_sync("get_wheel_setting", telescope_id)
+            return output
+        case _:
+            print("No command found")
+    #print ("Output: ", output)
+    
 def redirect(location):
     raise HTTPFound(location)
     # raise HTTPTemporaryRedirect(location)
@@ -286,21 +351,36 @@ class ImageResource:
         self.image(req, resp, {}, {}, telescope_id)
 
     def on_post(self, req, resp, telescope_id=1):
-        values, errors = do_create_image(req, resp, True)
+        values, errors = do_create_image(req, resp, True, telescope_id)
         self.image(req, resp, values, errors, telescope_id)
 
     @staticmethod
     def image(req, resp, values, errors, telescope_id):
-        telescope = get_telescope(telescope_id)
         current = do_action_device("get_schedule", telescope_id, {})
         state = current["Value"]["state"]
         schedule = current["Value"]["list"]
-        root = get_root(telescope_id)
+        context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors,
-                        action=f"/{telescope_id}/image", telescope=telescope, root=root)
+                        action=f"/{telescope_id}/image", **context)
 
+class CommandResource:   
+    def on_get(self, req, resp, telescope_id=1):
+        self.command(req, resp, telescope_id, {})
+    
+    def on_post(self, req, resp, telescope_id=1):
+        output = do_command(req, resp, telescope_id)
+        self.command(req, resp, telescope_id, output)
+    
+    @staticmethod
+    def command(req, resp, telescope_id, output):
+        current = do_action_device("get_schedule", telescope_id, {})
+        state = current["Value"]["state"]
+        schedule = current["Value"]["list"]
+        context = get_context(telescope_id, req)
 
+        render_template(req, resp, 'command.html', state=state, schedule=schedule, action=f"/{telescope_id}/command", output=output, **context)
+        
 class MosaicResource:
     def on_get(self, req, resp, telescope_id=1):
         self.mosaic(req, resp, {}, {}, telescope_id)
@@ -311,15 +391,13 @@ class MosaicResource:
 
     @staticmethod
     def mosaic(req, resp, values, errors, telescope_id):
-        telescope = get_telescope(telescope_id)
         current = do_action_device("get_schedule", telescope_id, {})
         state = current["Value"]["state"]
         schedule = current["Value"]["list"]
-        root = get_root(telescope_id)
+        context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'mosaic.html', state=state, schedule=schedule, values=values, errors=errors,
-                        action=f"/{telescope_id}/mosaic", telescope=telescope, root=root)
-
+                        action=f"/{telescope_id}/mosaic", **context)
 
 class ScheduleResource:
     def on_get(self, req, resp, telescope_id=1):
@@ -330,13 +408,12 @@ class ScheduleResource:
 
     @staticmethod
     def render_schedule(req, resp, telescope_id):
-        telescope = get_telescope(telescope_id)
         current = do_action_device("get_schedule", telescope_id, {})
         state = current["Value"]["state"]
         schedule = current["Value"]["list"]
-        root = get_root(telescope_id)
+        context = get_context(telescope_id, req)
         render_template(req, resp, 'schedule.html', schedule=schedule, state=state, errors={}, values={},
-                        telescope=telescope, root=root)
+                        **context)
 
 
 class ScheduleWaitUntilResource:
@@ -366,7 +443,7 @@ class ScheduleAutoFocusResource:
         response = do_schedule_action_device("auto_focus", {"try_count": int(autoFocus)}, telescope_id)
         print("POST scheduled request", response)
         check_response(resp, response)
-        redirect("/schedule")
+        redirect(f"{telescope_id}/schedule")
 
 
 class ScheduleImageResource:
@@ -417,8 +494,8 @@ class ScheduleClearResource:
         do_action_device("create_schedule", telescope_id, {})
         flash(resp, "Created New Schedule")
         redirect(f"/{telescope_id}/schedule")
-
-
+   
+   
 class LivePage:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -431,9 +508,8 @@ class LivePage:
             mode = status["View"]["mode"]
         state = method_sync("get_device_state")
         # ip = state["station"]["ip"]
-        telescope = get_telescope(telescope_id)
-        root = get_root(telescope_id)
-        render_template(req, resp, 'live.html', mode=f"{view_state} {mode}.", telescope=telescope, root=root)
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'live.html', mode=f"{view_state} {mode}.", **context)
         # Of non-star mode, offer to open link:  stream=rtps://{ip}:4554/stream
 
 
@@ -464,8 +540,8 @@ class StatsResource:
     def on_get(req, resp, telescope_id=1):
         stats = get_device_state()
         now = datetime.now()
-        root = get_root(telescope_id)
-        render_template(req, resp, 'stats.html', stats=stats, now=now, root=root)
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'stats.html', stats=stats, now=now, **context)
 
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
@@ -485,6 +561,7 @@ def main():
     app.add_route('/search', SearchObjectResource())
     app.add_route('/settings', SettingsResource())
     app.add_route('/schedule', ScheduleResource())
+    app.add_route('/command', CommandResource())
     app.add_route('/schedule/clear', ScheduleClearResource())
     app.add_route('/schedule/image', ScheduleImageResource())
     app.add_route('/schedule/mosaic', ScheduleMosaicResource())
@@ -495,6 +572,7 @@ def main():
     app.add_route('/schedule/auto-focus', ScheduleAutoFocusResource())
     app.add_route('/stats', StatsResource())
     app.add_route('/{telescope_id:int}/', HomeTelescopeResource())
+    app.add_route('/{telescope_id:int}/command', CommandResource())
     app.add_route('/{telescope_id:int}/image', ImageResource())
     app.add_route('/{telescope_id:int}/live', LivePage())
     app.add_route('/{telescope_id:int}/mosaic', MosaicResource())
@@ -511,6 +589,7 @@ def main():
     app.add_route('/{telescope_id:int}/schedule/wait-for', ScheduleWaitForResource())
     app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
     app.add_route('/{telescope_id:int}/stats', StatsResource())
+    app.add_static_route("/public", f"{os.getcwd()}/public")
     try:
         # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
         with make_server("127.0.0.1", 5432, app, handler_class=LoggingWSGIRequestHandler) as httpd:
