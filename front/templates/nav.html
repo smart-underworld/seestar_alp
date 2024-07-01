@@ -6,50 +6,59 @@
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
-          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-            <li class="nav-item">
-              <a class="nav-link active" aria-current="page" href="{{ root }}/">Home</a>
-            </li>
-			<li class="nav-item">
-				<a class="nav-link" href="{{ root }}/image">Image</a>
-			</li>
-{#            <li class="nav-item">#}
-{#              <a class="nav-link" href="{{ root }}/live">Live</a>#}
-{#            </li>#}
-            <li class="nav-item">
-              <a class="nav-link" href="{{ root }}/mosaic">Mosaic</a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="{{ root }}/schedule">Schedule</a>
-            </li>
-			<li class="nav-item">
-				<a class="nav-link" href="{{ root }}/command">Commands</a>
-			</li>
-{#            <li class="nav-item">#}
-{#              <a class="nav-link" href="/settings">Settings</a>#}
-{#            </li>#}
-            <li class="nav-item">
-              <a class="nav-link" href="{{ root }}/stats">Stats</a>
-            </li>
-{#            <li class="nav-item dropdown">#}
-{#              <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">#}
-{#                Dropdown#}
-{#              </a>#}
-{#              <ul class="dropdown-menu" aria-labelledby="navbarDropdown">#}
-{#                <li><a class="dropdown-item" href="#">Action</a></li>#}
-{#                <li><a class="dropdown-item" href="#">Another action</a></li>#}
-{#                <li><hr class="dropdown-divider"></li>#}
-{#                <li><a class="dropdown-item" href="#">Something else here</a></li>#}
-{#              </ul>#}
-{#            </li>#}
-{#            <li class="nav-item">#}
-{#              <a class="nav-link disabled">Disabled</a>#}
-{#            </li>#}
-          </ul>
-{#          <form class="d-flex" role="search">#}
-{#            <input class="form-control me-2" type="search" placeholder="Search" aria-label="Search">#}
-{#            <button class="btn btn-outline-success" type="submit">Search</button>#}
-{#          </form>#}
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <li class="nav-item">
+                    <a class="nav-link active" aria-current="page" href="{{ root }}/">Home</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ root }}/image">Image</a>
+                </li>
+                {#            <li class="nav-item">#}
+                {#              <a class="nav-link" href="{{ root }}/live">Live</a>#}
+                {#            </li>#}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ root }}/mosaic">Mosaic</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ root }}/schedule">Schedule</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ root }}/command">Commands</a>
+                </li>
+                {#            <li class="nav-item">#}
+                {#              <a class="nav-link" href="/settings">Settings</a>#}
+                {#            </li>#}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ root }}/stats">Stats</a>
+                </li>
+                {#            <li class="nav-item dropdown">#}
+                {#              <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">#}
+                {#                Dropdown#}
+                {#              </a>#}
+                {#              <ul class="dropdown-menu" aria-labelledby="navbarDropdown">#}
+                {#                <li><a class="dropdown-item" href="#">Action</a></li>#}
+                {#                <li><a class="dropdown-item" href="#">Another action</a></li>#}
+                {#                <li><hr class="dropdown-divider"></li>#}
+                {#                <li><a class="dropdown-item" href="#">Something else here</a></li>#}
+                {#              </ul>#}
+                {#            </li>#}
+                {#            <li class="nav-item">#}
+                {#              <a class="nav-link disabled">Disabled</a>#}
+                {#            </li>#}
+            </ul>
+            <div class="dropdown">
+                <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown"
+                        aria-expanded="false">
+                    {{ telescope["name"] }} ({{ telescope["ip_address"] }})
+                </button>
+                <ul class="dropdown-menu">
+                    {% for tel in telescopes %}
+                        <li><a class="dropdown-item"
+                               href="/{{ tel["device_num"] }}/{{ partial_path }}">{{ tel["name"] }}
+                            ({{ tel["ip_address"] }})</a></li>
+                    {% endfor %}
+                </ul>
+            </div>
         </div>
     </div>
 </nav>

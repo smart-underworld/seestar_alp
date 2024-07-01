@@ -9,6 +9,7 @@ import requests
 import json
 import re
 import toml
+import os
 
 base_url = "http://localhost:5555"
 
@@ -38,9 +39,17 @@ def get_root(telescope_id):
         telescope = list(filter(lambda tel: tel['device_num'] == telescope_id, telescopes))[0]
         if telescope:
             root = f"/{telescope['device_num']}"
-            print("root:", root)
             return root
     return ""
+
+
+def get_context(telescope_id, req):
+    # probably a better way of doing this...
+    telescope = get_telescope(telescope_id)
+    telescopes = get_telescopes()
+    root = get_root(telescope_id)
+    partial_path = "/".join(req.relative_uri.split("/", 2)[2:])
+    return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path}
 
 
 def get_flash_cookie(req, resp):
@@ -342,19 +351,18 @@ class ImageResource:
         self.image(req, resp, {}, {}, telescope_id)
 
     def on_post(self, req, resp, telescope_id=1):
-        values, errors = do_create_image(req, resp, True)
+        values, errors = do_create_image(req, resp, True, telescope_id)
         self.image(req, resp, values, errors, telescope_id)
 
     @staticmethod
     def image(req, resp, values, errors, telescope_id):
-        telescope = get_telescope(telescope_id)
         current = do_action_device("get_schedule", telescope_id, {})
         state = current["Value"]["state"]
         schedule = current["Value"]["list"]
-        root = get_root(telescope_id)
+        context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors,
-                        action=f"/{telescope_id}/image", telescope=telescope, root=root)
+                        action=f"/{telescope_id}/image", **context)
 
 class CommandResource:   
     def on_get(self, req, resp, telescope_id=1):
@@ -366,13 +374,12 @@ class CommandResource:
     
     @staticmethod
     def command(req, resp, telescope_id, output):
-        telescope = get_telescope(telescope_id)
         current = do_action_device("get_schedule", telescope_id, {})
         state = current["Value"]["state"]
         schedule = current["Value"]["list"]
-        root = get_root(telescope_id)
+        context = get_context(telescope_id, req)
 
-        render_template(req, resp, 'command.html', state=state, schedule=schedule, action=f"/{telescope_id}/command", output=output, telescope=telescope, root=root)
+        render_template(req, resp, 'command.html', state=state, schedule=schedule, action=f"/{telescope_id}/command", output=output, **context)
         
 class MosaicResource:
     def on_get(self, req, resp, telescope_id=1):
@@ -384,14 +391,13 @@ class MosaicResource:
 
     @staticmethod
     def mosaic(req, resp, values, errors, telescope_id):
-        telescope = get_telescope(telescope_id)
         current = do_action_device("get_schedule", telescope_id, {})
         state = current["Value"]["state"]
         schedule = current["Value"]["list"]
-        root = get_root(telescope_id)
+        context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'mosaic.html', state=state, schedule=schedule, values=values, errors=errors,
-                        action=f"/{telescope_id}/mosaic", telescope=telescope, root=root)
+                        action=f"/{telescope_id}/mosaic", **context)
 
 class ScheduleResource:
     def on_get(self, req, resp, telescope_id=1):
@@ -402,13 +408,12 @@ class ScheduleResource:
 
     @staticmethod
     def render_schedule(req, resp, telescope_id):
-        telescope = get_telescope(telescope_id)
         current = do_action_device("get_schedule", telescope_id, {})
         state = current["Value"]["state"]
         schedule = current["Value"]["list"]
-        root = get_root(telescope_id)
+        context = get_context(telescope_id, req)
         render_template(req, resp, 'schedule.html', schedule=schedule, state=state, errors={}, values={},
-                        telescope=telescope, root=root)
+                        **context)
 
 
 class ScheduleWaitUntilResource:
@@ -503,9 +508,8 @@ class LivePage:
             mode = status["View"]["mode"]
         state = method_sync("get_device_state")
         # ip = state["station"]["ip"]
-        telescope = get_telescope(telescope_id)
-        root = get_root(telescope_id)
-        render_template(req, resp, 'live.html', mode=f"{view_state} {mode}.", telescope=telescope, root=root)
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'live.html', mode=f"{view_state} {mode}.", **context)
         # Of non-star mode, offer to open link:  stream=rtps://{ip}:4554/stream
 
 
@@ -536,8 +540,8 @@ class StatsResource:
     def on_get(req, resp, telescope_id=1):
         stats = get_device_state()
         now = datetime.now()
-        root = get_root(telescope_id)
-        render_template(req, resp, 'stats.html', stats=stats, now=now, root=root)
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'stats.html', stats=stats, now=now, **context)
 
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
@@ -585,6 +589,7 @@ def main():
     app.add_route('/{telescope_id:int}/schedule/wait-for', ScheduleWaitForResource())
     app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
     app.add_route('/{telescope_id:int}/stats', StatsResource())
+    app.add_static_route("/public", f"{os.getcwd()}/public")
     try:
         # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
         with make_server("127.0.0.1", 5432, app, handler_class=LoggingWSGIRequestHandler) as httpd:
