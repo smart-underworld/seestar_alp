@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+
+{% block header %}
+    <h1>{% block title %}Commands{% endblock %}</h1>
+{% endblock %}
+
+{% block content %}
+    
+    <h3 class="mb-2">Select a command to execute</h3>
+
+    {% include 'do_command.html' with context %}
+	
+	{% if output %}
+		<div class="alert alert-primary" role="alert">{{output}}</div>
+	{% endif %}
+	
+{% endblock %}
