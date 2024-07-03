@@ -1,0 +1,7 @@
+{% extends 'schedule_base.html' %}
+
+{% block schedule_tab_content %}
+    {% with action=root ~ "/schedule/image" %}
+        {% include 'image_create.html' with context %}
+    {% endwith %}
+{% endblock %}

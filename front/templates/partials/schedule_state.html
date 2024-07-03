@@ -1,0 +1,8 @@
+<div hx-post="{{ root }}/schedule/state" hx-swap="outerHTML">
+    <span class="me-3">State: {{ state }}</span>
+    <span>
+        <button type="submit" class="btn btn-primary">
+            {% if state == "Stopped" %}Start{% else %}Stop{% endif %}
+        </button>
+    </span>
+</div>

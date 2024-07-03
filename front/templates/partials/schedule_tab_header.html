@@ -1,0 +1,53 @@
+<ul class="nav nav-pills mb-3" id="actionTab">
+    <li class="nav-item" role="presentation">
+        <a href="{{ root }}/schedule/wait-until"
+           class="nav-link {% if tab == "wait-until" %}active{% endif %}"
+           id="wait-until-tab"
+           type="button"
+                {#                role="tab"#}
+           aria-controls="wait-until"
+           aria-selected="false">Wait Until
+        </a>
+    </li>
+    <li class="nav-item" role="presentation">
+        <a href="{{ root }}/schedule/wait-for"
+           class="nav-link {% if tab == "wait-for" %}active{% endif %}"
+           type="button"
+           aria-controls="wait-for"
+           aria-selected="true">Wait For
+        </a>
+    </li>
+    <li class="nav-item" role="presentation">
+        <a href="{{ root }}/schedule/auto-focus"
+           class="nav-link {% if tab == "auto-focus" %}active{% endif %}"
+           type="button"
+           aria-controls="auto-focus"
+           aria-selected="false">Auto Focus
+        </a>
+    </li>
+    <li class="nav-item" role="presentation">
+        <a href="{{ root }}/schedule/image"
+           class="nav-link {% if tab == "image" %}active{% endif %}"
+           type="button"
+           aria-controls="image"
+           aria-selected="false">Image
+        </a>
+    </li>
+    <li class="nav-item" role="presentation">
+        <a href="{{ root }}/schedule/mosaic"
+           class="nav-link {% if tab == "mosaic" %}active{% endif %}"
+           type="button"
+           aria-controls="mosaic"
+           aria-selected="false">Mosaic
+        </a>
+    </li>
+    <li class="nav-item" role="presentation">
+        <a href="{{ root }}/schedule/shutdown"
+           class="nav-link {% if tab == "shutdown" %}active{% endif %}"
+           type="button"
+           aria-controls="shutdown"
+           aria-selected="false">Shutdown
+        </a>
+    </li>
+</ul>
+
