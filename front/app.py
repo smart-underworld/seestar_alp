@@ -19,7 +19,7 @@ messages = []
 def flash(resp, message):
     # todo : set to internal state so it can be used!
     resp.set_cookie('flash_cookie', message, path='/')
-    message.push(message)
+    messages.append(message)
 
 def get_messages():
     if len(messages) > 0:
@@ -483,8 +483,8 @@ class ScheduleImageResource:
 
     @staticmethod
     def on_post(req, resp, telescope_id=1):
-        values = do_create_image(req, resp, True, telescope_id)
-        render_schedule_tab(req, resp, telescope_id, 'schedule_image.html', 'image', values, {})
+        values, errors = do_create_image(req, resp, True, telescope_id)
+        render_schedule_tab(req, resp, telescope_id, 'schedule_image.html', 'image', values, errors)
 
 
 class ScheduleMosaicResource:
@@ -494,8 +494,8 @@ class ScheduleMosaicResource:
 
     @staticmethod
     def on_post(req, resp, telescope_id=1):
-        values = do_create_mosaic(req, resp, True, telescope_id)
-        render_schedule_tab(req, resp, telescope_id, 'schedule_mosaic.html', 'mosaic', values, {})
+        values, errors = do_create_mosaic(req, resp, True, telescope_id)
+        render_schedule_tab(req, resp, telescope_id, 'schedule_mosaic.html', 'mosaic', values, errors)
 
 
 class ScheduleShutdownResource:
