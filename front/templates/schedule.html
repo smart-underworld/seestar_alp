@@ -1,106 +1,96 @@
-{% extends 'base.html' %}
+<div id="tabs" hx-get="{{ root }}/schedule/wait-until"
+     hx-trigger="load delay:100ms"
+     hx-target="#tabs" hx-swap="outerHTML"></div>
 
-{% block header %}
-    <h1>{% block title %}Schedule Page{% endblock %} - {{ telescope["name"] }} ({{ telescope["ip_address"] }})</h1>
-{% endblock %}
 
-{% block content %}
-    <h3 class="mb-2">Current Schedule</h3>
-
-    {% include 'schedule_list.html' with context %}
-
-    <p></p>
-    <p>Schedule page. Pick an item to schedule, and Submit to add to the schedule.</p>
-
-    <div>
-        <ul class="nav nav-pills mb-3" id="actionTab" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="wait-until-tab" data-bs-toggle="tab" data-bs-target="#wait-until"
-                        type="button"
-                        role="tab" aria-controls="wait-until" aria-selected="false">Wait Until
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="wait-for-tab" data-bs-toggle="tab" data-bs-target="#wait-for" type="button"
-                        role="tab" aria-controls="wait-for" aria-selected="false">Wait For
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="auto-focus-tab" data-bs-toggle="tab" data-bs-target="#auto-focus"
-                        type="button"
-                        role="tab" aria-controls="auto-focus" aria-selected="false">Auto Focus
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="image-tab" data-bs-toggle="tab" data-bs-target="#image" type="button"
-                        role="tab" aria-controls="image" aria-selected="false">Image
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="mosaic-tab" data-bs-toggle="tab" data-bs-target="#mosaic" type="button"
-                        role="tab" aria-controls="mosaic" aria-selected="false">Mosaic
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="shutdown-tab" data-bs-toggle="tab" data-bs-target="#shutdown" type="button"
-                        role="tab" aria-controls="shutdown" aria-selected="false">Shutdown
-                </button>
-            </li>
-        </ul>
-
-        <div class="tab-content" id="actionTabContent">
-            <div class="tab-pane fade show active" id="wait-until" role="tabpanel" aria-labelledby="wait-until-tab">
-                {% include 'schedule_wait_until.html' with context %}
-            </div>
-            <div class="tab-pane fade" id="wait-for" role="tabpanel" aria-labelledby="wait-for-tab">
-                {% include 'schedule_wait_for.html' with context %}
-            </div>
-            <div class="tab-pane fade" id="auto-focus" role="tabpanel" aria-labelledby="auto-focus-tab">
-				{% include 'schedule_auto_focus.html' with context %}
-            </div>
-            <div class="tab-pane fade" id="mosaic" role="tabpanel" aria-labelledby="mosaic-tab">
-                {% with action=root ~ "/schedule/mosaic" %}
-                    {% include 'mosaic_create.html' with context %}
-                {% endwith %}
-            </div>
-            <div class="tab-pane fade" id="image" role="tabpanel" aria-labelledby="image-tab">
-                {% with action=root ~ "/schedule/image" %}
-                    {% include 'image_create.html' with context %}
-                {% endwith %}
-            </div>
-            <div class="tab-pane fade" id="shutdown" role="tabpanel" aria-labelledby="shutdown-tab">
-                {% include 'schedule_shutdown.html' with context %}
-            </div>
-        </div>
-    </div>
-    {#    <div>#}
-    {#        <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseExample"#}
-    {#                aria-expanded="false" aria-controls="collapseExample">#}
-    {#            Wait until time#}
-    {#        </button>#}
-    {##}
-    {#        <input type="radio" class="btn-check" name="options" id="option1" autocomplete="off"#}
-    {#               checked>#}
-    {#        <label class=" btn btn-primary" for="option1">Wait until time</label>#}
-    {##}
-    {#        <input type="radio" class="btn-check" name="options" id="option2" autocomplete="off">#}
-    {#        <label class="btn btn-primary" for="option2">Wait until timer</label>#}
-    {##}
-    {#        <input type="radio" class="btn-check" name="options" id="option3" autocomplete="off">#}
-    {#        <label class="btn btn-primary" for="option3">Auto Focus</label>#}
-    {##}
-    {#        <input type="radio" class="btn-check" name="options" id="option4" autocomplete="off">#}
-    {#        <label class="btn btn-primary" for="option4">Start mosaic</label>#}
-    {##}
-    {#        <input type="radio" class="btn-check" name="options" id="option4" autocomplete="off">#}
-    {#        <label class="btn btn-primary" for="option4">Shutdown</label>#}
-    {##}
-    {#        <div class="collapse" id="collapseExample">#}
-    {#            <div class="card card-body">#}
-    {#                Some placeholder content for the collapse component. This panel is hidden by default but revealed when#}
-    {#                the#}
-    {#                user activates the relevant trigger.#}
-    {#            </div>#}
-    {#        </div>#}
-    {#    </div>#}
-{% endblock %}
+{#    <div>#}
+{#        <ul class="nav nav-pills mb-3" id="actionTab" role="tablist">#}
+{#            <li class="nav-item" role="presentation">#}
+{#                <button class="nav-link active" id="wait-until-tab" data-bs-toggle="tab" data-bs-target="#wait-until"#}
+{#                        type="button"#}
+{#                        role="tab" aria-controls="wait-until" aria-selected="false">Wait Until#}
+{#                </button>#}
+{#            </li>#}
+{#            <li class="nav-item" role="presentation">#}
+{#                <button class="nav-link" id="wait-for-tab" data-bs-toggle="tab" data-bs-target="#wait-for" type="button"#}
+{#                        role="tab" aria-controls="wait-for" aria-selected="false">Wait For#}
+{#                </button>#}
+{#            </li>#}
+{#            <li class="nav-item" role="presentation">#}
+{#                <button class="nav-link" id="auto-focus-tab" data-bs-toggle="tab" data-bs-target="#auto-focus"#}
+{#                        type="button"#}
+{#                        role="tab" aria-controls="auto-focus" aria-selected="false">Auto Focus#}
+{#                </button>#}
+{#            </li>#}
+{#            <li class="nav-item" role="presentation">#}
+{#                <button class="nav-link" id="image-tab" data-bs-toggle="tab" data-bs-target="#image" type="button"#}
+{#                        role="tab" aria-controls="image" aria-selected="false">Image#}
+{#                </button>#}
+{#            </li>#}
+{#            <li class="nav-item" role="presentation">#}
+{#                <button class="nav-link" id="mosaic-tab" data-bs-toggle="tab" data-bs-target="#mosaic" type="button"#}
+{#                        role="tab" aria-controls="mosaic" aria-selected="false">Mosaic#}
+{#                </button>#}
+{#            </li>#}
+{#            <li class="nav-item" role="presentation">#}
+{#                <button class="nav-link" id="shutdown-tab" data-bs-toggle="tab" data-bs-target="#shutdown" type="button"#}
+{#                        role="tab" aria-controls="shutdown" aria-selected="false">Shutdown#}
+{#                </button>#}
+{#            </li>#}
+{#        </ul>#}
+{##}
+{#        <div class="tab-content" id="actionTabContent">#}
+{#            <div class="tab-pane fade show active" id="wait-until" role="tabpanel" aria-labelledby="wait-until-tab">#}
+{#                {% include 'schedule_wait_until.html' with context %}#}
+{#            </div>#}
+{#            <div class="tab-pane fade" id="wait-for" role="tabpanel" aria-labelledby="wait-for-tab">#}
+{#                {% include 'schedule_wait_for.html' with context %}#}
+{#            </div>#}
+{#            <div class="tab-pane fade" id="auto-focus" role="tabpanel" aria-labelledby="auto-focus-tab">#}
+{#				{% include 'schedule_auto_focus.html' with context %}#}
+{#            </div>#}
+{#            <div class="tab-pane fade" id="mosaic" role="tabpanel" aria-labelledby="mosaic-tab">#}
+{#                {% with action=root ~ "/schedule/mosaic" %}#}
+{#                    {% include 'mosaic_create.html' with context %}#}
+{#                {% endwith %}#}
+{#            </div>#}
+{#            <div class="tab-pane fade" id="image" role="tabpanel" aria-labelledby="image-tab">#}
+{#                {% with action=root ~ "/schedule/image" %}#}
+{#                    {% include 'image_create.html' with context %}#}
+{#                {% endwith %}#}
+{#            </div>#}
+{#            <div class="tab-pane fade" id="shutdown" role="tabpanel" aria-labelledby="shutdown-tab">#}
+{#                {% include 'schedule_shutdown.html' with context %}#}
+{#            </div>#}
+{#        </div>#}
+{#    </div>#}
+{#    <div>#}
+{#        <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseExample"#}
+{#                aria-expanded="false" aria-controls="collapseExample">#}
+{#            Wait until time#}
+{#        </button>#}
+{##}
+{#        <input type="radio" class="btn-check" name="options" id="option1" autocomplete="off"#}
+{#               checked>#}
+{#        <label class=" btn btn-primary" for="option1">Wait until time</label>#}
+{##}
+{#        <input type="radio" class="btn-check" name="options" id="option2" autocomplete="off">#}
+{#        <label class="btn btn-primary" for="option2">Wait until timer</label>#}
+{##}
+{#        <input type="radio" class="btn-check" name="options" id="option3" autocomplete="off">#}
+{#        <label class="btn btn-primary" for="option3">Auto Focus</label>#}
+{##}
+{#        <input type="radio" class="btn-check" name="options" id="option4" autocomplete="off">#}
+{#        <label class="btn btn-primary" for="option4">Start mosaic</label>#}
+{##}
+{#        <input type="radio" class="btn-check" name="options" id="option4" autocomplete="off">#}
+{#        <label class="btn btn-primary" for="option4">Shutdown</label>#}
+{##}
+{#        <div class="collapse" id="collapseExample">#}
+{#            <div class="card card-body">#}
+{#                Some placeholder content for the collapse component. This panel is hidden by default but revealed when#}
+{#                the#}
+{#                user activates the relevant trigger.#}
+{#            </div>#}
+{#        </div>#}
+{#    </div>#}

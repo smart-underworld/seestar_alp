@@ -13,11 +13,20 @@ import toml
 import os
 
 base_url = "http://localhost:5555"
+messages = []
 
 
 def flash(resp, message):
+    # todo : set to internal state so it can be used!
     resp.set_cookie('flash_cookie', message, path='/')
+    message.push(message)
 
+def get_messages():
+    if len(messages) > 0:
+        resp = messages
+        messages.clear()
+        return resp
+    return []
 
 def get_telescopes():
     with open('../device/config.toml', 'r') as inf:
@@ -260,9 +269,9 @@ def do_create_image(req, resp, schedule, telescope_id):
 
 def do_command(req, resp, telescope_id):
     form = req.media
-    #print("Form: ", form)
+    # print("Form: ", form)
     value = form["command"]
-    #print ("Selected command: ", value)
+    # print ("Selected command: ", value)
     match value:
         case "start_up_sequence":
             output = do_action_device("action_start_up_sequence", telescope_id, {"lat": 0, "lon": 0})
@@ -308,7 +317,7 @@ def do_command(req, resp, telescope_id):
             return output
         case _:
             print("No command found")
-    #print ("Output: ", output)
+    # print ("Output: ", output)
 
 
 def redirect(location):
@@ -321,7 +330,17 @@ def render_template(req, resp, template_name, **context):
 
     resp.status = falcon.HTTP_200
     resp.content_type = 'text/html'
-    resp.text = template.render(flashed_messages=get_flash_cookie(req, resp), **context)
+    resp.text = template.render(flashed_messages=get_flash_cookie(req, resp),
+                                messages=get_messages(),
+                                **context)
+
+
+def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
+    current = do_action_device("get_schedule", telescope_id, {})
+    schedule = current["Value"]["list"]
+    context = get_context(telescope_id, req)
+    render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values,
+                    **context)
 
 
 class HomeResource:
@@ -406,71 +425,89 @@ class MosaicResource:
 
 
 class ScheduleResource:
-    def on_get(self, req, resp, telescope_id=1):
-        self.render_schedule(req, resp, telescope_id)
-
-    def on_post(self, req, resp, telescope_id=1):
-        self.render_schedule(req, resp, telescope_id)
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
 
     @staticmethod
-    def render_schedule(req, resp, telescope_id):
-        current = do_action_device("get_schedule", telescope_id, {})
-        schedule = current["Value"]["list"]
-        context = get_context(telescope_id, req)
-        render_template(req, resp, 'schedule.html', schedule=schedule, errors={}, values={},
-                        **context)
+    def on_post(req, resp, telescope_id=1):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
 
 
 class ScheduleWaitUntilResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
+
     @staticmethod
     def on_post(req, resp, telescope_id=1):
         waitUntil = req.media["waitUntil"]
         response = do_schedule_action_device("wait_until", {"local_time": waitUntil}, telescope_id)
         # print("POST scheduled request", response)
         check_response(resp, response)
-        redirect(f"/{telescope_id}/schedule")
+        render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
 
 
 class ScheduleWaitForResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_wait_for.html', 'wait-for', {}, {})
+
     @staticmethod
     def on_post(req, resp, telescope_id=1):
         waitFor = req.media["waitFor"]
         response = do_schedule_action_device("wait_for", {"timer_sec": int(waitFor)}, telescope_id)
         # print("POST scheduled request", response)
         check_response(resp, response)
-        redirect(f"/{telescope_id}/schedule")
+        render_schedule_tab(req, resp, telescope_id, 'schedule_wait_for.html', 'wait-for', {}, {})
 
 
 class ScheduleAutoFocusResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_auto_focus.html', 'auto-focus', {}, {})
+
     @staticmethod
     def on_post(req, resp, telescope_id=1):
         autoFocus = req.media["autoFocus"]
         response = do_schedule_action_device("auto_focus", {"try_count": int(autoFocus)}, telescope_id)
         print("POST scheduled request", response)
         check_response(resp, response)
-        redirect(f"{telescope_id}/schedule")
+        render_schedule_tab(req, resp, telescope_id, 'schedule_auto_focus.html', 'auto-focus', {}, {})
 
 
 class ScheduleImageResource:
     @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_image.html', 'image', {}, {})
+
+    @staticmethod
     def on_post(req, resp, telescope_id=1):
         values = do_create_image(req, resp, True, telescope_id)
-        redirect(f"/{telescope_id}/schedule")
+        render_schedule_tab(req, resp, telescope_id, 'schedule_image.html', 'image', values, {})
 
 
 class ScheduleMosaicResource:
     @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_mosaic.html', 'mosaic', {}, {})
+
+    @staticmethod
     def on_post(req, resp, telescope_id=1):
         values = do_create_mosaic(req, resp, True, telescope_id)
-        redirect(f"/{telescope_id}/schedule")
+        render_schedule_tab(req, resp, telescope_id, 'schedule_mosaic.html', 'mosaic', values, {})
 
 
 class ScheduleShutdownResource:
     @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_shutdown.html', 'shutdown', {}, {})
+
+    @staticmethod
     def on_post(req, resp, telescope_id=1):
         response = do_schedule_action_device("shutdown", "", telescope_id)
         check_response(resp, response)
-        redirect(f"/{telescope_id}/schedule")
+        render_schedule_tab(req, resp, telescope_id, 'schedule_shutdown.html', 'shutdown', {}, {})
 
 
 class ScheduleToggleResource:

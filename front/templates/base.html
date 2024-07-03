@@ -22,6 +22,9 @@
         {% for message in flashed_messages %}
             <div class="alert alert-primary" role="alert">{{ message }}</div>
         {% endfor %}
+        {% for message in messages %}
+            <div class="alert alert-primary" role="alert">{{ message }}</div>
+        {% endfor %}
         {% block content %}{% endblock %}
     </section>
 </main>

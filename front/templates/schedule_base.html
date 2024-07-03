@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block header %}
+    <h1>{% block title %}Schedule Page{% endblock %} - {{ telescope["name"] }} ({{ telescope["ip_address"] }})</h1>
+{% endblock %}
+
+{% block content %}
+    <h3 class="mb-2">Current Schedule</h3>
+
+    {% include 'schedule_list.html' with context %}
+
+    <p></p>
+    <p>Schedule page. Pick an item to schedule, and Submit to add to the schedule.</p>
+
+    {% include 'partials/schedule_tab_header.html' with context %}
+
+    <div class="tab-content">
+        <div class="tab-pane fade show active" role="tabpanel" aria-labelledby="auto-focus-tab">
+            {% block schedule_tab_content %}{% endblock %}
+        </div>
+    </div>
+{% endblock %}
