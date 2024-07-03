@@ -1,3 +1,4 @@
+import time
 from datetime import datetime
 
 import falcon
@@ -97,7 +98,7 @@ def check_response(resp, response):
 
 def method_sync(method, telescope_id=1):
     out = do_action_device("method_sync", telescope_id, {"method": method})
-    
+
     if out["Value"].get("error"):
         return out["Value"]["error"]
     else:
@@ -264,7 +265,7 @@ def do_command(req, resp, telescope_id):
     #print ("Selected command: ", value)
     match value:
         case "start_up_sequence":
-            output = do_action_device("action_start_up_sequence", telescope_id, {"lat":0,"lon":0})
+            output = do_action_device("action_start_up_sequence", telescope_id, {"lat": 0, "lon": 0})
             return None
         case "scope_park":
             output = method_sync("scope_park", telescope_id)
@@ -308,7 +309,8 @@ def do_command(req, resp, telescope_id):
         case _:
             print("No command found")
     #print ("Output: ", output)
-    
+
+
 def redirect(location):
     raise HTTPFound(location)
     # raise HTTPTemporaryRedirect(location)
@@ -364,14 +366,15 @@ class ImageResource:
         render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors,
                         action=f"/{telescope_id}/image", **context)
 
-class CommandResource:   
+
+class CommandResource:
     def on_get(self, req, resp, telescope_id=1):
         self.command(req, resp, telescope_id, {})
-    
+
     def on_post(self, req, resp, telescope_id=1):
         output = do_command(req, resp, telescope_id)
         self.command(req, resp, telescope_id, output)
-    
+
     @staticmethod
     def command(req, resp, telescope_id, output):
         current = do_action_device("get_schedule", telescope_id, {})
@@ -379,8 +382,10 @@ class CommandResource:
         schedule = current["Value"]["list"]
         context = get_context(telescope_id, req)
 
-        render_template(req, resp, 'command.html', state=state, schedule=schedule, action=f"/{telescope_id}/command", output=output, **context)
-        
+        render_template(req, resp, 'command.html', state=state, schedule=schedule, action=f"/{telescope_id}/command",
+                        output=output, **context)
+
+
 class MosaicResource:
     def on_get(self, req, resp, telescope_id=1):
         self.mosaic(req, resp, {}, {}, telescope_id)
@@ -399,6 +404,7 @@ class MosaicResource:
         render_template(req, resp, 'mosaic.html', state=state, schedule=schedule, values=values, errors=errors,
                         action=f"/{telescope_id}/mosaic", **context)
 
+
 class ScheduleResource:
     def on_get(self, req, resp, telescope_id=1):
         self.render_schedule(req, resp, telescope_id)
@@ -409,10 +415,9 @@ class ScheduleResource:
     @staticmethod
     def render_schedule(req, resp, telescope_id):
         current = do_action_device("get_schedule", telescope_id, {})
-        state = current["Value"]["state"]
         schedule = current["Value"]["list"]
         context = get_context(telescope_id, req)
-        render_template(req, resp, 'schedule.html', schedule=schedule, state=state, errors={}, values={},
+        render_template(req, resp, 'schedule.html', schedule=schedule, errors={}, values={},
                         **context)
 
 
@@ -469,17 +474,24 @@ class ScheduleShutdownResource:
 
 
 class ScheduleToggleResource:
-    @staticmethod
-    def on_post(req, resp, telescope_id=1):
+    def on_get(self, req, resp, telescope_id=1):
+        self.display_state(req, resp, telescope_id)
+
+    def on_post(self, req, resp, telescope_id=1):
         current = do_action_device("get_schedule", telescope_id, {})
         state = current["Value"]["state"]
         if state == "Stopped":
             do_action_device("start_scheduler", telescope_id, {})
-
         else:
             do_action_device("stop_scheduler", telescope_id, {})
-            flash(resp, "Stopping scheduler")
-        redirect(f"/{telescope_id}/schedule")
+        self.display_state(req, resp, telescope_id)
+
+    @staticmethod
+    def display_state(req, resp, telescope_id):
+        current = do_action_device("get_schedule", telescope_id, {})
+        state = current["Value"]["state"]
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'partials/schedule_state.html', state=state, **context)
 
 
 class ScheduleClearResource:
@@ -494,8 +506,8 @@ class ScheduleClearResource:
         do_action_device("create_schedule", telescope_id, {})
         flash(resp, "Created New Schedule")
         redirect(f"/{telescope_id}/schedule")
-   
-   
+
+
 class LivePage:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -566,7 +578,7 @@ def main():
     app.add_route('/schedule/image', ScheduleImageResource())
     app.add_route('/schedule/mosaic', ScheduleMosaicResource())
     app.add_route('/schedule/shutdown', ScheduleShutdownResource())
-    app.add_route('/schedule/toggle', ScheduleToggleResource())
+    app.add_route('/schedule/state', ScheduleToggleResource())
     app.add_route('/schedule/wait-until', ScheduleWaitUntilResource())
     app.add_route('/schedule/wait-for', ScheduleWaitForResource())
     app.add_route('/schedule/auto-focus', ScheduleAutoFocusResource())
@@ -584,7 +596,7 @@ def main():
     app.add_route('/{telescope_id:int}/schedule/image', ScheduleImageResource())
     app.add_route('/{telescope_id:int}/schedule/mosaic', ScheduleMosaicResource())
     app.add_route('/{telescope_id:int}/schedule/shutdown', ScheduleShutdownResource())
-    app.add_route('/{telescope_id:int}/schedule/toggle', ScheduleToggleResource())
+    app.add_route('/{telescope_id:int}/schedule/state', ScheduleToggleResource())
     app.add_route('/{telescope_id:int}/schedule/wait-until', ScheduleWaitUntilResource())
     app.add_route('/{telescope_id:int}/schedule/wait-for', ScheduleWaitForResource())
     app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
