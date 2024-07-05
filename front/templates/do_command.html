@@ -45,3 +45,13 @@
 	</select>
 	<button type="submit" class="btn btn-primary">Execute</button>
 </form>
+<form method="post" action="{{ action }}">	
+	<div style="margin-bottom:5px;font-weight:bold">
+		<label for="dropdown">Dew Heater</label>
+	</div>
+	<select id="dropdown" name="command">
+		<option value="dew_heater_on">Turn Dew Heater On</option>
+		<option value="dew_heater_off">Turn Dew Heater Off</option>
+	</select>
+	<button type="submit" class="btn btn-primary">Execute</button>
+</form>
