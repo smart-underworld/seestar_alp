@@ -315,6 +315,12 @@ def do_command(req, resp, telescope_id):
         case "get_wheel_setting":
             output = method_sync("get_wheel_setting", telescope_id)
             return output
+        case "dew_heater_on":
+            output = do_action_device("method_sync", telescope_id, {'method': 'pi_output_set2', 'params': {'heater': {'state': True, 'value': 90}}})
+            return None
+        case "dew_heater_off":
+            output = do_action_device("method_sync", telescope_id, {'method': 'pi_output_set2', 'params': {'heater': {'state': False, 'value': 90}}})
+            return None
         case _:
             print("No command found")
     # print ("Output: ", output)
