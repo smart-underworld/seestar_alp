@@ -9,7 +9,6 @@ from wsgiref.simple_server import WSGIRequestHandler, make_server
 import requests
 import json
 import re
-import toml
 import os
 import sys
 sys.path.append('../device')
@@ -33,10 +32,8 @@ def get_messages():
     return []
 
 def get_telescopes():
-    with open('../device/config.toml', 'r') as inf:
-        config = toml.load(inf)
-        telescopes = config['seestars']
-        return list(telescopes)
+    telescopes = Config.seestars
+    return list(telescopes)
 
 
 def get_telescope(telescope_id):
