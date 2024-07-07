@@ -2,8 +2,9 @@ title = "Alpaca Sample Driver (Rotator)"
 
 [network]
 # ip_address should not have to be changed
-ip_address = '127.0.0.1'             # Any address
+ip_address = '0.0.0.0'             # Any address
 port = 5555
+uiport = 5432
 
 [server]
 location = 'Anywhere on Earth'  # Anything you want here
