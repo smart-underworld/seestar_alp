@@ -73,6 +73,8 @@ class Config:
     # ---------------
     ip_address: str = get_toml('network', 'ip_address')
     port: int = get_toml('network', 'port')
+    uiport: int = get_toml('network', 'uiport')
+    
     # --------------
     # Server Section
     # --------------

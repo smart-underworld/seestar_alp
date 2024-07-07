@@ -11,8 +11,12 @@ import json
 import re
 import toml
 import os
+import sys
+sys.path.append('../device')
+from config import Config 
 
-base_url = "http://localhost:5555"
+# base_url = "http://localhost:5555"
+base_url = "http://localhost:" + str(Config.port)
 messages = []
 
 
@@ -647,7 +651,7 @@ def main():
     app.add_static_route("/public", f"{os.getcwd()}/public")
     try:
         # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
-        with make_server("127.0.0.1", 5432, app, handler_class=LoggingWSGIRequestHandler) as httpd:
+        with make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler) as httpd:
             # logger.info(f'==STARTUP== Serving on {Config.ip_address}:{Config.port}. Time stamps are UTC.')
             # Serve until process is killed
             httpd.serve_forever()
