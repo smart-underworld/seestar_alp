@@ -40,7 +40,6 @@ async function fetchClipboard() {
 
         // Split the input string into an array using space as the separator
         const elements = text.trim().split(/\s+/);
-        alert(elements.length);
         // Check that there are exactly 6 elements
         if (elements.length == 6) {  // astro mosaic
             // Format RA and DEC
