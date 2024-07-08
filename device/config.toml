@@ -5,6 +5,7 @@ title = "Alpaca Sample Driver (Rotator)"
 ip_address = '0.0.0.0'             # Any address
 port = 5555
 uiport = 5432
+stport = 8090      #stellarium port
 
 [server]
 location = 'Anywhere on Earth'  # Anything you want here

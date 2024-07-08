@@ -3,11 +3,22 @@
         <div class="card-body">
             <h5 class="card-title">Target</h5>
 
-            <div class="mb-3">
-                <label for="targetName" class="form-label">Target Name</label>
-                <input type="text" class="form-control" id="targetName" name="targetName"
-                       aria-describedby="targetNameHelp" value="{{ values.target_name }}" required>
-                <div id="targetNameHelp" class="form-text">Enter a descriptive name for the target. (e.g. ...)</div>
+            <div class="mb-3 row">
+                <div class="col">
+                    <label for="targetName" class="form-label">Target Name</label>
+                    <input type="text" class="form-control" id="targetName" name="targetName"
+                        aria-describedby="targetNameHelp" value="{{ values.target_name }}" required>
+                    <div id="targetNameHelp" class="form-text">Enter a descriptive name for the target. (e.g. ...)</div>
+                </div>
+                <div class="col">
+                    <label for="getSimbad" class="form-label">&nbsp;</label><br>
+                    <button type="button" id="getSimbad" class="btn btn-primary" title="Retreive RA/Dec from Simbad" onclick="fetchSimbad()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
+                            <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
+                          </svg>                    </button>                    
+                    <div id="targetNameHelp" class="form-text">Enter target name and press</div>
+                    <div id="targetNameHelp" class="form-text">to retreive RA/Dec from Simbad</div>
+                </div>
             </div>
 
             <div class="mb-3 row">
@@ -22,12 +33,30 @@
 						   <div id="raError" class="form-text" style="color:red;">The RA value you provided {{errors.ra}} is not valid.
 					{% endif %}
                 </div>
+                <div class="col " >
+                    <label for="getClipboard" class="form-label">&nbsp;</label><br>
+                    <button type="button" id="getStallarium" class="btn btn-primary" title="Parse RA/Dec from clipboard" onclick="fetchClipboard()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard-fill" viewBox="0 0 16 16">
+                            <path fill-rule="evenodd" d="M10 1.5a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5zm-5 0A1.5 1.5 0 0 1 6.5 0h3A1.5 1.5 0 0 1 11 1.5v1A1.5 1.5 0 0 1 9.5 4h-3A1.5 1.5 0 0 1 5 2.5zm-2 0h1v1A2.5 2.5 0 0 0 6.5 5h3A2.5 2.5 0 0 0 12 2.5v-1h1a2 2 0 0 1 2 2V14a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V3.5a2 2 0 0 1 2-2"/>
+                          </svg>
+                    </button>                    
+                    <div id="targetNameHelp" class="form-text">Paste RA/Dec from Clipboard</div>
+                </div>
 
                 <div class="col">
                     <label for="raPanels" class="form-label">&nbsp;</label>
                     <input type="text" class="form-control" id="raPanels" name="raPanels"
                            aria-describedby="raPanelsHelp" value="{{ values.ra_num }}" required>
                     <div id="raPanelsHelp" class="form-text">Number of RA panels</div>
+                </div>
+                <div class="col">
+                    <label for="getStallarium" class="form-label">&nbsp;</label><br>
+                    <button type="button" id="getStallarium" class="btn btn-primary" title="Copy RA/Dec from Stellarium" onclick="fetchStellarium()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-star-fill" viewBox="0 0 16 16">
+                            <path d="M3.612 15.443c-.386.198-.824-.149-.746-.592l.83-4.73L.173 6.765c-.329-.314-.158-.888.283-.95l4.898-.696L7.538.792c.197-.39.73-.39.927 0l2.184 4.327 4.898.696c.441.062.612.636.282.95l-3.522 3.356.83 4.73c.078.443-.36.79-.746.592L8 13.187l-4.389 2.256z"/>
+                          </svg>
+                    </button>                    
+                    <div id="targetNameHelp" class="form-text">Retreive RA/Dec from Stellarium</div>
                 </div>
 
                 {#                    <div class="col">#}
@@ -124,4 +153,6 @@
     </div>
 
     <button type="submit" class="btn btn-primary">Submit</button>
+
+    
 </form>
