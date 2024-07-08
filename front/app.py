@@ -16,6 +16,8 @@ from config import Config
 
 # base_url = "http://localhost:5555"
 base_url = "http://localhost:" + str(Config.port)
+stellarium_url = 'http://localhost:' + str(Config.stport) + '/api/objects/info'
+simbad_url = 'https://simbad.cds.unistra.fr/simbad/sim-id?output.format=ASCII&obj.bibsel=off&Ident='
 messages = []
 
 
@@ -599,6 +601,77 @@ class StatsResource:
         context = get_context(telescope_id, req)
         render_template(req, resp, 'stats.html', stats=stats, now=now, **context)
 
+class SimbadResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+            objName = req.get_param('name')  #get the name to lookup from the request
+            try:
+                r = requests.get(simbad_url + objName)
+            except:
+                resp.status = falcon.HTTP_500
+                resp.content_type = 'application/text'
+                resp.text =  'Requst had communications error.'
+                return 
+            
+            html_content = r.text
+
+            # Find the start of the RA/Dec (J2000.0) information
+            start_index = html_content.find("Coordinates(ICRS,ep=J2000,eq=2000):")
+
+            # Find the end of the RA/Dec (J2000.0) information (end of the line)
+            end_index = html_content.find("(", start_index+13) #"Coordinates(IC".count)   # skip past the first (
+            
+            ra_dec_j2000 = html_content[start_index:end_index]
+
+            # Clean up the extracted information
+            ra_dec_j2000 = ra_dec_j2000.replace("Coordinates(ICRS,ep=J2000,eq=2000):", "").strip()
+            elements = re.split(r'\s+', ra_dec_j2000.strip())
+            
+            if (len(elements) < 6 ):
+                resp.status = falcon.HTTP_404
+                resp.content_type = 'application/text'
+                resp.text =  'Object not found'
+                return
+            
+            ra_dec_j2000 = f"{elements[0]}h{elements[1]}m{elements[2]}s {elements[3]}d{elements[4]}m{elements[5]}s"
+
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'application/text'
+            resp.text =  ra_dec_j2000
+            return
+
+class StellariumResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        try:
+            r = requests.get(stellarium_url)
+            html_content = r.text
+        except:
+            resp.status = falcon.HTTP_404
+            resp.content_type = 'application/text'
+            resp.text =  'Requst had communications error.'
+            return
+
+        # Find the start of the RA/Dec (J2000.0) information
+        start_index = html_content.find("RA/Dec (J2000.0):")
+
+        # Find the end of the RA/Dec (J2000.0) information (end of the line)
+        end_index = html_content.find("<br/>", start_index)
+
+        # Extract the RA/Dec (J2000.0) information
+        ra_dec_j2000 = html_content[start_index:end_index]
+        ra_dec_j2000 = ra_dec_j2000.replace("Â°", "d").strip()
+        ra_dec_j2000 = ra_dec_j2000.replace("'", "m")
+        ra_dec_j2000 = ra_dec_j2000.replace('"', "s")
+
+        # Clean up the extracted information
+        ra_dec_j2000 = ra_dec_j2000.replace("RA/Dec (J2000.0):", "").strip()
+
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'application/text'
+        resp.text =  ra_dec_j2000
+
+
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
@@ -646,6 +719,8 @@ def main():
     app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
     app.add_route('/{telescope_id:int}/stats', StatsResource())
     app.add_static_route("/public", f"{os.getcwd()}/public")
+    app.add_route('/simbad', SimbadResource())
+    app.add_route('/stellarium', StellariumResource())
     try:
         # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
         with make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler) as httpd:
