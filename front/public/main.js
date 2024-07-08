@@ -40,23 +40,37 @@ async function fetchClipboard() {
 
         // Split the input string into an array using space as the separator
         const elements = text.trim().split(/\s+/);
-
         // Check that there are exactly 6 elements
-        if (elements.length == 6) {
+        if (elements.length == 6) {  // astro mosaic
             // Format RA and DEC
             const ra = `${elements[0]}h${elements[1]}m${elements[2]}s`;
             const dec = `${elements[3]}d${elements[4]}m${elements[5]}s`;
 
             document.getElementById('ra').value = ra;
             document.getElementById('dec').value = dec;
-        } else if (elements.length == 2) {
+        } else if (elements.length == 2 ) {
             ra  = elements[0].replace("δ:","");   // astro-bin format
+
             dec = elements[1].replace("°","d"); 
             dec = dec.replace("'","m");
             dec = dec.replace('"',"s");
             dec = dec.replace("DE:","");   // Cartes du Ciel puts a DE: in the string
             document.getElementById('ra').value = elements[0];
             document.getElementById('dec').value = dec;
+        } else if (elements.length == 8 ) {       // Telescopious     RA 0hr 42' 44", DEC 41° 15' 58"
+            ra = `${elements[1]}${elements[2]}${elements[3]}`;
+            dec = `${elements[5]}${elements[6]}${elements[7]}`;
+            ra  = ra.replace("hr","h");   // Telescopious format
+            ra = ra.replace("'","m");
+            ra = ra.replace('"',"s");
+            ra = ra.replace(',',"");
+
+            dec = dec.replace("°","d"); 
+            dec = dec.replace("'","m");
+            dec = dec.replace('"',"s");
+            document.getElementById('ra').value = ra;
+            document.getElementById('dec').value = dec;
+
         } else {
             alert('Failed to parse clipboard contents:' + text);
 
