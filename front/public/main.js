@@ -55,7 +55,7 @@ async function fetchClipboard() {
             dec = dec.replace("'","m");
             dec = dec.replace('"',"s");
             dec = dec.replace("DE:","");   // Cartes du Ciel puts a DE: in the string
-            document.getElementById('ra').value = elements[0];
+            document.getElementById('ra').value = ra;
             document.getElementById('dec').value = dec;
         } else if (elements.length == 8 ) {       // Telescopious     RA 0hr 42' 44", DEC 41° 15' 58"
             ra = `${elements[1]}${elements[2]}${elements[3]}`;
@@ -89,7 +89,7 @@ try {
     fetch(stellariumURL)
     .then(response => {
         if (!response.ok) {
-            if (response.statusText == 'NOT FOUND') {
+            if (response.statusText == 'Not Found') {
                 alert("There was a problem communicating with Stellarium")
                 return;
             } else {
