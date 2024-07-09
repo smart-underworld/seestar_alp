@@ -41,7 +41,7 @@ navigate to the `front` folder and run the following command:
 python3 app.py
 ```
 
-The web interface should be available at <http://localhost:5432/>.
+The web interface should be available at <http://localhost:5430/>.
 
 ## How to get Support
 
