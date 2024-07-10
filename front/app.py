@@ -725,10 +725,11 @@ def main():
         # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
         with make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler) as httpd:
             # logger.info(f'==STARTUP== Serving on {Config.ip_address}:{Config.port}. Time stamps are UTC.')
+            print(f'SSC Started: http://{Config.ip_address}:{Config.uiport}')
             # Serve until process is killed
             httpd.serve_forever()
     except KeyboardInterrupt:
-        print("Keyboard interupt. Server shutting down.")
+        print("Keyboard interupt. Shutting down SSC.")
         # for dev in Config.seestars:
         #     telescope.end_seestar_device(dev['device_num'])
         httpd.server_close()
