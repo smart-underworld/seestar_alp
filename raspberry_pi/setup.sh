@@ -1,28 +1,45 @@
-#!/bin/bash
+#!/bin/bash -e
 
-# Check we are running as root
-if ! [ $(id -u) = 0 ]; then
-    echo "You must run this script as sudo, or root"
-	exit 1
-fi
-
-apt-get update
-apt-get install -y git python3-pip
+sudo apt-get update
+sudo apt-get install -y git python3-pip
 
 git clone https://github.com/smart-underworld/seestar_alp.git
+git clone https://github.com/bguthro/seestar_alp.git
 cd  seestar_alp
+git checkout -b r_pi origin/bguthro/r_pi
 
-pip install -r requirements.txt --break-system-packages
+src_home=$(pwd)
+mkdir logs
 
-username=$(logname)
+sed -i -e 's/127.0.0.1/0.0.0.0/g' device/config.toml
+
+sudo  pip install -r requirements.txt --break-system-packages
+
 cd raspberry_pi
-cat systemd/seestar_device.service | sed -e "s/<username>/$username/g" > /etc/systemd/system/seestar_device.service
-cat systemd/seestar_front.service | sed -e "s/<username>/$username/g" > /etc/systemd/system/seestar_front.service
+cat systemd/seestar_device.service | sed -e "s|/home/.*/seestar_alp|$src_home|g" > /tmp/seestar_device.service
+cat systemd/seestar_front.service | sed -e "s|/home/.*/seestar_alp|$src_home|g" > /tmp/seestar_front.service
+sudo mv /tmp/seestar*.service /etc/systemd/system
 
-systemctl daemon-reload
+sudo systemctl daemon-reload
 
-systemctl enable seestar_device
-systemctl enable seestar_front
+sudo systemctl enable seestar_device
+sudo systemctl enable seestar_front
 
-systemctl start seestar_device
-systemctl start seestar_front
+sudo systemctl start seestar_device
+sudo systemctl start seestar_front
+
+cat <<_EOF
+|-------------------------------------|
+| Seestar_alp Setup Complete          |
+|                                     |
+| You can access SSC via:             |
+| http://$(hostname).local:5430       |
+|                                     |
+| Device logs can be found in         |
+|  ./seestar_alp/logs                 |
+|                                     |
+| Systemd logs can be viewed via      |
+| journalctl -u seestar_device        |
+| journalctl -u seestar_front         |
+|-------------------------------------|
+_EOF
