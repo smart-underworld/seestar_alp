@@ -11,3 +11,6 @@ edit /device/config.toml
 run /device/app.py (This is the main seestar_alp application)
 run /front/app.py (This is the WebUI)
 ```
+
+To automatically start the two aforementioned applications, see the README.txt file in the systemd subfolder.
+These instructions will walk you through using the systemd init system to have the system start the apps at boot time.
