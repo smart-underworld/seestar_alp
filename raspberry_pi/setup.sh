@@ -4,9 +4,6 @@ sudo apt-get update
 sudo apt-get install -y git python3-pip
 
 git clone https://github.com/smart-underworld/seestar_alp.git
-git clone https://github.com/bguthro/seestar_alp.git
-cd  seestar_alp
-git checkout -b r_pi origin/bguthro/r_pi
 
 src_home=$(pwd)
 mkdir logs
