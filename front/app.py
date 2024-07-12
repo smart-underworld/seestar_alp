@@ -10,6 +10,7 @@ import requests
 import json
 import re
 import os
+import socket
 import sys
 sys.path.append('../device')
 from config import Config 
@@ -71,6 +72,20 @@ def get_flash_cookie(req, resp):
         resp.unset_cookie('flash_cookie', path='/')
         return cookie
     return []
+
+
+def get_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(0)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('10.254.254.254', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
 
 
 def do_action_device(action, dev_num, parameters):
@@ -725,10 +740,19 @@ def main():
         # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
         with make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler) as httpd:
             # logger.info(f'==STARTUP== Serving on {Config.ip_address}:{Config.port}. Time stamps are UTC.')
+            
+            # Print listening IP:Port to the console
+            if Config.ip_address == "0.0.0.0":
+                #Find the ip
+                ip_address = get_ip()
+            else:
+                ip_address = Config.ip_address
+            print(f'SSC Started: http://{ip_address}:{Config.uiport}')
+            
             # Serve until process is killed
             httpd.serve_forever()
     except KeyboardInterrupt:
-        print("Keyboard interupt. Server shutting down.")
+        print("Keyboard interupt. Shutting down SSC.")
         # for dev in Config.seestars:
         #     telescope.end_seestar_device(dev['device_num'])
         httpd.server_close()
