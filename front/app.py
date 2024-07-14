@@ -136,11 +136,12 @@ def get_device_state(telescope_id=1):
     result = method_sync("get_device_state", telescope_id)
     schedule = do_action_device("get_schedule", telescope_id, {})
     device = result["device"]
+    focuser = result["focuser"]
     settings = result["setting"]
     pi_status = result["pi_status"]
     stats = {
         "Firmware Version": device["firmware_ver_string"],
-        "Focal Position": settings["focal_pos"],
+        "Focal Position": focuser["step"],
         "Auto Power Off": settings["auto_power_off"],
         "Heater?": settings["heater_enable"],
         "Free Storage (MB)": result["storage"]["storage_volume"][0]["freeMB"],
