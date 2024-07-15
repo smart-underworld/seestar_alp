@@ -110,3 +110,22 @@ try {
     console.error('Failed to read from Stellarium', err);
 }
 }
+
+async function toggleuitheme() {
+    //update the current page
+    if (document.documentElement.getAttribute('data-bs-theme') == 'dark') {
+        document.documentElement.setAttribute('data-bs-theme','light')
+    } else {
+        document.documentElement.setAttribute('data-bs-theme','dark')
+    }
+    
+    //update the config
+    try{
+        const baseURL = 
+         `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
+        toggleuithemeURL = baseURL + '/toggleuitheme';
+        fetch(toggleuithemeURL)
+    } catch(err) {
+        console.error('Failed to toggle ui theme', err);
+    }
+}

@@ -355,8 +355,10 @@ def render_template(req, resp, template_name, **context):
 
     resp.status = falcon.HTTP_200
     resp.content_type = 'text/html'
+    webui_theme = Config.uitheme
     resp.text = template.render(flashed_messages=get_flash_cookie(req, resp),
                                 messages=get_messages(),
+                                webui_theme=webui_theme,
                                 **context)
 
 
@@ -617,6 +619,7 @@ class StatsResource:
         context = get_context(telescope_id, req)
         render_template(req, resp, 'stats.html', stats=stats, now=now, **context)
 
+
 class SimbadResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -656,6 +659,7 @@ class SimbadResource:
             resp.text =  ra_dec_j2000
             return
 
+
 class StellariumResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -687,6 +691,33 @@ class StellariumResource:
         resp.content_type = 'application/text'
         resp.text =  ra_dec_j2000
 
+
+class ToogleUITheme:
+    @staticmethod
+    def on_get(req, resp):
+        
+        #Read the current config.toml file
+        f = open("../device/config.toml", "r")
+        fread = f.read()
+        
+        #Current uitheme value in memory
+        Current_Theme = Config.uitheme
+        if Current_Theme == "light":
+            #Update variable that's stored in memory
+            Config.uitheme = "dark"
+
+            #Update uitheme in config.toml
+            uitheme = fread.replace('uitheme = "light"', 'uitheme = "dark"')
+        else:
+            #Update variable that's stored in memory
+            Config.uitheme = "light"
+
+            #Update uitheme in config.toml
+            uitheme = fread.replace('uitheme = "dark"', 'uitheme = "light"')
+
+        #Write the updated config.toml file
+        with open("../device/config.toml", "w") as f:
+            f.write(uitheme)
 
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
@@ -737,6 +768,7 @@ def main():
     app.add_static_route("/public", f"{os.getcwd()}/public")
     app.add_route('/simbad', SimbadResource())
     app.add_route('/stellarium', StellariumResource())
+    app.add_route('/toggleuitheme', ToogleUITheme())
     try:
         # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
         with make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler) as httpd:

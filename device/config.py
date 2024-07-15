@@ -73,14 +73,20 @@ class Config:
     # ---------------
     ip_address: str = get_toml('network', 'ip_address')
     port: int = get_toml('network', 'port')
-    uiport: int = get_toml('network', 'uiport')
     stport: int = get_toml('network', 'stport')
     
+    # --------------
+    # WebUI Section
+    # --------------
+    uiport: int = get_toml('webui_settings', 'uiport')
+    uitheme: str = get_toml('webui_settings', 'uitheme')
+
     # --------------
     # Server Section
     # --------------
     location: str = get_toml('server', 'location')
     verbose_driver_exceptions: bool = get_toml('server', 'verbose_driver_exceptions')
+
     # --------------
     # Device Section
     # --------------
@@ -88,6 +94,7 @@ class Config:
     step_size: float = get_toml('device', 'step_size')
     steps_per_sec: int = get_toml('device', 'steps_per_sec')
     seestars = _dict['seestars']
+
     # ---------------
     # Logging Section
     # ---------------
