@@ -40,12 +40,15 @@ async function fetchClipboard() {
         const text = await navigator.clipboard.readText();
 
         // Split the input string into an array using space as the separator
-        const elements = text.trim().split(/\s+/);
+        const elements = text.trim().split(/^\s+,/);
         // Check that there are exactly 6 elements
         if (elements.length == 6) {  // astro mosaic
             // Format RA and DEC
-            const ra = `${elements[0]}h${elements[1]}m${elements[2]}s`;
-            const dec = `${elements[3]}d${elements[4]}m${elements[5]}s`;
+            ra = `${elements[0]}h${elements[1]}m${elements[2]}s`;
+            dec = `${elements[3]}d${elements[4]}m${elements[5]}s`;
+
+            ra = ra.replace("hr","").replace(/[^a-zA-Z0-9]/g, "");
+            dec = dec.replace(/[^a-zA-Z0-9]/g, "");
 
             document.getElementById('ra').value = ra;
             document.getElementById('dec').value = dec;
@@ -104,6 +107,7 @@ try {
         const elements = data.trim().split("/");
         document.getElementById('ra').value = elements[0];
         document.getElementById('dec').value = elements[1];
+        document.getElementById('useJ2000').checked = true;
     })
     .catch(error => console.error('There was a problem with the fetch operation:', error));
 
