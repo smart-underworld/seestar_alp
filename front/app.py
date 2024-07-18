@@ -12,8 +12,9 @@ import re
 import os
 import socket
 import sys
-sys.path.append('../device')
-from config import Config 
+if not getattr(sys, "frozen",  False):       # if we are not running from a bundled app
+    sys.path.append('../device')
+from config import Config  # type: ignore
 
 # base_url = "http://localhost:5555"
 base_url = "http://localhost:" + str(Config.port)
@@ -351,8 +352,16 @@ def redirect(location):
 
 
 def render_template(req, resp, template_name, **context):
-    template = Environment(loader=FileSystemLoader('./templates')).get_template(template_name)
-
+    if getattr(sys, "frozen",  False):
+        ## RWR Testing
+        template_dir = os.path.join(os.path.dirname(__file__), 'templates')
+        print(template_dir)
+        env = Environment(loader=FileSystemLoader(template_dir))
+        template = env.get_template(template_name)
+        ## RWR
+    else:
+        template = Environment(loader=FileSystemLoader('./templates')).get_template(template_name)
+    
     resp.status = falcon.HTTP_200
     resp.content_type = 'text/html'
     webui_theme = Config.uitheme
@@ -695,9 +704,11 @@ class StellariumResource:
 class ToogleUITheme:
     @staticmethod
     def on_get(req, resp):
-        
-        #Read the current config.toml file
-        f = open("../device/config.toml", "r")
+        if getattr(sys, "frozen",  False):    # frozen means that we are running from a bundled app
+            config_file = "config.toml"    
+        else:
+            config_file = "../device/config.toml"
+        f = open(config_file, "r")    
         fread = f.read()
         
         #Current uitheme value in memory
@@ -716,7 +727,7 @@ class ToogleUITheme:
             uitheme = fread.replace('uitheme = "dark"', 'uitheme = "light"')
 
         #Write the updated config.toml file
-        with open("../device/config.toml", "w") as f:
+        with open(config_file, "w") as f:
             f.write(uitheme)
 
 
@@ -765,7 +776,7 @@ def main():
     app.add_route('/{telescope_id:int}/schedule/wait-for', ScheduleWaitForResource())
     app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
     app.add_route('/{telescope_id:int}/stats', StatsResource())
-    app.add_static_route("/public", f"{os.getcwd()}/public")
+    app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
     app.add_route('/simbad', SimbadResource())
     app.add_route('/stellarium', StellariumResource())
     app.add_route('/toggleuitheme', ToogleUITheme())
