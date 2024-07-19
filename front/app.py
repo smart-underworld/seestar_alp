@@ -675,13 +675,18 @@ class ScheduleClearResource:
         if online:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
-        else:
-            state = "Stopped"
-        if state == "Running":
-            do_action_device("stop_scheduler", telescope_id, {})
-            flash(resp, "Stopping scheduler")
+        
+            if state == "Running":
+                do_action_device("stop_scheduler", telescope_id, {})
+                lash(resp, "Stopping scheduler")
 
-        do_action_device("create_schedule", telescope_id, {})
+            do_action_device("create_schedule", telescope_id, {})
+            flash(resp, "Created New Schedule")
+            redirect(f"/{telescope_id}/schedule")
+        else:
+            global queue
+            queue = {}
+        
         flash(resp, "Created New Schedule")
         redirect(f"/{telescope_id}/schedule")
 
