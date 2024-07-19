@@ -213,7 +213,7 @@ def get_queue(telescope_id):
         return []
         
 
-def process_queue():
+def process_queue(resp):
     global online
     parameters_list = []
     online = check_api_state()
@@ -227,7 +227,8 @@ def process_queue():
                 print("POST scheduled request", action, params)
                 response = do_schedule_action_device(action, params, telescope)
                 print("GET response", response)
-
+    else:
+        flash(resp, "ERROR: Seestar ALP API is Offline, Please ensure your Seestar is powered on and device/app.py is running.")
               
             
     
@@ -606,7 +607,7 @@ class ScheduleGoOnlineResource:
     def on_post(req, resp, telescope_id=1):
         referer = req.get_header('Referer')
         print(f"Referer: {referer}")
-        process_queue()
+        process_queue(resp)
         redirect(f"{referer}")
         
 class ScheduleImageResource:
