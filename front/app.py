@@ -21,6 +21,8 @@ base_url = "http://localhost:" + str(Config.port)
 stellarium_url = 'http://localhost:' + str(Config.stport) + '/api/objects/info'
 simbad_url = 'https://simbad.cds.unistra.fr/simbad/sim-id?output.format=ASCII&obj.bibsel=off&Ident='
 messages = []
+online = None
+queue = {}
 
 
 def flash(resp, message):
@@ -64,7 +66,7 @@ def get_context(telescope_id, req):
     telescopes = get_telescopes()
     root = get_root(telescope_id)
     partial_path = "/".join(req.relative_uri.split("/", 2)[2:])
-    return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path}
+    return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path, "online": online}
 
 
 def get_flash_cookie(req, resp):
@@ -88,7 +90,39 @@ def get_ip():
         s.close()
     return IP
 
+def check_api_state():
+    url = f"{base_url}/api/v1/telescope/1/action"
+    payload = {
+        "Action": "method_sync",
+        "Parameters": json.dumps({"method":"get_device_state"}),
+        "ClientID": 1,
+        "ClientTransactionID": 999
+    }
+    try:
+        r = requests.put(url, json=payload)
+        r.raise_for_status()
+    except requests.exceptions.ConnectionError:
+        print("API is not online.")
+        return False
+    except requests.exceptions.RequestException as e:
+        print("API is not online.")
+        return False
+    else:
+        print("API is online.")
+        return True
+    
+    
+def queue_action(dev_num, payload):
 
+    global queue
+    
+    if dev_num not in queue:
+        queue[dev_num] = []
+        
+    queue[dev_num].append(payload)
+    
+    return []
+        
 def do_action_device(action, dev_num, parameters):
     url = f"{base_url}/api/v1/telescope/{dev_num}/action"
     payload = {
@@ -97,8 +131,11 @@ def do_action_device(action, dev_num, parameters):
         "ClientID": 1,
         "ClientTransactionID": 999
     }
-    r = requests.put(url, json=payload)
-    return r.json()
+    if online:
+        r = requests.put(url, json=payload)
+        return r.json()
+    else:
+        queue_action(dev_num, payload)
 
 
 def do_schedule_action_device(action, parameters, dev_num):
@@ -134,26 +171,29 @@ def method_sync(method, telescope_id=1):
 
 
 def get_device_state(telescope_id=1):
-    result = method_sync("get_device_state", telescope_id)
-    schedule = do_action_device("get_schedule", telescope_id, {})
-    device = result["device"]
-    focuser = result["focuser"]
-    settings = result["setting"]
-    pi_status = result["pi_status"]
-    stats = {
-        "Firmware Version": device["firmware_ver_string"],
-        "Focal Position": focuser["step"],
-        "Auto Power Off": settings["auto_power_off"],
-        "Heater?": settings["heater_enable"],
-        "Free Storage (MB)": result["storage"]["storage_volume"][0]["freeMB"],
-        "Balance Sensor (angle)": result["balance_sensor"]["data"]["angle"],
-        "Compass Sensor (direction)": result["compass_sensor"]["data"]["direction"],
-        "Temperature Sensor": pi_status["temp"],
-        "Charge Status": pi_status["charger_status"],
-        "Battery %": pi_status["battery_capacity"],
-        "Battery Temp": pi_status["battery_temp"],
-        "Scheduler Status": schedule["Value"]["state"]
-    }
+    if online:
+        result = method_sync("get_device_state", telescope_id)
+        schedule = do_action_device("get_schedule", telescope_id, {})
+        device = result["device"]
+        focuser = result["focuser"]
+        settings = result["setting"]
+        pi_status = result["pi_status"]
+        stats = {
+            "Firmware Version": device["firmware_ver_string"],
+            "Focal Position": focuser["step"],
+            "Auto Power Off": settings["auto_power_off"],
+            "Heater?": settings["heater_enable"],
+            "Free Storage (MB)": result["storage"]["storage_volume"][0]["freeMB"],
+            "Balance Sensor (angle)": result["balance_sensor"]["data"]["angle"],
+            "Compass Sensor (direction)": result["compass_sensor"]["data"]["direction"],
+            "Temperature Sensor": pi_status["temp"],
+            "Charge Status": pi_status["charger_status"],
+            "Battery %": pi_status["battery_capacity"],
+            "Battery Temp": pi_status["battery_temp"],
+            "Scheduler Status": schedule["Value"]["state"]
+        }
+    else:
+        stats = {}
     return stats
 
 
@@ -163,6 +203,35 @@ def get_telescopes_state():
     return list(map(lambda telescope: telescope | {"stats": get_device_state(telescope["device_num"])}, telescopes))
 
 
+def get_queue(telescope_id):
+    parameters_list = []
+    if telescope_id in queue:
+        for item in queue[telescope_id]:
+            parameters_list.append(json.loads(item['Parameters']))
+        return parameters_list
+    else:
+        return []
+        
+
+def process_queue(resp):
+    global online
+    online = check_api_state()
+    if online:
+        for telescope in queue:
+            parameters_list = []
+            for command in queue[telescope]:
+                parameters_list.append(json.loads(command['Parameters']))
+            for param in parameters_list:
+                action = param['action']
+                params = param['params']
+                print("POST scheduled request", action, params)
+                response = do_schedule_action_device(action, params, telescope)
+                print("GET response", response)
+    else:
+        flash(resp, "ERROR: Seestar ALP API is Offline, Please ensure your Seestar is powered on and device/app.py is running.")
+              
+            
+    
 def check_ra_value(raString):
     valid = [
         r"^\d+h\s*\d+m\s*([0-9.]+s)?$",
@@ -226,7 +295,8 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
             "params": values
         })
         print("POST scheduled request", values, response)
-        check_response(resp, response)
+        if online:
+            check_response(resp, response)
     else:
         response = do_action_device("start_mosaic", telescope_id, values)
         print("POST immediate request", values, response)
@@ -279,7 +349,8 @@ def do_create_image(req, resp, schedule, telescope_id):
             "params": values
         })
         print("POST scheduled request", values, response)
-        check_response(resp, response)
+        if online:
+            check_response(resp, response)
     else:
         response = do_action_device("start_mosaic", telescope_id, values)
         print("POST immediate request", values, response)
@@ -372,8 +443,12 @@ def render_template(req, resp, template_name, **context):
 
 
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
-    current = do_action_device("get_schedule", telescope_id, {})
-    schedule = current["Value"]["list"]
+    if online:
+        current = do_action_device("get_schedule", telescope_id, {})
+        schedule = current["Value"]["list"]
+    else:
+        schedule = get_queue(telescope_id)
+        
     context = get_context(telescope_id, req)
     render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values,
                     **context)
@@ -413,9 +488,13 @@ class ImageResource:
 
     @staticmethod
     def image(req, resp, values, errors, telescope_id):
-        current = do_action_device("get_schedule", telescope_id, {})
-        state = current["Value"]["state"]
-        schedule = current["Value"]["list"]
+        if online:
+            current = do_action_device("get_schedule", telescope_id, {})
+            state = current["Value"]["state"]
+            schedule = current["Value"]["list"]
+        else:
+            state = "Stopped"
+            schedule = get_queue(telescope_id)
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors,
@@ -432,9 +511,14 @@ class CommandResource:
 
     @staticmethod
     def command(req, resp, telescope_id, output):
-        current = do_action_device("get_schedule", telescope_id, {})
-        state = current["Value"]["state"]
-        schedule = current["Value"]["list"]
+        if online:
+            current = do_action_device("get_schedule", telescope_id, {})
+            state = current["Value"]["state"]
+            schedule = current["Value"]["list"]
+        else:
+            schedule = get_queue(telescope_id)
+            state = "Stopped"    
+        
         context = get_context(telescope_id, req)
 
         render_template(req, resp, 'command.html', state=state, schedule=schedule, action=f"/{telescope_id}/command",
@@ -451,9 +535,13 @@ class MosaicResource:
 
     @staticmethod
     def mosaic(req, resp, values, errors, telescope_id):
-        current = do_action_device("get_schedule", telescope_id, {})
-        state = current["Value"]["state"]
-        schedule = current["Value"]["list"]
+        if online:
+            current = do_action_device("get_schedule", telescope_id, {})
+            state = current["Value"]["state"]
+            schedule = current["Value"]["list"]
+        else:
+            state = "Stopped"
+            schedule = get_queue(telescope_id)
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'mosaic.html', state=state, schedule=schedule, values=values, errors=errors,
@@ -479,8 +567,9 @@ class ScheduleWaitUntilResource:
     def on_post(req, resp, telescope_id=1):
         waitUntil = req.media["waitUntil"]
         response = do_schedule_action_device("wait_until", {"local_time": waitUntil}, telescope_id)
-        # print("POST scheduled request", response)
-        check_response(resp, response)
+        print("POST scheduled request", response)
+        if online:
+            check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
 
 
@@ -493,8 +582,9 @@ class ScheduleWaitForResource:
     def on_post(req, resp, telescope_id=1):
         waitFor = req.media["waitFor"]
         response = do_schedule_action_device("wait_for", {"timer_sec": int(waitFor)}, telescope_id)
-        # print("POST scheduled request", response)
-        check_response(resp, response)
+        print("POST scheduled request", response)
+        if online:
+            check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_for.html', 'wait-for', {}, {})
 
 
@@ -508,10 +598,18 @@ class ScheduleAutoFocusResource:
         autoFocus = req.media["autoFocus"]
         response = do_schedule_action_device("auto_focus", {"try_count": int(autoFocus)}, telescope_id)
         print("POST scheduled request", response)
-        check_response(resp, response)
+        if online:
+            check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_auto_focus.html', 'auto-focus', {}, {})
 
-
+class ScheduleGoOnlineResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        referer = req.get_header('Referer')
+        print(f"Referer: {referer}")
+        process_queue(resp)
+        redirect(f"{referer}")
+        
 class ScheduleImageResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -542,7 +640,8 @@ class ScheduleShutdownResource:
     @staticmethod
     def on_post(req, resp, telescope_id=1):
         response = do_schedule_action_device("shutdown", "", telescope_id)
-        check_response(resp, response)
+        if online:
+            check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_shutdown.html', 'shutdown', {}, {})
 
 
@@ -561,8 +660,11 @@ class ScheduleToggleResource:
 
     @staticmethod
     def display_state(req, resp, telescope_id):
-        current = do_action_device("get_schedule", telescope_id, {})
-        state = current["Value"]["state"]
+        if online:
+            current = do_action_device("get_schedule", telescope_id, {})
+            state = current["Value"]["state"]
+        else:
+            state = "Stopped"
         context = get_context(telescope_id, req)
         render_template(req, resp, 'partials/schedule_state.html', state=state, **context)
 
@@ -570,8 +672,11 @@ class ScheduleToggleResource:
 class ScheduleClearResource:
     @staticmethod
     def on_post(req, resp, telescope_id=1):
-        current = do_action_device("get_schedule", telescope_id, {})
-        state = current["Value"]["state"]
+        if online:
+            current = do_action_device("get_schedule", telescope_id, {})
+            state = current["Value"]["state"]
+        else:
+            state = "Stopped"
         if state == "Running":
             do_action_device("stop_scheduler", telescope_id, {})
             flash(resp, "Stopping scheduler")
@@ -742,16 +847,17 @@ class LoggingWSGIRequestHandler(WSGIRequestHandler):
 def main():
     app = falcon.App()
     app.add_route('/', HomeResource())
+    app.add_route('/command', CommandResource())
     app.add_route('/image', ImageResource())
     app.add_route('/live', LivePage())
     app.add_route('/mosaic', MosaicResource())
     app.add_route('/search', SearchObjectResource())
     app.add_route('/settings', SettingsResource())
     app.add_route('/schedule', ScheduleResource())
-    app.add_route('/command', CommandResource())
     app.add_route('/schedule/clear', ScheduleClearResource())
     app.add_route('/schedule/image', ScheduleImageResource())
     app.add_route('/schedule/mosaic', ScheduleMosaicResource())
+    app.add_route('/schedule/online', ScheduleGoOnlineResource())
     app.add_route('/schedule/shutdown', ScheduleShutdownResource())
     app.add_route('/schedule/state', ScheduleToggleResource())
     app.add_route('/schedule/wait-until', ScheduleWaitUntilResource())
@@ -770,6 +876,7 @@ def main():
     app.add_route('/{telescope_id:int}/schedule/clear', ScheduleClearResource())
     app.add_route('/{telescope_id:int}/schedule/image', ScheduleImageResource())
     app.add_route('/{telescope_id:int}/schedule/mosaic', ScheduleMosaicResource())
+    app.add_route('/{telescope_id:int}/schedule/online', ScheduleGoOnlineResource())
     app.add_route('/{telescope_id:int}/schedule/shutdown', ScheduleShutdownResource())
     app.add_route('/{telescope_id:int}/schedule/state', ScheduleToggleResource())
     app.add_route('/{telescope_id:int}/schedule/wait-until', ScheduleWaitUntilResource())
@@ -780,6 +887,7 @@ def main():
     app.add_route('/simbad', SimbadResource())
     app.add_route('/stellarium', StellariumResource())
     app.add_route('/toggleuitheme', ToogleUITheme())
+    online = check_api_state()
     try:
         # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
         with make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler) as httpd:

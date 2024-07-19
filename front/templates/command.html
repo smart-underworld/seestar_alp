@@ -8,7 +8,12 @@
     
     <h3 class="mb-2">Select a command to execute</h3>
 
-    {% include 'do_command.html' with context %}
+	{% if online %}
+		{% include 'do_command.html' with context %}
+	{% else %}
+		<p>You are currently in offline mode</p>
+		<span> {% include 'go_online.html' %}</span>
+	{% endif %}
 	
 	{% if output %}
 		<div class="alert alert-primary" role="alert">{{output}}</div>
