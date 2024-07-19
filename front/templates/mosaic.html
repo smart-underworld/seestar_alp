@@ -7,17 +7,23 @@
 {% block content %}
 {#
     <h3 class="mb-2">Current Schedule</h3>
-	{% if online %}
 		{% include 'schedule_list.html' with context %}
 	{% else %}
 		<p>You are in offline mode.  Go online to see stats</p>
 	{% endif %}
 #}
-    <h3 class="mb-2">Enter a new mosaic</h3>
+	{% if online %}
 
-    <p>Creates and immediately runs a mosaic. For scheduling a mosaic, see <a href="/schedule">scheduler</a>.</p>
+		<h3 class="mb-2">Enter a new mosaic</h3>
 
-    {% include 'mosaic_create.html' with context %}
+		<p>Creates and immediately runs a mosaic. For scheduling a mosaic, see <a href="/schedule">scheduler</a>.</p>
+
+		{% include 'mosaic_create.html' with context %}
+	{% else %}
+		<p>You are currently in offline mode</p>
+		<span> {% include 'go_online.html' %}</span>
+	{% endif %}
+	
 {% endblock %}
 
 {#    # {"target_name":"kai32_NGC2244", "ra":"6h31m54.23s", "dec":"+4d56m26.4s", #}

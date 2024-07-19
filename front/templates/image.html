@@ -14,11 +14,18 @@
 		<p>You are in offline mode.  Go online to see stats</p>
 	{% endif %}
 #}
-    <h3 class="mb-2">Enter a new image</h3>
+	{% if online %}
+		
+		<h3 class="mb-2">Enter a new image</h3>
 
-    <p>Creates and immediately runs a image. For scheduling a image, see <a href="/schedule">scheduler</a>.</p>
+		<p>Creates and immediately runs a image. For scheduling a image, see <a href="/schedule">scheduler</a>.</p>
 
-    {% include 'image_create.html' with context %}
+		% include 'image_create.html' with context %}
+	{% else %}
+		<p>You are currently in offline mode</p>
+		<span> {% include 'go_online.html' %}</span>
+	{% endif %}
+
 {% endblock %}
 
 {#    # {"target_name":"kai32_NGC2244", "ra":"6h31m54.23s", "dec":"+4d56m26.4s", #}

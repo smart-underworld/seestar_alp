@@ -11,7 +11,8 @@
 	{% if online %}
 		{% include 'do_command.html' with context %}
 	{% else %}
-		<p>You are in offline mode.  Go online to see stats</p>
+		<p>You are currently in offline mode</p>
+		<span> {% include 'go_online.html' %}</span>
 	{% endif %}
 	
 	{% if output %}
