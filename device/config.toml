@@ -2,12 +2,12 @@ title = "Alpaca Sample Driver (Rotator)"
 
 [network]
 # ip_address should not have to be changed
-ip_address = '0.0.0.0'             # Any address
+ip_address = '127.0.0.1             # Any address
 port = 5555
 stport = 8090      #stellarium port
 
 [webui_settings]
-uiport = 5430
+uiport = 5432
 # light/dark theme
 uitheme = "dark" #all lower case
 
