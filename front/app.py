@@ -21,7 +21,7 @@ base_url = "http://localhost:" + str(Config.port)
 stellarium_url = 'http://localhost:' + str(Config.stport) + '/api/objects/info'
 simbad_url = 'https://simbad.cds.unistra.fr/simbad/sim-id?output.format=ASCII&obj.bibsel=off&Ident='
 messages = []
-online = False
+online = None
 queue = {}
 
 
@@ -90,7 +90,28 @@ def get_ip():
         s.close()
     return IP
 
-
+def check_api_state():
+    url = f"{base_url}/api/v1/telescope/1/action"
+    payload = {
+        "Action": "method_sync",
+        "Parameters": json.dumps({"method":"get_device_state"}),
+        "ClientID": 1,
+        "ClientTransactionID": 999
+    }
+    try:
+        r = requests.put(url, json=payload)
+        r.raise_for_status()
+    except requests.exceptions.ConnectionError:
+        print("API is not online.")
+        return False
+    except requests.exceptions.RequestException as e:
+        print("API is not online.")
+        return False
+    else:
+        print("API is online.")
+        return True
+    
+    
 def queue_action(dev_num, payload):
 
     global queue
@@ -195,16 +216,17 @@ def get_queue(telescope_id):
 def process_queue():
     global online
     parameters_list = []
-    online = True
-    for telescope in queue:
-        for command in queue[telescope]:
-            parameters_list.append(json.loads(command['Parameters']))
-        for param in parameters_list:
-            action = param['action']
-            params = param['params']
-            print("POST scheduled request", action, params)
-            response = do_schedule_action_device(action, params, telescope)
-            print("GET response", response)
+    online = check_api_state()
+    if online:
+        for telescope in queue:
+            for command in queue[telescope]:
+                parameters_list.append(json.loads(command['Parameters']))
+            for param in parameters_list:
+                action = param['action']
+                params = param['params']
+                print("POST scheduled request", action, params)
+                response = do_schedule_action_device(action, params, telescope)
+                print("GET response", response)
 
               
             
@@ -864,6 +886,7 @@ def main():
     app.add_route('/simbad', SimbadResource())
     app.add_route('/stellarium', StellariumResource())
     app.add_route('/toggleuitheme', ToogleUITheme())
+    online = check_api_state()
     try:
         # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
         with make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler) as httpd:
