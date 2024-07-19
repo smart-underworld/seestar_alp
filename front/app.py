@@ -13,7 +13,7 @@ import os
 import socket
 import sys
 if not getattr(sys, "frozen",  False):       # if we are not running from a bundled app
-    sys.path.append('..\\device')
+    sys.path.append('../device')
 from config import Config  # type: ignore
 
 # base_url = "http://localhost:5555"
