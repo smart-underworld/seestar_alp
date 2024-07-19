@@ -215,10 +215,10 @@ def get_queue(telescope_id):
 
 def process_queue(resp):
     global online
-    parameters_list = []
     online = check_api_state()
     if online:
         for telescope in queue:
+            parameters_list = []
             for command in queue[telescope]:
                 parameters_list.append(json.loads(command['Parameters']))
             for param in parameters_list:
