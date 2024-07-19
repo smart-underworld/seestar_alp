@@ -20,7 +20,7 @@
 
 		<p>Creates and immediately runs a image. For scheduling a image, see <a href="/schedule">scheduler</a>.</p>
 
-		% include 'image_create.html' with context %}
+		{% include 'image_create.html' with context %}
 	{% else %}
 		<p>You are currently in offline mode</p>
 		<span> {% include 'go_online.html' %}</span>

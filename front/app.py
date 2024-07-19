@@ -602,12 +602,12 @@ class ScheduleAutoFocusResource:
         render_schedule_tab(req, resp, telescope_id, 'schedule_auto_focus.html', 'auto-focus', {}, {})
 
 class ScheduleGoOnlineResource:
-    global online
     @staticmethod
     def on_post(req, resp, telescope_id=1):
-        online = True
+        referer = req.get_header('Referer')
+        print(f"Referer: {referer}")
         process_queue()
-        redirect(f"/{telescope_id}/schedule")
+        redirect(f"{referer}")
         
 class ScheduleImageResource:
     @staticmethod
@@ -846,13 +846,13 @@ class LoggingWSGIRequestHandler(WSGIRequestHandler):
 def main():
     app = falcon.App()
     app.add_route('/', HomeResource())
+    app.add_route('/command', CommandResource())
     app.add_route('/image', ImageResource())
     app.add_route('/live', LivePage())
     app.add_route('/mosaic', MosaicResource())
     app.add_route('/search', SearchObjectResource())
     app.add_route('/settings', SettingsResource())
     app.add_route('/schedule', ScheduleResource())
-    app.add_route('/command', CommandResource())
     app.add_route('/schedule/clear', ScheduleClearResource())
     app.add_route('/schedule/image', ScheduleImageResource())
     app.add_route('/schedule/mosaic', ScheduleMosaicResource())
