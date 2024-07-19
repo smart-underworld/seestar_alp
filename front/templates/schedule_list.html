@@ -1,10 +1,16 @@
 <div class="mb-5">
-    <div id="scheduler_state"
-         hx-get="{{ root }}/schedule/state"
-         hx-swap="innerHTML"
-         hx-target="#scheduler_state"
-         hx-trigger="load delay:0ms"
-         style="height:45px;"></div>
+
+	{% if online %}
+		<div id="scheduler_state"
+			hx-get="{{ root }}/schedule/state"
+			hx-swap="innerHTML"
+			hx-target="#scheduler_state"
+			hx-trigger="load delay:0ms"
+			style="height:45px;">
+		</div>
+	{% else %}
+		<span> {% include 'go_online.html' %}</span>
+	{% endif %}
 
     <table class="table table-striped mt-3">
         <thead>

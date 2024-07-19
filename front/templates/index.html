@@ -6,21 +6,27 @@
 
 {% block content %}
     <p>Welcome to the Simple Seestar (Web) Controller.</p>
-    {% for telescope in telescopes %}
-        <h2><a href="/{{  telescope["device_num"] }}/">{{ telescope["name"] }} ({{ telescope["ip_address"] }})</a></h2>
+	
+	{% if online %}
+		{% for telescope in telescopes %}
+			<h2><a href="/{{  telescope["device_num"] }}/">{{ telescope["name"] }} ({{ telescope["ip_address"] }})</a></h2>
 
-        <table class="table table-striped">
-            <tbody>
-            {% for key, value in telescope["stats"].items() %}
-                <tr>
-                    <th class="col">{{ key }}</th>
-                    <td>{{ value }}</td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    {% endfor %}
+			<table class="table table-striped">
+				<tbody>
+				{% for key, value in telescope["stats"].items() %}
+					<tr>
+						<th class="col">{{ key }}</th>
+						<td>{{ value }}</td>
+					</tr>
+				{% endfor %}
+				</tbody>
+			</table>
+		{% endfor %}
+	{% else %}
+		<p>You are in offline mode.  Go online to see stats</p>
+	{% endif %}
 
+	
     <footer class="bg-body-tertiary text-center">
         Last updated: {{ now }}
     </footer>

@@ -7,8 +7,11 @@
 {% block content %}
 {#
     <h3 class="mb-2">Current Schedule</h3>
-
-    {% include 'schedule_list.html' with context %}
+	{% if online %}
+		{% include 'schedule_list.html' with context %}
+	{% else %}
+		<p>You are in offline mode.  Go online to see stats</p>
+	{% endif %}
 #}
     <h3 class="mb-2">Enter a new mosaic</h3>
 
