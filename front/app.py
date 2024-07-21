@@ -513,7 +513,7 @@ def import_schedule(input, telescope_id):
             case "auto_focus":
                 do_schedule_action_device("auto_focus", {"try_count": int(try_count)}, telescope_id)
             case "start_mosaic":
-                do_schedule_action_device("start_mosaic", {"target_name": target_name, "ra": ra, "dec": dec, "is_j2000": is_j2000, "is_use_lp_filter": is_use_lp_filter, "is_use_autofocus": is_use_autofocus, "session_time_sec": int(session_time_sec), "ra_num": int(ra_num), "dec_num": int(dec_num), "panel_overlap_percent": int(panel_overlap_percent), "gain": gain}, int(telescope_id))                
+                do_schedule_action_device("start_mosaic", {"target_name": target_name, "ra": ra, "dec": dec, "is_j2000": is_j2000, "is_use_lp_filter": is_use_lp_filter, "is_use_autofocus": is_use_autofocus, "session_time_sec": int(session_time_sec), "ra_num": int(ra_num), "dec_num": int(dec_num), "panel_overlap_percent": int(panel_overlap_percent), "gain": int(gain)}, int(telescope_id))                
             case "shutdown":
                 do_schedule_action_device("shutdown", "", telescope_id)
  

@@ -1,45 +1,45 @@
 {% extends 'base.html' %}
 
 {% block header %}
-    <h1>{% block title %}Simple Seestar Controller{% endblock %}</h1>
+    <div class="container mt-3">
+		<p class="h1">{% block title %}Simple Seestar Controller{% endblock %}</p>
+	</div>
 {% endblock %}
 
 {% block content %}
-    <p>Welcome to the Simple Seestar (Web) Controller.</p>
+    <div class="container mt-3">
+		<p>Welcome to the Simple Seestar (Web) Controller.</p>
+	</div>
 	
 	{% if online %}
 		{% for telescope in telescopes %}
-			<h2><a href="/{{  telescope["device_num"] }}/">{{ telescope["name"] }} ({{ telescope["ip_address"] }})</a></h2>
+			<div class="container mt-3"><p class="h2"><a href="/{{  telescope["device_num"] }}/">{{ telescope["name"] }} ({{ telescope["ip_address"] }})</a></p></div>
 
-			<table class="table table-striped">
-				<tbody>
+			<div class="container mt-3">
+				
 				{% for key, value in telescope["stats"].items() %}
-					<tr>
-						<th class="col">{{ key }}</th>
-						<td>{{ value }}</td>
-					</tr>
+					<div class="row border-bottom py-1">
+						<div class="col fw-bold">{{ key }}</div>
+						<div class="col"><p class="text-end">{{ value }}</p></div>
+					</div>
 				{% endfor %}
-				</tbody>
-			</table>
+				
+			</div>
+			
 		{% endfor %}
 	{% else %}
-		<p>You are currently in offline mode</p>
-		<span> {% include 'go_online.html' %}</span>
+		<div class="container mt3">
+			<p>You are currently in offline mode</p>
+			<span> {% include 'go_online.html' %}</span>
+		</div>
 	{% endif %}
 
 	
-    <footer class="bg-body-tertiary text-center">
-        Last updated: {{ now }}
-    </footer>
+	<footer class="bg-body-tertiary text-center">
+		Last updated: {{ now }}
+	</footer>
+	
 {% endblock %}
-
-{#  <form method="post">#}
-{#    <label for="username">Username</label>#}
-{#    <input name="username" id="username" required>#}
-{#    <label for="password">Password</label>#}
-{#    <input type="password" name="password" id="password" required>#}
-{#    <input type="submit" value="Register">#}
-{#  </form>#}
 
 {% block html_header %}
     <meta http-equiv="refresh" content="15">

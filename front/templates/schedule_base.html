@@ -1,22 +1,22 @@
 {% extends 'base.html' %}
 
 {% block header %}
-    <h1>{% block title %}Schedule Page{% endblock %} - {{ telescope["name"] }} ({{ telescope["ip_address"] }})</h1>
+	<div class="container mt-3">
+		<p class="h1">{% block title %}Schedule Page{% endblock %} - {{ telescope["name"] }} ({{ telescope["ip_address"] }})</p>
+	</div>
 {% endblock %}
 
 {% block content %}
-    <h3 class="mb-2">Current Schedule</h3>
+	<div class="container mb-2">
+		<p class="h3">Current Schedule</p>	
+		{% include 'schedule_list.html' with context %}   
+		<p>Schedule page. Pick an item to schedule, and Submit to add to the schedule.</p>
+		{% include 'partials/schedule_tab_header.html' with context %}
 
-    {% include 'schedule_list.html' with context %}
-
-    <p></p>
-    <p>Schedule page. Pick an item to schedule, and Submit to add to the schedule.</p>
-
-    {% include 'partials/schedule_tab_header.html' with context %}
-
-    <div class="tab-content">
-        <div class="tab-pane fade show active" role="tabpanel" aria-labelledby="auto-focus-tab">
-            {% block schedule_tab_content %}{% endblock %}
-        </div>
-    </div>
+		<div class="tab-content">
+			<div class="tab-pane fade show active" role="tabpanel" aria-labelledby="auto-focus-tab">
+				{% block schedule_tab_content %}{% endblock %}
+			</div>
+		</div>
+	</div>
 {% endblock %}

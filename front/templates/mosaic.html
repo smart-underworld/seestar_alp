@@ -1,31 +1,26 @@
 {% extends 'base.html' %}
 
 {% block header %}
-    <h1>{% block title %}Mosaic{% endblock %}</h1>
+    <div class="container mt-3">
+		<p class="h1">{% block title %}Mosaic{% endblock %}</p>
+	</div>
 {% endblock %}
 
 {% block content %}
-{#
-    <h3 class="mb-2">Current Schedule</h3>
-		{% include 'schedule_list.html' with context %}
-	{% else %}
-		<p>You are in offline mode.  Go online to see stats</p>
-	{% endif %}
-#}
+
 	{% if online %}
+		<div class="container mt-3">
+			<p class="h3 mb-2">Enter a new mosaic</p>
 
-		<h3 class="mb-2">Enter a new mosaic</h3>
+			<p>Creates and immediately runs a mosaic. For scheduling a mosaic, see <a href="/schedule">scheduler</a>.</p>
 
-		<p>Creates and immediately runs a mosaic. For scheduling a mosaic, see <a href="/schedule">scheduler</a>.</p>
-
-		{% include 'mosaic_create.html' with context %}
+			{% include 'mosaic_create.html' with context %}
+		</div>
 	{% else %}
-		<p>You are currently in offline mode</p>
-		<span> {% include 'go_online.html' %}</span>
+		<div class="container mt-3">
+			<p>You are currently in offline mode</p>
+			<span> {% include 'go_online.html' %}</span>
+		</div>
 	{% endif %}
 	
 {% endblock %}
-
-{#    # {"target_name":"kai32_NGC2244", "ra":"6h31m54.23s", "dec":"+4d56m26.4s", #}
-{#"is_j2000": true, "is_use_lp_filter":true, "session_time_sec":3600, "ra_num": 2, "dec_num": 2, "panel_overlap_percent": 20, "gain": 80}#}
-

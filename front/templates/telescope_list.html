@@ -1,24 +1,20 @@
 <div class="mb-5">
-    <table class="table table-striped">
-        <thead>
-        <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Battery</th>
-            <th>Space</th>
-            <th>Last Image</th>
-        </tr>
-        </thead>
-        <tbody>
+	<div class="container mt-3">
+        <div class="row fw-bold border-bottom pb-2">
+            <div class="col">ID</div>
+            <div class="col">Name</div>
+            <div class="col">Battery</div>
+            <div class="col">Space</div>
+            <div class="col">Last Image</div>
+        </div>
         {% for item in telescopes %}
-            <tr>
-            <td>{{ items["id"] }}</td>
-            <td>{{ items["name"] }}</td>
-            <td>{{ items["battery"] }}</td>
-            <td>{{ items["space"] }}</td>
-            <td></td>
-            </tr>
+            <div class="row border-bottom py-2">
+				<div class="col">{{ items["id"] }}</div>
+				<div class="col">{{ items["name"] }}</div>
+				<div class="col">{{ items["battery"] }}</div
+				<div class="col">{{ items["space"] }}</div>
+				<div class="col"></div>
+            </div>
         {% endfor %}
-        </tbody>
-    </table>
+    </div>
 </div>

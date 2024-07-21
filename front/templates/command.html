@@ -1,18 +1,25 @@
 {% extends 'base.html' %}
 
 {% block header %}
-    <h1>{% block title %}Commands{% endblock %}</h1>
+    <div class="container mt-3">
+		<p class="h1">{% block title %}Commands{% endblock %}</p>
+	</div>
 {% endblock %}
 
 {% block content %}
-    
-    <h3 class="mb-2">Select a command to execute</h3>
+    <div class="container mt-3">
+		<p class="h3">Select a command to execute</p>
+	</div>
 
 	{% if online %}
-		{% include 'do_command.html' with context %}
+		<div class="container mt-3">
+			{% include 'do_command.html' with context %}
+		</div>
 	{% else %}
-		<p>You are currently in offline mode</p>
-		<span> {% include 'go_online.html' %}</span>
+		<div class="container mt-3">
+			<p>You are currently in offline mode</p>
+			<span> {% include 'go_online.html' %}</span>
+		</div>
 	{% endif %}
 	
 	{% if output %}
