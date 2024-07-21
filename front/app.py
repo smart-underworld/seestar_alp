@@ -461,6 +461,8 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
     render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values,
                     **context)
 
+FIXED_PARAMS_KEYS = ["local_time", "timer_sec", "try_count", "target_name", "is_j2000", "ra", "dec", "is_use_lp_filter", "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus"]
+
 
 def export_schedule(filename, telescope_id):
 
@@ -474,25 +476,12 @@ def export_schedule(filename, telescope_id):
     list_to_json = json.dumps(schedule)
     data = json.loads(list_to_json)
         
-    # Collect all keys from the params dictionaries in the order they appear
-    params_keys = []
-    seen_keys = set()
-
-    for entry in data:
-        if 'params' in entry:
-            for key in entry['params']:
-                if key not in seen_keys:
-                    seen_keys.add(key)
-                    params_keys.append(key)
-
     # Define the fieldnames (column names)
-    fieldnames = ['action'] + params_keys
-
-    # Specify the CSV file name
-    csv_file = filename
+    fieldnames = ['action'] + FIXED_PARAMS_KEYS
     
     # Open a CSV file for writing
-    with open(csv_file, 'w', newline='') as csvfile:        # Create a writer object
+    with open(filename, 'w', newline='') as csvfile:        
+        # Create a writer object
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     
         # Write the header
@@ -502,9 +491,13 @@ def export_schedule(filename, telescope_id):
         for entry in data:
             row = OrderedDict({'action': entry['action']})
             if 'params' in entry:
-                for key in params_keys:
+                for key in FIXED_PARAMS_KEYS:
                     row[key] = entry['params'].get(key, '')
-            writer.writerow(row)
+            else:
+                # If 'params' key is missing, ensure all fixed params are empty
+                for key in FIXED_PARAMS_KEYS:
+                    row[key] = ''
+            writer.writerow(row)    
 
     
 def import_schedule(input, telescope_id):
