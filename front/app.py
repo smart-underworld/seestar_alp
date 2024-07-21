@@ -6,8 +6,11 @@ from falcon import HTTPTemporaryRedirect, HTTPFound
 from astroquery.simbad import Simbad
 from jinja2 import Template, Environment, FileSystemLoader
 from wsgiref.simple_server import WSGIRequestHandler, make_server
+from collections import OrderedDict
+from pprint import pprint
 import requests
 import json
+import csv
 import re
 import os
 import socket
@@ -171,6 +174,8 @@ def method_sync(method, telescope_id=1):
 
 
 def get_device_state(telescope_id=1):
+    global online
+    online = check_api_state()
     if online:
         result = method_sync("get_device_state", telescope_id)
         schedule = do_action_device("get_schedule", telescope_id, {})
@@ -223,7 +228,10 @@ def process_queue(resp):
                 parameters_list.append(json.loads(command['Parameters']))
             for param in parameters_list:
                 action = param['action']
-                params = param['params']
+                if param['params']:
+                    params = param['params']
+                else:
+                    params = None
                 print("POST scheduled request", action, params)
                 response = do_schedule_action_device(action, params, telescope)
                 print("GET response", response)
@@ -454,17 +462,82 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
                     **context)
 
 
+def export_schedule(filename, telescope_id):
+
+    if online:
+        current = do_action_device("get_schedule", telescope_id, {})
+        schedule = current["Value"]["list"]
+    else:
+        schedule = get_queue(telescope_id)
+   
+    # Parse the JSON data
+    list_to_json = json.dumps(schedule)
+    data = json.loads(list_to_json)
+        
+    # Collect all keys from the params dictionaries in the order they appear
+    params_keys = []
+    seen_keys = set()
+
+    for entry in data:
+        if 'params' in entry:
+            for key in entry['params']:
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    params_keys.append(key)
+
+    # Define the fieldnames (column names)
+    fieldnames = ['action'] + params_keys
+
+    # Specify the CSV file name
+    csv_file = filename
+    
+    # Open a CSV file for writing
+    with open(csv_file, 'w', newline='') as csvfile:        # Create a writer object
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    
+        # Write the header
+        writer.writeheader()
+    
+        # Write the rows
+        for entry in data:
+            row = OrderedDict({'action': entry['action']})
+            if 'params' in entry:
+                for key in params_keys:
+                    row[key] = entry['params'].get(key, '')
+            writer.writerow(row)
+
+    
+def import_schedule(input, telescope_id):
+    for line in input:
+        action,local_time,timer_sec,try_count,target_name,is_j2000,ra,dec,is_use_lp_filter,session_time_sec,ra_num,dec_num,panel_overlap_percent,gain,is_use_autofocus = line.split(',')
+        match action:
+            case "action":
+                pass
+            case "wait_until":
+                do_schedule_action_device("wait_until", {"local_time": local_time}, telescope_id)
+            case "wait_for":
+                do_schedule_action_device("wait_for", {"timer_sec": int(timer_sec)}, telescope_id)                
+            case "auto_focus":
+                do_schedule_action_device("auto_focus", {"try_count": int(try_count)}, telescope_id)
+            case "start_mosaic":
+                do_schedule_action_device("start_mosaic", {"target_name": target_name, "ra": ra, "dec": dec, "is_j2000": is_j2000, "is_use_lp_filter": is_use_lp_filter, "is_use_autofocus": is_use_autofocus, "session_time_sec": int(session_time_sec), "ra_num": int(ra_num), "dec_num": int(dec_num), "panel_overlap_percent": int(panel_overlap_percent), "gain": gain}, int(telescope_id))                
+            case "shutdown":
+                do_schedule_action_device("shutdown", "", telescope_id)
+ 
+ 
 class HomeResource:
     @staticmethod
     def on_get(req, resp):
         now = datetime.now()
         telescopes = get_telescopes_state()
         telescope = telescopes[0]  # We just force it to first telescope
+        context = get_context(telescope['device_num'], req)
+        del context["telescopes"]
         if len(telescopes) > 1:
             redirect(f"/{telescope['device_num']}/")
         else:
             root = get_root(telescope['device_num'])
-            render_template(req, resp, 'index.html', now=now, telescopes=telescopes, telescope=telescope)
+            render_template(req, resp, 'index.html', now=now, telescopes=telescopes, **context)
 
 
 class HomeTelescopeResource:
@@ -472,9 +545,9 @@ class HomeTelescopeResource:
     def on_get(req, resp, telescope_id):
         now = datetime.now()
         telescopes = get_telescopes_state()
-        telescope = get_telescope(telescope_id)
-        root = get_root(telescope_id)
-        render_template(req, resp, 'index.html', now=now, telescopes=telescopes, telescope=telescope, root=root)
+        context = get_context(telescope_id, req)
+        del context["telescopes"]
+        render_template(req, resp, 'index.html', now=now, telescopes=telescopes, **context)
 
 
 class ImageResource:
@@ -690,7 +763,36 @@ class ScheduleClearResource:
         flash(resp, "Created New Schedule")
         redirect(f"/{telescope_id}/schedule")
 
+class ScheduleExportResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        filename = req.media["filename"]
+        export_schedule(filename, telescope_id)
+        flash(resp, f"Schedule exported to {filename}.")
+        redirect(f"/{telescope_id}/schedule")
+        
+class ScheduleImportResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+               
+        data = req.get_media()
+        for part in data:
+            string_data = part.data.decode('utf-8').splitlines()
+            filename = part.filename
+        import_schedule(string_data, telescope_id)
+        flash(resp, f"Schedule imported from {filename}.")
+        redirect(f"/{telescope_id}/schedule")
+           
+            
+               
 
+                
+        
+        
+            
+            
+
+        
 class LivePage:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -860,7 +962,9 @@ def main():
     app.add_route('/settings', SettingsResource())
     app.add_route('/schedule', ScheduleResource())
     app.add_route('/schedule/clear', ScheduleClearResource())
+    app.add_route('/schedule/export', ScheduleExportResource())
     app.add_route('/schedule/image', ScheduleImageResource())
+    app.add_route('/schedule/import', ScheduleImportResource())
     app.add_route('/schedule/mosaic', ScheduleMosaicResource())
     app.add_route('/schedule/online', ScheduleGoOnlineResource())
     app.add_route('/schedule/shutdown', ScheduleShutdownResource())
@@ -879,7 +983,9 @@ def main():
     app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
     app.add_route('/{telescope_id:int}/schedule/auto-focus', ScheduleAutoFocusResource())
     app.add_route('/{telescope_id:int}/schedule/clear', ScheduleClearResource())
+    app.add_route('/{telescope_id:int}/schedule/export', ScheduleExportResource())
     app.add_route('/{telescope_id:int}/schedule/image', ScheduleImageResource())
+    app.add_route('/{telescope_id:int}/schedule/import', ScheduleImportResource())
     app.add_route('/{telescope_id:int}/schedule/mosaic', ScheduleMosaicResource())
     app.add_route('/{telescope_id:int}/schedule/online', ScheduleGoOnlineResource())
     app.add_route('/{telescope_id:int}/schedule/shutdown', ScheduleShutdownResource())
