@@ -1,3 +1,33 @@
-<form action="{{ root }}/schedule/clear" method="post">
-    <button type="submit" class="btn btn-primary">Clear Schedule</button>
-</form>
+<div class="form-row">
+	<form action="{{ root }}/schedule/clear" method="post">
+		<div class="form row aliign-items-center">
+			<div class="col-auto">
+				<button type="submit" class="btn btn-primary mb-2">Clear Schedule</button>
+			</div>
+		</div>
+	</form>
+</div>
+<div class="form-row">
+	<form action="{{ root }}/schedule/import" method="post" enctype="multipart/form-data">
+		<div class="form row align-items-center">
+			<div class="col-auto">
+				<button type="submit" class="btn btn-primary mb-2">Import Schedule</button>
+			</div>
+			<div class="col-auto">
+				<input type="file" class="form-control-file" name="schedule_file" accept=".csv" required>
+			</div>
+		</div>
+	</form>
+</div>
+<div class="form-row">
+	<form action="{{ root }}/schedule/export" method="post">
+		<div class="form row align-items-center">
+			<div class="col-auto">
+				<button type="submit" class="btn btn-primary mb-2">Export Schedule</button>
+			</div>
+			<div class="col-auto">
+				<input type="text" class="form-control" name="filename" placeholder="Filename.csv" required>
+			</div>
+		</div>
+	</form>
+</div>
