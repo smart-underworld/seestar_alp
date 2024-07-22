@@ -744,7 +744,7 @@ class ScheduleClearResource:
         
             if state == "Running":
                 do_action_device("stop_scheduler", telescope_id, {})
-                lash(resp, "Stopping scheduler")
+                flash(resp, "Stopping scheduler")
 
             do_action_device("create_schedule", telescope_id, {})
             flash(resp, "Created New Schedule")
