@@ -202,6 +202,37 @@ def get_device_state(telescope_id=1):
     return stats
 
 
+def get_device_settings(telescope_id=1):
+    settings_result = method_sync("get_setting", telescope_id)
+    stack_settings_result = method_sync("get_stack_setting", telescope_id)
+    
+    settings = {
+        "stack_dither_pix": settings_result["stack_dither"]["pix"],
+        "stack_dither_interval": settings_result["stack_dither"]["interval"],
+        "stack_dither_enable": settings_result["stack_dither"]["enable"],
+        "exp_ms_stack_l": settings_result["exp_ms"]["stack_l"],
+        "exp_ms_continuous": settings_result["exp_ms"]["continuous"],
+        "save_discrete_frame": stack_settings_result["save_discrete_frame"],
+        "save_discrete_ok_frame": stack_settings_result["save_discrete_ok_frame"],
+        "light_duration_min": stack_settings_result["light_duration_min"],
+        "auto_3ppa_calib": settings_result["auto_3ppa_calib"],
+        "frame_calib": settings_result["frame_calib"],
+        "stack_masic": settings_result["stack_masic"],
+        "rec_stablzn": settings_result["rec_stablzn"],
+        "manual_exp": settings_result["manual_exp"],
+        #"isp_exp_ms": settings_result["isp_exp_ms"],
+        #"calib_location": settings_result["calib_location"],
+        #"wide_cam": settings_result["wide_cam"],
+        #"temp_unit": settings_result["temp_unit"],
+        "focal_pos": settings_result["focal_pos"],
+        "factory_focal_pos": settings_result["factory_focal_pos"],
+        "heater_enable": settings_result["heater_enable"],
+        "auto_power_off": settings_result["auto_power_off"],
+        "stack_lenhance": settings_result["stack_lenhance"]
+    }
+    return settings
+
+
 def get_telescopes_state():
     telescopes = get_telescopes()
 
@@ -775,15 +806,6 @@ class ScheduleImportResource:
         import_schedule(string_data, telescope_id)
         flash(resp, f"Schedule imported from {filename}.")
         redirect(f"/{telescope_id}/schedule")
-           
-            
-               
-
-                
-        
-        
-            
-            
 
         
 class LivePage:
@@ -820,9 +842,104 @@ class SearchObjectResource:
 
 
 class SettingsResource:
+    def on_get(self, req, resp, telescope_id=1):
+        self.render_settings(req, resp, telescope_id, {})
+    
+    def on_post(self, req, resp, telescope_id=1):
+        PostedSettings = req.media
+        
+        #Convert the form names back into the required format
+        FormattedNewSettings = {
+            "stack_lenhance": eval(PostedSettings["stack_lenhance"]),
+            "stack_dither":{"pix": int(PostedSettings["stack_dither_pix"]), "interval": int(PostedSettings["stack_dither_interval"]), "enable": eval(PostedSettings["stack_dither_enable"])},
+            "exp_ms": {"stack_l": int(PostedSettings["exp_ms_stack_l"]), "continuous": int(PostedSettings["exp_ms_continuous"]) },
+            "focal_pos": int(PostedSettings["focal_pos"]),
+            "factory_focal_pos": int(PostedSettings["factory_focal_pos"]),
+            "auto_power_off": eval(PostedSettings["auto_power_off"]),
+            "auto_3ppa_calib": eval(PostedSettings["auto_3ppa_calib"]),
+            "frame_calib": eval(PostedSettings["frame_calib"]),
+            "stack_masic": eval(PostedSettings["stack_masic"]),
+            "rec_stablzn": eval(PostedSettings["rec_stablzn"]),
+            "manual_exp": eval(PostedSettings["manual_exp"])
+        }
+
+        FormattedNewStackSettings = {
+            "save_discrete_frame": PostedSettings["save_discrete_frame"],
+            "save_discrete_ok_frame": PostedSettings["save_discrete_ok_frame"],
+            "light_duration_min": PostedSettings["light_duration_min"]
+        }
+
+        #Dew Heater is wierd
+        if(eval(PostedSettings["heater_enable"])):
+            do_action_device("method_sync", telescope_id, {'method': 'pi_output_set2', 'params': {'heater': {'state': True, 'value': 90}}})
+        else:
+            do_action_device("method_sync", telescope_id, {'method': 'pi_output_set2', 'params': {'heater': {'state': False, 'value': 90}}})
+
+        settings_output = do_action_device("method_async", telescope_id, {"method": "set_setting", "params": FormattedNewSettings})
+        stack_settings_output = do_action_device("method_async", telescope_id, {"method": "set_stack_setting", "params": FormattedNewStackSettings})
+
+        if(settings_output["ErrorNumber"] or stack_settings_output["ErrorNumber"]):
+            output = "Error Updating Settings."
+        else:
+            output = "Successfully Updated Settings."
+
+        self.render_settings(req, resp, telescope_id, output)
+
     @staticmethod
-    def on_get(req, resp):
-        render_template(req, resp, 'settings.html')
+    def render_settings(req, resp, telescope_id, output):
+        context = get_context(telescope_id, req)
+        settings =  get_device_settings()
+        # Maybe we can store this better?
+        settings_friendly_names = {
+            "stack_dither_pix": "Stack Dither Pixels",
+            "stack_dither_interval": "Stack Dither Interval",
+            "stack_dither_enable": "Stack Dither Enable",
+            "exp_ms_stack_l": "Exposure Stack L (ms)",
+            "exp_ms_continuous": "Exposure Continuous (ms)",
+            "save_discrete_frame": "Save Discrete Frame",
+            "save_discrete_ok_frame": "Save Discrete OK Frame",
+            "light_duration_min": "Light Duration Min",
+            "auto_3ppa_calib": "Auto 3 Point Calibration",
+            "frame_calib": "Frame Calibration",
+            "stack_masic": "Stack Mosaic",
+            "rec_stablzn": "Rec Stablzn",
+            "manual_exp": "Manual Exp",
+            "isp_exp_ms": "isp_exp_ms",
+            "calib_location": "calib_location",
+            "wide_cam": "Wide Cam",
+            "temp_unit": "Temperature Unit",
+            "focal_pos": "Focal Position",
+            "factory_focal_pos": "Default Focal Position",
+            "heater_enable": "Heater Enable",
+            "auto_power_off": "Auto Power Off",
+            "stack_lenhance": "LP Filter"
+        }
+        # Maybe we can store this better?
+        settings_helper_text = {
+            "stack_dither_pix": "Dither by (x) pixels.",
+            "stack_dither_interval": "Dither every (x) sub frames.",
+            "stack_dither_enable": "Enable or disable dither.",
+            "exp_ms_stack_l": "Exposure Stack L (ms)",
+            "exp_ms_continuous": "Exposure Continuous (ms)",
+            "save_discrete_frame": "Save failed sub frames.",
+            "save_discrete_ok_frame": "Save OK sub frames.",
+            "light_duration_min": "Light Duration Min",
+            "auto_3ppa_calib": "Enable or disable 3 point calibration.",
+            "frame_calib": "Frame Calibration",
+            "stack_masic": "Stack Mosaic",
+            "rec_stablzn": "Rec Stablzn",
+            "manual_exp": "Manual Exp",
+            "isp_exp_ms": "isp_exp_ms",
+            "calib_location": "calib_location",
+            "wide_cam": "Wide Cam",
+            "temp_unit": "Temperature Unit",
+            "focal_pos": "Current focal position.",
+            "factory_focal_pos": "Default focal position on startup.",
+            "heater_enable": "Enable or disable dew heater.",
+            "auto_power_off": "Enable or disable auto power off",
+            "stack_lenhance": "Enable or disable LP Filter."
+        }
+        render_template(req, resp, 'settings.html', settings=settings, settings_friendly_names=settings_friendly_names, settings_helper_text=settings_helper_text, output=output, **context)
 
 
 class StatsResource:

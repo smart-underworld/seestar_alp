@@ -1,9 +1,56 @@
 {% extends 'base.html' %}
 
 {% block header %}
-    <h1>{% block title %}Settings{% endblock %}</h1>
+    <meta http-equiv="Cache-Control" content="no-cache">
+    <div class="container mt-3">
+        <h1>{% block title %}Settings{% endblock %}</h1>
+    </div>
 {% endblock %}
 
 {% block content %}
-    <p>Settings</p>
+    {% if online %}
+        <div class="container mt-3">
+            {% if output %}
+                <div class="alert alert-primary" role="alert">{{output}}</div>
+            {% endif %}
+            <form method="post" action="{{ action }}">    
+                <table class="table table-striped">
+                    <tbody>
+                    {% for key, value in settings.items() %}
+                        <tr>
+                            <th class="col">
+                                {{ settings_friendly_names[key] }}
+                                <div class="form-text">{{ settings_helper_text[key] }}</div>
+                            </th>
+                            {% if value == true or value == false %}
+                                <td>
+                                    <input type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}" required pattern="[Tt]rue|[Ff]alse" aria-describedby="truefalseHelp">
+                                    <div id="truefalseHelp" class="form-text">True/False</div>
+                                </td>
+                            {% elif key == "temp_unit" %}
+                                <td>
+                                    <input type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}" required pattern="[Cc]|[Ff]" aria-describedby="cfHelp">
+                                    <div id="cfHelp" class="form-text">C/F</div>
+                                </td>
+                            {% elif value is number %}
+                                <td>
+                                    <input type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" required aria-describedby="numberHelp">
+                                    <div id="numberHelp" class="form-text">Numbers Only</div>
+                                </td>
+                            {% else %}
+                                <td><input type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}" required></td>
+                            {% endif %}
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </form>    
+        </div>
+    {% else %}
+        <div class="container mt-3">
+            <p>You are currently in offline mode</p>
+            <span> {% include 'go_online.html' %}</span>
+        </div>
+    {% endif %}
 {% endblock %}
