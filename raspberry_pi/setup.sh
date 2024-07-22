@@ -31,7 +31,7 @@ cat <<_EOF
 | Seestar_alp Setup Complete          |
 |                                     |
 | You can access SSC via:             |
-| http://$(hostname).local:5430       |
+| http://$(hostname).local:5432       |
 |                                     |
 | Device logs can be found in         |
 |  ./seestar_alp/logs                 |
