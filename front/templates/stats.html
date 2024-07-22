@@ -1,29 +1,36 @@
 {% extends 'base.html' %}
 
 {% block header %}
-    <h1>{% block title %}Stats{% endblock %}</h1>
+    <div class="container mt-3">
+		<p class="h1">{% block title %}Stats{% endblock %}</p>
+	</div>
 {% endblock %}
 
 {% block content %}
-	{% if online %}
-		<p>Stats</p>
-		<table class="table table-striped">
-			<tbody>
+
+	{% if online %}	
+		<div class="container mt-3">
+		
 			{% for key, value in stats.items() %}
-				<tr>
-					<th class="col">{{ key }}</th>
-					<td>{{ value }}</td>
-				</tr>
+				<div class="row border-bottom py-1">
+					<div class="col fw-bold"><p>{{ key }}</p></div>
+					<div class="col"><p class="text-end">{{ value }}</p></div>
+				</div>
 			{% endfor %}
-			</tbody>
-		</table>
+			
+		</div>
 	{% else %}
-		<p>You are currently in offline mode</p>
-		<span> {% include 'go_online.html' %}</span>
+		<div class="container mt3">
+			<p>You are currently in offline mode</p>
+			<span> {% include 'go_online.html' %}</span>
+		</div>
 	{% endif %}
+	
+	
 	<footer class="bg-body-tertiary text-center">
 			Last updated: {{ now }}
 	</footer>
+	
 {% endblock %}
 
 {% block html_header %}

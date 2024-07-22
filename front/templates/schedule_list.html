@@ -1,67 +1,64 @@
-<div class="mb-5">
+<div class="mb-3">
+    {% if online %}
+        <div id="scheduler_state"
+            hx-get="{{ root }}/schedule/state"
+            hx-swap="innerHTML"
+            hx-target="#scheduler_state"
+            hx-trigger="load delay:0ms"
+            style="height:45px;">
+        </div>
+    {% else %}
+        <p>You are currently in offline mode</p>
+        <span> {% include 'go_online.html' %}</span>
+    {% endif %}
 
-	{% if online %}
-		<div id="scheduler_state"
-			hx-get="{{ root }}/schedule/state"
-			hx-swap="innerHTML"
-			hx-target="#scheduler_state"
-			hx-trigger="load delay:0ms"
-			style="height:45px;">
-		</div>
-	{% else %}
-		<p>You are currently in offline mode</p>
-		<span> {% include 'go_online.html' %}</span>
-	{% endif %}
-
-    <table class="table table-striped mt-3">
-        <thead>
-        <tr>
-            <th>Action</th>
-            <th>Target</th>
-            <th>Coords</th>
-            <th>Panels</th>
-            <th>Overlap</th>
-            <th>J2000?</th>
-            <th>Total Exp (sec)</th>
-            <th>Gain</th>
-            <th>LP filter?</th>
-            <th>AutoFocus</th>
-        </tr>
-        </thead>
-        <tbody>
+    <div class="container mt-3">
+        <div class="row fw-bold border-bottom py-1 text-start">
+            <div class="col-2">Action</div>
+            <div class="col">Target</div>
+            <div class="col-3">Coords</div>
+            <div class="col">Panels</div>
+            <div class="col">Overlap</div>
+            <div class="col">J2000?</div>
+            <div class="col">Total Exp</div>
+            <div class="col">Gain</div>
+            <div class="col">LP filter?</div>
+            <div class="col">AutoFocus</div>
+        </div>
         {% for item in schedule %}
-            <tr>
+            <div class="row border-bottom py-2 text-start">
                 {% if item["action"] == 'wait_until' %}
-                    <td colspan="10">Wait Until {{ item["params"]["local_time"] }}</td>
+                    <div class="col-2">Wait Until </div> 
+					<div class="col">{{ item["params"]["local_time"] }}</div>
                 {% elif item["action"] == 'wait_for' %}
-                    <td colspan="10">Wait For {{ item["params"]["timer_sec"] }} seconds</td>
+                    <div class="col-2">Wait For</div>
+					<div class="col">{{ item["params"]["timer_sec"] }}s</div>
                 {% elif item["action"] == 'auto_focus' %}
-                    <td colspan="10">Auto Focus {{ item["params"]["try_count"] }} attempts</td>
+                    <div class="col-2">Auto Focus</div>
+					<div class="col">{{ item["params"]["try_count"] }}x</div>
                 {% elif item["action"] == 'set_setting_exposures' %}
-                    <td colspan="10">Set exposure ...</td>
+                    <div class="col-2">Set exposure ...</div>
                 {% elif item["action"] == 'shutdown' %}
-                    <td colspan="10">Shutdown</td>
+                    <div class="col-2">Shutdown</div>
                 {% elif item["action"] == 'start_mosaic' %}
-                    <td>{{ item["action"] }}</td>
-                    <td>{{ item["params"]["target_name"] }}</td>
-                    <td>{{ item["params"]["ra"] }} / {{ item["params"]["dec"] }}</td>
-                    <td>{{ item["params"]["ra_num"] }} / {{ item["params"]["dec_num"] }}</td>
-                    {#                    <td>{{ item["params"]["ra_offset_mult"] }} / {{ item["params"]["dec_offset_mult"] }}</td>#}
-                    <td>{{ item["params"]["panel_overlap_percent"] }}</td>
-                    <td>{{ item["params"]["is_j2000"] }}</td>
-                    <td>{{ item["params"]["session_time_sec"] }}</td>
-                    <td>{{ item["params"]["gain"] }}</td>
-                    <td>{{ item["params"]["is_use_lp_filter"] }}</td>
-                    <td>{{ item["params"]["is_use_autofocus"] }}</td>
+                    <div class="col-2">Start Mosaic</div>
+                    <div class="col">{{ item["params"]["target_name"] }}</div>
+                    <div class="col-3">{{ item["params"]["ra"] }} / {{ item["params"]["dec"] }}</div>
+                    <div class="col">{{ item["params"]["ra_num"] }} / {{ item["params"]["dec_num"] }}</div>
+                    <div class="col">{{ item["params"]["panel_overlap_percent"] }}</div>
+                    <div class="col">{{ item["params"]["is_j2000"] }}</div>
+                    <div class="col">{{ item["params"]["session_time_sec"] }}s</div>
+                    <div class="col">{{ item["params"]["gain"] }}</div>
+                    <div class="col">{{ item["params"]["is_use_lp_filter"] }}</div>
+                    <div class="col">{{ item["params"]["is_use_autofocus"] }}</div>
                 {% else %}
-                    <td>Unrecognized schedule item: {{ item }}</td>
+                    <div class="col" colspan="10">Unrecognized schedule item: {{ item }}</div>
                 {% endif %}
-            </tr>
+            </div>
         {% endfor %}
-        </tbody>
-    </table>
-
-    <div>
+    </div>
+	<p></p>
+    <div class="container py-2">
         <span> {% include 'clear_schedule.html' %}</span>
     </div>
 </div>
