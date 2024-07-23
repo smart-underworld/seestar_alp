@@ -919,7 +919,10 @@ class SettingsResource:
     @staticmethod
     def render_settings(req, resp, telescope_id, output):
         context = get_context(telescope_id, req)
-        settings = get_device_settings()
+        if online:
+            settings = get_device_settings()
+        else:
+            settings = {}
         # Maybe we can store this better?
         settings_friendly_names = {
             "stack_dither_pix": "Stack Dither Pixels",
