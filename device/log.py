@@ -73,10 +73,10 @@ def init_logging():
     logger.handlers[0].setFormatter(formatter)  # This is the stdout handler, level set above
     # Add a logfile handler, same formatter and level
     handler = logging.handlers.RotatingFileHandler('alpyca.log',
-                                                    mode='w',
-                                                    delay=True,     # Prevent creation of empty logs
-                                                    maxBytes=Config.max_size_mb * 1000000,
-                                                    backupCount=Config.num_keep_logs)
+                                                   mode='w',
+                                                   delay=True,  # Prevent creation of empty logs
+                                                   maxBytes=Config.max_size_mb * 1000000,
+                                                   backupCount=Config.num_keep_logs)
     handler.setLevel(Config.log_level)
     handler.setFormatter(formatter)
     handler.doRollover()                                            # Always start with fresh log

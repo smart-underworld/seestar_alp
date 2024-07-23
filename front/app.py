@@ -21,10 +21,11 @@ if not getattr(sys, "frozen", False):  # if we are not running from a bundled ap
     sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
 
 from config import Config  # type: ignore
+from log import init_logging
 import logging
 import threading
 
-logger = logging.getLogger()
+logger = init_logging()
 
 base_url = "http://localhost:" + str(Config.port)
 stellarium_url = 'http://localhost:' + str(Config.stport) + '/api/objects/info'
@@ -1167,14 +1168,16 @@ def main(device_main):
     app.add_route('/stellarium', StellariumResource())
     app.add_route('/toggleuitheme', ToogleUITheme())
 
-    alp_resource = AlpResource(device_main)
-    app.add_route("/alp/stop", alp_resource, suffix="stop")
-    app.add_route("/alp/start", alp_resource, suffix="start")
+    if device_main:
+        alp_resource = AlpResource(device_main)
+        app.add_route("/alp/stop", alp_resource, suffix="stop")
+        app.add_route("/alp/start", alp_resource, suffix="start")
+
     online = check_api_state()
     try:
         # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
         with make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler) as httpd:
-            # logger.info(f'==STARTUP== Serving on {Config.ip_address}:{Config.port}. Time stamps are UTC.')
+            logger.info(f'==STARTUP== Serving on {Config.ip_address}:{Config.port}. Time stamps are UTC.')
 
             # Print listening IP:Port to the console
             if Config.ip_address == "0.0.0.0":
@@ -1194,4 +1197,4 @@ def main(device_main):
 
 
 if __name__ == '__main__':
-    main()
+    main(None)
