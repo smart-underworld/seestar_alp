@@ -66,9 +66,9 @@ def init_logging():
 
     """
 
-    logging.basicConfig(level=Config.log_level)
+    logging.basicConfig(level=Config.log_level) # This creates the default handler
     logger = logging.getLogger()                # Root logger, see above
-    formatter = logging.Formatter('%(asctime)s.%(msecs)03d %(levelname)s %(message)s', '%Y-%m-%dT%H:%M:%S')
+    formatter = logging.Formatter('%(asctime)s.%(msecs)03d %(levelname)s %(threadName)s %(message)s', '%Y-%m-%dT%H:%M:%S')
     formatter.converter = time.gmtime           # UTC time
     logger.handlers[0].setFormatter(formatter)  # This is the stdout handler, level set above
     # Add a logfile handler, same formatter and level
