@@ -66,17 +66,17 @@ def init_logging():
 
     """
 
-    logging.basicConfig(level=Config.log_level)
+    logging.basicConfig(level=Config.log_level) # This creates the default handler
     logger = logging.getLogger()                # Root logger, see above
-    formatter = logging.Formatter('%(asctime)s.%(msecs)03d %(levelname)s %(message)s', '%Y-%m-%dT%H:%M:%S')
+    formatter = logging.Formatter('%(asctime)s.%(msecs)03d %(levelname)s %(threadName)s %(message)s', '%Y-%m-%dT%H:%M:%S')
     formatter.converter = time.gmtime           # UTC time
     logger.handlers[0].setFormatter(formatter)  # This is the stdout handler, level set above
     # Add a logfile handler, same formatter and level
     handler = logging.handlers.RotatingFileHandler('alpyca.log',
-                                                    mode='w',
-                                                    delay=True,     # Prevent creation of empty logs
-                                                    maxBytes=Config.max_size_mb * 1000000,
-                                                    backupCount=Config.num_keep_logs)
+                                                   mode='w',
+                                                   delay=True,  # Prevent creation of empty logs
+                                                   maxBytes=Config.max_size_mb * 1000000,
+                                                   backupCount=Config.num_keep_logs)
     handler.setLevel(Config.log_level)
     handler.setFormatter(formatter)
     handler.doRollover()                                            # Always start with fresh log

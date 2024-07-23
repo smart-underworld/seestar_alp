@@ -1,5 +1,6 @@
 import time
 from datetime import datetime
+from sys import prefix
 
 import falcon
 from falcon import HTTPTemporaryRedirect, HTTPFound
@@ -15,11 +16,17 @@ import re
 import os
 import socket
 import sys
-if not getattr(sys, "frozen",  False):       # if we are not running from a bundled app
-    sys.path.append('../device')
-from config import Config  # type: ignore
 
-# base_url = "http://localhost:5555"
+if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
+    sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
+
+from config import Config  # type: ignore
+from log import init_logging
+import logging
+import threading
+
+logger = init_logging()
+
 base_url = "http://localhost:" + str(Config.port)
 stellarium_url = 'http://localhost:' + str(Config.stport) + '/api/objects/info'
 simbad_url = 'https://simbad.cds.unistra.fr/simbad/sim-id?output.format=ASCII&obj.bibsel=off&Ident='
@@ -33,12 +40,14 @@ def flash(resp, message):
     resp.set_cookie('flash_cookie', message, path='/')
     messages.append(message)
 
+
 def get_messages():
     if len(messages) > 0:
         resp = messages
         messages.clear()
         return resp
     return []
+
 
 def get_telescopes():
     telescopes = Config.seestars
@@ -69,7 +78,8 @@ def get_context(telescope_id, req):
     telescopes = get_telescopes()
     root = get_root(telescope_id)
     partial_path = "/".join(req.relative_uri.split("/", 2)[2:])
-    return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path, "online": online}
+    return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
+            "online": online}
 
 
 def get_flash_cookie(req, resp):
@@ -93,11 +103,12 @@ def get_ip():
         s.close()
     return IP
 
+
 def check_api_state():
     url = f"{base_url}/api/v1/telescope/1/action"
     payload = {
         "Action": "method_sync",
-        "Parameters": json.dumps({"method":"get_device_state"}),
+        "Parameters": json.dumps({"method": "get_device_state"}),
         "ClientID": 1,
         "ClientTransactionID": 999
     }
@@ -105,27 +116,27 @@ def check_api_state():
         r = requests.put(url, json=payload)
         r.raise_for_status()
     except requests.exceptions.ConnectionError:
-        print("API is not online.")
+        logger.info("API is not online.")
         return False
     except requests.exceptions.RequestException as e:
-        print("API is not online.")
+        logger.info("API is not online.")
         return False
     else:
-        print("API is online.")
+        logger.info("API is online.")
         return True
-    
-    
-def queue_action(dev_num, payload):
 
+
+def queue_action(dev_num, payload):
     global queue
-    
+
     if dev_num not in queue:
         queue[dev_num] = []
-        
+
     queue[dev_num].append(payload)
-    
+
     return []
-        
+
+
 def do_action_device(action, dev_num, parameters):
     url = f"{base_url}/api/v1/telescope/{dev_num}/action"
     payload = {
@@ -205,7 +216,7 @@ def get_device_state(telescope_id=1):
 def get_device_settings(telescope_id=1):
     settings_result = method_sync("get_setting", telescope_id)
     stack_settings_result = method_sync("get_stack_setting", telescope_id)
-    
+
     settings = {
         "stack_dither_pix": settings_result["stack_dither"]["pix"],
         "stack_dither_interval": settings_result["stack_dither"]["interval"],
@@ -220,10 +231,10 @@ def get_device_settings(telescope_id=1):
         "stack_masic": settings_result["stack_masic"],
         "rec_stablzn": settings_result["rec_stablzn"],
         "manual_exp": settings_result["manual_exp"],
-        #"isp_exp_ms": settings_result["isp_exp_ms"],
-        #"calib_location": settings_result["calib_location"],
-        #"wide_cam": settings_result["wide_cam"],
-        #"temp_unit": settings_result["temp_unit"],
+        # "isp_exp_ms": settings_result["isp_exp_ms"],
+        # "calib_location": settings_result["calib_location"],
+        # "wide_cam": settings_result["wide_cam"],
+        # "temp_unit": settings_result["temp_unit"],
         "focal_pos": settings_result["focal_pos"],
         "factory_focal_pos": settings_result["factory_focal_pos"],
         "heater_enable": settings_result["heater_enable"],
@@ -247,7 +258,7 @@ def get_queue(telescope_id):
         return parameters_list
     else:
         return []
-        
+
 
 def process_queue(resp):
     global online
@@ -263,14 +274,14 @@ def process_queue(resp):
                     params = param['params']
                 else:
                     params = None
-                print("POST scheduled request", action, params)
+                logger.info("POST scheduled request", action, params)
                 response = do_schedule_action_device(action, params, telescope)
-                print("GET response", response)
+                logger.info("GET response", response)
     else:
-        flash(resp, "ERROR: Seestar ALP API is Offline, Please ensure your Seestar is powered on and device/app.py is running.")
-              
-            
-    
+        flash(resp,
+              "ERROR: Seestar ALP API is Offline, Please ensure your Seestar is powered on and device/app.py is running.")
+
+
 def check_ra_value(raString):
     valid = [
         r"^\d+h\s*\d+m\s*([0-9.]+s)?$",
@@ -333,12 +344,12 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
             "action": "start_mosaic",
             "params": values
         })
-        print("POST scheduled request", values, response)
+        logger.info("POST scheduled request", values, response)
         if online:
             check_response(resp, response)
     else:
         response = do_action_device("start_mosaic", telescope_id, values)
-        print("POST immediate request", values, response)
+        logger.info("POST immediate request", values, response)
 
     return values, errors
 
@@ -387,12 +398,12 @@ def do_create_image(req, resp, schedule, telescope_id):
             "action": "start_mosaic",
             "params": values
         })
-        print("POST scheduled request", values, response)
+        logger.info("POST scheduled request", values, response)
         if online:
             check_response(resp, response)
     else:
         response = do_action_device("start_mosaic", telescope_id, values)
-        print("POST immediate request", values, response)
+        logger.info("POST immediate request", values, response)
 
     return values, errors
 
@@ -446,10 +457,12 @@ def do_command(req, resp, telescope_id):
             output = method_sync("get_wheel_setting", telescope_id)
             return output
         case "dew_heater_on":
-            output = do_action_device("method_sync", telescope_id, {'method': 'pi_output_set2', 'params': {'heater': {'state': True, 'value': 90}}})
+            output = do_action_device("method_sync", telescope_id,
+                                      {'method': 'pi_output_set2', 'params': {'heater': {'state': True, 'value': 90}}})
             return None
         case "dew_heater_off":
-            output = do_action_device("method_sync", telescope_id, {'method': 'pi_output_set2', 'params': {'heater': {'state': False, 'value': 90}}})
+            output = do_action_device("method_sync", telescope_id,
+                                      {'method': 'pi_output_set2', 'params': {'heater': {'state': False, 'value': 90}}})
             return None
         case _:
             print("No command found")
@@ -462,16 +475,17 @@ def redirect(location):
 
 
 def render_template(req, resp, template_name, **context):
-    if getattr(sys, "frozen",  False):
+    if getattr(sys, "frozen", False):
         ## RWR Testing
         template_dir = os.path.join(os.path.dirname(__file__), 'templates')
-        print(template_dir)
+        logger.info(template_dir)
         env = Environment(loader=FileSystemLoader(template_dir))
         template = env.get_template(template_name)
         ## RWR
     else:
-        template = Environment(loader=FileSystemLoader('./templates')).get_template(template_name)
-    
+        template = Environment(
+            loader=FileSystemLoader(os.path.join(os.path.dirname(__file__), 'templates'))).get_template(template_name)
+
     resp.status = falcon.HTTP_200
     resp.content_type = 'text/html'
     webui_theme = Config.uitheme
@@ -487,37 +501,38 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
         schedule = current["Value"]["list"]
     else:
         schedule = get_queue(telescope_id)
-        
+
     context = get_context(telescope_id, req)
     render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values,
                     **context)
 
-FIXED_PARAMS_KEYS = ["local_time", "timer_sec", "try_count", "target_name", "is_j2000", "ra", "dec", "is_use_lp_filter", "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus"]
+
+FIXED_PARAMS_KEYS = ["local_time", "timer_sec", "try_count", "target_name", "is_j2000", "ra", "dec", "is_use_lp_filter",
+                     "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus"]
 
 
 def export_schedule(filename, telescope_id):
-
     if online:
         current = do_action_device("get_schedule", telescope_id, {})
         schedule = current["Value"]["list"]
     else:
         schedule = get_queue(telescope_id)
-   
+
     # Parse the JSON data
     list_to_json = json.dumps(schedule)
     data = json.loads(list_to_json)
-        
+
     # Define the fieldnames (column names)
     fieldnames = ['action'] + FIXED_PARAMS_KEYS
-    
+
     # Open a CSV file for writing
-    with open(filename, 'w', newline='') as csvfile:        
+    with open(filename, 'w', newline='') as csvfile:
         # Create a writer object
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-    
+
         # Write the header
         writer.writeheader()
-    
+
         # Write the rows
         for entry in data:
             row = OrderedDict({'action': entry['action']})
@@ -528,27 +543,33 @@ def export_schedule(filename, telescope_id):
                 # If 'params' key is missing, ensure all fixed params are empty
                 for key in FIXED_PARAMS_KEYS:
                     row[key] = ''
-            writer.writerow(row)    
+            writer.writerow(row)
 
-    
+
 def import_schedule(input, telescope_id):
     for line in input:
-        action,local_time,timer_sec,try_count,target_name,is_j2000,ra,dec,is_use_lp_filter,session_time_sec,ra_num,dec_num,panel_overlap_percent,gain,is_use_autofocus = line.split(',')
+        action, local_time, timer_sec, try_count, target_name, is_j2000, ra, dec, is_use_lp_filter, session_time_sec, ra_num, dec_num, panel_overlap_percent, gain, is_use_autofocus = line.split(
+            ',')
         match action:
             case "action":
                 pass
             case "wait_until":
                 do_schedule_action_device("wait_until", {"local_time": local_time}, telescope_id)
             case "wait_for":
-                do_schedule_action_device("wait_for", {"timer_sec": int(timer_sec)}, telescope_id)                
+                do_schedule_action_device("wait_for", {"timer_sec": int(timer_sec)}, telescope_id)
             case "auto_focus":
                 do_schedule_action_device("auto_focus", {"try_count": int(try_count)}, telescope_id)
             case "start_mosaic":
-                do_schedule_action_device("start_mosaic", {"target_name": target_name, "ra": ra, "dec": dec, "is_j2000": is_j2000, "is_use_lp_filter": is_use_lp_filter, "is_use_autofocus": is_use_autofocus, "session_time_sec": int(session_time_sec), "ra_num": int(ra_num), "dec_num": int(dec_num), "panel_overlap_percent": int(panel_overlap_percent), "gain": int(gain)}, int(telescope_id))                
+                do_schedule_action_device("start_mosaic",
+                                          {"target_name": target_name, "ra": ra, "dec": dec, "is_j2000": is_j2000,
+                                           "is_use_lp_filter": is_use_lp_filter, "is_use_autofocus": is_use_autofocus,
+                                           "session_time_sec": int(session_time_sec), "ra_num": int(ra_num),
+                                           "dec_num": int(dec_num), "panel_overlap_percent": int(panel_overlap_percent),
+                                           "gain": int(gain)}, int(telescope_id))
             case "shutdown":
                 do_schedule_action_device("shutdown", "", telescope_id)
- 
- 
+
+
 class HomeResource:
     @staticmethod
     def on_get(req, resp):
@@ -614,8 +635,8 @@ class CommandResource:
             schedule = current["Value"]["list"]
         else:
             schedule = get_queue(telescope_id)
-            state = "Stopped"    
-        
+            state = "Stopped"
+
         context = get_context(telescope_id, req)
 
         render_template(req, resp, 'command.html', state=state, schedule=schedule, action=f"/{telescope_id}/command",
@@ -664,7 +685,7 @@ class ScheduleWaitUntilResource:
     def on_post(req, resp, telescope_id=1):
         waitUntil = req.media["waitUntil"]
         response = do_schedule_action_device("wait_until", {"local_time": waitUntil}, telescope_id)
-        print("POST scheduled request", response)
+        logger.info("POST scheduled request", response)
         if online:
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
@@ -679,7 +700,7 @@ class ScheduleWaitForResource:
     def on_post(req, resp, telescope_id=1):
         waitFor = req.media["waitFor"]
         response = do_schedule_action_device("wait_for", {"timer_sec": int(waitFor)}, telescope_id)
-        print("POST scheduled request", response)
+        logger.info("POST scheduled request", response)
         if online:
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_for.html', 'wait-for', {}, {})
@@ -694,19 +715,21 @@ class ScheduleAutoFocusResource:
     def on_post(req, resp, telescope_id=1):
         autoFocus = req.media["autoFocus"]
         response = do_schedule_action_device("auto_focus", {"try_count": int(autoFocus)}, telescope_id)
-        print("POST scheduled request", response)
+        logger.info("POST scheduled request", response)
         if online:
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_auto_focus.html', 'auto-focus', {}, {})
+
 
 class ScheduleGoOnlineResource:
     @staticmethod
     def on_post(req, resp, telescope_id=1):
         referer = req.get_header('Referer')
-        print(f"Referer: {referer}")
+        logger.info(f"Referer: {referer}")
         process_queue(resp)
         redirect(f"{referer}")
-        
+
+
 class ScheduleImageResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -772,10 +795,10 @@ class ScheduleClearResource:
         if online:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
-        
+
             if state == "Running":
                 do_action_device("stop_scheduler", telescope_id, {})
-                lash(resp, "Stopping scheduler")
+                flash(resp, "Stopping scheduler")
 
             do_action_device("create_schedule", telescope_id, {})
             flash(resp, "Created New Schedule")
@@ -783,9 +806,10 @@ class ScheduleClearResource:
         else:
             global queue
             queue = {}
-        
+
         flash(resp, "Created New Schedule")
         redirect(f"/{telescope_id}/schedule")
+
 
 class ScheduleExportResource:
     @staticmethod
@@ -794,11 +818,11 @@ class ScheduleExportResource:
         export_schedule(filename, telescope_id)
         flash(resp, f"Schedule exported to {filename}.")
         redirect(f"/{telescope_id}/schedule")
-        
+
+
 class ScheduleImportResource:
     @staticmethod
     def on_post(req, resp, telescope_id=1):
-               
         data = req.get_media()
         for part in data:
             string_data = part.data.decode('utf-8').splitlines()
@@ -807,12 +831,12 @@ class ScheduleImportResource:
         flash(resp, f"Schedule imported from {filename}.")
         redirect(f"/{telescope_id}/schedule")
 
-        
+
 class LivePage:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
         status = method_sync('get_view_state')
-        print(status)
+        logger.info(status)
         view_state = "Idle"
         mode = ""
         if status.get("View"):
@@ -829,7 +853,7 @@ class SearchObjectResource:
     @staticmethod
     def on_post(req, resp):
         result_table = Simbad.query_object(req.media["q"])
-        print(result_table)
+        logger.info(result_table)
         if result_table and len(result_table) > 0:
             row = result_table[0]
             resp.media = {
@@ -844,15 +868,18 @@ class SearchObjectResource:
 class SettingsResource:
     def on_get(self, req, resp, telescope_id=1):
         self.render_settings(req, resp, telescope_id, {})
-    
+
     def on_post(self, req, resp, telescope_id=1):
         PostedSettings = req.media
-        
-        #Convert the form names back into the required format
+
+        # Convert the form names back into the required format
         FormattedNewSettings = {
             "stack_lenhance": eval(PostedSettings["stack_lenhance"]),
-            "stack_dither":{"pix": int(PostedSettings["stack_dither_pix"]), "interval": int(PostedSettings["stack_dither_interval"]), "enable": eval(PostedSettings["stack_dither_enable"])},
-            "exp_ms": {"stack_l": int(PostedSettings["exp_ms_stack_l"]), "continuous": int(PostedSettings["exp_ms_continuous"]) },
+            "stack_dither": {"pix": int(PostedSettings["stack_dither_pix"]),
+                             "interval": int(PostedSettings["stack_dither_interval"]),
+                             "enable": eval(PostedSettings["stack_dither_enable"])},
+            "exp_ms": {"stack_l": int(PostedSettings["exp_ms_stack_l"]),
+                       "continuous": int(PostedSettings["exp_ms_continuous"])},
             "focal_pos": int(PostedSettings["focal_pos"]),
             "factory_focal_pos": int(PostedSettings["factory_focal_pos"]),
             "auto_power_off": eval(PostedSettings["auto_power_off"]),
@@ -869,16 +896,20 @@ class SettingsResource:
             "light_duration_min": PostedSettings["light_duration_min"]
         }
 
-        #Dew Heater is wierd
-        if(eval(PostedSettings["heater_enable"])):
-            do_action_device("method_sync", telescope_id, {'method': 'pi_output_set2', 'params': {'heater': {'state': True, 'value': 90}}})
+        # Dew Heater is wierd
+        if (eval(PostedSettings["heater_enable"])):
+            do_action_device("method_sync", telescope_id,
+                             {'method': 'pi_output_set2', 'params': {'heater': {'state': True, 'value': 90}}})
         else:
-            do_action_device("method_sync", telescope_id, {'method': 'pi_output_set2', 'params': {'heater': {'state': False, 'value': 90}}})
+            do_action_device("method_sync", telescope_id,
+                             {'method': 'pi_output_set2', 'params': {'heater': {'state': False, 'value': 90}}})
 
-        settings_output = do_action_device("method_async", telescope_id, {"method": "set_setting", "params": FormattedNewSettings})
-        stack_settings_output = do_action_device("method_async", telescope_id, {"method": "set_stack_setting", "params": FormattedNewStackSettings})
+        settings_output = do_action_device("method_async", telescope_id,
+                                           {"method": "set_setting", "params": FormattedNewSettings})
+        stack_settings_output = do_action_device("method_async", telescope_id,
+                                                 {"method": "set_stack_setting", "params": FormattedNewStackSettings})
 
-        if(settings_output["ErrorNumber"] or stack_settings_output["ErrorNumber"]):
+        if (settings_output["ErrorNumber"] or stack_settings_output["ErrorNumber"]):
             output = "Error Updating Settings."
         else:
             output = "Successfully Updated Settings."
@@ -888,7 +919,7 @@ class SettingsResource:
     @staticmethod
     def render_settings(req, resp, telescope_id, output):
         context = get_context(telescope_id, req)
-        settings =  get_device_settings()
+        settings = get_device_settings()
         # Maybe we can store this better?
         settings_friendly_names = {
             "stack_dither_pix": "Stack Dither Pixels",
@@ -939,7 +970,8 @@ class SettingsResource:
             "auto_power_off": "Enable or disable auto power off",
             "stack_lenhance": "Enable or disable LP Filter."
         }
-        render_template(req, resp, 'settings.html', settings=settings, settings_friendly_names=settings_friendly_names, settings_helper_text=settings_helper_text, output=output, **context)
+        render_template(req, resp, 'settings.html', settings=settings, settings_friendly_names=settings_friendly_names,
+                        settings_helper_text=settings_helper_text, output=output, **context)
 
 
 class StatsResource:
@@ -954,41 +986,41 @@ class StatsResource:
 class SimbadResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
-            objName = req.get_param('name')  #get the name to lookup from the request
-            try:
-                r = requests.get(simbad_url + objName)
-            except:
-                resp.status = falcon.HTTP_500
-                resp.content_type = 'application/text'
-                resp.text =  'Requst had communications error.'
-                return 
-            
-            html_content = r.text
-
-            # Find the start of the RA/Dec (J2000.0) information
-            start_index = html_content.find("Coordinates(ICRS,ep=J2000,eq=2000):")
-
-            # Find the end of the RA/Dec (J2000.0) information (end of the line)
-            end_index = html_content.find("(", start_index+13) #"Coordinates(IC".count)   # skip past the first (
-            
-            ra_dec_j2000 = html_content[start_index:end_index]
-
-            # Clean up the extracted information
-            ra_dec_j2000 = ra_dec_j2000.replace("Coordinates(ICRS,ep=J2000,eq=2000):", "").strip()
-            elements = re.split(r'\s+', ra_dec_j2000.strip())
-            
-            if (len(elements) < 6 ):
-                resp.status = falcon.HTTP_404
-                resp.content_type = 'application/text'
-                resp.text =  'Object not found'
-                return
-            
-            ra_dec_j2000 = f"{elements[0]}h{elements[1]}m{elements[2]}s {elements[3]}d{elements[4]}m{elements[5]}s"
-
-            resp.status = falcon.HTTP_200
+        objName = req.get_param('name')  # get the name to lookup from the request
+        try:
+            r = requests.get(simbad_url + objName)
+        except:
+            resp.status = falcon.HTTP_500
             resp.content_type = 'application/text'
-            resp.text =  ra_dec_j2000
+            resp.text = 'Request had communications error.'
             return
+
+        html_content = r.text
+
+        # Find the start of the RA/Dec (J2000.0) information
+        start_index = html_content.find("Coordinates(ICRS,ep=J2000,eq=2000):")
+
+        # Find the end of the RA/Dec (J2000.0) information (end of the line)
+        end_index = html_content.find("(", start_index + 13)  # "Coordinates(IC".count)   # skip past the first (
+
+        ra_dec_j2000 = html_content[start_index:end_index]
+
+        # Clean up the extracted information
+        ra_dec_j2000 = ra_dec_j2000.replace("Coordinates(ICRS,ep=J2000,eq=2000):", "").strip()
+        elements = re.split(r'\s+', ra_dec_j2000.strip())
+
+        if (len(elements) < 6):
+            resp.status = falcon.HTTP_404
+            resp.content_type = 'application/text'
+            resp.text = 'Object not found'
+            return
+
+        ra_dec_j2000 = f"{elements[0]}h{elements[1]}m{elements[2]}s {elements[3]}d{elements[4]}m{elements[5]}s"
+
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'application/text'
+        resp.text = ra_dec_j2000
+        return
 
 
 class StellariumResource:
@@ -1000,7 +1032,7 @@ class StellariumResource:
         except:
             resp.status = falcon.HTTP_404
             resp.content_type = 'application/text'
-            resp.text =  'Requst had communications error.'
+            resp.text = 'Requst had communications error.'
             return
 
         # Find the start of the RA/Dec (J2000.0) information
@@ -1020,35 +1052,62 @@ class StellariumResource:
 
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
-        resp.text =  ra_dec_j2000
+        resp.text = ra_dec_j2000
+
+
+class AlpResource:
+    def __init__(self, device_main):
+        self.device_app = device_main()
+        self.thread = None
+
+    def on_get_start(self, req, resp):
+        logger.info("Starting ALP")
+        self.thread = threading.Thread(target=self.runner, args=(1,))
+        self.thread.start()
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'application/text'
+        resp.text = 'Started, yo!'
+
+    def on_get_stop(self, req, resp):
+        logger.info("Stopping ALP")
+        self.device_app.stop()
+        self.thread.join()
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'application/text'
+        resp.text = 'Stopped'
+
+    def runner(self, name):
+        logging.info("SeestarAlp %s: starting", name)
+        self.device_app.start()
+        logging.info("SeestarAlp %s: finishing", name)
 
 
 class ToogleUITheme:
     @staticmethod
     def on_get(req, resp):
-        if getattr(sys, "frozen",  False):    # frozen means that we are running from a bundled app
-            config_file = "config.toml"    
+        if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+            config_file = "config.toml"
         else:
             config_file = "../device/config.toml"
-        f = open(config_file, "r")    
+        f = open(config_file, "r")
         fread = f.read()
-        
-        #Current uitheme value in memory
+
+        # Current uitheme value in memory
         Current_Theme = Config.uitheme
         if Current_Theme == "light":
-            #Update variable that's stored in memory
+            # Update variable that's stored in memory
             Config.uitheme = "dark"
 
-            #Update uitheme in config.toml
+            # Update uitheme in config.toml
             uitheme = fread.replace('uitheme = "light"', 'uitheme = "dark"')
         else:
-            #Update variable that's stored in memory
+            # Update variable that's stored in memory
             Config.uitheme = "light"
 
-            #Update uitheme in config.toml
+            # Update uitheme in config.toml
             uitheme = fread.replace('uitheme = "dark"', 'uitheme = "light"')
 
-        #Write the updated config.toml file
+        # Write the updated config.toml file
         with open(config_file, "w") as f:
             f.write(uitheme)
 
@@ -1058,10 +1117,10 @@ class LoggingWSGIRequestHandler(WSGIRequestHandler):
 
     def log_message(self, format: str, *args):
         # if args[1] != '200':  # Log this only on non-200 responses
-        print(f'{datetime.now()} {self.client_address[0]} <- {format % args}')
+        logger.info(f'{datetime.now()} {self.client_address[0]} <- {format % args}')
 
 
-def main():
+def main(device_main):
     app = falcon.App()
     app.add_route('/', HomeResource())
     app.add_route('/command', CommandResource())
@@ -1108,28 +1167,34 @@ def main():
     app.add_route('/simbad', SimbadResource())
     app.add_route('/stellarium', StellariumResource())
     app.add_route('/toggleuitheme', ToogleUITheme())
+
+    if device_main:
+        alp_resource = AlpResource(device_main)
+        app.add_route("/alp/stop", alp_resource, suffix="stop")
+        app.add_route("/alp/start", alp_resource, suffix="start")
+
     online = check_api_state()
     try:
         # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
         with make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler) as httpd:
-            # logger.info(f'==STARTUP== Serving on {Config.ip_address}:{Config.port}. Time stamps are UTC.')
-            
+            logger.info(f'==STARTUP== Serving on {Config.ip_address}:{Config.port}. Time stamps are UTC.')
+
             # Print listening IP:Port to the console
             if Config.ip_address == "0.0.0.0":
-                #Find the ip
+                # Find the ip
                 ip_address = get_ip()
             else:
                 ip_address = Config.ip_address
-            print(f'SSC Started: http://{ip_address}:{Config.uiport}')
-            
+            logger.info(f'SSC Started: http://{ip_address}:{Config.uiport}')
+
             # Serve until process is killed
             httpd.serve_forever()
     except KeyboardInterrupt:
-        print("Keyboard interupt. Shutting down SSC.")
+        logger.info("Keyboard interrupt. Shutting down SSC.")
         # for dev in Config.seestars:
         #     telescope.end_seestar_device(dev['device_num'])
         httpd.server_close()
 
 
 if __name__ == '__main__':
-    main()
+    main(None)
