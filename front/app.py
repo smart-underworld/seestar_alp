@@ -14,6 +14,7 @@ import json
 import csv
 import re
 import os
+import io
 import socket
 import sys
 
@@ -517,7 +518,7 @@ FIXED_PARAMS_KEYS = ["local_time", "timer_sec", "try_count", "target_name", "is_
                      "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus"]
 
 
-def export_schedule(filename, telescope_id):
+def export_schedule(telescope_id):
     if online:
         current = do_action_device("get_schedule", telescope_id, {})
         schedule = current["Value"]["list"]
@@ -531,26 +532,30 @@ def export_schedule(filename, telescope_id):
     # Define the fieldnames (column names)
     fieldnames = ['action'] + FIXED_PARAMS_KEYS
 
-    # Open a CSV file for writing
-    with open(filename, 'w', newline='') as csvfile:
-        # Create a writer object
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    # use an in-memory file-like object
+    output = io.StringIO()
+    
+    # create writer object
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    
+    # Write the header
+    writer.writeheader()
 
-        # Write the header
-        writer.writeheader()
-
-        # Write the rows
-        for entry in data:
-            row = OrderedDict({'action': entry['action']})
-            if 'params' in entry:
-                for key in FIXED_PARAMS_KEYS:
-                    row[key] = entry['params'].get(key, '')
-            else:
-                # If 'params' key is missing, ensure all fixed params are empty
-                for key in FIXED_PARAMS_KEYS:
-                    row[key] = ''
-            writer.writerow(row)
-
+    # Write the rows
+    for entry in data:
+        row = OrderedDict({'action': entry['action']})
+        if 'params' in entry:
+            for key in FIXED_PARAMS_KEYS:
+                row[key] = entry['params'].get(key, '')
+        else:
+            # If 'params' key is missing, ensure all fixed params are empty
+            for key in FIXED_PARAMS_KEYS:
+                row[key] = ''
+        writer.writerow(row)
+        
+        output.seek(0)
+        return output.getvalue()
+            
 
 def import_schedule(input, telescope_id):
     for line in input:
@@ -823,10 +828,17 @@ class ScheduleExportResource:
     @staticmethod
     def on_post(req, resp, telescope_id=1):
         filename = req.media["filename"]
-        export_schedule(filename, telescope_id)
-        flash(resp, f"Schedule exported to {filename}.")
-        redirect(f"/{telescope_id}/schedule")
-
+        file_content = export_schedule(telescope_id)
+        
+        if file_content:        
+            resp.content_type = 'application/octet-stream'
+            resp.append_header('Content-Disposition', f'attachment; filename="{filename}"')        
+            resp.data = file_content.encode('utf-8')      
+            resp.status = falcon.HTTP_200
+        else:
+            flash(resp, "No schedule to export")
+            redirect(f"/{telescope_id}/schedule")
+        
 
 class ScheduleImportResource:
     @staticmethod
