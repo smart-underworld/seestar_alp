@@ -34,6 +34,7 @@ class Seestar:
         self.s = ""
         self.get_msg_thread = ""
         self.heartbeat_msg_thread = ""
+        self.reconnect_thread = ""
         self.is_debug = is_debug
         self.response_dict = {}
         self.logger = logger
@@ -62,6 +63,7 @@ class Seestar:
 
     def heartbeat(self):  # I noticed a lot of pairs of test_connection followed by a get if nothing was going on
         #    json_message("test_connection")
+        # If heartbeat fails, we should try to reconnect
         self.json_message("scope_get_equ_coord")
 
     def send_message(self, data):
@@ -69,18 +71,20 @@ class Seestar:
             self.s.sendall(data.encode())  # TODO: would utf-8 or unicode_escaped help here
         except socket.error as e:
             # Don't bother trying to recover if watch events is false
+            self.logger.error(f"Device {self.device_name}: send Socket error: {e}")
             if self.is_watch_events:
                 if self.reconnect():
-                    # self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    # self.s.connect((self.host, self.port))
                     self.send_message(data)
 
     def reconnect(self):
         try:
+            self.logger.info(f"RECONNECTING {self.device_name}")
             # print("RECONNECTING!")
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.s.settimeout(2)
             self.s.connect((self.host, self.port))
+            self.s.settimeout(None)
+            # todo : set is_connected = True?
             return True
         except socket.error as e:
             # Let's just delay a fraction of a second to avoid reconnecting too quickly
@@ -91,7 +95,9 @@ class Seestar:
         try:
             data = self.s.recv(1024 * 60)  # comet data is >50kb
         except socket.error as e:
-            # xxx handle message failure
+            self.logger.error(f"Device {self.device_name}: read Socket error: {e}")
+            # todo : handle message failure
+            # perhaps set is_connected = False and return None.  then next iteration, it will try to connect
             if self.reconnect():
                 return self.get_socket_msg()
             return None
@@ -109,13 +115,14 @@ class Seestar:
 
     def heartbeat_message_thread_fn(self):
         while self.is_watch_events:
+            # if this times out, we need to end the watcher, and restart it.
             self.heartbeat()
             time.sleep(3)
 
     def receive_message_thread_fn(self):
         msg_remainder = ""
         while self.is_watch_events:
-            # if disconnected, try to reconnect
+            # todo : if disconnected, try to reconnect.  if reconnect fails, wait a few seconds?
             # print("checking for msg")
             data = self.get_socket_msg()
             if data:
@@ -805,6 +812,7 @@ class Seestar:
         if self.scheduler_state != "Stopped":
             return "An existing scheduler is active. Returned with no action."
         self.scheduler_thread = threading.Thread(target=lambda: self.scheduler_thread_fn())
+        self.scheduler_thread.name = f"SchedulerThread.{self.device_name}"
         self.scheduler_thread.start()
         return "Scheduler started"
 
@@ -898,31 +906,51 @@ class Seestar:
 
         return dec_decimal
 
+    def connect_to_seestar(self):
+        try:
+            self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.s.settimeout(2)  # Timeout connection after 2 seconds
+            self.s.connect((self.host, self.port))
+            self.s.settimeout(None)
+
+            self.is_watch_events = True
+            self.op_watch = ""
+            self.get_msg_thread = threading.Thread(target=self.receive_message_thread_fn, daemon=True)
+            self.get_msg_thread.name = f"ReceiveMessageThread.{self.device_name}"
+            self.get_msg_thread.start()
+
+            self.heartbeat_msg_thread = threading.Thread(target=self.heartbeat_message_thread_fn, daemon=True)
+            self.heartbeat_msg_thread.name = f"HeartbeatMessageThread.{self.device_name}"
+            self.heartbeat_msg_thread.start()
+            self.is_connected = True
+        except Exception as ex:
+            self.is_connected = False
+
+        return self.is_connected
+
     def start_watch_thread(self):
         if self.is_connected:
             return
         else:
             for i in range(3, 0, -1):
-                try:
-                    self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    self.s.settimeout(2)  # Timeout after 2 seconds
-                    self.s.connect((self.host, self.port))
-
-                    self.is_watch_events = True
-                    self.op_watch = ""
-                    self.get_msg_thread = threading.Thread(target=self.receive_message_thread_fn, daemon=True)
-                    self.get_msg_thread.start()
-
-                    self.heartbeat_msg_thread = threading.Thread(target=self.heartbeat_message_thread_fn, daemon=True)
-                    self.heartbeat_msg_thread.start()
-                    self.is_connected = True
-                    self.logger.info('Connected')
+                if self.connect_to_seestar():
+                    self.logger.info(f'{self.device_name}: Connected')
                     break
-                except Exception as ex:
-                    self.logger.info('Connection Failed, is Seestar turned on?')
+                else:
+                    self.logger.info(f'{self.device_name}: Connection Failed, is Seestar turned on?')
                     time.sleep(1)
             else:
-                self.logger.info('Could not establish connection to Seestar. Starting in offline mode')
+                self.logger.info(f'{self.device_name}: Could not establish connection to Seestar. Starting in offline mode')
+                self.reconnect_thread = threading.Thread(target=self.reconnect_thread_fn, daemon=True)
+                self.reconnect_thread.name = "ReconnectThread"
+                self.reconnect_thread.start()
+
+    def reconnect_thread_fn(self):
+        # The reconnect thread kicks off when Seestar gets disconnected
+        time.sleep(15)
+        self.start_watch_thread()
+        #while not self.connect_to_seestar():
+        #    time.sleep(15)
 
     def end_watch_thread(self):
         if self.is_connected == True:
