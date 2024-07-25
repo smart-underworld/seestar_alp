@@ -2,43 +2,39 @@
 
 {% block header %}
     <div class="container mt-3">
-		<p class="h1">{% block title %}Simple Seestar Controller{% endblock %}</p>
-	</div>
+        <p class="h1">{% block title %}Simple Seestar Controller{% endblock %}</p>
+    </div>
 {% endblock %}
 
 {% block content %}
     <div class="container mt-3">
-		<p>Welcome to the Simple Seestar (Web) Controller.</p>
-	</div>
-	
-	{% if online %}
-		{% for telescope in telescopes %}
-			<div class="container mt-3"><p class="h2"><a href="/{{  telescope["device_num"] }}/">{{ telescope["name"] }} ({{ telescope["ip_address"] }})</a></p></div>
+        <p>Welcome to the Simple Seestar (Web) Controller.</p>
+    </div>
 
-			<div class="container mt-3">
-				
-				{% for key, value in telescope["stats"].items() %}
-					<div class="row border-bottom py-1">
-						<div class="col fw-bold">{{ key }}</div>
-						<div class="col"><p class="text-end">{{ value }}</p></div>
-					</div>
-				{% endfor %}
-				
-			</div>
-			
-		{% endfor %}
-	{% else %}
-		<div class="container mt3">
-			<p>You are currently in offline mode</p>
-			<span> {% include 'go_online.html' %}</span>
-		</div>
-	{% endif %}
+    {% for telescope in telescopes %}
+        <div class="container mt-3"><p class="h2"><a href="/{{ telescope["device_num"] }}/">{{ telescope["name"] }}
+            ({{ telescope["ip_address"] }})</a></p></div>
 
-	
-	<footer class="bg-body-tertiary text-center">
-		Last updated: {{ now }}
-	</footer>
-	
+        {% if telescope.stats %}
+            <div class="container mt-3">
+
+                {% for key, value in telescope["stats"].items() %}
+                    <div class="row border-bottom py-1">
+                        <div class="col fw-bold">{{ key }}</div>
+                        <div class="col"><p class="text-end">{{ value }}</p></div>
+                    </div>
+                {% endfor %}
+
+            </div>
+        {% else %}
+            <p>Telescope is currently offline</p>
+        {% endif %}
+    {% endfor %}
+
+    <footer class="bg-body-tertiary text-center">
+        Last updated: {{ now }}
+    </footer>
+
 {% endblock %}
 
 {% block html_header %}
