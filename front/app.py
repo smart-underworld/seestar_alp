@@ -1083,10 +1083,13 @@ class AlpResource:
         self.device_app = device_main()
         self.thread = None
 
-    def on_get_start(self, req, resp):
+    def start(self):
         logger.info("Starting ALP")
         self.thread = threading.Thread(target=self.runner, args=(1,))
         self.thread.start()
+
+    def on_get_start(self, req, resp):
+        self.start()
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
         resp.text = 'Started, yo!'
@@ -1195,6 +1198,8 @@ def main(device_main):
         alp_resource = AlpResource(device_main)
         app.add_route("/alp/stop", alp_resource, suffix="stop")
         app.add_route("/alp/start", alp_resource, suffix="start")
+
+        alp_resource.start()
 
     online = check_api_state()
     try:
