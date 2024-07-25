@@ -108,13 +108,6 @@ def get_ip():
 
 def check_api_state(telescope_id):
     url = f"{base_url}/api/v1/telescope/{telescope_id}/connected?ClientID=1&ClientTransactionID=999"
-    #url = f"{base_url}/api/v1/telescope/{telescope_id}/action"
-    #payload = {
-    #    "Action": "method_sync",
-    #    "Parameters": json.dumps({"method": "get_device_state"}),
-    #    "ClientID": 1,
-    #    "ClientTransactionID": 999
-    #}
     try:
         r = requests.get(url, timeout=2.0)
         r.raise_for_status()
@@ -1083,7 +1076,7 @@ class AlpResource:
 
     def start(self):
         logger.info("Starting ALP")
-        self.thread = threading.Thread(target=self.runner, args=(1,))
+        self.thread = threading.Thread(target=self.runner, args=(1,), daemon=True)
         self.thread.name = "StartupThread"
         self.thread.start()
 
