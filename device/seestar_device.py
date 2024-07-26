@@ -34,7 +34,6 @@ class Seestar:
         self.s = ""
         self.get_msg_thread = ""
         self.heartbeat_msg_thread = ""
-        self.reconnect_thread = ""
         self.is_debug = is_debug
         self.response_dict = {}
         self.logger = logger
@@ -82,9 +81,9 @@ class Seestar:
 
     def disconnect(self):
         # Disconnect tries to clean up socket if it exists
+        self.is_connected = False
         if self.s:
             try:
-                self.is_connected = False
                 self.s.close()
                 self.s = ""
             except:
