@@ -182,10 +182,11 @@ def method_sync(method, telescope_id=1):
     out = do_action_device("method_sync", telescope_id, {"method": method})
     print(f"method_sync {out=}")
 
-    if out["Value"].get("error"):
-        return out["Value"]["error"]
-    else:
-        return out["Value"]["result"]
+    if out:
+        if out["Value"].get("error"):
+            return out["Value"]["error"]
+        else:
+            return out["Value"]["result"]
 
 
 def get_device_state(telescope_id):
