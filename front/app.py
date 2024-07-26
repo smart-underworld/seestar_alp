@@ -113,8 +113,12 @@ def check_api_state():
         "ClientTransactionID": 999
     }
     try:
-        r = requests.put(url, json=payload)
+        r = requests.put(url, json=payload, timeout=2.0)
         r.raise_for_status()
+        response = r.json()
+        if response.get("ErrorNumber") == 1031:
+            logger.info("API is not connected.")
+            return False
     except requests.exceptions.ConnectionError:
         logger.info("API is not online.")
         return False
@@ -138,6 +142,7 @@ def queue_action(dev_num, payload):
 
 
 def do_action_device(action, dev_num, parameters):
+    global online
     url = f"{base_url}/api/v1/telescope/{dev_num}/action"
     payload = {
         "Action": action,
@@ -146,7 +151,7 @@ def do_action_device(action, dev_num, parameters):
         "ClientTransactionID": 999
     }
     if online:
-        r = requests.put(url, json=payload)
+        r = requests.put(url, json=payload, timeout=2.0)
         return r.json()
     else:
         queue_action(dev_num, payload)
@@ -274,9 +279,9 @@ def process_queue(resp):
                     params = param['params']
                 else:
                     params = None
-                logger.info("POST scheduled request", action, params)
+                logger.info("POST scheduled request %s %s", action, params)
                 response = do_schedule_action_device(action, params, telescope)
-                logger.info("GET response", response)
+                logger.info("GET response %s", response)
     else:
         flash(resp,
               "ERROR: Seestar ALP API is Offline, Please ensure your Seestar is powered on and device/app.py is running.")
@@ -344,12 +349,12 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
             "action": "start_mosaic",
             "params": values
         })
-        logger.info("POST scheduled request", values, response)
+        logger.info("POST scheduled request %s %s", values, response)
         if online:
             check_response(resp, response)
     else:
         response = do_action_device("start_mosaic", telescope_id, values)
-        logger.info("POST immediate request", values, response)
+        logger.info("POST immediate request %s %s", values, response)
 
     return values, errors
 
@@ -398,17 +403,18 @@ def do_create_image(req, resp, schedule, telescope_id):
             "action": "start_mosaic",
             "params": values
         })
-        logger.info("POST scheduled request", values, response)
+        logger.info("POST scheduled request %s %s", values, response)
         if online:
             check_response(resp, response)
     else:
         response = do_action_device("start_mosaic", telescope_id, values)
-        logger.info("POST immediate request", values, response)
+        logger.info("POST immediate request %s %s", values, response)
 
     return values, errors
 
 
 def do_command(req, resp, telescope_id):
+    global online
     form = req.media
     # print("Form: ", form)
     value = form["command"]
@@ -629,6 +635,8 @@ class CommandResource:
 
     @staticmethod
     def command(req, resp, telescope_id, output):
+        global online
+        online = check_api_state()
         if online:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
@@ -685,7 +693,7 @@ class ScheduleWaitUntilResource:
     def on_post(req, resp, telescope_id=1):
         waitUntil = req.media["waitUntil"]
         response = do_schedule_action_device("wait_until", {"local_time": waitUntil}, telescope_id)
-        logger.info("POST scheduled request", response)
+        logger.info("POST scheduled request %s", response)
         if online:
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
@@ -700,7 +708,7 @@ class ScheduleWaitForResource:
     def on_post(req, resp, telescope_id=1):
         waitFor = req.media["waitFor"]
         response = do_schedule_action_device("wait_for", {"timer_sec": int(waitFor)}, telescope_id)
-        logger.info("POST scheduled request", response)
+        logger.info("POST scheduled request %s", response)
         if online:
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_for.html', 'wait-for', {}, {})
@@ -715,7 +723,7 @@ class ScheduleAutoFocusResource:
     def on_post(req, resp, telescope_id=1):
         autoFocus = req.media["autoFocus"]
         response = do_schedule_action_device("auto_focus", {"try_count": int(autoFocus)}, telescope_id)
-        logger.info("POST scheduled request", response)
+        logger.info("POST scheduled request %s", response)
         if online:
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_auto_focus.html', 'auto-focus', {}, {})
