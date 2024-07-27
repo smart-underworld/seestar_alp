@@ -87,7 +87,8 @@ class action:
                 result = cur_dev.send_message_param_sync(params)
                 if params["method"] == 'pi_shutdown': 
                     print('Seestar has been shut down')
-                    end_seestar_device(devnum)
+                    # we will leave the threads running in case user leaves app running
+                    # end_seestar_device(devnum)
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "method_async":
                 result = cur_dev.send_message_param(params)

@@ -14,6 +14,7 @@ import json
 import csv
 import re
 import os
+import io
 import socket
 import sys
 
@@ -77,6 +78,7 @@ def get_context(telescope_id, req):
     telescope = get_telescope(telescope_id)
     telescopes = get_telescopes()
     root = get_root(telescope_id)
+    online = check_api_state(telescope_id)
     partial_path = "/".join(req.relative_uri.split("/", 2)[2:])
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
             "online": online}
@@ -104,29 +106,23 @@ def get_ip():
     return IP
 
 
-def check_api_state():
-    url = f"{base_url}/api/v1/telescope/1/action"
-    payload = {
-        "Action": "method_sync",
-        "Parameters": json.dumps({"method": "get_device_state"}),
-        "ClientID": 1,
-        "ClientTransactionID": 999
-    }
+def check_api_state(telescope_id):
+    url = f"{base_url}/api/v1/telescope/{telescope_id}/connected?ClientID=1&ClientTransactionID=999"
     try:
-        r = requests.put(url, json=payload, timeout=2.0)
+        r = requests.get(url, timeout=2.0)
         r.raise_for_status()
         response = r.json()
-        if response.get("ErrorNumber") == 1031:
-            logger.info("API is not connected.")
+        if response.get("ErrorNumber") == 1031 or not response.get("Value"):
+            logger.info(f"Telescope {telescope_id} API is not connected.")
             return False
     except requests.exceptions.ConnectionError:
-        logger.info("API is not online.")
+        logger.info(f"Telescope {telescope_id} API is not online. (ConnectionError)")
         return False
     except requests.exceptions.RequestException as e:
-        logger.info("API is not online.")
+        logger.info(f"Telescope {telescope_id} API is not online. (RequestException)")
         return False
     else:
-        logger.info("API is online.")
+        logger.info(f"Telescope {telescope_id} API is online.")
         return True
 
 
@@ -142,7 +138,6 @@ def queue_action(dev_num, payload):
 
 
 def do_action_device(action, dev_num, parameters):
-    global online
     url = f"{base_url}/api/v1/telescope/{dev_num}/action"
     payload = {
         "Action": action,
@@ -150,11 +145,14 @@ def do_action_device(action, dev_num, parameters):
         "ClientID": 1,
         "ClientTransactionID": 999
     }
-    if online:
-        r = requests.put(url, json=payload, timeout=2.0)
-        return r.json()
-    else:
-        queue_action(dev_num, payload)
+    if check_api_state(dev_num):
+        try:
+            r = requests.put(url, json=payload, timeout=2.0)
+            return r.json()
+        except:
+            logger.error(f"do_action_device: Failed to send action to device {dev_num}")
+
+    queue_action(dev_num, payload)
 
 
 def do_schedule_action_device(action, parameters, dev_num):
@@ -182,17 +180,18 @@ def check_response(resp, response):
 
 def method_sync(method, telescope_id=1):
     out = do_action_device("method_sync", telescope_id, {"method": method})
+    print(f"method_sync {out=}")
 
-    if out["Value"].get("error"):
-        return out["Value"]["error"]
-    else:
-        return out["Value"]["result"]
+    if out:
+        if out["Value"].get("error"):
+            return out["Value"]["error"]
+        else:
+            return out["Value"]["result"]
 
 
-def get_device_state(telescope_id=1):
-    global online
-    online = check_api_state()
-    if online:
+def get_device_state(telescope_id):
+    if check_api_state(telescope_id):
+        print("Device is online", telescope_id)
         result = method_sync("get_device_state", telescope_id)
         schedule = do_action_device("get_schedule", telescope_id, {})
         device = result["device"]
@@ -214,11 +213,12 @@ def get_device_state(telescope_id=1):
             "Scheduler Status": schedule["Value"]["state"]
         }
     else:
+        print("Device is OFFLINE", telescope_id)
         stats = {}
     return stats
 
 
-def get_device_settings(telescope_id=1):
+def get_device_settings(telescope_id):
     settings_result = method_sync("get_setting", telescope_id)
     stack_settings_result = method_sync("get_stack_setting", telescope_id)
 
@@ -265,26 +265,22 @@ def get_queue(telescope_id):
         return []
 
 
-def process_queue(resp):
-    global online
-    online = check_api_state()
-    if online:
-        for telescope in queue:
-            parameters_list = []
-            for command in queue[telescope]:
-                parameters_list.append(json.loads(command['Parameters']))
-            for param in parameters_list:
-                action = param['action']
-                if param['params']:
-                    params = param['params']
-                else:
-                    params = None
-                logger.info("POST scheduled request %s %s", action, params)
-                response = do_schedule_action_device(action, params, telescope)
-                logger.info("GET response %s", response)
+def process_queue(resp, telescope_id):
+    if check_api_state(telescope_id):
+        parameters_list = []
+        for command in queue[telescope_id]:
+            parameters_list.append(json.loads(command['Parameters']))
+        for param in parameters_list:
+            action = param['action']
+            if param['params']:
+                params = param['params']
+            else:
+                params = None
+            logger.info("POST scheduled request %s %s", action, params)
+            response = do_schedule_action_device(action, params, telescope_id)
+            logger.info("GET response %s", response)
     else:
-        flash(resp,
-              "ERROR: Seestar ALP API is Offline, Please ensure your Seestar is powered on and device/app.py is running.")
+        flash(resp, "ERROR: Seestar ALP API is Offline, Please ensure your Seestar is powered on and device/app.py is running.")
 
 
 def check_ra_value(raString):
@@ -414,7 +410,6 @@ def do_create_image(req, resp, schedule, telescope_id):
 
 
 def do_command(req, resp, telescope_id):
-    global online
     form = req.media
     # print("Form: ", form)
     value = form["command"]
@@ -502,7 +497,7 @@ def render_template(req, resp, template_name, **context):
 
 
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
-    if online:
+    if check_api_state(telescope_id):
         current = do_action_device("get_schedule", telescope_id, {})
         schedule = current["Value"]["list"]
     else:
@@ -517,8 +512,8 @@ FIXED_PARAMS_KEYS = ["local_time", "timer_sec", "try_count", "target_name", "is_
                      "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus"]
 
 
-def export_schedule(filename, telescope_id):
-    if online:
+def export_schedule(telescope_id):
+    if check_api_state(telescope_id):
         current = do_action_device("get_schedule", telescope_id, {})
         schedule = current["Value"]["list"]
     else:
@@ -531,26 +526,32 @@ def export_schedule(filename, telescope_id):
     # Define the fieldnames (column names)
     fieldnames = ['action'] + FIXED_PARAMS_KEYS
 
-    # Open a CSV file for writing
-    with open(filename, 'w', newline='') as csvfile:
-        # Create a writer object
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    # use an in-memory file-like object
+    output = io.StringIO()
+    
+    # create writer object
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    
+    # Write the header
+    writer.writeheader()
 
-        # Write the header
-        writer.writeheader()
+    # Write the rows
+    for entry in data:
+        row = OrderedDict({'action': entry['action']})
+        if 'params' in entry:
+            for key in FIXED_PARAMS_KEYS:
+                row[key] = entry['params'].get(key, '')
+        else:
+            # If 'params' key is missing, ensure all fixed params are empty
+            for key in FIXED_PARAMS_KEYS:
+                row[key] = ''
+        writer.writerow(row)
+        
+    output.seek(0)
+    return output.getvalue()
 
-        # Write the rows
-        for entry in data:
-            row = OrderedDict({'action': entry['action']})
-            if 'params' in entry:
-                for key in FIXED_PARAMS_KEYS:
-                    row[key] = entry['params'].get(key, '')
-            else:
-                # If 'params' key is missing, ensure all fixed params are empty
-                for key in FIXED_PARAMS_KEYS:
-                    row[key] = ''
-            writer.writerow(row)
-
+def str2bool(v):
+  return str(v).lower() in ("yes", "y", "true", "t", "1")
 
 def import_schedule(input, telescope_id):
     for line in input:
@@ -567,8 +568,8 @@ def import_schedule(input, telescope_id):
                 do_schedule_action_device("auto_focus", {"try_count": int(try_count)}, telescope_id)
             case "start_mosaic":
                 do_schedule_action_device("start_mosaic",
-                                          {"target_name": target_name, "ra": ra, "dec": dec, "is_j2000": is_j2000,
-                                           "is_use_lp_filter": is_use_lp_filter, "is_use_autofocus": is_use_autofocus,
+                                          {"target_name": target_name, "ra": ra, "dec": dec, "is_j2000": str2bool(is_j2000),
+                                           "is_use_lp_filter": str2bool(is_use_lp_filter), "is_use_autofocus": str2bool(is_use_autofocus),
                                            "session_time_sec": int(session_time_sec), "ra_num": int(ra_num),
                                            "dec_num": int(dec_num), "panel_overlap_percent": int(panel_overlap_percent),
                                            "gain": int(gain)}, int(telescope_id))
@@ -612,7 +613,7 @@ class ImageResource:
 
     @staticmethod
     def image(req, resp, values, errors, telescope_id):
-        if online:
+        if check_api_state(telescope_id):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
             schedule = current["Value"]["list"]
@@ -635,9 +636,7 @@ class CommandResource:
 
     @staticmethod
     def command(req, resp, telescope_id, output):
-        global online
-        online = check_api_state()
-        if online:
+        if check_api_state(telescope_id):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
             schedule = current["Value"]["list"]
@@ -661,7 +660,7 @@ class MosaicResource:
 
     @staticmethod
     def mosaic(req, resp, values, errors, telescope_id):
-        if online:
+        if check_api_state(telescope_id):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
             schedule = current["Value"]["list"]
@@ -694,7 +693,7 @@ class ScheduleWaitUntilResource:
         waitUntil = req.media["waitUntil"]
         response = do_schedule_action_device("wait_until", {"local_time": waitUntil}, telescope_id)
         logger.info("POST scheduled request %s", response)
-        if online:
+        if check_api_state(telescope_id):
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
 
@@ -709,7 +708,7 @@ class ScheduleWaitForResource:
         waitFor = req.media["waitFor"]
         response = do_schedule_action_device("wait_for", {"timer_sec": int(waitFor)}, telescope_id)
         logger.info("POST scheduled request %s", response)
-        if online:
+        if check_api_state(telescope_id):
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_for.html', 'wait-for', {}, {})
 
@@ -724,7 +723,7 @@ class ScheduleAutoFocusResource:
         autoFocus = req.media["autoFocus"]
         response = do_schedule_action_device("auto_focus", {"try_count": int(autoFocus)}, telescope_id)
         logger.info("POST scheduled request %s", response)
-        if online:
+        if check_api_state(telescope_id):
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_auto_focus.html', 'auto-focus', {}, {})
 
@@ -734,7 +733,7 @@ class ScheduleGoOnlineResource:
     def on_post(req, resp, telescope_id=1):
         referer = req.get_header('Referer')
         logger.info(f"Referer: {referer}")
-        process_queue(resp)
+        process_queue(resp, telescope_id)
         redirect(f"{referer}")
 
 
@@ -768,7 +767,7 @@ class ScheduleShutdownResource:
     @staticmethod
     def on_post(req, resp, telescope_id=1):
         response = do_schedule_action_device("shutdown", "", telescope_id)
-        if online:
+        if check_api_state(telescope_id):
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_shutdown.html', 'shutdown', {}, {})
 
@@ -788,7 +787,7 @@ class ScheduleToggleResource:
 
     @staticmethod
     def display_state(req, resp, telescope_id):
-        if online:
+        if check_api_state(telescope_id):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
         else:
@@ -800,7 +799,7 @@ class ScheduleToggleResource:
 class ScheduleClearResource:
     @staticmethod
     def on_post(req, resp, telescope_id=1):
-        if online:
+        if check_api_state(telescope_id):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
 
@@ -823,10 +822,17 @@ class ScheduleExportResource:
     @staticmethod
     def on_post(req, resp, telescope_id=1):
         filename = req.media["filename"]
-        export_schedule(filename, telescope_id)
-        flash(resp, f"Schedule exported to {filename}.")
-        redirect(f"/{telescope_id}/schedule")
-
+        file_content = export_schedule(telescope_id)
+        
+        if file_content:        
+            resp.content_type = 'application/octet-stream'
+            resp.append_header('Content-Disposition', f'attachment; filename="{filename}"')        
+            resp.data = file_content.encode('utf-8')      
+            resp.status = falcon.HTTP_200
+        else:
+            flash(resp, "No schedule to export")
+            redirect(f"/{telescope_id}/schedule")
+        
 
 class ScheduleImportResource:
     @staticmethod
@@ -927,8 +933,8 @@ class SettingsResource:
     @staticmethod
     def render_settings(req, resp, telescope_id, output):
         context = get_context(telescope_id, req)
-        if online:
-            settings = get_device_settings()
+        if check_api_state(telescope_id):
+            settings = get_device_settings(telescope_id)
         else:
             settings = {}
         # Maybe we can store this better?
@@ -988,7 +994,7 @@ class SettingsResource:
 class StatsResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
-        stats = get_device_state()
+        stats = get_device_state(telescope_id)
         now = datetime.now()
         context = get_context(telescope_id, req)
         render_template(req, resp, 'stats.html', stats=stats, now=now, **context)
@@ -1071,10 +1077,14 @@ class AlpResource:
         self.device_app = device_main()
         self.thread = None
 
-    def on_get_start(self, req, resp):
+    def start(self):
         logger.info("Starting ALP")
-        self.thread = threading.Thread(target=self.runner, args=(1,))
+        self.thread = threading.Thread(target=self.runner, args=(1,), daemon=True)
+        self.thread.name = "StartupThread"
         self.thread.start()
+
+    def on_get_start(self, req, resp):
+        self.start()
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
         resp.text = 'Started, yo!'
@@ -1184,7 +1194,8 @@ def main(device_main):
         app.add_route("/alp/stop", alp_resource, suffix="stop")
         app.add_route("/alp/start", alp_resource, suffix="start")
 
-    online = check_api_state()
+        alp_resource.start()
+
     try:
         # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
         with make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler) as httpd:
