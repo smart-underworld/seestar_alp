@@ -776,7 +776,7 @@ class Seestar:
         self.logger.info("  session time  : %s", session_time)
         self.logger.info("  RA num panels : %s", nRA)
         self.logger.info("  Dec num panels: %s", nDec)
-        self.logger.info("  overlap %     : %s", overlap_percent)
+        self.logger.info("  overlap %%     : %s", overlap_percent)
         self.logger.info("  gain          : %s", gain)
         self.logger.info("  use autofocus : %s", is_use_autofocus)
 
