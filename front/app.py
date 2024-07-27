@@ -547,9 +547,11 @@ def export_schedule(telescope_id):
                 row[key] = ''
         writer.writerow(row)
         
-        output.seek(0)
-        return output.getvalue()
-            
+    output.seek(0)
+    return output.getvalue()
+
+def str2bool(v):
+  return str(v).lower() in ("yes", "y", "true", "t", "1")
 
 def import_schedule(input, telescope_id):
     for line in input:
@@ -566,8 +568,8 @@ def import_schedule(input, telescope_id):
                 do_schedule_action_device("auto_focus", {"try_count": int(try_count)}, telescope_id)
             case "start_mosaic":
                 do_schedule_action_device("start_mosaic",
-                                          {"target_name": target_name, "ra": ra, "dec": dec, "is_j2000": is_j2000,
-                                           "is_use_lp_filter": is_use_lp_filter, "is_use_autofocus": is_use_autofocus,
+                                          {"target_name": target_name, "ra": ra, "dec": dec, "is_j2000": str2bool(is_j2000),
+                                           "is_use_lp_filter": str2bool(is_use_lp_filter), "is_use_autofocus": str2bool(is_use_autofocus),
                                            "session_time_sec": int(session_time_sec), "ra_num": int(ra_num),
                                            "dec_num": int(dec_num), "panel_overlap_percent": int(panel_overlap_percent),
                                            "gain": int(gain)}, int(telescope_id))
