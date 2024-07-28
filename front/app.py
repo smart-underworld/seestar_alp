@@ -180,7 +180,7 @@ def check_response(resp, response):
 
 def method_sync(method, telescope_id=1):
     out = do_action_device("method_sync", telescope_id, {"method": method})
-    print(f"method_sync {out=}")
+    #print(f"method_sync {out=}")
 
     if out:
         if out["Value"].get("error"):
@@ -1107,7 +1107,7 @@ class ToggleUITheme:
     @staticmethod
     def on_get(req, resp):
         if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
-            config_file = "config.toml"
+            config_file = os.path.abspath(os.path.join(sys._MEIPASS, "config.toml"))
         else:
             config_file = os.path.join(os.path.dirname(__file__), "../device/config.toml")
         f = open(config_file, "r")
