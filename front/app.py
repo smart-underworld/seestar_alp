@@ -1103,13 +1103,13 @@ class AlpResource:
         logging.info("SeestarAlp %s: finishing", name)
 
 
-class ToogleUITheme:
+class ToggleUITheme:
     @staticmethod
     def on_get(req, resp):
         if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
             config_file = "config.toml"
         else:
-            config_file = "../device/config.toml"
+            config_file = os.path.join(os.path.dirname(__file__), "../device/config.toml")
         f = open(config_file, "r")
         fread = f.read()
 
@@ -1187,7 +1187,7 @@ def main(device_main):
     app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
     app.add_route('/simbad', SimbadResource())
     app.add_route('/stellarium', StellariumResource())
-    app.add_route('/toggleuitheme', ToogleUITheme())
+    app.add_route('/toggleuitheme', ToggleUITheme())
 
     if device_main:
         alp_resource = AlpResource(device_main)
