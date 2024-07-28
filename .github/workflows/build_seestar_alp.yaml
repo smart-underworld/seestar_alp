@@ -21,12 +21,12 @@ jobs:
           
       - name: Install dependencies
         run: |
-          python -m pip install pyinstaller
           pip install -r requirements.txt
+          python -m pip install pyinstaller
   
           
-      - name: run pyinstaller for device
-        id: create_device
+      - name: run pyinstaller for seestar_alp
+        id: create_seestar_alp
         run: |
           cp ./device/config.py ./front
           cp ./device/config.toml ./front
@@ -46,7 +46,7 @@ jobs:
       - name: Upload Result as Asset
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: ${{ env.device_script_result }}
