@@ -21,12 +21,12 @@ jobs:
           
       - name: Install dependencies
         run: |
-          python -m pip install pyinstaller
           pip install -r requirements.txt
+          python -m pip install pyinstaller
   
           
-      - name: run pyinstaller for device
-        id: create_device
+      - name: run pyinstaller for seestar_alp
+        id: create_seestar_alp
         run: |
           cp ./device/config.py ./front
           cp ./device/config.toml ./front
