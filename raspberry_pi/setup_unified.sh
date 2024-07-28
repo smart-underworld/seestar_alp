@@ -1,10 +1,17 @@
 #!/bin/bash -e
+#
+# This bootstraps the unified application on a Raspberry Pi.
+# Note: it intentionally does _not_ start the services for...
+#       reasons.
+#
 
 sudo apt-get update
 sudo apt-get install -y git python3-pip
+sudo rm -rf seestar_alp
+sudo chown -R pi:pi .
 
-# git clone https://github.com/astrophotograph/seestar_alp.git
-# cd  seestar_alp
+git clone https://github.com/astrophotograph/seestar_alp.git
+cd  seestar_alp
 
 src_home=$(pwd)
 mkdir logs
@@ -17,11 +24,7 @@ cd raspberry_pi
 cat systemd/seestar_unified.service | sed -e "s|/home/.*/seestar_alp|$src_home|g" > /tmp/seestar_unified.service
 sudo mv /tmp/seestar*.service /etc/systemd/system
 
-sudo systemctl daemon-reload
-
 sudo systemctl enable seestar_unified
-
-sudo systemctl start seestar_unified
 
 cat <<_EOF
 |-------------------------------------|
@@ -34,7 +37,6 @@ cat <<_EOF
 |  ./seestar_alp/logs                 |
 |                                     |
 | Systemd logs can be viewed via      |
-| journalctl -u seestar_device        |
-| journalctl -u seestar_front         |
+| journalctl -u seestar_unified       |
 |-------------------------------------|
 _EOF

@@ -35,6 +35,11 @@ messages = []
 online = None
 queue = {}
 
+#
+# Globally turned off IPv6 on requests.  This was causing incredible slowness
+#   on Windows
+#
+requests.packages.urllib3.util.connection.HAS_IPV6 = False
 
 def flash(resp, message):
     # todo : set to internal state so it can be used!
