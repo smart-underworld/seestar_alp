@@ -3,8 +3,8 @@
 sudo apt-get update
 sudo apt-get install -y git python3-pip
 
-git clone https://github.com/astrophotograph/seestar_alp.git
-cd  seestar_alp
+# git clone https://github.com/astrophotograph/seestar_alp.git
+# cd  seestar_alp
 
 src_home=$(pwd)
 mkdir logs
