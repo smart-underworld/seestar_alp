@@ -22,7 +22,7 @@ if not getattr(sys, "frozen", False):  # if we are not running from a bundled ap
     sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
 
 from config import Config  # type: ignore
-from log import init_logging
+from log import init_logging # type: ignore
 import logging
 import threading
 
