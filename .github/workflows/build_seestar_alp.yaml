@@ -58,15 +58,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python 3.10
+      - name: Set up Python 3.12
         uses: actions/setup-python@v3
         with:
-          python-version: 3.10
+          python-version: 3.12
           
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          sudo apt-get install python3-dev
           python -m pip install pyinstaller
   
           
@@ -80,7 +79,8 @@ jobs:
           --add-data="front/config.toml.example:." --add-data="front/config.py:." --add-data="front/log.py:." \
           --add-data="front/CITATION:astroquery" --add-data="front/templates:templates" --add-data="front/public:public" \
           --add-data="front:front" --add-data="device:device" root_app.py
-          zip -r linux_seestar_alp.zip  ./dist/seestar_alp/*
+          cd dist
+          zip -r linux_seestar_alp.zip  ./seestar_alp/*
           echo "device_script_result=linux_seestar_alp.zip" >> $GITHUB_ENV
         shell: bash
   
