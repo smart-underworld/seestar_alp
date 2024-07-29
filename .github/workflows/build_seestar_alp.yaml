@@ -29,10 +29,10 @@ jobs:
         id: create_seestar_alp
         run: |
           cp ./device/config.py ./front
-          cp ./device/config.toml ./front
+          cp ./device/config.toml.example ./front
           cp ./device/log.py ./front
           pyinstaller --name="seestar_alp" --hidden-import tzlocal --hidden-import geocoder --hidden-import alpaca.telescope --hidden-import log --hidden-import toml `
-          --add-data="front/config.toml;." --add-data="front/config.py;." --add-data="front/log.py;." `
+          --add-data="front/config.toml.example;." --add-data="front/config.py;." --add-data="front/log.py;." `
           --add-data="front/citation;astroquery" --add-data="front/templates;templates" --add-data="front/public;public" `
           --add-data="front;front" --add-data="device;device" root_app.py
           Compress-Archive -Path ./dist/seestar_alp/* -DestinationPath win_seestar_alp.zip
@@ -73,10 +73,10 @@ jobs:
         id: create_device
         run: |
           cp ./device/config.py ./front
-          cp ./device/config.toml ./front
+          cp ./device/config.toml.example ./front
           cp ./device/log.py ./front
           pyinstaller --name="seestar_alp" --hidden-import tzlocal --hidden-import geocoder --hidden-import alpaca.telescope --hidden-import log --hidden-import toml \
-          --add-data="front/config.toml:." --add-data="front/config.py:." --add-data="front/log.py:." \
+          --add-data="front/config.toml.example:." --add-data="front/config.py:." --add-data="front/log.py:." \
           --add-data="front/citation:astroquery" --add-data="front/templates:templates" --add-data="front/public:public" \
           --add-data="front:front" --add-data="device:device" root_app.py
           zip -r linux_seestar_alp.zip  ./dist/seestar_alp/*
