@@ -1,4 +1,4 @@
-#!/bin/bash -ex
+#!/bin/bash -e
 
 src_home=$(cd $(dirname $0)/.. && pwd)
 
