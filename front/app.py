@@ -10,6 +10,7 @@ from wsgiref.simple_server import WSGIRequestHandler, make_server
 from collections import OrderedDict
 from pprint import pprint
 import requests
+import humanize
 import json
 import csv
 import re
@@ -35,6 +36,11 @@ messages = []
 online = None
 queue = {}
 
+#
+# Globally turned off IPv6 on requests.  This was causing incredible slowness
+#   on Windows
+#
+requests.packages.urllib3.util.connection.HAS_IPV6 = False
 
 def flash(resp, message):
     # todo : set to internal state so it can be used!
@@ -198,12 +204,13 @@ def get_device_state(telescope_id):
         focuser = result["focuser"]
         settings = result["setting"]
         pi_status = result["pi_status"]
+        free_storage = humanize.naturalsize(result["storage"]["storage_volume"][0]["freeMB"] * 1024 * 1024)
         stats = {
             "Firmware Version": device["firmware_ver_string"],
             "Focal Position": focuser["step"],
             "Auto Power Off": settings["auto_power_off"],
             "Heater?": settings["heater_enable"],
-            "Free Storage (MB)": result["storage"]["storage_volume"][0]["freeMB"],
+            "Free Storage": free_storage,
             "Balance Sensor (angle)": result["balance_sensor"]["data"]["angle"],
             "Compass Sensor (direction)": result["compass_sensor"]["data"]["direction"],
             "Temperature Sensor": pi_status["temp"],

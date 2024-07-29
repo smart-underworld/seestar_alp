@@ -6,3 +6,4 @@ tzlocal==5.2
 toml==0.10.2
 astroquery==0.4.8.dev9321
 Jinja2==3.1.4
+humanize==4.10.0
