@@ -7,4 +7,4 @@ Restart=always
 WorkingDirectory=/home/<username>/seestar_alp/front
 ExecStart=/usr/bin/python3 /home/<username>/seestar_alp/front/app.py
 [Install]
-WantedBy=multi-user.target
+WantedBy=network-online.target
