@@ -10,7 +10,7 @@ sudo apt-get install -y git python3-pip
 sudo rm -rf seestar_alp
 sudo chown -R pi:pi .
 
-git clone https://github.com/astrophotograph/seestar_alp.git
+git clone https://github.com/smart-underworld/seestar_alp.git
 cd  seestar_alp
 
 src_home=$(pwd)
