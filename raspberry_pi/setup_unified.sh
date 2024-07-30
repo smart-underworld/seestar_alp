@@ -16,7 +16,10 @@ cd  seestar_alp
 src_home=$(pwd)
 mkdir logs
 
-sed -i -e 's/127.0.0.1/0.0.0.0/g' device/config.toml
+if [ ! -e device/config.toml ]; then
+  cp device/config.toml.example device/config.toml
+  sed -i -e 's/127.0.0.1/0.0.0.0/g' device/config.toml
+fi
 
 sudo  pip install -r requirements.txt --break-system-packages
 
