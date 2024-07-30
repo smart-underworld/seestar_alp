@@ -40,6 +40,7 @@
 import sys
 import toml
 import logging
+import shutil
 ### rwr
 from os import path
 import os
@@ -54,9 +55,15 @@ import os
 _dict = {}
 ### RWR Added
 if getattr(sys, "frozen",  False):
-    path_to_dat = os.path.abspath(os.path.join(sys._MEIPASS, "config.toml"))
+    search_path = sys._MEIPASS
 else:
-    path_to_dat = path.abspath(path.join(path.dirname(__file__), 'config.toml'))
+    search_path = path.join(path.dirname(__file__))
+
+path_to_dat = os.path.abspath(os.path.join(search_path, "config.toml"))
+if not os.path.exists(path_to_dat):
+  path_to_ex = os.path.abspath(os.path.join(search_path, "config.toml.example"))
+  shutil.copy(path_to_ex, path_to_dat)
+
 print(path_to_dat)
 ### RWR _dict = toml.load(f'{sys.path[0]}/config.toml')    # Errors here are fatal.
 _dict = toml.load(path_to_dat)    # Errors here are fatal.

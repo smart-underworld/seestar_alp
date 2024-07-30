@@ -10,6 +10,7 @@ from wsgiref.simple_server import WSGIRequestHandler, make_server
 from collections import OrderedDict
 from pprint import pprint
 import requests
+import humanize
 import json
 import csv
 import re
@@ -22,7 +23,7 @@ if not getattr(sys, "frozen", False):  # if we are not running from a bundled ap
     sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
 
 from config import Config  # type: ignore
-from log import init_logging
+from log import init_logging # type: ignore
 import logging
 import threading
 
@@ -35,6 +36,11 @@ messages = []
 online = None
 queue = {}
 
+#
+# Globally turned off IPv6 on requests.  This was causing incredible slowness
+#   on Windows
+#
+requests.packages.urllib3.util.connection.HAS_IPV6 = False
 
 def flash(resp, message):
     # todo : set to internal state so it can be used!
@@ -180,7 +186,7 @@ def check_response(resp, response):
 
 def method_sync(method, telescope_id=1):
     out = do_action_device("method_sync", telescope_id, {"method": method})
-    print(f"method_sync {out=}")
+    #print(f"method_sync {out=}")
 
     if out:
         if out["Value"].get("error"):
@@ -198,12 +204,13 @@ def get_device_state(telescope_id):
         focuser = result["focuser"]
         settings = result["setting"]
         pi_status = result["pi_status"]
+        free_storage = humanize.naturalsize(result["storage"]["storage_volume"][0]["freeMB"] * 1024 * 1024)
         stats = {
             "Firmware Version": device["firmware_ver_string"],
             "Focal Position": focuser["step"],
             "Auto Power Off": settings["auto_power_off"],
             "Heater?": settings["heater_enable"],
-            "Free Storage (MB)": result["storage"]["storage_volume"][0]["freeMB"],
+            "Free Storage": free_storage,
             "Balance Sensor (angle)": result["balance_sensor"]["data"]["angle"],
             "Compass Sensor (direction)": result["compass_sensor"]["data"]["direction"],
             "Temperature Sensor": pi_status["temp"],
@@ -1107,7 +1114,7 @@ class ToggleUITheme:
     @staticmethod
     def on_get(req, resp):
         if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
-            config_file = "config.toml"
+            config_file = os.path.abspath(os.path.join(sys._MEIPASS, "config.toml"))
         else:
             config_file = os.path.join(os.path.dirname(__file__), "../device/config.toml")
         f = open(config_file, "r")

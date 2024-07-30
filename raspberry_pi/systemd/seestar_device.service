@@ -1,10 +1,10 @@
 [Unit]
 Description=SeeStar device communications
-After=multi-user.target
+After=network-online.target
 [Service]
 Type=simple
 Restart=always
 WorkingDirectory=/home/<username>/seestar_alp/logs
 ExecStart=/usr/bin/python3 /home/<username>/seestar_alp/device/app.py
 [Install]
-WantedBy=multi-user.target
+WantedBy=network-online.target
