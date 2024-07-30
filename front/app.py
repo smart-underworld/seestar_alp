@@ -248,7 +248,7 @@ def get_device_settings(telescope_id):
         # "wide_cam": settings_result["wide_cam"],
         # "temp_unit": settings_result["temp_unit"],
         "focal_pos": settings_result["focal_pos"],
-        "factory_focal_pos": settings_result["factory_focal_pos"],
+        # "factory_focal_pos": settings_result["factory_focal_pos"],
         "heater_enable": settings_result["heater_enable"],
         "auto_power_off": settings_result["auto_power_off"],
         "stack_lenhance": settings_result["stack_lenhance"]
@@ -895,30 +895,30 @@ class SettingsResource:
 
         # Convert the form names back into the required format
         FormattedNewSettings = {
-            "stack_lenhance": eval(PostedSettings["stack_lenhance"]),
+            "stack_lenhance": str2bool(PostedSettings["stack_lenhance"]),
             "stack_dither": {"pix": int(PostedSettings["stack_dither_pix"]),
                              "interval": int(PostedSettings["stack_dither_interval"]),
-                             "enable": eval(PostedSettings["stack_dither_enable"])},
+                             "enable": str2bool(PostedSettings["stack_dither_enable"])},
             "exp_ms": {"stack_l": int(PostedSettings["exp_ms_stack_l"]),
                        "continuous": int(PostedSettings["exp_ms_continuous"])},
             "focal_pos": int(PostedSettings["focal_pos"]),
-            "factory_focal_pos": int(PostedSettings["factory_focal_pos"]),
-            "auto_power_off": eval(PostedSettings["auto_power_off"]),
-            "auto_3ppa_calib": eval(PostedSettings["auto_3ppa_calib"]),
-            "frame_calib": eval(PostedSettings["frame_calib"]),
-            "stack_masic": eval(PostedSettings["stack_masic"]),
-            "rec_stablzn": eval(PostedSettings["rec_stablzn"]),
-            "manual_exp": eval(PostedSettings["manual_exp"])
+            # "factory_focal_pos": int(PostedSettings["factory_focal_pos"]),
+            "auto_power_off": str2bool(PostedSettings["auto_power_off"]),
+            "auto_3ppa_calib": str2bool(PostedSettings["auto_3ppa_calib"]),
+            "frame_calib": str2bool(PostedSettings["frame_calib"]),
+            "stack_masic": str2bool(PostedSettings["stack_masic"]),
+            "rec_stablzn": str2bool(PostedSettings["rec_stablzn"]),
+            "manual_exp": str2bool(PostedSettings["manual_exp"])
         }
 
         FormattedNewStackSettings = {
-            "save_discrete_frame": PostedSettings["save_discrete_frame"],
-            "save_discrete_ok_frame": PostedSettings["save_discrete_ok_frame"],
+            "save_discrete_frame": str2bool(PostedSettings["save_discrete_frame"]),
+            "save_discrete_ok_frame": str2bool(PostedSettings["save_discrete_ok_frame"]),
             "light_duration_min": PostedSettings["light_duration_min"]
         }
 
         # Dew Heater is wierd
-        if (eval(PostedSettings["heater_enable"])):
+        if (str2bool(PostedSettings["heater_enable"])):
             do_action_device("method_sync", telescope_id,
                              {'method': 'pi_output_set2', 'params': {'heater': {'state': True, 'value': 90}}})
         else:
