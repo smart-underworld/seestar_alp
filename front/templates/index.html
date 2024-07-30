@@ -27,11 +27,13 @@
 
             </div>
         {% else %}
-            <p>Telescope is currently offline</p>
+            <div class="container mt-3">
+                <p>Telescope is currently offline</p>
+            </div>
         {% endif %}
     {% endfor %}
 
-    <footer class="bg-body-tertiary text-center">
+    <footer class="bg-body-tertiary text-center mt-3">
         Last updated: {{ now }}
     </footer>
 
