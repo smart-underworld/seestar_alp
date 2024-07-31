@@ -92,8 +92,13 @@
             </div>
 
             <div class="mb-3">
-                <input type="text" class="form-control" id="gain" name="gain" aria-describedby="gainHelp"
-                       value="{{ values.gain }}" required>
+                {% if values.gain %}
+                    <input type="text" class="form-control" id="gain" name="gain" aria-describedby="gainHelp"
+                        value="{{ values.gain }}" required>
+                {% else %}
+                    <input type="text" class="form-control" id="gain" name="gain" aria-describedby="gainHelp"
+                        value="80" required>
+                {% endif %}
                 <div id="gainHelp" class="form-text">Gain. (ex: 80)</div>
             </div>
 
