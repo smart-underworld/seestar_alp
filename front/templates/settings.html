@@ -24,8 +24,17 @@
                             </th>
                             {% if value == true or value == false %}
                                 <td>
-                                    <input type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}" required pattern="[Tt]rue|[Ff]alse" aria-describedby="truefalseHelp">
-                                    <div id="truefalseHelp" class="form-text">True/False</div>
+                                    {% if value == true%}
+                                        <input type="radio" id="{{ key }}_enable" name="{{ key }}" value="{{ value }}" checked>
+                                        <label for="{{ key }}_enable">Enable</label>
+                                        <input type="radio" id="{{ key }}_disable" name="{{ key }}" value="false">
+                                        <label for="{{ key }}_disable">Disable</label>
+                                    {% else %}
+                                        <input type="radio" id="{{ key }}_enable" name="{{ key }}" value="true">
+                                        <label for="{{ key }}_enable">Enable</label>
+                                        <input type="radio" id="{{ key }}_disable" name="{{ key }}" value="{{ value }}" checked>
+                                        <label for="{{ key }}_disable">Disable</label>
+                                    {% endif %}
                                 </td>
                             {% elif key == "temp_unit" %}
                                 <td>

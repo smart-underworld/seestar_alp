@@ -948,7 +948,7 @@ class SettingsResource:
         settings_friendly_names = {
             "stack_dither_pix": "Stack Dither Pixels",
             "stack_dither_interval": "Stack Dither Interval",
-            "stack_dither_enable": "Stack Dither Enable",
+            "stack_dither_enable": "Stack Dither",
             "exp_ms_stack_l": "Stacking Exposure Length (ms)",
             "exp_ms_continuous": "Continuous Preview Exposure Length (ms)",
             "save_discrete_frame": "Save Discrete Frame",
@@ -963,11 +963,11 @@ class SettingsResource:
             "calib_location": "calib_location",
             "wide_cam": "Wide Cam",
             "temp_unit": "Temperature Unit",
-            "focal_pos": "Focal Position",
+            "focal_pos": "Focal Position - User Defined",
             "factory_focal_pos": "Default Focal Position",
-            "heater_enable": "Dew Heater Enable",
+            "heater_enable": "Dew Heater",
             "auto_power_off": "Auto Power Off",
-            "stack_lenhance": "LP Filter"
+            "stack_lenhance": "Light Pollution (LP) Filter"
         }
         # Maybe we can store this better?
         settings_helper_text = {
@@ -988,11 +988,11 @@ class SettingsResource:
             "calib_location": "calib_location",
             "wide_cam": "Wide Cam",
             "temp_unit": "Temperature Unit",
-            "focal_pos": "Current focal position.",
+            "focal_pos": "Focal Position - User Defined",
             "factory_focal_pos": "Default focal position on startup.",
             "heater_enable": "Enable or disable dew heater.",
             "auto_power_off": "Enable or disable auto power off",
-            "stack_lenhance": "Enable or disable LP Filter."
+            "stack_lenhance": "Enable or disable light pollution (LP) Filter."
         }
         render_template(req, resp, 'settings.html', settings=settings, settings_friendly_names=settings_friendly_names,
                         settings_helper_text=settings_helper_text, output=output, **context)
