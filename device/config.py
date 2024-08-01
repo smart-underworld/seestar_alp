@@ -68,7 +68,7 @@ print(path_to_dat)
 ### RWR _dict = toml.load(f'{sys.path[0]}/config.toml')    # Errors here are fatal.
 _dict = toml.load(path_to_dat)    # Errors here are fatal.
 def get_toml(sect: str, item: str):
-    if not _dict is {}:
+    if not _dict is {} and sect in _dict and item in _dict[sect]:
         return _dict[sect][item]
     else:
         return ''
@@ -109,4 +109,5 @@ class Config:
     log_to_stdout: str = get_toml('logging', 'log_to_stdout')
     max_size_mb: int = get_toml('logging', 'max_size_mb')
     num_keep_logs: int = get_toml('logging', 'num_keep_logs')
+    log_prefix: str = get_toml('logging', 'log_prefix')
 
