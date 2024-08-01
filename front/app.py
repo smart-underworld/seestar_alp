@@ -935,6 +935,10 @@ class SettingsResource:
         else:
             output = "Successfully Updated Settings."
 
+        # Delay for LP filter on (off doesn't need a delay), this is helpful for rendering the current status on page refresh.
+        if (FormattedNewSettings["stack_lenhance"]):
+            time.sleep(0.7) # This is the lowest delay I could use to get the correct status.
+
         self.render_settings(req, resp, telescope_id, output)
 
     @staticmethod
