@@ -3,8 +3,17 @@
 src_home=$(cd $(dirname $0)/.. && pwd)
 
 
-sudo systemctl stop seestar_device
-sudo systemctl stop seestar_front
+if $(systemctl is-active --quiet seestar_device); then
+  sudo systemctl stop seestar_device
+fi
+
+if $(systemctl is-active --quiet seestar_front); then
+  sudo systemctl stop seestar_front
+fi
+
+if $(systemctl is-active --quiet seestar); then
+  sudo systemctl stop seestar
+fi
 
 cd ${src_home}
 
@@ -19,24 +28,20 @@ sudo  pip install -r requirements.txt --break-system-packages
 
 cd raspberry_pi
 
-cat systemd/seestar_device.service | sed -e "s|/home/.*/seestar_alp|$src_home|g" > /tmp/seestar_device.service
-cat systemd/seestar_front.service | sed -e "s|/home/.*/seestar_alp|$src_home|g" > /tmp/seestar_front.service
+cat systemd/seestar.service | sed -e "s|/home/.*/seestar_alp|$src_home|g" > /tmp/seestar.service
 sudo chown root:root /tmp/seestar*.service
+
+sudo rm -f /etc/systemd/system/seestar*
 sudo mv /tmp/seestar*.service /etc/systemd/system
 
 sudo systemctl daemon-reload
 
-sudo systemctl start seestar_device
-sudo systemctl start seestar_front
+sudo systemctl enable seestar
+sudo systemctl start seestar
 
-if ! $(systemctl is-active --quiet seestar_device); then
-  echo "ERROR: seestar_device is not running"
-  systemctl status seestar_device
-fi
-
-if ! $(systemctl is-active --quiet seestar_front); then
-  echo "ERROR: seestar_front is not running"
-  systemctl status seestar_front
+if ! $(systemctl is-active --quiet seestar); then
+  echo "ERROR: seestar service is not running"
+  systemctl status seestar
 fi
 
 cat <<_EOF
@@ -50,7 +55,9 @@ cat <<_EOF
 |  ./seestar_alp/logs                 |
 |                                     |
 | Systemd logs can be viewed via      |
-| journalctl -u seestar_device        |
-| journalctl -u seestar_front         |
+| journalctl -u seestar               |
+|                                     |
+| Current status can be viewed via    |
+| systemctl status seestar            |
 |-------------------------------------|
 _EOF
