@@ -948,7 +948,7 @@ class SettingsResource:
         settings_friendly_names = {
             "stack_dither_pix": "Stack Dither Pixels",
             "stack_dither_interval": "Stack Dither Interval",
-            "stack_dither_enable": "Stack Dither Enable",
+            "stack_dither_enable": "Stack Dither",
             "exp_ms_stack_l": "Stacking Exposure Length (ms)",
             "exp_ms_continuous": "Continuous Preview Exposure Length (ms)",
             "save_discrete_frame": "Save Discrete Frame",
