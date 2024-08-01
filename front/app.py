@@ -965,9 +965,9 @@ class SettingsResource:
             "temp_unit": "Temperature Unit",
             "focal_pos": "Focal Position - User Defined",
             "factory_focal_pos": "Default Focal Position",
-            "heater_enable": "Dew Heater Enable",
+            "heater_enable": "Dew Heater",
             "auto_power_off": "Auto Power Off",
-            "stack_lenhance": "LP Filter"
+            "stack_lenhance": "Light Pollution (LP) Filter"
         }
         # Maybe we can store this better?
         settings_helper_text = {
@@ -992,7 +992,7 @@ class SettingsResource:
             "factory_focal_pos": "Default focal position on startup.",
             "heater_enable": "Enable or disable dew heater.",
             "auto_power_off": "Enable or disable auto power off",
-            "stack_lenhance": "Enable or disable LP Filter."
+            "stack_lenhance": "Enable or disable light pollution (LP) Filter."
         }
         render_template(req, resp, 'settings.html', settings=settings, settings_friendly_names=settings_friendly_names,
                         settings_helper_text=settings_helper_text, output=output, **context)
