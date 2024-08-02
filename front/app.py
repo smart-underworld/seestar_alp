@@ -546,9 +546,10 @@ def render_template(req, resp, template_name, **context):
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
     if check_api_state(telescope_id):
         current = do_action_device("get_schedule", telescope_id, {})
-        schedule = current["Value"]["list"]
+        print("schedule", current)
+        schedule = current["Value"]
     else:
-        schedule = get_queue(telescope_id)
+        schedule = { list: get_queue(telescope_id) }
 
     twilight_times = get_twilight_times()
 
@@ -665,10 +666,10 @@ class ImageResource:
         if check_api_state(telescope_id):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
-            schedule = current["Value"]["list"]
+            schedule = current["Value"]
         else:
             state = "Stopped"
-            schedule = get_queue(telescope_id)
+            schedule = { list: get_queue(telescope_id) }
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors,
@@ -688,9 +689,9 @@ class CommandResource:
         if check_api_state(telescope_id):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
-            schedule = current["Value"]["list"]
+            schedule = current["Value"]
         else:
-            schedule = get_queue(telescope_id)
+            schedule = { list: get_queue(telescope_id) }
             state = "Stopped"
 
         context = get_context(telescope_id, req)
@@ -712,10 +713,10 @@ class MosaicResource:
         if check_api_state(telescope_id):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
-            schedule = current["Value"]["list"]
+            schedule = current["Value"]
         else:
             state = "Stopped"
-            schedule = get_queue(telescope_id)
+            schedule = { list: get_queue(telescope_id) }
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'mosaic.html', state=state, schedule=schedule, values=values, errors=errors,
@@ -730,6 +731,20 @@ class ScheduleResource:
     @staticmethod
     def on_post(req, resp, telescope_id=1):
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
+
+
+class ScheduleListResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        if check_api_state(telescope_id):
+            current = do_action_device("get_schedule", telescope_id, {})
+            print("schedule", current)
+            schedule = current["Value"]
+        else:
+            schedule = {list: get_queue(telescope_id)}
+
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'schedule_list.html', schedule=schedule, **context)
 
 
 class ScheduleWaitUntilResource:
@@ -1208,6 +1223,7 @@ def main(device_main):
     app.add_route('/schedule/export', ScheduleExportResource())
     app.add_route('/schedule/image', ScheduleImageResource())
     app.add_route('/schedule/import', ScheduleImportResource())
+    app.add_route('/schedule/list', ScheduleListResource())
     app.add_route('/schedule/mosaic', ScheduleMosaicResource())
     app.add_route('/schedule/online', ScheduleGoOnlineResource())
     app.add_route('/schedule/shutdown', ScheduleShutdownResource())
@@ -1229,6 +1245,7 @@ def main(device_main):
     app.add_route('/{telescope_id:int}/schedule/export', ScheduleExportResource())
     app.add_route('/{telescope_id:int}/schedule/image', ScheduleImageResource())
     app.add_route('/{telescope_id:int}/schedule/import', ScheduleImportResource())
+    app.add_route('/{telescope_id:int}/schedule/list', ScheduleListResource())
     app.add_route('/{telescope_id:int}/schedule/mosaic', ScheduleMosaicResource())
     app.add_route('/{telescope_id:int}/schedule/online', ScheduleGoOnlineResource())
     app.add_route('/{telescope_id:int}/schedule/shutdown', ScheduleShutdownResource())

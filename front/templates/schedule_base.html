@@ -8,9 +8,9 @@
 
 {% block content %}
 	<div class="container mb-2">
-		<p class="h3">Current Schedule</p>	
-		{% include 'schedule_list.html' with context %}
-		
+		<p class="h3">Current Schedule</p>
+        <div hx-get="{{ root }}/schedule/list" hx-trigger="load, every 2s">Loading schedule...</div>
+
 		<p class="h3">Twilight Times</p>
 		<p class="d-inline-flex gap-1">
 			<button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseExample" aria-expanded="false" aria-controls="collapseExample">
