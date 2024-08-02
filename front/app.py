@@ -1,5 +1,7 @@
 import time
 from datetime import datetime
+from tzlocal import get_localzone
+from dateutil import tz
 from sys import prefix
 
 import falcon
@@ -18,6 +20,9 @@ import os
 import io
 import socket
 import sys
+import ephem
+import geocoder
+import pytz
 
 if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
     sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
@@ -110,6 +115,49 @@ def get_ip():
     finally:
         s.close()
     return IP
+
+
+def get_twilight_times():
+    geo = geocoder.ip('me')
+    observer = ephem.Observer()
+    observer.date = datetime.now()
+    observer.lat = str(geo.latlng[0])
+    observer.lon = str(geo.latlng[1])
+    observer.pressure = 0
+    observer.horizon = 0
+    local_timezone = get_localzone()
+    sun = ephem.Sun()
+    
+    # Sunrise & Sunset
+    utc_sunset = observer.next_setting(sun)
+    loc_sunset = pytz.utc.localize(utc_sunset.datetime()).astimezone(local_timezone)
+    utc_next_sunrise = observer.next_rising(sun)
+    loc_next_sunrise = pytz.utc.localize(utc_next_sunrise.datetime()).astimezone(local_timezone)
+    
+    # Civil Beginning and End
+    observer.horizon = '-6' # -6=civil twilight, -12=nautical, -18=astronomical
+    utc_end_civil = observer.next_setting(sun, use_center=True)
+    loc_end_civil = pytz.utc.localize(utc_end_civil.datetime()).astimezone(local_timezone)
+    utc_next_beg_civil = observer.next_rising(sun, use_center=True)
+    loc_next_beg_civil = pytz.utc.localize(utc_next_beg_civil.datetime()).astimezone(local_timezone)
+    
+    # Astronomical Beginning and End
+    observer.horizon = '-18' # -6=civil twilight, -12=nautical, -18=astronomical
+    utc_beg_astronomical = observer.next_setting(sun, use_center=True)
+    loc_beg_astronomical = pytz.utc.localize(utc_beg_astronomical.datetime()).astimezone(local_timezone)
+    utc_next_end_astronomical = observer.next_rising(sun, use_center=True)
+    loc_next_end_astronomical = pytz.utc.localize(utc_next_end_astronomical.datetime()).astimezone(local_timezone)
+
+    twilight_times = {
+        "Today's Sunset": loc_sunset,
+        "Next Sunrise": loc_next_sunrise,
+        "Today's Civil End": loc_end_civil,
+        "Next Civil Begin": loc_next_beg_civil,
+        "Today's Astronomical Begin": loc_beg_astronomical,
+        "Next Astronomical End": loc_next_end_astronomical
+    }
+
+    return twilight_times
 
 
 def check_api_state(telescope_id):
@@ -510,8 +558,10 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
     else:
         schedule = get_queue(telescope_id)
 
+    twilight_times = get_twilight_times()
+
     context = get_context(telescope_id, req)
-    render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values,
+    render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values, twilight_times=twilight_times,
                     **context)
 
 
