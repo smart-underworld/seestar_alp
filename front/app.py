@@ -546,7 +546,6 @@ def render_template(req, resp, template_name, **context):
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
     if check_api_state(telescope_id):
         current = do_action_device("get_schedule", telescope_id, {})
-        print("schedule", current)
         schedule = current["Value"]
     else:
         schedule = { list: get_queue(telescope_id) }
@@ -738,7 +737,6 @@ class ScheduleListResource:
     def on_get(req, resp, telescope_id=1):
         if check_api_state(telescope_id):
             current = do_action_device("get_schedule", telescope_id, {})
-            print("schedule", current)
             schedule = current["Value"]
         else:
             schedule = {list: get_queue(telescope_id)}
