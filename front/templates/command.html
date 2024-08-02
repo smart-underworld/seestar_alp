@@ -7,11 +7,10 @@
 {% endblock %}
 
 {% block content %}
-    <div class="container mt-3">
-		<p class="h3">Select a command to execute</p>
-	</div>
-
 	{% if online %}
+		<div class="container mt-3">
+			<p class="h3">Select a command to execute</p>
+		</div>
 		<div class="container mt-3">
 			{% include 'do_command.html' with context %}
 		</div>
