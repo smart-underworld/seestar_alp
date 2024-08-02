@@ -1,11 +1,14 @@
 <div class="mb-3">
     {% if online %}
-        <div id="scheduler_state"
-            hx-get="{{ root }}/schedule/state"
-            hx-swap="innerHTML"
-            hx-target="#scheduler_state"
-            hx-trigger="load delay:0ms"
-            style="height:45px;">
+        <div style="height: 45px;">
+            <div hx-post="{{ root }}/schedule/state" hx-swap="outerHTML">
+                <span class="me-3">State: {{ schedule['state'] }}</span>
+                <span>
+                    <button type="submit" class="btn btn-primary">
+                        {% if schedule['state'] == "Stopped" %}Start{% else %}Stop{% endif %}
+                    </button>
+                </span>
+            </div>
         </div>
     {% else %}
         <p>You are currently in offline mode</p>
@@ -24,18 +27,19 @@
             <div class="col">Gain</div>
             <div class="col">LP filter?</div>
             <div class="col">AutoFocus</div>
+            {# <div class="col">Status</div>#}
         </div>
-        {% for item in schedule %}
-            <div class="row border-bottom py-2 text-start">
+        {% for item in schedule.list %}
+            <div class="row border-bottom py-2 text-start {% if schedule['current_item_id'] == item['id'] %}bg-primary{% endif %}">
                 {% if item["action"] == 'wait_until' %}
-                    <div class="col-2">Wait Until </div> 
-					<div class="col">{{ item["params"]["local_time"] }}</div>
+                    <div class="col-2">Wait Until</div>
+                    <div class="col">{{ item["params"]["local_time"] }}</div>
                 {% elif item["action"] == 'wait_for' %}
                     <div class="col-2">Wait For</div>
-					<div class="col">{{ item["params"]["timer_sec"] }}s</div>
+                    <div class="col">{{ item["params"]["timer_sec"] }}s</div>
                 {% elif item["action"] == 'auto_focus' %}
                     <div class="col-2">Auto Focus</div>
-					<div class="col">{{ item["params"]["try_count"] }}x</div>
+                    <div class="col">{{ item["params"]["try_count"] }}x</div>
                 {% elif item["action"] == 'set_setting_exposures' %}
                     <div class="col-2">Set exposure ...</div>
                 {% elif item["action"] == 'shutdown' %}
@@ -51,13 +55,14 @@
                     <div class="col">{{ item["params"]["gain"] }}</div>
                     <div class="col">{{ item["params"]["is_use_lp_filter"] }}</div>
                     <div class="col">{{ item["params"]["is_use_autofocus"] }}</div>
+                    {# <div class="col">{{ item["scheduler_status"] }}</div>#}
                 {% else %}
                     <div class="col" colspan="10">Unrecognized schedule item: {{ item }}</div>
                 {% endif %}
             </div>
         {% endfor %}
     </div>
-	<p></p>
+    <p></p>
     <div class="container py-2">
         <span> {% include 'clear_schedule.html' %}</span>
     </div>

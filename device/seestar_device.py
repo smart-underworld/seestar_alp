@@ -5,6 +5,7 @@ from datetime import datetime
 import threading
 import sys, os
 import math
+import uuid
 from time import sleep
 
 import tzlocal
@@ -47,14 +48,19 @@ class Seestar:
         self.utcdate = time.time()
         self.scheduler_state = "Stopped"
         self.scheduler_item_state = "Stopped"
+        self.scheduler_item_id = ""
+        self.scheduler_item = "" # Text description of specific scheduler item that's running
         self.mosaic_thread = ""
         self.scheduler_thread = ""
         self.schedule = {}
         self.schedule['list'] = []
         self.schedule['state'] = self.scheduler_state
+        self.schedule['current_item_id'] = ""
+        # self.schedule['current_item_detail']    # Text description for mosaic?
         self.cur_solve_RA = -9999.0  #
         self.cur_solve_Dec = -9999.0
         self.goto_state = "complete"
+        self.connect_count = 0
         self.below_horizon_dec_offset = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
 
     def __repr__(self) -> str:
@@ -117,6 +123,7 @@ class Seestar:
             return None
         except socket.error as e:
             # todo : if general socket error, close socket, and kick off reconnect?
+            # todo : no route to host...
             self.logger.error(f"Device {self.device_name}: read Socket error: {e}")
             # todo : handle message failure
             if self.is_watch_events:
@@ -715,6 +722,8 @@ class Seestar:
                         time.sleep(4)
                         if not self.start_stack({"gain": gain, "restart": True}):
                             return
+                        # xxx : is this fully accurate?  as far as way of sleeping per panel?
+                        # xxx : update state to show which panel is running
                         for i in range(sleep_time_per_panel):
                             if self.scheduler_state != "Running":
                                 self.logger.info("Scheduler was requested to stop. Stopping current mosaic.")
@@ -809,6 +818,7 @@ class Seestar:
                     mosaic_params['ra'] = self.ra
                     mosaic_params['dec'] = self.dec
                     mosaic_params['is_j2000'] = False
+        params['id'] = str(uuid.uuid4())
         self.schedule['list'].append(params)
         return self.schedule
 
@@ -850,6 +860,7 @@ class Seestar:
         for item in self.schedule['list']:
             if self.scheduler_state != "Running":
                 break
+            self.schedule['current_item_id'] = item.get('id', 'UNKNOWN')
             action = item['action']
             if action == 'start_mosaic':
                 self.start_mosaic_item(item['params'])
@@ -882,6 +893,7 @@ class Seestar:
                     time.sleep(2)
 
         self.scheduler_state = "Stopped"
+        self.schedule['current_item_id'] = ""
         self.logger.info("Scheduler Stopped.")
         self.play_sound(82)
 
