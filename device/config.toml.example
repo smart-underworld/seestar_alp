@@ -22,6 +22,7 @@ steps_per_sec = 6
 
 [logging]
 log_level = 'INFO'   #'WARN' only if trouble    #'INFO' to output more logging      #'DEBUG' still more output
+log_prefix = ''
 log_to_stdout = false
 max_size_mb = 5
 num_keep_logs = 10
