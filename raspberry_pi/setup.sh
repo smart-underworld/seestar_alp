@@ -19,6 +19,7 @@ mkdir -p logs
 
 if [ ! -e device/config.toml ]; then
     sed -e 's/127.0.0.1/0.0.0.0/g' device/config.toml.example > device/config.toml
+    sed -i -e 's|log_prefix =.*|log_prefix = "logs/"|g' device/config.toml
 fi
 
 sudo  pip install -r requirements.txt --break-system-packages
