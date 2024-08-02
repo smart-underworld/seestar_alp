@@ -1,5 +1,7 @@
 import time
 from datetime import datetime
+from tzlocal import get_localzone
+from dateutil import tz
 from sys import prefix
 
 import falcon
@@ -18,6 +20,9 @@ import os
 import io
 import socket
 import sys
+import ephem
+import geocoder
+import pytz
 
 if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
     sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
@@ -110,6 +115,49 @@ def get_ip():
     finally:
         s.close()
     return IP
+
+
+def get_twilight_times():
+    geo = geocoder.ip('me')
+    observer = ephem.Observer()
+    observer.date = datetime.now()
+    observer.lat = str(geo.latlng[0])
+    observer.lon = str(geo.latlng[1])
+    observer.pressure = 0
+    observer.horizon = 0
+    local_timezone = get_localzone()
+    sun = ephem.Sun()
+    
+    # Sunrise & Sunset
+    utc_sunset = observer.next_setting(sun)
+    loc_sunset = pytz.utc.localize(utc_sunset.datetime()).astimezone(local_timezone)
+    utc_next_sunrise = observer.next_rising(sun)
+    loc_next_sunrise = pytz.utc.localize(utc_next_sunrise.datetime()).astimezone(local_timezone)
+    
+    # Civil Beginning and End
+    observer.horizon = '-6' # -6=civil twilight, -12=nautical, -18=astronomical
+    utc_end_civil = observer.next_setting(sun, use_center=True)
+    loc_end_civil = pytz.utc.localize(utc_end_civil.datetime()).astimezone(local_timezone)
+    utc_next_beg_civil = observer.next_rising(sun, use_center=True)
+    loc_next_beg_civil = pytz.utc.localize(utc_next_beg_civil.datetime()).astimezone(local_timezone)
+    
+    # Astronomical Beginning and End
+    observer.horizon = '-18' # -6=civil twilight, -12=nautical, -18=astronomical
+    utc_beg_astronomical = observer.next_setting(sun, use_center=True)
+    loc_beg_astronomical = pytz.utc.localize(utc_beg_astronomical.datetime()).astimezone(local_timezone)
+    utc_next_end_astronomical = observer.next_rising(sun, use_center=True)
+    loc_next_end_astronomical = pytz.utc.localize(utc_next_end_astronomical.datetime()).astimezone(local_timezone)
+
+    twilight_times = {
+        "Today's Sunset": loc_sunset,
+        "Next Sunrise": loc_next_sunrise,
+        "Today's Civil End": loc_end_civil,
+        "Next Civil Begin": loc_next_beg_civil,
+        "Today's Astronomical Begin": loc_beg_astronomical,
+        "Next Astronomical End": loc_next_end_astronomical
+    }
+
+    return twilight_times
 
 
 def check_api_state(telescope_id):
@@ -235,8 +283,8 @@ def get_device_settings(telescope_id):
         "stack_dither_enable": settings_result["stack_dither"]["enable"],
         "exp_ms_stack_l": settings_result["exp_ms"]["stack_l"],
         "exp_ms_continuous": settings_result["exp_ms"]["continuous"],
-        "save_discrete_frame": stack_settings_result["save_discrete_frame"],
         "save_discrete_ok_frame": stack_settings_result["save_discrete_ok_frame"],
+        "save_discrete_frame": stack_settings_result["save_discrete_frame"],
         "light_duration_min": stack_settings_result["light_duration_min"],
         "auto_3ppa_calib": settings_result["auto_3ppa_calib"],
         "frame_calib": settings_result["frame_calib"],
@@ -510,8 +558,10 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
     else:
         schedule = get_queue(telescope_id)
 
+    twilight_times = get_twilight_times()
+
     context = get_context(telescope_id, req)
-    render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values,
+    render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values, twilight_times=twilight_times,
                     **context)
 
 
@@ -935,6 +985,10 @@ class SettingsResource:
         else:
             output = "Successfully Updated Settings."
 
+        # Delay for LP filter on (off doesn't need a delay), this is helpful for rendering the current status on page refresh.
+        if (FormattedNewSettings["stack_lenhance"]):
+            time.sleep(0.7) # This is the lowest delay I could use to get the correct status.
+
         self.render_settings(req, resp, telescope_id, output)
 
     @staticmethod
@@ -951,8 +1005,8 @@ class SettingsResource:
             "stack_dither_enable": "Stack Dither",
             "exp_ms_stack_l": "Stacking Exposure Length (ms)",
             "exp_ms_continuous": "Continuous Preview Exposure Length (ms)",
-            "save_discrete_frame": "Save Discrete Frame",
-            "save_discrete_ok_frame": "Save Discrete OK Frame",
+            "save_discrete_ok_frame": "Save Sub Frames",
+            "save_discrete_frame": "Save Failed Sub Frames",
             "light_duration_min": "Light Duration Min",
             "auto_3ppa_calib": "Auto 3 Point Calibration",
             "frame_calib": "Frame Calibration",
@@ -976,8 +1030,8 @@ class SettingsResource:
             "stack_dither_enable": "Enable or disable dither. Reset apon Seestar reboot.",
             "exp_ms_stack_l": "Stacking Exposure Lenght (ms).",
             "exp_ms_continuous": "Continuous Preview Exposure Length (ms), used in the live view.",
-            "save_discrete_frame": "Save failed sub frames.",
-            "save_discrete_ok_frame": "Save OK sub frames.",
+            "save_discrete_ok_frame": "Save sub frames. (Doesn't include failed.)",
+            "save_discrete_frame": "Save failed sub frames. (Failed sub frames will have \"_failed\" added to their filename.)",
             "light_duration_min": "Light Duration Min.",
             "auto_3ppa_calib": "Enable or disable 3 point calibration.",
             "frame_calib": "Frame Calibration",
