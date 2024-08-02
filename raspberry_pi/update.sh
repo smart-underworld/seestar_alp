@@ -20,6 +20,7 @@ cd ${src_home}
 if [ ! -e device/config.toml ]; then
   cp device/config.toml.example device/config.toml
   sed -i -e 's/127.0.0.1/0.0.0.0/g' device/config.toml
+  sed -i -e 's|log_prefix =.*|log_prefix = "logs/"|g' device/config.toml
 else
   cp device/config.toml device/config.toml.bak
 fi
