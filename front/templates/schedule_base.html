@@ -1,37 +1,45 @@
 {% extends 'base.html' %}
 
 {% block header %}
-	<div class="container mt-3">
-		<p class="h1">{% block title %}Schedule Page{% endblock %} - {{ telescope["name"] }} ({{ telescope["ip_address"] }})</p>
-	</div>
+    <div class="container mt-3">
+        <p class="h1">{% block title %}Schedule Page{% endblock %} - {{ telescope["name"] }}
+            ({{ telescope["ip_address"] }})</p>
+    </div>
 {% endblock %}
 
 {% block content %}
-	<div class="container mb-2">
-		<p class="h3">Current Schedule</p>
+    <div class="container mb-2">
+        <p class="h3">Current Schedule</p>
         <div hx-get="{{ root }}/schedule/list" hx-trigger="load, every 2s">Loading schedule...</div>
 
-		<p class="h3">Twilight Times</p>
-		<p class="d-inline-flex gap-1">
-			<button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseExample" aria-expanded="false" aria-controls="collapseExample">
-			  Hide/Show Twilight Times
-			</button>
-		</p>
-		<div class="collapse" id="collapseExample">
-			<div class="card card-body">
-				{% for key, value in twilight_times.items() %}
-					<span>{{ key }}: {{ value }}</span>
-				{% endfor %}
-			</div>
-		</div>
+        <div class="mb-3">
+            <div class="container py-2">
+                <span> {% include 'clear_schedule.html' %}</span>
+            </div>
+        </div>
 
-		<p class="mt-3">Schedule page. Pick an item to schedule, and Submit to add to the schedule.</p>
-		{% include 'partials/schedule_tab_header.html' with context %}
+        <p class="h3">Twilight Times</p>
+        <p class="d-inline-flex gap-1">
+            <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseExample"
+                    aria-expanded="false" aria-controls="collapseExample">
+                Hide/Show Twilight Times
+            </button>
+        </p>
+        <div class="collapse" id="collapseExample">
+            <div class="card card-body">
+                {% for key, value in twilight_times.items() %}
+                    <span>{{ key }}: {{ value }}</span>
+                {% endfor %}
+            </div>
+        </div>
 
-		<div class="tab-content">
-			<div class="tab-pane fade show active" role="tabpanel" aria-labelledby="auto-focus-tab">
-				{% block schedule_tab_content %}{% endblock %}
-			</div>
-		</div>
-	</div>
+        <p class="mt-3">Schedule page. Pick an item to schedule, and Submit to add to the schedule.</p>
+        {% include 'partials/schedule_tab_header.html' with context %}
+
+        <div class="tab-content">
+            <div class="tab-pane fade show active" role="tabpanel" aria-labelledby="auto-focus-tab">
+                {% block schedule_tab_content %}{% endblock %}
+            </div>
+        </div>
+    </div>
 {% endblock %}
