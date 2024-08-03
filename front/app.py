@@ -35,7 +35,7 @@ import threading
 logger = init_logging()
 
 base_url = "http://localhost:" + str(Config.port)
-stellarium_url = 'http://localhost:' + str(Config.stport) + '/api/objects/info'
+stellarium_url = 'http://' + str(Config.sthost) + ':' + str(Config.stport) + '/api/objects/info'
 simbad_url = 'https://simbad.cds.unistra.fr/simbad/sim-id?output.format=ASCII&obj.bibsel=off&Ident='
 messages = []
 online = None
@@ -435,7 +435,7 @@ def do_create_image(req, resp, schedule, telescope_id):
         "gain": int(gain),
         "is_use_autofocus": useAutoFocus
     }
-
+  
     if not check_ra_value(ra):
         flash(resp, "Invalid RA value")
         errors["ra"] = ra
@@ -1100,6 +1100,20 @@ class SimbadResource:
 
         ra_dec_j2000 = f"{elements[0]}h{elements[1]}m{elements[2]}s {elements[3]}d{elements[4]}m{elements[5]}s"
 
+        #see if we should recommand the LP Filter
+        substrings = ["---  ISM  ---", "---  HII  ---", "---  SNR  ---", "---  PN  ---"]
+
+        lpFilter = False
+        for substring in substrings:
+            if substring in html_content:
+                lpFilter = True
+                break
+        lpStr = " off"
+        if (lpFilter == True):
+            lpStr = " on"
+
+        ra_dec_j2000 += lpStr
+
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
         resp.text = ra_dec_j2000
@@ -1132,6 +1146,20 @@ class StellariumResource:
 
         # Clean up the extracted information
         ra_dec_j2000 = ra_dec_j2000.replace("RA/Dec (J2000.0):", "").strip()
+
+        substrings = ["Type: <b>HII region", "Type: <b>emission nebula", "Type: <b>supernova remnant", "Type: <b>planetary nebula"]
+
+        lpFilter = False
+        for substring in substrings:
+            if substring in html_content:
+                lpFilter = True
+                break
+        lpStr = "/off"
+        if (lpFilter == True):
+            lpStr = "/on"
+
+        ra_dec_j2000 += lpStr
+
 
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
