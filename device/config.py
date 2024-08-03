@@ -81,6 +81,7 @@ class Config:
     ip_address: str = get_toml('network', 'ip_address')
     port: int = get_toml('network', 'port')
     stport: int = get_toml('network', 'stport')
+    sthost: int = get_toml('network', 'sthost')
     
     # --------------
     # WebUI Section
