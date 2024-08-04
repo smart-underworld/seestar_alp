@@ -969,7 +969,7 @@ class SettingsResource:
         FormattedNewStackSettings = {
             "save_discrete_frame": str2bool(PostedSettings["save_discrete_frame"]),
             "save_discrete_ok_frame": str2bool(PostedSettings["save_discrete_ok_frame"]),
-            "light_duration_min": PostedSettings["light_duration_min"]
+            "light_duration_min": int(PostedSettings["light_duration_min"])
         }
 
         # Dew Heater is wierd
