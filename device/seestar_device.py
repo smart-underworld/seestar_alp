@@ -491,8 +491,7 @@ class Seestar:
         result = self.send_message_param_sync(
             {"method": "iscope_start_stack", "params": {"restart": params["restart"]}})
         self.logger.info(result)
-        result = self.send_message_param_sync(
-            {"method": "set_control_value", "params": {"gain": stack_gain}})
+        result = self.send_message_param_sync({"method": "set_control_value", "params": ["gain", stack_gain]})
         self.logger.info(result)
         return not "error" in result
 
