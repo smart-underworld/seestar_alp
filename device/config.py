@@ -89,6 +89,7 @@ class Config:
     # --------------
     uiport: int = get_toml('webui_settings', 'uiport', 5432)
     uitheme: str = get_toml('webui_settings', 'uitheme', 'dark')
+    twilighttimes: str = get_toml('webui_settings', 'twilighttimes', False)
 
     # --------------
     # Server Section
