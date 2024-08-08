@@ -65,7 +65,7 @@ if not os.path.exists(path_to_dat):
   path_to_ex = os.path.abspath(os.path.join(search_path, "config.toml.example"))
   shutil.copy(path_to_ex, path_to_dat)
 
-print(path_to_dat)
+#print(path_to_dat)
 ### RWR _dict = toml.load(f'{sys.path[0]}/config.toml')    # Errors here are fatal.
 _dict = toml.load(path_to_dat)    # Errors here are fatal.
 def get_toml(sect: str, item: str, default : typing.Any):

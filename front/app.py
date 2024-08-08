@@ -1314,5 +1314,13 @@ def main(device_main):
         httpd.server_close()
 
 
+class style():
+    YELLOW = '\033[33m'
+    RESET = '\033[0m'
+
 if __name__ == '__main__':
+    print(style.YELLOW + "WARN")
+    print(style.YELLOW + "WARN" + style.RESET + ": Deprecated app launch detected.")
+    print(style.YELLOW + "WARN" + style.RESET + ": We recommend launching from the top level root_app.py, instead of ./front/app.py")
+    print(style.YELLOW + "WARN" + style.RESET)
     main(None)
