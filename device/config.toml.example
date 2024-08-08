@@ -11,6 +11,7 @@ sthost = 'localhost'  #stellarium hostname or IP
 uiport = 5432
 # light/dark theme
 uitheme = "dark" #all lower case
+twilighttimes = false #true/false
 
 [server]
 location = 'Anywhere on Earth'  # Anything you want here
