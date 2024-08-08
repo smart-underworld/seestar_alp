@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pkg_resources
 import sys
+import os
 
 def launch_app():
     from front.app import main as front_app
@@ -17,6 +18,7 @@ def launch_app():
     front_app(DeviceMain)
 
 if __name__ == "__main__":
+    os.chdir(Path(__file__).parent)
 
     p = Path(__file__).with_name("requirements.txt")
     try:
