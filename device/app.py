@@ -296,9 +296,16 @@ class DeviceMain:
         if self.httpd:
             self.httpd.shutdown()
 
+class style():
+    YELLOW = '\033[33m'
+    RESET = '\033[0m'
 
 # ========================
 if __name__ == '__main__':
+    print(style.YELLOW + "WARN")
+    print(style.YELLOW + "WARN" + style.RESET + ": Deprecated app launch detected.")
+    print(style.YELLOW + "WARN" + style.RESET + ": We recommend launching from the top level root_app.py, instead of ./device/app.py")
+    print(style.YELLOW + "WARN" + style.RESET)
     device = DeviceMain()
     device.start()
 # ========================
