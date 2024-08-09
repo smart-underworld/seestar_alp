@@ -1,9 +1,15 @@
 title = "Alpaca Sample Driver (Rotator)"
 
 [network]
-ip_address = '0.0.0.0'
+# ip_address should not have to be changed
+ip_address = '0.0.0.0'           # Any address
 port = 5555
+stport = 8090      #stellarium port
+
+[webui_settings]
 uiport = 5432
+# light/dark theme
+uitheme = "dark" #all lower case
 
 [server]
 location = 'Anywhere on Earth'  # Anything you want here
@@ -15,13 +21,14 @@ step_size = 1.0
 steps_per_sec = 6
 
 [logging]
-log_level = 'INFO'
+log_level = 'INFO'   #'WARN' only if trouble    #'INFO' to output more logging      #'DEBUG' still more output
 log_to_stdout = false
 max_size_mb = 5
 num_keep_logs = 10
 
 [[seestars]]
 name = "Seestar Alpha"
+# ip_address should not have to be changed unless you have more than 1 seestar
 ip_address = "seestar.local"
 device_num = 1
 
@@ -38,4 +45,3 @@ device_num = 1
 #ip_address = "192.168.110.238"
 #ip_address = "192.168.8.117"
 #device_num = 3
-

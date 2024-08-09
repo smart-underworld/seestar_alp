@@ -140,3 +140,46 @@ async function toggleuitheme() {
         console.error('Failed to toggle ui theme', err);
     }
 }
+
+function get_location_from_browser() {
+    // This doesn't work as SSC doesn't use HTTPS
+    function success(position) {
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+
+        document.getElementById('Latitude').value = latitude;
+        document.getElementById('Longitude').value = longitude;
+    }
+  
+    function error(err) {
+        alert("Unable to get location from browser.");
+        console.warn(`ERROR(${err.code}): ${err.message}`);
+    }
+  
+    if (!navigator.geolocation) {
+        alert("Geolocation is not supported by your browser");
+    } else {
+        navigator.geolocation.getCurrentPosition(success, error, {maximumAge:60000, timeout:2000, enableHighAccuracy:true});
+    }
+}
+
+async function get_location_from_IP() {
+    const url = "https://ipapi.co/json/";
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Response status: ${response.status}`);
+        }
+
+        const json = await response.json();
+        const latitude = json['latitude'];
+        const longitude = json['longitude'];
+
+        document.getElementById('Latitude').value = latitude;
+        document.getElementById('Longitude').value = longitude;
+        console.log("Latitude: " + latitude + " Longitude: " + longitude);
+    } catch (error) {
+        console.error(error.message);
+    }
+}
