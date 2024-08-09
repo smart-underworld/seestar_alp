@@ -9,7 +9,7 @@ If you don't have docker installed and don't have a preference, then [follow the
 # Configuration
 Copy `docker/config.toml.example` to `docker/config.toml` and edit it for your Seestar array.  
 
-Edit `run.sh` and set `TIME_ZONE` to your local time zone using one of the `TZ identifier` options listed [here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones). For example:  
+Identify your local time zone using one of the `TZ identifier` options listed [here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones). For example:  
 `TIME_ZONE="America/Vancouver"`
 
 # Run
@@ -34,3 +34,25 @@ OR to build the INDI version
 ./docker/run.sh -b -i -t "America/Vancouver"
 ```
 
+# Connect to Seestar from Stellarium
+
+- In Stellarium, enable the Telescope Control plugin by clicking Load on startup  
+
+- Restart Stellarium, go to the Telescope Control plugin and click Configure  
+
+- Click Add New Telescope icon  
+
+- Click INDI/INDIGO  
+
+- Name the telescope Seestar (or whatever else you'd prefer)  
+
+- Select Equinox of the date (JNow) 
+
+- Leave INDI host settings at defaults and click Refresh Devices
+
+- You should see "Seestar Alpha" (or whatever you called it in your config.toml file) listed
+
+- Click OK and then Connect
+
+- You should now see the location of your Seestar on the Stellarium sky atlas. Its position
+will update every couple of seconds. 
