@@ -34,7 +34,7 @@ jobs:
           pyinstaller --name="seestar_alp" --hidden-import tzlocal --hidden-import geocoder --hidden-import alpaca.telescope --hidden-import log --hidden-import toml `
           --add-data="front/config.toml.example;." --add-data="front/config.py;." --add-data="front/log.py;." `
           --add-data="front/citation;astroquery" --add-data="front/templates;templates" --add-data="front/public;public" `
-          --add-data="front;front" --add-data="device;device" root_app.py
+          --add-data="front;front" --add-data="device;device --ada-data="requirements.txt;." root_app.py
           Compress-Archive -Path ./dist/seestar_alp/* -DestinationPath win_seestar_alp.zip
           echo "device_script_result=win_seestar_alp.zip" >> $env:GITHUB_ENV
         shell: pwsh  
