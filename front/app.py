@@ -117,30 +117,46 @@ def get_ip():
     return IP
 
 
-def get_twilight_times():
-    geo = geocoder.ip('me')
+def update_twilight_times(latitude=None, longitude=None):
     observer = ephem.Observer()
     observer.date = datetime.now()
-    observer.lat = str(geo.latlng[0])
-    observer.lon = str(geo.latlng[1])
     observer.pressure = 0
     observer.horizon = 0
     local_timezone = get_localzone()
     sun = ephem.Sun()
-    
+    current_date_formatted = str(datetime.now().strftime("%Y-%m-%d"))
+
+    if (latitude == None and longitude == None):
+        if internet_connection:
+                geo = geocoder.ip('me')
+                observer.lat = str(geo.latlng[0])
+                observer.lon = str(geo.latlng[1])
+        else:
+            twilight_times = {
+                "Info": "No internet connection detected on the device running SSC. Please set Latitude and Longitude.",
+                "Latitude": "",
+                "Longitude": ""
+            }
+
+            # Don't update the cache file.
+            return twilight_times
+    else:
+        observer.lat = latitude
+        observer.lon = longitude
+
     # Sunrise & Sunset
     utc_sunset = observer.next_setting(sun)
     loc_sunset = pytz.utc.localize(utc_sunset.datetime()).astimezone(local_timezone)
     utc_next_sunrise = observer.next_rising(sun)
     loc_next_sunrise = pytz.utc.localize(utc_next_sunrise.datetime()).astimezone(local_timezone)
-    
+
     # Civil Beginning and End
     observer.horizon = '-6' # -6=civil twilight, -12=nautical, -18=astronomical
     utc_end_civil = observer.next_setting(sun, use_center=True)
     loc_end_civil = pytz.utc.localize(utc_end_civil.datetime()).astimezone(local_timezone)
     utc_next_beg_civil = observer.next_rising(sun, use_center=True)
     loc_next_beg_civil = pytz.utc.localize(utc_next_beg_civil.datetime()).astimezone(local_timezone)
-    
+
     # Astronomical Beginning and End
     observer.horizon = '-18' # -6=civil twilight, -12=nautical, -18=astronomical
     utc_beg_astronomical = observer.next_setting(sun, use_center=True)
@@ -149,13 +165,61 @@ def get_twilight_times():
     loc_next_end_astronomical = pytz.utc.localize(utc_next_end_astronomical.datetime()).astimezone(local_timezone)
 
     twilight_times = {
-        "Today's Sunset": loc_sunset,
-        "Next Sunrise": loc_next_sunrise,
-        "Today's Civil End": loc_end_civil,
-        "Next Civil Begin": loc_next_beg_civil,
-        "Today's Astronomical Begin": loc_beg_astronomical,
-        "Next Astronomical End": loc_next_end_astronomical
+        "Today's Date": current_date_formatted,
+        "Latitude": str(observer.lat),
+        "Longitude": str(observer.lon),
+        "Today's Sunset": str(loc_sunset),
+        "Next Sunrise": str(loc_next_sunrise),
+        "Today's Civil End": str(loc_end_civil),
+        "Next Civil Begin": str(loc_next_beg_civil),
+        "Today's Astronomical Begin": str(loc_beg_astronomical),
+        "Next Astronomical End": str(loc_next_end_astronomical)
     }
+
+    # Write twilight times cache file
+    if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+        twilight_times_file = os.path.abspath(os.path.join(sys._MEIPASS, "twilight_times.json"))
+    else:
+        twilight_times_file = os.path.join(os.path.dirname(__file__), "twilight_times.json")
+
+    with open(twilight_times_file, "w") as outfile:
+        logger.info(f"Twilight times: Writing cache file.")
+        json.dump(twilight_times, outfile)
+
+    return twilight_times
+
+
+def get_twilight_times():
+    current_date_formatted = str(datetime.now().strftime("%Y-%m-%d"))
+
+    if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+        twilight_times_file = os.path.abspath(os.path.join(sys._MEIPASS, "twilight_times.json"))
+    else:
+        twilight_times_file = os.path.join(os.path.dirname(__file__), "twilight_times.json")
+
+    # Check to see if there is cached infromation for today
+    if os.path.isfile(twilight_times_file):
+        logger.info(f"Twilight times: Cache file exists.")
+        
+        with open(twilight_times_file, 'r') as openfile:
+            twilight_times = json.load(openfile)
+        
+        # Check if cached data is for today.
+        if(twilight_times["Today's Date"] == current_date_formatted):
+            logger.info(f"Twilight times: Cache file is current, using cache file.")
+        else:
+            logger.info(f"Twilight times: Cache file out of date, updating cache file.")
+
+            # Use lat and lon from the cache file
+            latitude = twilight_times["Latitude"]
+            longitude  = twilight_times["Longitude"]
+            
+            # Update the cache file
+            twilight_times = update_twilight_times(latitude, longitude)
+    else:
+        logger.info(f"Twilight times: Cache file doesn't exists, creating cache file.")
+        # Update the cache file
+        twilight_times = update_twilight_times()
 
     return twilight_times
 
@@ -178,6 +242,16 @@ def check_api_state(telescope_id):
     else:
         logger.info(f"Telescope {telescope_id} API is online.")
         return True
+
+
+def check_internet_connection():
+    try:
+        requests.get("https://github.com/smart-underworld/seestar_alp", timeout=2.0)
+        logger.info(f"Internet connection detected.")
+        return True
+    except requests.exceptions.ConnectionError:
+        logger.info(f"Unable to detect Internet connection or github is down.") # or github is down...
+        return False 
 
 
 def queue_action(dev_num, payload):
@@ -550,10 +624,13 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
     else:
         schedule = { list: get_queue(telescope_id) }
 
-    twilight_times = get_twilight_times()
+    if(Config.twilighttimes):
+        twilight_times = get_twilight_times()
+    else:
+        twilight_times = {}
 
     context = get_context(telescope_id, req)
-    render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values, twilight_times=twilight_times,
+    render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values, twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes,
                     **context)
 
 
@@ -1197,7 +1274,7 @@ class AlpResource:
         logging.info("SeestarAlp %s: finishing", name)
 
 
-class ToggleUITheme:
+class ToggleUIThemeResource:
     @staticmethod
     def on_get(req, resp):
         if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
@@ -1226,6 +1303,16 @@ class ToggleUITheme:
         with open(config_file, "w") as f:
             f.write(uitheme)
 
+
+class UpdateTwilightTimesResource:
+    @staticmethod
+    def on_post(req, resp):
+            referer = req.get_header('Referer')
+            PostedForm = req.media
+            PostedLat = PostedForm["Latitude"] # TODO: This should have some type of input check
+            PostedLon = PostedForm["Longitude"] # TODO: This should have some type of input check
+            update_twilight_times(PostedLat, PostedLon)
+            redirect(f"{referer}")
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
@@ -1283,7 +1370,8 @@ def main(device_main):
     app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
     app.add_route('/simbad', SimbadResource())
     app.add_route('/stellarium', StellariumResource())
-    app.add_route('/toggleuitheme', ToggleUITheme())
+    app.add_route('/toggleuitheme', ToggleUIThemeResource())
+    app.add_route('/updatetwilighttimes', UpdateTwilightTimesResource())
 
     if device_main:
         alp_resource = AlpResource(device_main)
@@ -1305,6 +1393,10 @@ def main(device_main):
                 ip_address = Config.ip_address
             logger.info(f'SSC Started: http://{ip_address}:{Config.uiport}')
 
+            # Check for internet connection
+            global internet_connection
+            internet_connection = check_internet_connection()
+
             # Serve until process is killed
             httpd.serve_forever()
     except KeyboardInterrupt:
@@ -1314,5 +1406,13 @@ def main(device_main):
         httpd.server_close()
 
 
+class style():
+    YELLOW = '\033[33m'
+    RESET = '\033[0m'
+
 if __name__ == '__main__':
+    print(style.YELLOW + "WARN")
+    print(style.YELLOW + "WARN" + style.RESET + ": Deprecated app launch detected.")
+    print(style.YELLOW + "WARN" + style.RESET + ": We recommend launching from the top level root_app.py, instead of ./front/app.py")
+    print(style.YELLOW + "WARN" + style.RESET)
     main(None)

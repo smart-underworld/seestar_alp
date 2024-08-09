@@ -17,21 +17,45 @@
                 <span> {% include 'clear_schedule.html' %}</span>
             </div>
         </div>
-
-        <p class="h3">Twilight Times</p>
-        <p class="d-inline-flex gap-1">
-            <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#twilightcollapse"
-                    aria-expanded="false" aria-controls="twilightcollapse">
-                Hide/Show Twilight Times
-            </button>
-        </p>
-        <div class="collapse" id="twilightcollapse">
-            <div class="card card-body">
-                {% for key, value in twilight_times.items() %}
-                    <span>{{ key }}: {{ value }}</span>
-                {% endfor %}
+        {% if twilight_times_enabled %}
+            <p class="h3">Twilight Times</p>
+            <p class="d-inline-flex gap-1">
+                <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#twilightcollapse"
+                        aria-expanded="false" aria-controls="twilightcollapse">
+                    Hide/Show Twilight Times
+                </button>
+            </p>
+            <div class="collapse" id="twilightcollapse">
+                <div class="card card-body">
+                    <form method="post" action="/updatetwilighttimes">
+                        <table class="table table-striped">
+                            <tbody>
+                                {% for key, value in twilight_times.items() %}
+                                <tr>
+                                    {% if key == "Latitude" or key == "Longitude" %}
+                                        <th class="col">
+                                            <label for="{{ key }}">{{ key }}</label>
+                                            <input type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}">
+                                        </th>
+                                        <td>
+                                            <button type="submit" class="btn btn-primary me-2">Save</button>
+                                        </td>
+                                    {% else %}
+                                        <th class="col">
+                                            {{ key }}
+                                        </th>
+                                        <td>
+                                            {{ value }}
+                                        </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </form>
+                </div>
             </div>
-        </div>
+        {% endif %}
 
         <p class="mt-3">Schedule page. Pick an item to schedule, and Submit to add to the schedule.</p>
         {% include 'partials/schedule_tab_header.html' with context %}

@@ -45,6 +45,7 @@ import shutil
 from os import path
 import os
 ### end rwr
+import typing
 
 #
 # This slimy hack is for Sphinx which, despite the toml.load() being
@@ -64,51 +65,60 @@ if not os.path.exists(path_to_dat):
   path_to_ex = os.path.abspath(os.path.join(search_path, "config.toml.example"))
   shutil.copy(path_to_ex, path_to_dat)
 
-print(path_to_dat)
+#print(path_to_dat)
 ### RWR _dict = toml.load(f'{sys.path[0]}/config.toml')    # Errors here are fatal.
 _dict = toml.load(path_to_dat)    # Errors here are fatal.
-def get_toml(sect: str, item: str):
+def get_toml(sect: str, item: str, default : typing.Any):
     if not _dict is {} and sect in _dict and item in _dict[sect]:
         return _dict[sect][item]
     else:
-        return ''
+        return default
 
 class Config:
     """Device configuration in ``config.toml``"""
     # ---------------
     # Network Section
     # ---------------
-    ip_address: str = get_toml('network', 'ip_address')
-    port: int = get_toml('network', 'port')
-    stport: int = get_toml('network', 'stport')
-    sthost: int = get_toml('network', 'sthost')
-    
+    ip_address: str = get_toml('network', 'ip_address', '127.0.0.1')
+    port: int = get_toml('network', 'port', 5555)
+    stport: int = get_toml('network', 'stport', 8090)
+    sthost: str = get_toml('network', 'sthost', 'localhost')
+
     # --------------
     # WebUI Section
     # --------------
-    uiport: int = get_toml('webui_settings', 'uiport')
-    uitheme: str = get_toml('webui_settings', 'uitheme')
+    uiport: int = get_toml('webui_settings', 'uiport', 5432)
+    uitheme: str = get_toml('webui_settings', 'uitheme', 'dark')
+    twilighttimes: bool = get_toml('webui_settings', 'twilighttimes', False)
 
     # --------------
     # Server Section
     # --------------
-    location: str = get_toml('server', 'location')
-    verbose_driver_exceptions: bool = get_toml('server', 'verbose_driver_exceptions')
+    location: str = get_toml('server', 'location', 'Anywhere on Earth')
+    verbose_driver_exceptions: bool = get_toml('server', 'verbose_driver_exceptions', True)
 
     # --------------
     # Device Section
     # --------------
-    can_reverse: bool = get_toml('device', 'can_reverse')
-    step_size: float = get_toml('device', 'step_size')
-    steps_per_sec: int = get_toml('device', 'steps_per_sec')
-    seestars = _dict['seestars']
-
+    can_reverse: bool = get_toml('device', 'can_reverse', True)
+    step_size: float = get_toml('device', 'step_size', 1.0)
+    steps_per_sec: int = get_toml('device', 'steps_per_sec', 6)
+    if 'seestars' in _dict:
+        seestars = _dict['seestars']
+    else:
+        seestars = [
+          {
+            'name': 'Seestar Alpha',
+            'ip_address': 'seestar.local',
+            'device_num': 1
+          }
+        ]
     # ---------------
     # Logging Section
     # ---------------
-    log_level: int = logging.getLevelName(get_toml('logging', 'log_level'))  # Not documented but works (!!!!)
-    log_to_stdout: str = get_toml('logging', 'log_to_stdout')
-    max_size_mb: int = get_toml('logging', 'max_size_mb')
-    num_keep_logs: int = get_toml('logging', 'num_keep_logs')
-    log_prefix: str = get_toml('logging', 'log_prefix')
+    log_level: int = logging.getLevelName(get_toml('logging', 'log_level', 'INFO'))  # Not documented but works (!!!!)
+    log_to_stdout: str = get_toml('logging', 'log_to_stdout', False)
+    max_size_mb: int = get_toml('logging', 'max_size_mb', 5)
+    num_keep_logs: int = get_toml('logging', 'num_keep_logs', 10)
+    log_prefix: str = get_toml('logging', 'log_prefix', '')
 

@@ -36,7 +36,9 @@ This will:
 
 ### YouTube links
 
-There have been a couple YouTube tutorials on how to set up a Raspberry Pi
+There have been some YouTube tutorials on how to set up a Raspberry Pi
+
+[Discover Easy Seestar Automation with Raspberry Pi](https://youtu.be/DoCsGYKzDFE)
 
 [SeeStarALP RPi Demo](youtube.com/watch?v=0nhUNr_uNZA)
 
