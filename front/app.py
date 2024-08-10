@@ -616,7 +616,7 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
         current = do_action_device("get_schedule", telescope_id, {})
         schedule = current["Value"]
     else:
-        schedule = { list: get_queue(telescope_id) }
+        schedule = { "list": get_queue(telescope_id) }
 
     if(Config.twilighttimes):
         twilight_times = get_twilight_times()
@@ -739,7 +739,7 @@ class ImageResource:
             schedule = current["Value"]
         else:
             state = "Stopped"
-            schedule = { list: get_queue(telescope_id) }
+            schedule = { "list": get_queue(telescope_id) }
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors,
@@ -761,7 +761,7 @@ class CommandResource:
             state = current["Value"]["state"]
             schedule = current["Value"]
         else:
-            schedule = { list: get_queue(telescope_id) }
+            schedule = { "list": get_queue(telescope_id) }
             state = "Stopped"
 
         context = get_context(telescope_id, req)
@@ -786,7 +786,7 @@ class MosaicResource:
             schedule = current["Value"]
         else:
             state = "Stopped"
-            schedule = { list: get_queue(telescope_id) }
+            schedule = { "list": get_queue(telescope_id) }
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'mosaic.html', state=state, schedule=schedule, values=values, errors=errors,
@@ -810,7 +810,7 @@ class ScheduleListResource:
             current = do_action_device("get_schedule", telescope_id, {})
             schedule = current["Value"]
         else:
-            schedule = {list: get_queue(telescope_id)}
+            schedule = {"list": get_queue(telescope_id)}
 
         context = get_context(telescope_id, req)
         render_template(req, resp, 'schedule_list.html', schedule=schedule, **context)
