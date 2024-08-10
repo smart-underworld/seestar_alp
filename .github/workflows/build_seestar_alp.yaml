@@ -80,8 +80,8 @@ jobs:
           --add-data="front/CITATION:astroquery" --add-data="front/templates:templates" --add-data="front/public:public" \
           --add-data="front:front" --add-data="device:device"  root_app.py
           cd dist
-          zip -r ../linux_seestar_alp.zip  ./seestar_alp/*
-          echo "device_script_result=linux_seestar_alp.zip" >> $GITHUB_ENV
+          zip -r ../MacOS_seestar_alp.zip  ./seestar_alp/*
+          echo "device_script_result=MacOS_seestar_alp.zip" >> $GITHUB_ENV
         shell: bash
   
       - name: Display Result
