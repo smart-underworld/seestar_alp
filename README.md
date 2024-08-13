@@ -2,18 +2,18 @@
 
 There are many things in this repository to allow you to interact with your Seestar in interesting ways.
 
-./device directory has the code for the actual seestar control program. It accepts and returns JSON strings
-./bruno  This directory has the API to the Seestar in an easy to ues format for the Bruno program or any other program that can send http requests.
+`./device` directory has the code for the actual seestar control program. It accepts and returns JSON strings
+`./bruno`  This directory has the API to the Seestar in an easy to ues format for the Bruno program or any other program that can send http requests.
 
-./docker This directory has instruction and code to create a docker container that has all the things needed to run the GUI and the device control code
+`./docker` This directory has instruction and code to create a docker container that has all the things needed to run the GUI and the device control code
 
-./front This directory has the code to render the Web GUI.  It is named SSC for Simple Seestar Controler. It makes communicating with the Seestar easy.
+`./front` This directory has the code to render the Web GUI.  It is named SSC for Simple Seestar Controler. It makes communicating with the Seestar easy.
 
-./raspberry_pi Here you will find instructions and code to allow you to use a raspberry Pi to host the GUI and the device control software.  If you know RPi this make it very easy to build a standalone device.  You won't have to install anyother softwhere just communicate with it with your browser. Look at the README.md in the directory for more info.
+`./raspberry_pi` Here you will find instructions and code to allow you to use a raspberry Pi to host the GUI and the device control software.  If you know RPi this make it very easy to build a standalone device.  You won't have to install anyother softwhere just communicate with it with your browser. Look at the README.md in the directory for more info.
 
-./templates This directory contains device driver templates for building a new part of an alpaca driver. It is Python code, you probably won't need this unless you are a very advanced user.
+`./templates` This directory contains device driver templates for building a new part of an alpaca driver. It is Python code, you probably won't need this unless you are a very advanced user.
 
-./thunder-test is the start of unit testing of the code with the Thunder product
+`./thunder-test` is the start of unit testing of the code with the Thunder product
 
 Along the right side of the page you will see the release information. When you look in a release you will see the source code for the release as well as zips for single directory installation of the project.
 
@@ -32,13 +32,13 @@ If you just want to use the GUI and commnicate with your Seestar then the single
 The easiest way to install and run on Windows is to download a zip file that will allow you to run from one .exe file
 and everything will come up. If you want to run from source code then you will need to follow the Mac/Source install below.
 
-Download win_seestar_alp.zip from the current release at:
-    <https://github.com/smart-underworld/seestar_alp/releases>
+Download win_seestar_alp.zip or linux_seestar_alp.zip from the lastest release tagged 1.1.0b1PullXXX at:
+    <https://github.com/rrowley42/seestar_alp/releases>
 
 Unzip the file and put the enclosed folder anywhere you would like.
 Open a command window and navigate the the foler that contains seestar_alp.exe
 Now execute seestar.exe
-At first all you will see here is the path to the config.toml, as commands are sent more info will be in the terminal window.
+At first all you will see here is the path to the config.toml, as commands are sent, more info will be in the terminal window.
 Once the program prints this path it is ready to go.  If the Seestar is not turned on you will see messages in this command windows.
 
 The web interface should be available in your browser at <http://localhost:5432/>.
@@ -47,7 +47,10 @@ If you need to modify the config.toml file it is located in the _internal subdir
 Log files named alpaca.log will be written to the same directory as the executable
 Ctrl-c will close the windows when you are finished
 
-### Mac or Srouce code 
+#### Updating from prior version (Windows/Linux)
+Rename the directory that you are currently using for the code and download and install the new version.  This give you a way to revert to the old version if there is an issue.  You will need to make any changes to your config.toml in the new version.
+
+### Mac or Source code 
 Because of code signing issues the Mac can't use the one folder solution described for windows/linux, instead you will need to run from source code.
 
 Install Python on your system.     <https://www.python.org/downloads/>
@@ -99,6 +102,8 @@ From the Collections menu item in Bruno, select the 'Seestar Alpaca API'
 Use Bruno to test out control of your seestar using the "GettingStarted" section
 Be sure to set your environment to target your specfic Seestar.
 
+#### Updating from prior version (Mac/Source Code)
+Rename the directory that you are currently using for the code and download and install the new version.  This give you a way to revert to the old version if there is an issue.  You will need to make any changes to your config.toml in the new version.
 
 ### Raspberry Pi
 Follow the instructions in the readme.md file in the raspberry_pi directory
@@ -121,13 +126,14 @@ Github
 
 
 
-## Version XXX, August X, 2024
+## Current code
 
 - This version provides a unified web and device interface. You don't have to run two differnt programs, just one. 
 - The web interface has been significantly enhanced to now allow you to send commands as well as see and set many of the configuration parameters that are used by the Seestar.
 - The schedule page has been improved and now allows you to Clear the schedule, save and load schedules
 - this may be removed   You can display your local sun rise/sun set times
 - It now gives visual feedback as to where in the schedule it is currently executing.
+- Schedule creation can be done when not connected to the Seestar
 - There are many many ways you can enter the RA/DEC of a desired target on the Image and Mosaic pages or when you want to schedule an image or mosaic:
     1. Enter the name of the target in the image name field and press the search icon and the RA/DEC will be retreived from Simbad. It will also flag the data as J2000, and turn on the LP filter if the object is an HII region, Emission Nebula, Planetary Nebula or a Supernova Remnant.
     2.  If you have Stallarium configued to allow communcation from outside sources with the remote plugin, you can select an object in Stellarium and on the SSC page press the star icon and it will retreive the RA/DEC, check the J2000 box, and check the LP Filter box if the object is of type HII region, Emission Nebula, Planetary Nebula or a Supernova Remnant.
@@ -147,44 +153,4 @@ Github
 This project, based on AlpacaDevice, is a lightweight Python framework to control and automate all aspect of Seestar S50.
 It implements and extends the Alpaca protocol and ASCOM Standards
 
-
-============================   I recommend that we remove this quick start guide and use the instructions abovve
-
-## Quick Start
-
-Configure the list of Seestars you will be controlling by updating the last portion of the config file device/config.toml.
-You can add as many Seestars as you like.
-
-Install python3 for your system.
-
-For Windows, you will need to install the build tool as well. Follow this link for detailed steps:
-https://stackoverflow.com/questions/64261546/how-to-solve-error-microsoft-visual-c-14-0-or-greater-is-required-when-inst
-
-Install python required libraries:
-
-```shell
-pip install -r requirements.txt
-```
-
-Install bruno and open the collection inside Bruno folder.
-
-bruno is a simple GUI for calling Seestar Alpaca API commands.
-
-Run seestar_alp by navigating to the device folder and issue the command:
-
-```shell
-python3 app.py
-``` 
-
-Use bruno to test out control of your seestar using the "GettingStarted" section
-Be sure to set your environment to target your specfic Seestar.
-
-To run the new experimental web interface, make sure seestar_alp is already running, and 
-navigate to the `front` folder and run the following command:
-
-```shell
-python3 app.py
-```
-
-The web interface should be available at <http://localhost:5432/>.
 
