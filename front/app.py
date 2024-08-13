@@ -120,8 +120,6 @@ def get_ip():
 def update_twilight_times(latitude=None, longitude=None):
     observer = ephem.Observer()
     observer.date = datetime.now()
-    observer.pressure = 0
-    observer.horizon = 0
     local_timezone = get_localzone()
     sun = ephem.Sun()
     current_date_formatted = str(datetime.now().strftime("%Y-%m-%d"))
@@ -129,8 +127,10 @@ def update_twilight_times(latitude=None, longitude=None):
     if (latitude == None and longitude == None):
         if internet_connection:
                 geo = geocoder.ip('me')
-                observer.lat = str(geo.latlng[0])
-                observer.lon = str(geo.latlng[1])
+                latitude = str(geo.latlng[0])
+                longitude = str(geo.latlng[1])
+                observer.lat = str(geo.latlng[0]) #ephem likes str
+                observer.lon = str(geo.latlng[1]) #ephem likes str
         else:
             twilight_times = {
                 "Info": "No internet connection detected on the device running SSC. Please set Latitude and Longitude.",
@@ -141,33 +141,27 @@ def update_twilight_times(latitude=None, longitude=None):
             # Don't update the cache file.
             return twilight_times
     else:
-        observer.lat = latitude
-        observer.lon = longitude
+        observer.lat = str(latitude) #ephem likes str
+        observer.lon = str(longitude) #ephem likes str
 
     # Sunrise & Sunset
-    utc_sunset = observer.next_setting(sun)
-    loc_sunset = pytz.utc.localize(utc_sunset.datetime()).astimezone(local_timezone)
-    utc_next_sunrise = observer.next_rising(sun)
-    loc_next_sunrise = pytz.utc.localize(utc_next_sunrise.datetime()).astimezone(local_timezone)
+    loc_sunset = pytz.utc.localize(observer.next_setting(sun).datetime()).astimezone(local_timezone)
+    loc_next_sunrise = pytz.utc.localize(observer.next_rising(sun).datetime()).astimezone(local_timezone)
 
     # Civil Beginning and End
     observer.horizon = '-6' # -6=civil twilight, -12=nautical, -18=astronomical
-    utc_end_civil = observer.next_setting(sun, use_center=True)
-    loc_end_civil = pytz.utc.localize(utc_end_civil.datetime()).astimezone(local_timezone)
-    utc_next_beg_civil = observer.next_rising(sun, use_center=True)
-    loc_next_beg_civil = pytz.utc.localize(utc_next_beg_civil.datetime()).astimezone(local_timezone)
+    loc_end_civil = pytz.utc.localize(observer.next_setting(sun, use_center=True).datetime()).astimezone(local_timezone)
+    loc_next_beg_civil = pytz.utc.localize(observer.next_rising(sun, use_center=True).datetime()).astimezone(local_timezone)
 
     # Astronomical Beginning and End
     observer.horizon = '-18' # -6=civil twilight, -12=nautical, -18=astronomical
-    utc_beg_astronomical = observer.next_setting(sun, use_center=True)
-    loc_beg_astronomical = pytz.utc.localize(utc_beg_astronomical.datetime()).astimezone(local_timezone)
-    utc_next_end_astronomical = observer.next_rising(sun, use_center=True)
-    loc_next_end_astronomical = pytz.utc.localize(utc_next_end_astronomical.datetime()).astimezone(local_timezone)
+    loc_beg_astronomical = pytz.utc.localize(observer.next_setting(sun, use_center=True).datetime()).astimezone(local_timezone)
+    loc_next_end_astronomical = pytz.utc.localize(observer.next_rising(sun, use_center=True).datetime()).astimezone(local_timezone)
 
     twilight_times = {
         "Today's Date": current_date_formatted,
-        "Latitude": str(observer.lat),
-        "Longitude": str(observer.lon),
+        "Latitude": str(latitude),
+        "Longitude": str(longitude),
         "Today's Sunset": str(loc_sunset),
         "Next Sunrise": str(loc_next_sunrise),
         "Today's Civil End": str(loc_end_civil),
@@ -211,8 +205,8 @@ def get_twilight_times():
             logger.info(f"Twilight times: Cache file out of date, updating cache file.")
 
             # Use lat and lon from the cache file
-            latitude = twilight_times["Latitude"]
-            longitude  = twilight_times["Longitude"]
+            latitude = str(twilight_times["Latitude"])
+            longitude  = str(twilight_times["Longitude"])
             
             # Update the cache file
             twilight_times = update_twilight_times(latitude, longitude)
@@ -622,7 +616,7 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
         current = do_action_device("get_schedule", telescope_id, {})
         schedule = current["Value"]
     else:
-        schedule = { list: get_queue(telescope_id) }
+        schedule = { "list": get_queue(telescope_id) }
 
     if(Config.twilighttimes):
         twilight_times = get_twilight_times()
@@ -745,7 +739,7 @@ class ImageResource:
             schedule = current["Value"]
         else:
             state = "Stopped"
-            schedule = { list: get_queue(telescope_id) }
+            schedule = { "list": get_queue(telescope_id) }
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors,
@@ -767,7 +761,7 @@ class CommandResource:
             state = current["Value"]["state"]
             schedule = current["Value"]
         else:
-            schedule = { list: get_queue(telescope_id) }
+            schedule = { "list": get_queue(telescope_id) }
             state = "Stopped"
 
         context = get_context(telescope_id, req)
@@ -792,7 +786,7 @@ class MosaicResource:
             schedule = current["Value"]
         else:
             state = "Stopped"
-            schedule = { list: get_queue(telescope_id) }
+            schedule = { "list": get_queue(telescope_id) }
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'mosaic.html', state=state, schedule=schedule, values=values, errors=errors,
@@ -816,7 +810,7 @@ class ScheduleListResource:
             current = do_action_device("get_schedule", telescope_id, {})
             schedule = current["Value"]
         else:
-            schedule = {list: get_queue(telescope_id)}
+            schedule = {"list": get_queue(telescope_id)}
 
         context = get_context(telescope_id, req)
         render_template(req, resp, 'schedule_list.html', schedule=schedule, **context)
