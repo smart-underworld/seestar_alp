@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash -ex
 
 src_home=$(cd $(dirname $0)/.. && pwd)
 
@@ -25,11 +25,45 @@ else
   cp device/config.toml device/config.toml.bak
 fi
 
-sudo  pip install -r requirements.txt --break-system-packages
+sudo apt-get update --yes
+sudo apt-get install --yes libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev libgdbm-dev lzma lzma-dev tcl-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev wget curl make build-essential openssl
+
+# pyenv
+if [ ! -e ~/.pyenv ]; then
+  curl https://pyenv.run | bash
+  cat <<_EOF >> ~/.bashrc
+# start seestar_alp
+export PYENV_ROOT="\$HOME/.pyenv"
+[[ -d \$PYENV_ROOT/bin ]] && export PATH="\$PYENV_ROOT/bin:\$PATH"
+eval "\$(pyenv init -)"
+eval "\$(pyenv virtualenv-init -)"
+# end seestar_alp
+_EOF
+
+  export PYENV_ROOT="$HOME/.pyenv"
+  [[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+  eval "$(pyenv init -)"
+  eval "$(pyenv virtualenv-init -)"
+
+  pyenv install 3.12.5
+  pyenv virtualenv 3.12.5 ssc-3.12.5
+
+  pyenv global ssc-3.12.5
+
+else
+  export PYENV_ROOT="$HOME/.pyenv"
+  [[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+  eval "$(pyenv init -)"
+  eval "$(pyenv virtualenv-init -)"
+fi
+
+pip install -r requirements.txt
 
 cd raspberry_pi
 
-cat systemd/seestar.service | sed -e "s|/home/.*/seestar_alp|$src_home|g" > /tmp/seestar.service
+cat systemd/seestar.service | sed \
+  -e "s|/home/.*/seestar_alp|$src_home|g" \
+  -e "s|^ExecStart=.*|ExecStart=$HOME/.pyenv/versions/ssc-3.12.5/bin/python3 $src_home/root_app.py|" > /tmp/seestar.service
 sudo chown root:root /tmp/seestar*.service
 
 sudo rm -f /etc/systemd/system/seestar*
