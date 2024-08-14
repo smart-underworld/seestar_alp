@@ -28,7 +28,9 @@ If you just want to use the GUI and commnicate with your Seestar then the single
 
 ## Installation
 
-### Windows/Linux
+### Standalone package
+
+#### Windows/Linux
 The easiest way to install and run on Windows is to download a zip file that will allow you to run from one .exe file
 and everything will come up. If you want to run from source code then you will need to follow the Mac/Source install below.
 
@@ -47,33 +49,69 @@ If you need to modify the config.toml file it is located in the _internal subdir
 Log files named alpaca.log will be written to the same directory as the executable
 Ctrl-c will close the windows when you are finished
 
-#### Updating from prior version (Windows/Linux)
+##### Updating from prior version (Windows/Linux)
 Rename the directory that you are currently using for the code and download and install the new version.  This give you a way to revert to the old version if there is an issue.  You will need to make any changes to your config.toml in the new version.
 
+<<<<<<< Updated upstream
 ### Mac or Source code 
 Because of code signing issues the Mac can't use the one folder solution described for windows/linux, instead you will need to run from source code.
+=======
+### Source code
+>>>>>>> Stashed changes
 
-Install Python on your system.     <https://www.python.org/downloads/>
+#### Ensure development tools are installed
+
+-  ##### Mac
+
+    Because of code signing issues the Mac can't use the one folder solution described for windows/linux, instead you will need to run from source code.
+
+    ##### Ensure xcode command line tools are installed:
+    ```
+    xcode-select -p
+    ```
+    If the above prints an error, rather than an install path - you need to install `XCode command line tools` via:
+    ```
+    xcode-select --install
+    ```
+    This will ensure the apps like `git` and `python3` are installed.
+
+    ##### Create an alias from `python3` to `python` (optional)
+
+    This tutorial references the `python` executable, rather than `python3`. To avoid confusion, you can create an alias (and equivalent `pip` alias):
+    ```
+    echo "alias python='python3'" >> ~/.zprofile
+    echo "alias pip='pip3'" >> ~/.zprofile
+    ```
+
+- ##### Windows
+    - Install Python on your system.     <https://www.python.org/downloads/>
+
+    - Download and install the following:
+        <https://visualstudio.microsoft.com/visual-cpp-build-tools/>
 
 
-On Mac
-    You will need to download and install xcode from the App Store.
+#### Get the seestar_alp code, and install requirements
 
-On Windows you will need to download the following:
-    <https://visualstudio.microsoft.com/visual-cpp-build-tools/>
+You have the choice of running from a versioned, point-in-time release of the code, or to use the latest source in `git`
 
+- Zip file release
+    Download the source file zip from the current relelase at:
 
-Download the source file zip from the current relelase at:
     <https://github.com/smart-underworld/seestar_alp/releases>
 
-or download the lastest code from here
-    <https://github.com/smart-underworld/seestar_alp>
+    Unzip the file and put the resultant directory wherever you want it.
 
-Unzip the file and put the resultant directory wherever you want it.
+- Latest source:
 
+<<<<<<< Updated upstream
 Note:
     pip is known as pip3 on the Mac, on windows you may use pip or pip3
     python or python3 will work on both Windows or Mac
+=======
+    ```
+    git clone https://github.com/smart-underworld/seestar_alp
+    ```
+>>>>>>> Stashed changes
 
 Load the project dependencies by issuing the following in the directory where you unpacked the code
 ```
