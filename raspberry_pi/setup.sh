@@ -9,7 +9,7 @@ if [ -e seestar_alp ] || [ -e ~/seestar_alp ]; then
 fi
 
 sudo apt-get update
-sudo apt-get install -y git python3-pip
+sudo apt-get install --yes git python3-pip libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev libgdbm-dev lzma lzma-dev tcl-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev wget curl make build-essential openssl
 
 git clone https://github.com/smart-underworld/seestar_alp.git
 cd  seestar_alp
@@ -22,10 +22,31 @@ if [ ! -e device/config.toml ]; then
     sed -i -e 's|log_prefix =.*|log_prefix = "logs/"|g' device/config.toml
 fi
 
-sudo  pip install -r requirements.txt --break-system-packages
+curl https://pyenv.run | bash
+cat <<_EOF >> ~/.bashrc
+# start seestar_alp
+export PYENV_ROOT="\$HOME/.pyenv"
+[[ -d \$PYENV_ROOT/bin ]] && export PATH="\$PYENV_ROOT/bin:\$PATH"
+eval "\$(pyenv init -)"
+eval "\$(pyenv virtualenv-init -)"
+# end seestar_alp
+_EOF
+
+export PYENV_ROOT="$HOME/.pyenv"
+[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+eval "$(pyenv virtualenv-init -)"
+
+pyenv install 3.12.5
+pyenv virtualenv 3.12.5 ssc-3.12.5
+pyenv global ssc-3.12.5
+
+pip install -r requirements.txt
 
 cd raspberry_pi
-cat systemd/seestar.service | sed -e "s|/home/.*/seestar_alp|$src_home|g" > /tmp/seestar.service
+cat systemd/seestar.service | sed \
+  -e "s|/home/.*/seestar_alp|$src_home|g" \
+  -e "s|^ExecStart=.*|ExecStart=$HOME/.pyenv/versions/ssc-3.12.5/bin/python3 $src_home/root_app.py|" > /tmp/seestar.service
 sudo mv /tmp/seestar.service /etc/systemd/system
 
 sudo systemctl daemon-reload
