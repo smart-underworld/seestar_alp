@@ -32,15 +32,21 @@ eval "\$(pyenv virtualenv-init -)"
 # end seestar_alp
 _EOF
 
-source ~/.bashrc
+export PYENV_ROOT="$HOME/.pyenv"
+[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+eval "$(pyenv virtualenv-init -)"
+
 pyenv install 3.12.5
 pyenv virtualenv 3.12.5 ssc-3.12.5
 pyenv global ssc-3.12.5
 
-sudo  pip install -r requirements.txt --break-system-packages
+pip install -r requirements.txt
 
 cd raspberry_pi
-cat systemd/seestar.service | sed -e "s|/home/.*/seestar_alp|$src_home|g" > /tmp/seestar.service
+cat systemd/seestar.service | sed \
+  -e "s|/home/.*/seestar_alp|$src_home|g" \
+  -e "s|^ExecStart=.*|ExecStart=$HOME/.pyenv/versions/ssc-3.12.5/bin/python3 $src_home/root_app.py|" > /tmp/seestar.service
 sudo mv /tmp/seestar.service /etc/systemd/system
 
 sudo systemctl daemon-reload
