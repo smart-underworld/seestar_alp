@@ -5,10 +5,15 @@
 #
 import socket
 import threading
+import zipfile
+from io import BytesIO
+from struct import unpack, calcsize
 from time import sleep
 import sys
 import os
 import rtsp
+from astropy.visualization.stretch import SinhStretch, LinearStretch
+from astropy.visualization import ImageNormalize
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "."))
 
@@ -29,7 +34,9 @@ import log
 # {  "id" : 255,  "method" : "start_scan_planet"}
 
 # Port 4800
-# {  "id" : 21,  "method" : "begin_streaming"}
+#   {  "id" : 21,  "method" : "begin_streaming"}
+# Star:
+#   {  "id" : 23,  "method" : "get_stacked_img"}
 
 class SeestarImaging:
     def __new__(cls, *args, **kwargs):
@@ -46,7 +53,7 @@ class SeestarImaging:
         self.raw_img = None
         self.s = None
         self.is_connected = False
-        self.mode = "stream"  # preview | stack | stream
+        self.mode = "preview"  # preview | stack | stream
         self.frame = 0
 
     def __repr__(self):
@@ -102,7 +109,10 @@ class SeestarImaging:
             self.get_image_thread.name = f"ReceiveImageThread.{self.device_name}"
             self.get_image_thread.start()
 
-            self.send_message('{  "id" : 21,  "method" : "begin_streaming"}' + "\r\n")
+            if self.mode == "stack":
+                self.send_message('{"id": 23, "method": "get_stacked_img"}' + "\r\n")
+            else:
+                self.send_message('{  "id" : 21,  "method" : "begin_streaming"}' + "\r\n")
         else:
             self.get_stream_thread = threading.Thread(target=self.streaming_thread_fn, daemon=True)
             self.get_stream_thread.name = f"ReceiveStreamThread.{self.device_name}"
@@ -110,15 +120,44 @@ class SeestarImaging:
 
     def receive_message_thread_fn(self):
         # read and discard the initial header
-        print("starting receive message: starting read initial header")
-        self.read_bytes(80)
-        self.read_bytes(4)
+        if self.mode == "preview":
+            print("starting receive message: starting read initial header")
+            header = self.read_bytes(80)
+            size = self.parse_header(header)
+            self.read_bytes(size)
         print("starting receive message: main loop")
         while self.is_connected:
             # todo : make this something that can timeout, but don't make timeout too short...
-            self.read_bytes(80)
-            self.raw_img = self.read_bytes(1080 * 1920 * 2)
-            print("read image", len(self.raw_img))
+            header = self.read_bytes(80)
+            size = self.parse_header(header)
+            data = None
+            if size is not None:
+                data = self.read_bytes(size)
+
+            if data is not None:
+                if self.mode == "preview":
+                    self.raw_img = data
+                else:
+                    # for stacking, we have to extract
+
+                    zip_file = BytesIO(data)
+                    with zipfile.ZipFile(zip_file) as zip:
+                        contents = {name: zip.read(name) for name in zip.namelist()}
+                        self.raw_img = contents['raw_data']
+
+                print("read image", len(self.raw_img))
+
+    def parse_header(self, header):
+        if header is not None and len(header) > 20:
+            # We ignore all values at end of header...
+            header = header[:20]
+            fmt = ">HHHIHHHHH"
+            print("size:", calcsize(fmt))
+            _s1, _s2, _s3, size, _s5, _s6, _s7, width, height = unpack(fmt, header)
+            print(f"header: {size=} {width=} {height=} {_s1=} {_s2=} {_s3=}")
+
+            return size
+        return 0
 
     def streaming_thread_fn(self):
         print("starting streaming thread")
@@ -132,7 +171,6 @@ class SeestarImaging:
                     print("getting image", self.frame)
                 image = client.read(raw=True)
                 if image is not None:
-                    #image.resize([540, 960])
                     self.raw_img = image
                     self.frame += 1
                 sleep(0.025)
@@ -160,7 +198,10 @@ class SeestarImaging:
         return data
 
     def get_star_preview(self):
-        img = np.frombuffer(self.raw_img, np.uint16).reshape(1920, 1080)
+        size = np.uint16
+        if self.mode == "stack":
+            size = np.uint32
+        img = np.frombuffer(self.raw_img, size).reshape(1920, 1080)
         img_in_range_0to1 = img.astype(np.float32) / (
                 2 ** 16 - 1)  # Convert to type float32 in range [0, 1] (before applying gamma correction).
         gamma_img = lin2rgb(img_in_range_0to1)
@@ -195,16 +236,25 @@ class SeestarImaging:
                 case _:
                     if self.is_connected and self.raw_img is not None:
                         frame += 1
-                        image = self.get_star_preview()
+                        image = self.raw_img  # self.get_star_preview()
                     delay = 0.5
 
             if image is not None:
-                #print("yielding")
+                # print("yielding")
+                # stretch = LinearStretch(slope=0.5, intercept=0.5) + SinhStretch() + \
+                #          LinearStretch(slope=2, intercept=-1)
+                ## ImageNormalize normalizes values to [0,1] before applying the stretch
+                # norm = ImageNormalize(stretch=stretch, vmin=-5, vmax=5)
 
-                imgencode = cv2.imencode('.jpg', image)[1]
-                stringData = imgencode.tobytes()
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + stringData + b'\r\n')
+                try:
+                    imgencode = cv2.imencode('.jpg', image)[1]
+                    stringData = imgencode.tobytes()
+                    print("sending frame")
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + stringData + b'\r\n')
+                except Exception as e:
+                    self.raw_img = None
+                    print(f"exception encoding frame. skipping {e=}")
 
             sleep(delay)
 
@@ -274,7 +324,7 @@ def lin2rgb(im):
 
 logger = log.init_logging()
 imager = SeestarImaging(logger, "192.168.42.251", 4800, 'SeestarB', 1)
-# imager.reconnect()
+imager.reconnect()  # not in stream mode!
 imager.start()
 
 
