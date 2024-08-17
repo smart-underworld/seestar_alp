@@ -315,6 +315,14 @@ def get_device_state(telescope_id):
     if check_api_state(telescope_id):
         print("Device is online", telescope_id)
         result = method_sync("get_device_state", telescope_id)
+        status = method_sync('get_view_state')
+        view_state = "Idle"
+        mode = ""
+        stage = ""
+        if status.get("View"):
+            view_state = status["View"]["state"]
+            mode = status["View"]["mode"]
+            stage = status["View"]["stage"]
         schedule = do_action_device("get_schedule", telescope_id, {})
         device = result["device"]
         focuser = result["focuser"]
@@ -333,7 +341,10 @@ def get_device_state(telescope_id):
             "Charge Status": pi_status["charger_status"],
             "Battery %": pi_status["battery_capacity"],
             "Battery Temp": pi_status["battery_temp"],
-            "Scheduler Status": schedule["Value"]["state"]
+            "Scheduler Status": schedule["Value"]["state"],
+            "View State": view_state,
+            "View Mode": mode,
+            "View Stage": stage,
         }
     else:
         print("Device is OFFLINE", telescope_id)
