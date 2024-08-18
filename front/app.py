@@ -992,19 +992,49 @@ class ScheduleImportResource:
 
 class LivePage:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=1,mode=None):
+        if mode is None:
+            do_action_device("method_async", telescope_id,
+                             {"method": "iscope_stop_view"})
+        else:
+            pass
+            # do_action_device("method_async", telescope_id,
+            #                         {"method": "iscope_start_view", "params": {"mode": mode}})
         status = method_sync('get_view_state')
         logger.info(status)
+        # state = method_sync("get_device_state")
+        # ip = state["station"]["ip"]
+        context = get_context(telescope_id, req)
+        now = datetime.now()
+        render_template(req, resp, 'live.html', mode=mode, now=now, **context)
+
+
+class LiveModeResource:
+    def on_post(self, req, resp, telescope_id=1):
+        mode = req.media["mode"]
+        # xxx: If mode is none, need to cancel things
+        response = do_action_device("method_async", telescope_id,
+                                    {"method": "iscope_start_view", "params": {"mode": mode}})
+        print("iscope_start_view:", response)
+        render_template(req, resp, 'live_mode.html')
+
+
+class LiveStatusResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        status = method_sync('get_view_state')
         view_state = "Idle"
         mode = ""
+        stage = ""
         if status.get("View"):
             view_state = status["View"]["state"]
             mode = status["View"]["mode"]
-        state = method_sync("get_device_state")
-        # ip = state["station"]["ip"]
+            stage = status["View"]["stage"]
         context = get_context(telescope_id, req)
-        render_template(req, resp, 'live.html', mode=f"{view_state} {mode}.", **context)
-        # Of non-star mode, offer to open link:  stream=rtps://{ip}:4554/stream
+        tm = datetime.now().strftime("%H:%M:%S")
+        render_template(req, resp, 'live_status.html',
+                        view_state=view_state, mode=mode, stage=stage,
+                        time=tm, **context)
 
 
 class SearchObjectResource:
@@ -1354,6 +1384,9 @@ def main(device_main):
     app.add_route('/{telescope_id:int}/command', CommandResource())
     app.add_route('/{telescope_id:int}/image', ImageResource())
     app.add_route('/{telescope_id:int}/live', LivePage())
+    app.add_route('/{telescope_id:int}/live/status', LiveStatusResource())
+    app.add_route('/{telescope_id:int}/live/mode', LiveModeResource())
+    app.add_route('/{telescope_id:int}/live/{mode}', LivePage())
     app.add_route('/{telescope_id:int}/mosaic', MosaicResource())
     app.add_route('/{telescope_id:int}/search', SearchObjectResource())
     app.add_route('/{telescope_id:int}/settings', SettingsResource())

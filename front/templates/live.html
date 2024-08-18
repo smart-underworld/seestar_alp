@@ -2,10 +2,27 @@
 
 {% block header %}
     <h1>{% block title %}Live View{% endblock %}</h1>
+    <h2>Mode: {{ mode }}</h2>
 {% endblock %}
 
 {% block content %}
-    <p>{{  mode  }}</p>
+    <div hx-get="{{ root }}/live/status" hx-trigger="load, every 2s">Loading live status...</div>
 
-    <img src="http://localhost:6543/vid" width="360" height="640"/>
+    <p>
+        <a href="{{ root }}/live">None</a> |
+        <a href="{{ root }}/live/star">Star</a> |
+        <a href="{{ root }}/live/sun">Sun</a> |
+        <a href="{{ root }}/live/moon">Moon</a> |
+        <a href="{{ root }}/live/planet">Planet</a> |
+        <a href="{{ root }}/live/scenery">Scenery</a>
+    </p>
+
+    {#    {% if mode %}#}
+    <img src="http://localhost:6543/vid/{{ mode }}" width="360" height="640"/>
+    {#    {% endif %}#}
+
+    <footer class="bg-body-tertiary text-center mt-3">
+        Last updated: {{ now }}
+    </footer>
+
 {% endblock %}
