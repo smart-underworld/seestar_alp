@@ -555,6 +555,9 @@ def do_command(req, resp, telescope_id):
         case "scope_park":
             output = method_sync("scope_park", telescope_id)
             return None
+        case "scope_move_to_horizon":
+            output = method_sync("scope_move_to_horizon", telescope_id)
+            return None
         case "pi_reboot":
             output = method_sync("pi_reboot", telescope_id)
             return None

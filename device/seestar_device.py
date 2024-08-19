@@ -59,6 +59,8 @@ class Seestar:
         # self.schedule['current_item_detail']    # Text description for mosaic?
         self.cur_solve_RA = -9999.0  #
         self.cur_solve_Dec = -9999.0
+        self.cur_mosaic_nRA = -1
+        self.cur_mosaic_nDec = -1
         self.goto_state = "complete"
         self.connect_count = 0
         self.below_horizon_dec_offset = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
@@ -672,10 +674,14 @@ class Seestar:
         self.mosaic_thread.start()
 
     def mosaic_thread_fn(self, target_name, center_RA, center_Dec, is_use_LP_filter, session_time, nRA, nDec,
-                         overlap_percent, gain, is_use_autofocus):
+                         overlap_percent, gain, is_use_autofocus, selected_panels):
         spacing_result = Util.mosaic_next_center_spacing(center_RA, center_Dec, overlap_percent)
         delta_RA = spacing_result[0]
         delta_Dec = spacing_result[1]
+
+        is_use_selected_panels = not selected_panels == ""
+        if is_use_selected_panels:
+            panel_set = selected_panels.split(';')
 
         # adjust mosaic center if num panels is even
         if nRA % 2 == 0:
@@ -687,19 +693,29 @@ class Seestar:
 
         cur_dec = center_Dec - int(nDec / 2) * delta_Dec
         for index_dec in range(nDec):
+            self.cur_mosaic_nDec = index_dec+1
             spacing_result = Util.mosaic_next_center_spacing(center_RA, cur_dec, overlap_percent)
             delta_RA = spacing_result[0]
             cur_ra = center_RA - int(nRA / 2) * spacing_result[0]
             for index_ra in range(nRA):
+                self.cur_mosaic_nRA = index_ra+1
                 if self.scheduler_state != "Running":
                     self.logger.info("Mosaic mode was requested to stop. Stopping")
                     self.scheduler_state = "Stopped"
                     self.scheduler_item_state = "Stopped"
+                    self.cur_mosaic_nDec = -1
+                    self.cur_mosaic_nRA = -1
                     return
+                
+                # check if we are doing a subset of the panels
+                panel_string = str(index_ra + 1) + str(index_dec + 1)
+                if is_use_selected_panels and panel_string not in panel_set:
+                    continue
+
                 if nRA == 1 and nDec == 1:
                     save_target_name = target_name
                 else:
-                    save_target_name = target_name + "_" + str(index_ra + 1) + str(index_dec + 1)
+                    save_target_name = target_name + "_" + panel_string
                 self.logger.info("goto %s", (cur_ra, cur_dec))
                 # set_settings(x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, heater_enable):
                 # TODO: Need to set correct parameters
@@ -742,6 +758,8 @@ class Seestar:
             cur_dec += delta_Dec
         self.logger.info("Finished mosaic.")
         self.scheduler_item_state = "Stopped"
+        self.cur_mosaic_nDec = -1
+        self.cur_mosaic_nRA = -1
 
     def start_mosaic_item(self, params):
         if self.scheduler_state != "Running":
@@ -759,7 +777,14 @@ class Seestar:
         nDec = params['dec_num']
         overlap_percent = params['panel_overlap_percent']
         gain = params['gain']
-        is_use_autofocus = params['is_use_autofocus']
+        if 'is_use_autofocus' in params:
+            is_use_autofocus = params['is_use_autofocus']
+        else:
+            is_use_autofocus = False
+        if not 'selected_panels' in params:
+            selected_panels = ""
+        else:
+            selected_panels = params['selected_panels']
 
         # verify mosaic pattern
         if nRA < 1 or nDec < 0:
@@ -788,10 +813,11 @@ class Seestar:
         self.logger.info("  overlap %%     : %s", overlap_percent)
         self.logger.info("  gain          : %s", gain)
         self.logger.info("  use autofocus : %s", is_use_autofocus)
+        self.logger.info("  select panels : %s", selected_panels)
 
         self.mosaic_thread = threading.Thread(
             target=lambda: self.mosaic_thread_fn(target_name, center_RA, center_Dec, is_use_LP_filter, session_time,
-                                                 nRA, nDec, overlap_percent, gain, is_use_autofocus))
+                                                 nRA, nDec, overlap_percent, gain, is_use_autofocus, selected_panels))
         self.mosaic_thread.start()
 
     def get_schedule(self):

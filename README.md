@@ -3,6 +3,7 @@
 There are many things in this repository to allow you to interact with your Seestar in interesting ways.
 
 `./device` directory has the code for the actual seestar control program. It accepts and returns JSON strings
+
 `./bruno`  This directory has the API to the Seestar in an easy to ues format for the Bruno program or any other program that can send http requests.
 
 `./docker` This directory has instruction and code to create a docker container that has all the things needed to run the GUI and the device control code
