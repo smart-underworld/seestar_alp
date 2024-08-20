@@ -732,14 +732,14 @@ class Seestar:
 
                     if is_use_autofocus == True:
                         result = self.try_auto_focus(2)
-                    else:
+                    if result == False:
+                        self.logger.info("Failed to auto focus, but will continue to next panel anyway.")
                         result = True
                     if result == True:
                         time.sleep(4)
                         if not self.start_stack({"gain": gain, "restart": True}):
                             return
-                        # xxx : is this fully accurate?  as far as way of sleeping per panel?
-                        # xxx : update state to show which panel is running
+
                         for i in range(sleep_time_per_panel):
                             if self.scheduler_state != "Running":
                                 self.logger.info("Scheduler was requested to stop. Stopping current mosaic.")
