@@ -17,12 +17,22 @@
         <a href="{{ root }}/live/scenery">Scenery</a>
     </p>
 
+{#    {{ root }}#}
     {#    {% if mode %}#}
-    <img src="http://localhost:6543/vid/{{ mode }}" width="360" height="640"/>
+    {#    <img src="http://localhost:6543/vid/{{ mode }}" width="1080" height="1920"/>#}
+    <img src="http://localhost:6543/vid/{{ mode }}" width="540" height="960"/>
+    <img src="http://localhost:7654/vid/{{ mode }}" width="540" height="960"/>
+{#    <img src="http://localhost:7654/vid/{{ mode }}" width="360" height="640"/>#}
+{#    <img src="http://localhost:7654/vid/{{ mode }}" width="360" height="640"/>#}
+    {#    <img src="{{ root }}/vid/{{ mode }}" width="360" height="640"/>#}
     {#    {% endif %}#}
 
     <footer class="bg-body-tertiary text-center mt-3">
         Last updated: {{ now }}
     </footer>
 
+{% endblock %}
+
+{% block html_header %}
+    <meta http-equiv="refresh" content="75">
 {% endblock %}

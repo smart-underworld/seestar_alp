@@ -14,6 +14,8 @@
 
 from falcon import Request, Response, HTTPBadRequest, HTTPTemporaryRedirect, before
 from logging import Logger
+
+from device.seestar_imaging import SeestarImaging
 from shr import PropertyResponse, MethodResponse, PreProcessRequest, \
                 get_request_field, to_bool
 from exceptions import *        # Nothing but exception classes
@@ -50,13 +52,31 @@ class TelescopeMetadata:
     MaxDeviceNumber = maxdev
     InterfaceVersion = 3                            # ITelescopeV3
 
+
+global seestar_dev
+global seestar_imager
+
 seestar_dev = {}
+seestar_imager = {}
+
 # At app init not import :-)
 def start_seestar_device(logger: logger, name: str, ip_address: str, port: int, device_num: int): # type: ignore
     logger = logger
     global seestar_dev
     seestar_dev[device_num] = Seestar(logger, ip_address, port, name, device_num, True)
     seestar_dev[device_num].start_watch_thread()
+
+
+def start_seestar_imaging(logger: logger, name: str, ip_address: str, port: int, device_num: int):
+    logger = logger
+    global seestar_imager
+    seestar_imager[device_num] = SeestarImaging(logger, ip_address, port, name, device_num)
+
+
+def get_seestar_imager(device_num: int):
+    global seestar_imager
+    return seestar_imager[device_num]
+
 
 def end_seestar_device(device_num: int):
     seestar_dev[device_num].end_watch_thread()
@@ -65,6 +85,18 @@ def end_seestar_device(device_num: int):
 # --------------------
 # RESOURCE CONTROLLERS
 # --------------------
+
+@before(PreProcessRequest(maxdev))
+class vid:
+    def on_get(self, req: Request, resp: Response, devnum: int):
+        if devnum not in seestar_imager:
+            err = DevNotConnectedException("device not connected.")
+            resp.text = PropertyResponse(None, req, err).json
+            return
+        cur_dev = seestar_imager[devnum]
+        resp.content_type = 'multipart/x-mixed-replace; boundary=frame'
+        resp.stream = cur_dev.get_frame()
+
 
 @before(PreProcessRequest(maxdev))
 class action:

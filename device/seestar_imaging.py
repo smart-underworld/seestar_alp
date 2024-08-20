@@ -7,6 +7,7 @@
 #
 # This is just the beginning
 #
+import datetime
 import socket
 import threading
 import zipfile
@@ -16,10 +17,6 @@ from struct import unpack, calcsize
 from time import sleep, time
 import sys
 import os
-from PIL import Image
-from astropy.visualization.stretch import SinhStretch, LinearStretch
-from astropy.visualization import ImageNormalize
-from auto_stretch.stretch import Stretch
 from skimage import exposure
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "."))
@@ -92,6 +89,7 @@ class SeestarImaging:
                 case 'planet':
                     self.exposure_mode = 'stream'
                 case 'star':
+                    # look at the stage.  ContinuousExposure = preview
                     self.exposure_mode = 'stack'  # it could stack or preview (need to check)
                 case _:
                     self.exposure_mode = None
@@ -231,13 +229,11 @@ class SeestarImaging:
 
     def streaming_thread_fn(self):
         print("starting streaming thread")
-        ip = "192.168.42.251"
-        # ip="10.0.0.1"
         while True:
             if self.is_streaming:
                 try:
                     empty_images = 0
-                    with RtspClient(rtsp_server_uri=f'rtsp://{ip}:4554/stream', verbose=True) as client:
+                    with RtspClient(rtsp_server_uri=f'rtsp://{self.host}:4554/stream', verbose=True) as client:
                         self.raw_img = client.read(raw=True)
                         self.received_frame += 1
 
@@ -285,43 +281,15 @@ class SeestarImaging:
 
     def get_star_preview(self):
         if self.exposure_mode == "stack":
-            # img = np.frombuffer(self.raw_img, dtype=np.uint16, count=-1)
             img = np.frombuffer(self.raw_img, dtype=np.uint16).reshape(1920, 1080, 3)
-
-            #img_in_range_0to1 = img.astype(np.float32) / (
-            #       2 ** 16 - 1)  # Convert to type float32 in range [0, 1] (before applying gamma correction).
-            #gamma_img = lin2rgb(img_in_range_0to1)
-            #gamma_img = np.round(gamma_img * 255).astype(
-            #   np.uint8)  # Convert from range [0, 1] to uint8 in range [0, 255].
-
-            #f = open("stacked.raw", "wb")
-            #f.write(self.raw_img)
-            #f.close()
-            #gamma_img = gamma_img * 1.1
             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-            # cv2.imwrite('stacked.gamma.tiff', img)
-
-            return img  # Image.fromarray(img, 'RGB')
+            return img
 
         img = np.frombuffer(self.raw_img, np.uint16).reshape(1920, 1080)
-        # img = (img >> 8) + (img << 8) # Convert big endian to little endian
         img = cv2.cvtColor(img, cv2.COLOR_BAYER_GRBG2BGR)
-
-        # img_in_range_0to1 = img.astype(np.float32) / (
-        #        2 ** 16 - 1)  # Convert to type float32 in range [0, 1] (before applying gamma correction).
-        # gamma_img = lin2rgb(img_in_range_0to1)
-        # gamma_img = np.round(gamma_img * 255).astype(
-        #    np.uint8)  # Convert from range [0, 1] to uint8 in range [0, 255].
-
-        ## gamma_img = gamma_img * 1.1
-
-        # New to debayer here!
-
         return img
 
     def image_stretch(self, img):
-        # stretched_image = Stretch().stretch(img)
-        # return stretched_image
         # https://scikit-image.org/docs/stable/auto_examples/color_exposure/plot_equalize.html
         # Contrast stretching
         p2, p98 = np.percentile(img, (2, 99.5))
@@ -333,6 +301,9 @@ class SeestarImaging:
 
         # Adaptive Equalization
         # img_adapteq = exposure.equalize_adapthist(img, clip_limit=0.03)
+
+        # stretched_image = Stretch().stretch(img)
+        # return stretched_image
 
         return img_rescale
 
@@ -361,7 +332,7 @@ class SeestarImaging:
                         try:
                             image = self.get_star_preview()
                             image = self.image_stretch(image)
-                            cv2.imwrite('stacked.png', image)
+                            # cv2.imwrite('stacked.png', image)
                         except Exception as e:
                             # if buffer is misformed, just catch error
                             print(f"misformed buffer exception... {e}")
@@ -371,9 +342,18 @@ class SeestarImaging:
             if image is not None:
                 try:
                     if self.last_frame != self.received_frame:
+                        font = cv2.FONT_HERSHEY_SCRIPT_COMPLEX
+
+                        dt = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-5]
+
+                        image = cv2.putText(image, dt, # f'{dt} {self.received_frame}',
+                                            (300, 1850),
+                                            font, 1,
+                                            (210, 210, 210),
+                                            4, cv2.LINE_8)
                         imgencode = cv2.imencode('.png', image)[1]
                         stringData = imgencode.tobytes()
-                        print("sending frame", len(stringData))
+                        # print("sending frame bytes=", len(stringData))
 
                         # Update stats!
                         self.sent_frame += 1
@@ -402,57 +382,30 @@ class SeestarImaging:
                         pass
                         # print("skipping send")
                 except Exception as e:
-                    # self.raw_img = None
                     print(f"exception encoding frame. skipping {e=}")
 
             sleep(delay)
-
-            # l = -1
-            # if image is not None:
-            #     l = len(image)
-            # print("frame", frame, self.is_connected, l, self.raw_img is not None)
 
 
 from flask import Flask, render_template, Response
 import numpy as np
 import cv2
+
+
 import sys
-import numpy
-import os
-
-app = Flask(__name__)
-
-
-def lin2rgb(im):
-    """ Convert im from "Linear sRGB" to sRGB - apply Gamma. """
-    # sRGB standard applies gamma = 2.4, Break Point = 0.00304 (and computed Slope = 12.92)
-    # lin2rgb MATLAB functions uses the exact formula [we may approximate it to power of (1/gamma)].
-    g = 2.4
-    bp = 0.00304
-    inv_g = 1 / g
-    sls = 1 / (g / (bp ** (inv_g - 1)) - g * bp + bp)
-    fs = g * sls / (bp ** (inv_g - 1))
-    co = fs * bp ** (inv_g) - sls * bp
-
-    srgb = im.copy()
-    srgb[im <= bp] = sls * im[im <= bp]
-    srgb[im > bp] = np.power(fs * im[im > bp], inv_g) - co
-    return srgb
-
-
-logger = log.init_logging()
-imager = SeestarImaging(logger, "192.168.42.251", 4800, 'SeestarB', 1)
-imager.set_mode(None)  # Perhaps not necessary?
-
-
-# imager.reconnect()  # not in stream mode!
-# imager.start()
-
-
-@app.route('/vid/<mode>')
-def vid(mode):
-    return Response(imager.get_frame(mode), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 if __name__ == '__main__':
-    app.run(host='localhost', port=6543, debug=True)  # , threaded=True)
+    app = Flask(__name__)
+
+    host, port, device_num, listen_port = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+    logger = log.init_logging()
+    imager = SeestarImaging(logger, host, port, 'SeestarB', device_num)
+    imager.set_mode(None)  # Perhaps not necessary?
+
+    @app.route('/vid/<mode>')
+    def vid(mode):
+        return Response(imager.get_frame(mode), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+    app.run(host='localhost', port=listen_port, debug=True)  # , threaded=True)

@@ -995,21 +995,32 @@ class ScheduleImportResource:
 
 class LivePage:
     @staticmethod
-    def on_get(req, resp, telescope_id=1,mode=None):
+    def on_get(req, resp, telescope_id=1, mode=None):
+        # XXX need to look at view state before firing off things!
+        status = method_sync('get_view_state')
         if mode is None:
             do_action_device("method_async", telescope_id,
                              {"method": "iscope_stop_view"})
         else:
-            pass
-            # do_action_device("method_async", telescope_id,
-            #                         {"method": "iscope_start_view", "params": {"mode": mode}})
-        status = method_sync('get_view_state')
+            if mode != "star":
+                do_action_device("method_async", telescope_id,
+                                 {"method": "iscope_start_view", "params": {"mode": mode}})
         logger.info(status)
         # state = method_sync("get_device_state")
         # ip = state["station"]["ip"]
         context = get_context(telescope_id, req)
         now = datetime.now()
         render_template(req, resp, 'live.html', mode=mode, now=now, **context)
+
+
+class LiveVideoResource:
+    def __init__(self, device_main):
+        self.device_main = device_main
+
+    def on_get(self, req, resp, telescope_id=1, mode=None):
+        imager = self.device_main.get_imager(telescope_id)
+        resp.content_type = 'multipart/x-mixed-replace; boundary=frame'
+        resp.stream = imager.get_frame(mode)
 
 
 class LiveModeResource:
@@ -1306,6 +1317,9 @@ class AlpResource:
         resp.content_type = 'application/text'
         resp.text = 'Stopped'
 
+    def get_imager(self, device_num: int):
+        return self.device_app.get_imager(device_num)
+
     def runner(self, name):
         logging.info("SeestarAlp %s: starting", name)
         self.device_app.start()
@@ -1420,6 +1434,8 @@ def main(device_main):
         app.add_route("/alp/start", alp_resource, suffix="start")
 
         alp_resource.start()
+
+        app.add_route('/{telescope_id:int}/vid/{mode}', LiveVideoResource(alp_resource))
 
     try:
         # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
