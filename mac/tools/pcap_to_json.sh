@@ -6,4 +6,4 @@ if [ -z "$1" ]; then
   exit 255
 fi
 
-/Applications/Wireshark.app/Contents/MacOS/tshark -r $1 -Tfields -e tcp.payload | xxd -r -p | jq -R "fromjson? | . "
+/Applications/Wireshark.app/Contents/MacOS/tshark -r $1 -Tfields -e tcp.payload -d tcp.port==4700,json -Yjson| xxd -r -p | jq -R "fromjson? | . "
