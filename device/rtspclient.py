@@ -12,13 +12,14 @@ class RtspClient:
     """ Maintain live RTSP feed without buffering. """
     _stream = None
 
-    def __init__(self, rtsp_server_uri, verbose = False):
+    def __init__(self, rtsp_server_uri, logger, verbose = False):
         """
             rtsp_server_uri: the path to an RTSP server. should start with "rtsp://"
             verbose: print log or not
         """
         self.rtsp_server_uri = rtsp_server_uri
         self._verbose = verbose
+        self.logger = logger
 
         self._bg_run = False
         self.open()
@@ -37,7 +38,7 @@ class RtspClient:
             return
         self._stream = cv2.VideoCapture(self.rtsp_server_uri)
         if self._verbose:
-            print("Connected to video source {}.".format(self.rtsp_server_uri))
+            self.logger.info("Connected to video source {}.".format(self.rtsp_server_uri))
         self._bg_run = True
         t = Thread(target=self._update, args=())
         t.daemon = True
@@ -50,7 +51,7 @@ class RtspClient:
         self._bg_run = False
         self._bgt.join()
         if self._verbose:
-            print("Disconnected from {}".format(self.rtsp_server_uri))
+            self.logger.info("Disconnected from {}".format(self.rtsp_server_uri))
 
     def isOpened(self):
         """ return true if stream is opened and being read, else ensure closed """

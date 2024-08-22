@@ -6,7 +6,7 @@
 {% endblock %}
 
 {% block content %}
-    <div hx-get="{{ root }}/live/status" hx-trigger="load, every 2s">Loading live status...</div>
+    <div hx-get="{{ root }}/live/status" hx-trigger="load, every 5s">Loading live status...</div>
 
     <p>
         <a href="{{ root }}/live">None</a> |
@@ -17,13 +17,17 @@
         <a href="{{ root }}/live/scenery">Scenery</a>
     </p>
 
-{#    {{ root }}#}
-    {#    {% if mode %}#}
+    <img src="{{ imager_root }}/vid/{{ mode }}" width="360" height="640"/>
+
+{#    {% if root == "/1" %}#}
+{#        <img src="http://localhost:6543/vid/{{ mode }}" width="360" height="640"/>#}
+{#    {% else %}#}
+{#        <img src="http://localhost:7654/vid/{{ mode }}" width="540" height="960"/>#}
+{#    {% endif %}#}
+
     {#    <img src="http://localhost:6543/vid/{{ mode }}" width="1080" height="1920"/>#}
-    <img src="http://localhost:6543/vid/{{ mode }}" width="540" height="960"/>
-    <img src="http://localhost:7654/vid/{{ mode }}" width="540" height="960"/>
-{#    <img src="http://localhost:7654/vid/{{ mode }}" width="360" height="640"/>#}
-{#    <img src="http://localhost:7654/vid/{{ mode }}" width="360" height="640"/>#}
+    {#    <img src="http://localhost:7654/vid/{{ mode }}" width="360" height="640"/>#}
+    {#    <img src="http://localhost:7654/vid/{{ mode }}" width="360" height="640"/>#}
     {#    <img src="{{ root }}/vid/{{ mode }}" width="360" height="640"/>#}
     {#    {% endif %}#}
 
@@ -33,6 +37,6 @@
 
 {% endblock %}
 
-{% block html_header %}
-    <meta http-equiv="refresh" content="75">
-{% endblock %}
+{#{% block html_header %}#}
+{#    <meta http-equiv="refresh" content="75">#}
+{#{% endblock %}#}

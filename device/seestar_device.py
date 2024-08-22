@@ -107,7 +107,7 @@ class Seestar:
             self.disconnect()
 
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.s.settimeout(2)
+            self.s.settimeout(5)
             self.s.connect((self.host, self.port))
             # self.s.settimeout(None)
             self.is_connected = True
@@ -223,7 +223,7 @@ class Seestar:
     def send_message_param(self, data):
         cur_cmdid = self.cmdid
         data['id'] = cur_cmdid
-        self.cmdid += 1
+        self.cmdid += 1 # can this overflow?  not in JSON...
         json_data = json.dumps(data)
         self.logger.debug(f'{self.device_name} sending: {json_data}')
         self.send_message(json_data + "\r\n")

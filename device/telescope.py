@@ -1,4 +1,4 @@
-
+import time
 # -*- coding: utf-8 -*-
 #
 # -----------------------------------------------------------------------------
@@ -24,7 +24,10 @@ from alpaca.telescope import *
 import json
 from seestar_util import Util    # RWR
 
-logger: Logger = None
+# logger: Logger = None
+
+seestar_dev = {}
+seestar_imager = {}
 
 # ----------------------
 # MULTI-INSTANCE SUPPORT
@@ -53,24 +56,21 @@ class TelescopeMetadata:
     InterfaceVersion = 3                            # ITelescopeV3
 
 
-global seestar_dev
-global seestar_imager
-
-seestar_dev = {}
-seestar_imager = {}
 
 # At app init not import :-)
 def start_seestar_device(logger: logger, name: str, ip_address: str, port: int, device_num: int): # type: ignore
-    logger = logger
+    # logger = logger
     global seestar_dev
     seestar_dev[device_num] = Seestar(logger, ip_address, port, name, device_num, True)
     seestar_dev[device_num].start_watch_thread()
+    return seestar_dev[device_num]
 
 
-def start_seestar_imaging(logger: logger, name: str, ip_address: str, port: int, device_num: int):
-    logger = logger
+def start_seestar_imaging(logger: logger, name: str, ip_address: str, port: int, device_num: int, device: Seestar = None):
+    # logger = logger
     global seestar_imager
-    seestar_imager[device_num] = SeestarImaging(logger, ip_address, port, name, device_num)
+    seestar_imager[device_num] = SeestarImaging(logger, ip_address, port, name, device_num, device)
+    return seestar_imager[device_num]
 
 
 def get_seestar_imager(device_num: int):
@@ -79,6 +79,7 @@ def get_seestar_imager(device_num: int):
 
 
 def end_seestar_device(device_num: int):
+    global seestar_dev
     seestar_dev[device_num].end_watch_thread()
 
 

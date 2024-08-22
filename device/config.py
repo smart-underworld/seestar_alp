@@ -81,6 +81,7 @@ class Config:
     # ---------------
     ip_address: str = get_toml('network', 'ip_address', '127.0.0.1')
     port: int = get_toml('network', 'port', 5555)
+    imgport: int = get_toml('network', 'imgport', 5556)
     stport: int = get_toml('network', 'stport', 8090)
     sthost: str = get_toml('network', 'sthost', 'localhost')
 
