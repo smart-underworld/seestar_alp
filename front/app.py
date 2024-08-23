@@ -1062,7 +1062,7 @@ class LiveModeResource:
 class LiveStatusResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
-        status = method_sync('get_view_state')
+        status = method_sync('get_view_state', telescope_id)
         view_state = "Idle"
         mode = ""
         stage = ""

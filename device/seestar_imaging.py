@@ -325,7 +325,7 @@ class SeestarImaging:
         if np.min(image_array) < 0 or np.max(image_array > 1):
             image_array = exposure.rescale_intensity(image_array, out_range=(0, 1))
 
-        image_display = stretch(image_array, StretchParameters("20% Bg, 3 sigma"))
+        image_display = stretch(image_array, StretchParameters("15% Bg, 3 sigma"))
         image_display = image_display * 255
 
         # if image_display.shape[2] == 1:
@@ -440,6 +440,8 @@ class SeestarImaging:
                         try:
                             image = self.get_star_preview()
                             image = self.image_stretch_graxpert(image)
+                            # image = np.uint8(np.clip(image, 0, 255))
+                            # image = cv2.fastNlMeansDenoisingColored(image,None,10,10,7,21)
                             # cv2.imwrite('stacked.png', image)
                         except Exception as e:
                             # if buffer is misformed, just catch error
