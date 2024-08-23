@@ -431,6 +431,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
     ra, raPanels = form["ra"], form["raPanels"]
     dec, decPanels = form["dec"], form["decPanels"]
     panelOverlap = form["panelOverlap"]
+    panelSelect = form["panelSelect"]
     useJ2000 = form.get("useJ2000") == "on"
     sessionTime = form["sessionTime"]
     useLpfilter = form.get("useLpFilter") == "on"
@@ -447,6 +448,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
         "ra_num": int(raPanels),
         "dec_num": int(decPanels),
         "panel_overlap_percent": int(panelOverlap),
+        "selected_panels": panelSelect,
         "gain": int(gain),
         "is_use_autofocus": useAutoFocus
     }

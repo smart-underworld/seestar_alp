@@ -95,13 +95,20 @@
                 {#                    </div>#}
             </div>
 
-            <div class="mb-3">
-                <label for="panelOverlap" class="form-label">Panel Overlap (%)</label>
-                <input type="text" class="form-control" id="panelOverlap" name="panelOverlap"
+			<div class="mb-3 row">
+				<div class="mb-3 col">
+					<label for="panelOverlap" class="form-label">Panel Overlap (%)</label>
+					<input type="text" class="form-control" id="panelOverlap" name="panelOverlap"
                        aria-describedby="panelOverlapHelp" value="{{ values.panel_overlap_percent }}" required>
-                <div id="panelOverlapHelp" class="form-text">Overlap of panels in percentage</div>
-            </div>
-
+					<div id="panelOverlapHelp" class="form-text">Overlap of panels in percentage</div>
+				</div>
+				<div class="mb-3 col">
+					<label for="panelSelect" class="form-label">Selected Panels (optional)</label>
+					<input type="text" class="form-control" id="panelSelect" name="panelSelect"
+						aria-describedby="panelSelectHelp" value="{{ values.selected_panels }}">
+					<div id="panelSelectHelp" class="form-text">Panels you want to image from mosaic</div>
+				</div>
+			</div>
             <div class="mb-3">
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="useJ2000" name="useJ2000">
