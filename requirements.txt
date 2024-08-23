@@ -14,3 +14,4 @@ opencv-python==4.10.0.84
 rtsp==1.1.12
 scikit-image==0.21.0
 Flask==3.0.3
+waitress==3.0.0

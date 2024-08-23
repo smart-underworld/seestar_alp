@@ -84,6 +84,7 @@ class Config:
     imgport: int = get_toml('network', 'imgport', 5556)
     stport: int = get_toml('network', 'stport', 8090)
     sthost: str = get_toml('network', 'sthost', 'localhost')
+    timeout: int = get_toml('network', 'timeout', 5)
 
     # --------------
     # WebUI Section
@@ -91,6 +92,7 @@ class Config:
     uiport: int = get_toml('webui_settings', 'uiport', 5432)
     uitheme: str = get_toml('webui_settings', 'uitheme', 'dark')
     twilighttimes: bool = get_toml('webui_settings', 'twilighttimes', False)
+    experimental: bool = get_toml('webui_settings', 'experimental', False)
 
     # --------------
     # Server Section

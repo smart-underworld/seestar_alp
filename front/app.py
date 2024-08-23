@@ -1,8 +1,6 @@
 import time
 from datetime import datetime
 from tzlocal import get_localzone
-from dateutil import tz
-from sys import prefix
 
 import falcon
 from falcon import HTTPTemporaryRedirect, HTTPFound
@@ -10,7 +8,6 @@ from astroquery.simbad import Simbad
 from jinja2 import Template, Environment, FileSystemLoader
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 from collections import OrderedDict
-from pprint import pprint
 import requests
 import humanize
 import json
@@ -28,7 +25,7 @@ if not getattr(sys, "frozen", False):  # if we are not running from a bundled ap
     sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
 
 from config import Config  # type: ignore
-from log import init_logging # type: ignore
+from log import init_logging  # type: ignore
 import logging
 import threading
 
@@ -46,6 +43,7 @@ queue = {}
 #   on Windows
 #
 requests.packages.urllib3.util.connection.HAS_IPV6 = False
+
 
 def flash(resp, message):
     # todo : set to internal state so it can be used!
@@ -83,16 +81,29 @@ def get_root(telescope_id):
             return root
     return ""
 
+def get_imager_root(telescope_id):
+    if telescope_id:
+        telescopes = get_telescopes()
+        # if len(telescopes) == 1:
+        #     return ""
+
+        telescope = list(filter(lambda tel: tel['device_num'] == telescope_id, telescopes))[0]
+        if telescope:
+            root = f"http://{Config.ip_address}:{Config.imgport}/{telescope['device_num']}"
+            return root
+    return ""
 
 def get_context(telescope_id, req):
     # probably a better way of doing this...
     telescope = get_telescope(telescope_id)
     telescopes = get_telescopes()
     root = get_root(telescope_id)
+    imager_root = get_imager_root(telescope_id)
     online = check_api_state(telescope_id)
     partial_path = "/".join(req.relative_uri.split("/", 2)[2:])
+    experimental = Config.experimental
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
-            "online": online}
+            "online": online, "imager_root": imager_root, "experimental": experimental}
 
 
 def get_flash_cookie(req, resp):
@@ -126,11 +137,11 @@ def update_twilight_times(latitude=None, longitude=None):
 
     if (latitude == None and longitude == None):
         if internet_connection:
-                geo = geocoder.ip('me')
-                latitude = str(geo.latlng[0])
-                longitude = str(geo.latlng[1])
-                observer.lat = str(geo.latlng[0]) #ephem likes str
-                observer.lon = str(geo.latlng[1]) #ephem likes str
+            geo = geocoder.ip('me')
+            latitude = str(geo.latlng[0])
+            longitude = str(geo.latlng[1])
+            observer.lat = str(geo.latlng[0])  # ephem likes str
+            observer.lon = str(geo.latlng[1])  # ephem likes str
         else:
             twilight_times = {
                 "Info": "No internet connection detected on the device running SSC. Please set Latitude and Longitude.",
@@ -141,22 +152,25 @@ def update_twilight_times(latitude=None, longitude=None):
             # Don't update the cache file.
             return twilight_times
     else:
-        observer.lat = str(latitude) #ephem likes str
-        observer.lon = str(longitude) #ephem likes str
+        observer.lat = str(latitude)  # ephem likes str
+        observer.lon = str(longitude)  # ephem likes str
 
     # Sunrise & Sunset
     loc_sunset = pytz.utc.localize(observer.next_setting(sun).datetime()).astimezone(local_timezone)
     loc_next_sunrise = pytz.utc.localize(observer.next_rising(sun).datetime()).astimezone(local_timezone)
 
     # Civil Beginning and End
-    observer.horizon = '-6' # -6=civil twilight, -12=nautical, -18=astronomical
+    observer.horizon = '-6'  # -6=civil twilight, -12=nautical, -18=astronomical
     loc_end_civil = pytz.utc.localize(observer.next_setting(sun, use_center=True).datetime()).astimezone(local_timezone)
-    loc_next_beg_civil = pytz.utc.localize(observer.next_rising(sun, use_center=True).datetime()).astimezone(local_timezone)
+    loc_next_beg_civil = pytz.utc.localize(observer.next_rising(sun, use_center=True).datetime()).astimezone(
+        local_timezone)
 
     # Astronomical Beginning and End
-    observer.horizon = '-18' # -6=civil twilight, -12=nautical, -18=astronomical
-    loc_beg_astronomical = pytz.utc.localize(observer.next_setting(sun, use_center=True).datetime()).astimezone(local_timezone)
-    loc_next_end_astronomical = pytz.utc.localize(observer.next_rising(sun, use_center=True).datetime()).astimezone(local_timezone)
+    observer.horizon = '-18'  # -6=civil twilight, -12=nautical, -18=astronomical
+    loc_beg_astronomical = pytz.utc.localize(observer.next_setting(sun, use_center=True).datetime()).astimezone(
+        local_timezone)
+    loc_next_end_astronomical = pytz.utc.localize(observer.next_rising(sun, use_center=True).datetime()).astimezone(
+        local_timezone)
 
     twilight_times = {
         "Today's Date": current_date_formatted,
@@ -194,20 +208,20 @@ def get_twilight_times():
     # Check to see if there is cached infromation for today
     if os.path.isfile(twilight_times_file):
         logger.info(f"Twilight times: Cache file exists.")
-        
+
         with open(twilight_times_file, 'r') as openfile:
             twilight_times = json.load(openfile)
-        
+
         # Check if cached data is for today.
-        if(twilight_times["Today's Date"] == current_date_formatted):
+        if (twilight_times["Today's Date"] == current_date_formatted):
             logger.info(f"Twilight times: Cache file is current, using cache file.")
         else:
             logger.info(f"Twilight times: Cache file out of date, updating cache file.")
 
             # Use lat and lon from the cache file
             latitude = str(twilight_times["Latitude"])
-            longitude  = str(twilight_times["Longitude"])
-            
+            longitude = str(twilight_times["Longitude"])
+
             # Update the cache file
             twilight_times = update_twilight_times(latitude, longitude)
     else:
@@ -244,8 +258,8 @@ def check_internet_connection():
         logger.info(f"Internet connection detected.")
         return True
     except requests.exceptions.ConnectionError:
-        logger.info(f"Unable to detect Internet connection or github is down.") # or github is down...
-        return False 
+        logger.info(f"Unable to detect Internet connection or github is down.")  # or github is down...
+        return False
 
 
 def queue_action(dev_num, payload):
@@ -302,7 +316,7 @@ def check_response(resp, response):
 
 def method_sync(method, telescope_id=1):
     out = do_action_device("method_sync", telescope_id, {"method": method})
-    #print(f"method_sync {out=}")
+    # print(f"method_sync {out=}")
 
     if out:
         if out["Value"].get("error"):
@@ -315,11 +329,11 @@ def get_device_state(telescope_id):
     if check_api_state(telescope_id):
         print("Device is online", telescope_id)
         result = method_sync("get_device_state", telescope_id)
-        status = method_sync('get_view_state')
+        status = method_sync('get_view_state', telescope_id)
         view_state = "Idle"
         mode = ""
         stage = ""
-        if status.get("View"):
+        if status is not None and status.get("View"):
             view_state = status["View"]["state"]
             mode = status["View"]["mode"]
             stage = status["View"]["stage"]
@@ -414,7 +428,8 @@ def process_queue(resp, telescope_id):
             response = do_schedule_action_device(action, params, telescope_id)
             logger.info("GET response %s", response)
     else:
-        flash(resp, "ERROR: Seestar ALP API is Offline, Please ensure your Seestar is powered on and device/app.py is running.")
+        flash(resp,
+              "ERROR: Seestar ALP API is Offline, Please ensure your Seestar is powered on and device/app.py is running.")
 
 
 def check_ra_value(raString):
@@ -514,7 +529,7 @@ def do_create_image(req, resp, schedule, telescope_id):
         "gain": int(gain),
         "is_use_autofocus": useAutoFocus
     }
-  
+
     if not check_ra_value(ra):
         flash(resp, "Invalid RA value")
         errors["ra"] = ra
@@ -630,15 +645,16 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
         current = do_action_device("get_schedule", telescope_id, {})
         schedule = current["Value"]
     else:
-        schedule = { "list": get_queue(telescope_id) }
+        schedule = {"list": get_queue(telescope_id)}
 
-    if(Config.twilighttimes):
+    if (Config.twilighttimes):
         twilight_times = get_twilight_times()
     else:
         twilight_times = {}
 
     context = get_context(telescope_id, req)
-    render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values, twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes,
+    render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values,
+                    twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes,
                     **context)
 
 
@@ -662,10 +678,10 @@ def export_schedule(telescope_id):
 
     # use an in-memory file-like object
     output = io.StringIO()
-    
+
     # create writer object
     writer = csv.DictWriter(output, fieldnames=fieldnames)
-    
+
     # Write the header
     writer.writeheader()
 
@@ -680,12 +696,14 @@ def export_schedule(telescope_id):
             for key in FIXED_PARAMS_KEYS:
                 row[key] = ''
         writer.writerow(row)
-        
+
     output.seek(0)
     return output.getvalue()
 
+
 def str2bool(v):
-  return str(v).lower() in ("yes", "y", "true", "t", "1")
+    return str(v).lower() in ("yes", "y", "true", "t", "1")
+
 
 def import_schedule(input, telescope_id):
     for line in input:
@@ -702,8 +720,10 @@ def import_schedule(input, telescope_id):
                 do_schedule_action_device("auto_focus", {"try_count": int(try_count)}, telescope_id)
             case "start_mosaic":
                 do_schedule_action_device("start_mosaic",
-                                          {"target_name": target_name, "ra": ra, "dec": dec, "is_j2000": str2bool(is_j2000),
-                                           "is_use_lp_filter": str2bool(is_use_lp_filter), "is_use_autofocus": str2bool(is_use_autofocus),
+                                          {"target_name": target_name, "ra": ra, "dec": dec,
+                                           "is_j2000": str2bool(is_j2000),
+                                           "is_use_lp_filter": str2bool(is_use_lp_filter),
+                                           "is_use_autofocus": str2bool(is_use_autofocus),
                                            "session_time_sec": int(session_time_sec), "ra_num": int(ra_num),
                                            "dec_num": int(dec_num), "panel_overlap_percent": int(panel_overlap_percent),
                                            "gain": int(gain)}, int(telescope_id))
@@ -753,7 +773,7 @@ class ImageResource:
             schedule = current["Value"]
         else:
             state = "Stopped"
-            schedule = { "list": get_queue(telescope_id) }
+            schedule = {"list": get_queue(telescope_id)}
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors,
@@ -775,7 +795,7 @@ class CommandResource:
             state = current["Value"]["state"]
             schedule = current["Value"]
         else:
-            schedule = { "list": get_queue(telescope_id) }
+            schedule = {"list": get_queue(telescope_id)}
             state = "Stopped"
 
         context = get_context(telescope_id, req)
@@ -800,7 +820,7 @@ class MosaicResource:
             schedule = current["Value"]
         else:
             state = "Stopped"
-            schedule = { "list": get_queue(telescope_id) }
+            schedule = {"list": get_queue(telescope_id)}
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'mosaic.html', state=state, schedule=schedule, values=values, errors=errors,
@@ -970,16 +990,16 @@ class ScheduleExportResource:
     def on_post(req, resp, telescope_id=1):
         filename = req.media["filename"]
         file_content = export_schedule(telescope_id)
-        
-        if file_content:        
+
+        if file_content:
             resp.content_type = 'application/octet-stream'
-            resp.append_header('Content-Disposition', f'attachment; filename="{filename}"')        
-            resp.data = file_content.encode('utf-8')      
+            resp.append_header('Content-Disposition', f'attachment; filename="{filename}"')
+            resp.data = file_content.encode('utf-8')
             resp.status = falcon.HTTP_200
         else:
             flash(resp, "No schedule to export")
             redirect(f"/{telescope_id}/schedule")
-        
+
 
 class ScheduleImportResource:
     @staticmethod
@@ -998,13 +1018,19 @@ class LivePage:
     def on_get(req, resp, telescope_id=1, mode=None):
         # XXX need to look at view state before firing off things!
         status = method_sync('get_view_state')
+        current_mode = None
+        print("get_view_state", status)
+        if status is not None and status.get('View'):
+            current_mode = status['View']['mode']
+        #current_status = status['View']['status']
+        print("Current status:", status, "new mode:", mode)
         if mode is None:
             do_action_device("method_async", telescope_id,
                              {"method": "iscope_stop_view"})
         else:
-            if mode != "star":
+            if current_mode != mode:
                 do_action_device("method_async", telescope_id,
-                                 {"method": "iscope_start_view", "params": {"mode": mode}})
+                                     {"method": "iscope_start_view", "params": {"mode": mode}})
         logger.info(status)
         # state = method_sync("get_device_state")
         # ip = state["station"]["ip"]
@@ -1040,15 +1066,26 @@ class LiveStatusResource:
         view_state = "Idle"
         mode = ""
         stage = ""
-        if status.get("View"):
+        if status is not None and status.get("View"):
             view_state = status["View"]["state"]
             mode = status["View"]["mode"]
-            stage = status["View"]["stage"]
+            stage = status["View"].get("stage")
         context = get_context(telescope_id, req)
         tm = datetime.now().strftime("%H:%M:%S")
         render_template(req, resp, 'live_status.html',
                         view_state=view_state, mode=mode, stage=stage,
                         time=tm, **context)
+
+def status():
+    while True:
+        yield 'this is a test' + "\r\n"
+        time.sleep(5)
+
+
+class LiveStateResource:
+    def on_get(self, req, resp, telescope_id=1):
+        resp.content_type = 'text/plain'
+        resp.stream = status()
 
 
 class SearchObjectResource:
@@ -1118,7 +1155,7 @@ class SettingsResource:
 
         # Delay for LP filter on (off doesn't need a delay), this is helpful for rendering the current status on page refresh.
         if (FormattedNewSettings["stack_lenhance"]):
-            time.sleep(0.7) # This is the lowest delay I could use to get the correct status.
+            time.sleep(0.7)  # This is the lowest delay I could use to get the correct status.
 
         self.render_settings(req, resp, telescope_id, output)
 
@@ -1226,7 +1263,7 @@ class SimbadResource:
 
         ra_dec_j2000 = f"{elements[0]}h{elements[1]}m{elements[2]}s {elements[3]}d{elements[4]}m{elements[5]}s"
 
-        #see if we should recommand the LP Filter
+        # see if we should recommand the LP Filter
         substrings = ["---  ISM  ---", "---  HII  ---", "---  SNR  ---", "---  PN  ---"]
 
         lpFilter = False
@@ -1273,7 +1310,8 @@ class StellariumResource:
         # Clean up the extracted information
         ra_dec_j2000 = ra_dec_j2000.replace("RA/Dec (J2000.0):", "").strip()
 
-        substrings = ["Type: <b>HII region", "Type: <b>emission nebula", "Type: <b>supernova remnant", "Type: <b>planetary nebula"]
+        substrings = ["Type: <b>HII region", "Type: <b>emission nebula", "Type: <b>supernova remnant",
+                      "Type: <b>planetary nebula"]
 
         lpFilter = False
         for substring in substrings:
@@ -1285,7 +1323,6 @@ class StellariumResource:
             lpStr = "/on"
 
         ra_dec_j2000 += lpStr
-
 
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
@@ -1359,12 +1396,13 @@ class ToggleUIThemeResource:
 class UpdateTwilightTimesResource:
     @staticmethod
     def on_post(req, resp):
-            referer = req.get_header('Referer')
-            PostedForm = req.media
-            PostedLat = PostedForm["Latitude"] # TODO: This should have some type of input check
-            PostedLon = PostedForm["Longitude"] # TODO: This should have some type of input check
-            update_twilight_times(PostedLat, PostedLon)
-            redirect(f"{referer}")
+        referer = req.get_header('Referer')
+        PostedForm = req.media
+        PostedLat = PostedForm["Latitude"]  # TODO: This should have some type of input check
+        PostedLon = PostedForm["Longitude"]  # TODO: This should have some type of input check
+        update_twilight_times(PostedLat, PostedLon)
+        redirect(f"{referer}")
+
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
@@ -1374,73 +1412,80 @@ class LoggingWSGIRequestHandler(WSGIRequestHandler):
         logger.info(f'{datetime.now()} {self.client_address[0]} <- {format % args}')
 
 
-def main(device_main):
-    app = falcon.App()
-    app.add_route('/', HomeResource())
-    app.add_route('/command', CommandResource())
-    app.add_route('/image', ImageResource())
-    app.add_route('/live', LivePage())
-    app.add_route('/mosaic', MosaicResource())
-    app.add_route('/search', SearchObjectResource())
-    app.add_route('/settings', SettingsResource())
-    app.add_route('/schedule', ScheduleResource())
-    app.add_route('/schedule/clear', ScheduleClearResource())
-    app.add_route('/schedule/export', ScheduleExportResource())
-    app.add_route('/schedule/image', ScheduleImageResource())
-    app.add_route('/schedule/import', ScheduleImportResource())
-    app.add_route('/schedule/list', ScheduleListResource())
-    app.add_route('/schedule/mosaic', ScheduleMosaicResource())
-    app.add_route('/schedule/online', ScheduleGoOnlineResource())
-    app.add_route('/schedule/shutdown', ScheduleShutdownResource())
-    app.add_route('/schedule/state', ScheduleToggleResource())
-    app.add_route('/schedule/wait-until', ScheduleWaitUntilResource())
-    app.add_route('/schedule/wait-for', ScheduleWaitForResource())
-    app.add_route('/schedule/auto-focus', ScheduleAutoFocusResource())
-    app.add_route('/stats', StatsResource())
-    app.add_route('/{telescope_id:int}/', HomeTelescopeResource())
-    app.add_route('/{telescope_id:int}/command', CommandResource())
-    app.add_route('/{telescope_id:int}/image', ImageResource())
-    app.add_route('/{telescope_id:int}/live', LivePage())
-    app.add_route('/{telescope_id:int}/live/status', LiveStatusResource())
-    app.add_route('/{telescope_id:int}/live/mode', LiveModeResource())
-    app.add_route('/{telescope_id:int}/live/{mode}', LivePage())
-    app.add_route('/{telescope_id:int}/mosaic', MosaicResource())
-    app.add_route('/{telescope_id:int}/search', SearchObjectResource())
-    app.add_route('/{telescope_id:int}/settings', SettingsResource())
-    app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
-    app.add_route('/{telescope_id:int}/schedule/auto-focus', ScheduleAutoFocusResource())
-    app.add_route('/{telescope_id:int}/schedule/clear', ScheduleClearResource())
-    app.add_route('/{telescope_id:int}/schedule/export', ScheduleExportResource())
-    app.add_route('/{telescope_id:int}/schedule/image', ScheduleImageResource())
-    app.add_route('/{telescope_id:int}/schedule/import', ScheduleImportResource())
-    app.add_route('/{telescope_id:int}/schedule/list', ScheduleListResource())
-    app.add_route('/{telescope_id:int}/schedule/mosaic', ScheduleMosaicResource())
-    app.add_route('/{telescope_id:int}/schedule/online', ScheduleGoOnlineResource())
-    app.add_route('/{telescope_id:int}/schedule/shutdown', ScheduleShutdownResource())
-    app.add_route('/{telescope_id:int}/schedule/state', ScheduleToggleResource())
-    app.add_route('/{telescope_id:int}/schedule/wait-until', ScheduleWaitUntilResource())
-    app.add_route('/{telescope_id:int}/schedule/wait-for', ScheduleWaitForResource())
-    app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
-    app.add_route('/{telescope_id:int}/stats', StatsResource())
-    app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
-    app.add_route('/simbad', SimbadResource())
-    app.add_route('/stellarium', StellariumResource())
-    app.add_route('/toggleuitheme', ToggleUIThemeResource())
-    app.add_route('/updatetwilighttimes', UpdateTwilightTimesResource())
+class FrontMain:
+    def __init__(self):
+        self.httpd = None
 
-    if device_main:
-        alp_resource = AlpResource(device_main)
-        app.add_route("/alp/stop", alp_resource, suffix="stop")
-        app.add_route("/alp/start", alp_resource, suffix="start")
+    def start(self):
+        """ Application startup"""
 
-        alp_resource.start()
+        app = falcon.App()
+        app.add_route('/', HomeResource())
+        app.add_route('/command', CommandResource())
+        app.add_route('/image', ImageResource())
+        app.add_route('/live', LivePage())
+        app.add_route('/mosaic', MosaicResource())
+        app.add_route('/search', SearchObjectResource())
+        app.add_route('/settings', SettingsResource())
+        app.add_route('/schedule', ScheduleResource())
+        app.add_route('/schedule/clear', ScheduleClearResource())
+        app.add_route('/schedule/export', ScheduleExportResource())
+        app.add_route('/schedule/image', ScheduleImageResource())
+        app.add_route('/schedule/import', ScheduleImportResource())
+        app.add_route('/schedule/list', ScheduleListResource())
+        app.add_route('/schedule/mosaic', ScheduleMosaicResource())
+        app.add_route('/schedule/online', ScheduleGoOnlineResource())
+        app.add_route('/schedule/shutdown', ScheduleShutdownResource())
+        app.add_route('/schedule/state', ScheduleToggleResource())
+        app.add_route('/schedule/wait-until', ScheduleWaitUntilResource())
+        app.add_route('/schedule/wait-for', ScheduleWaitForResource())
+        app.add_route('/schedule/auto-focus', ScheduleAutoFocusResource())
+        app.add_route('/stats', StatsResource())
+        app.add_route('/{telescope_id:int}/', HomeTelescopeResource())
+        app.add_route('/{telescope_id:int}/command', CommandResource())
+        app.add_route('/{telescope_id:int}/image', ImageResource())
+        app.add_route('/{telescope_id:int}/live', LivePage())
+        app.add_route('/{telescope_id:int}/live/status', LiveStatusResource())
+        app.add_route('/{telescope_id:int}/live/mode', LiveModeResource())
+        app.add_route('/{telescope_id:int}/live/state', LiveStateResource())
+        app.add_route('/{telescope_id:int}/live/{mode}', LivePage())
+        app.add_route('/{telescope_id:int}/mosaic', MosaicResource())
+        app.add_route('/{telescope_id:int}/search', SearchObjectResource())
+        app.add_route('/{telescope_id:int}/settings', SettingsResource())
+        app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
+        app.add_route('/{telescope_id:int}/schedule/auto-focus', ScheduleAutoFocusResource())
+        app.add_route('/{telescope_id:int}/schedule/clear', ScheduleClearResource())
+        app.add_route('/{telescope_id:int}/schedule/export', ScheduleExportResource())
+        app.add_route('/{telescope_id:int}/schedule/image', ScheduleImageResource())
+        app.add_route('/{telescope_id:int}/schedule/import', ScheduleImportResource())
+        app.add_route('/{telescope_id:int}/schedule/list', ScheduleListResource())
+        app.add_route('/{telescope_id:int}/schedule/mosaic', ScheduleMosaicResource())
+        app.add_route('/{telescope_id:int}/schedule/online', ScheduleGoOnlineResource())
+        app.add_route('/{telescope_id:int}/schedule/shutdown', ScheduleShutdownResource())
+        app.add_route('/{telescope_id:int}/schedule/state', ScheduleToggleResource())
+        app.add_route('/{telescope_id:int}/schedule/wait-until', ScheduleWaitUntilResource())
+        app.add_route('/{telescope_id:int}/schedule/wait-for', ScheduleWaitForResource())
+        app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
+        app.add_route('/{telescope_id:int}/stats', StatsResource())
+        app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
+        app.add_route('/simbad', SimbadResource())
+        app.add_route('/stellarium', StellariumResource())
+        app.add_route('/toggleuitheme', ToggleUIThemeResource())
+        app.add_route('/updatetwilighttimes', UpdateTwilightTimesResource())
 
-        app.add_route('/{telescope_id:int}/vid/{mode}', LiveVideoResource(alp_resource))
+        #if device_main:
+        #    alp_resource = AlpResource(device_main)
+        #    app.add_route("/alp/stop", alp_resource, suffix="stop")
+        #    app.add_route("/alp/start", alp_resource, suffix="start")
+        #
+        #        alp_resource.start()
+        #
+        #    app.add_route('/{telescope_id:int}/vid/{mode}', LiveVideoResource(alp_resource))
 
-    try:
-        # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
-        with make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler) as httpd:
-            logger.info(f'==STARTUP== Serving on {Config.ip_address}:{Config.port}. Time stamps are UTC.')
+        try:
+            # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
+            self.httpd = make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler)
+            logger.info(f'==STARTUP== Serving on {Config.ip_address}:{Config.uiport}. Time stamps are UTC.')
 
             # Print listening IP:Port to the console
             if Config.ip_address == "0.0.0.0":
@@ -1455,21 +1500,32 @@ def main(device_main):
             internet_connection = check_internet_connection()
 
             # Serve until process is killed
-            httpd.serve_forever()
-    except KeyboardInterrupt:
-        logger.info("Keyboard interrupt. Shutting down SSC.")
+            self.httpd.serve_forever()
+
+        except KeyboardInterrupt:
+            logger.info("Keyboard interrupt. Shutting down SSC.")
+            # for dev in Config.seestars:
+            #     telescope.end_seestar_device(dev['device_num'])
+            if self.httpd:
+                self.httpd.shutdown()
+
+    def stop(self):
         # for dev in Config.seestars:
-        #     telescope.end_seestar_device(dev['device_num'])
-        httpd.server_close()
+        #    telescope.end_seestar_device(dev['device_num'])
+        if self.httpd:
+            self.httpd.shutdown()
 
 
 class style():
     YELLOW = '\033[33m'
     RESET = '\033[0m'
 
+
 if __name__ == '__main__':
     print(style.YELLOW + "WARN")
     print(style.YELLOW + "WARN" + style.RESET + ": Deprecated app launch detected.")
-    print(style.YELLOW + "WARN" + style.RESET + ": We recommend launching from the top level root_app.py, instead of ./front/app.py")
+    print(
+        style.YELLOW + "WARN" + style.RESET + ": We recommend launching from the top level root_app.py, instead of ./front/app.py")
     print(style.YELLOW + "WARN" + style.RESET)
-    main(None)
+    app = FrontMain()
+    app.start()

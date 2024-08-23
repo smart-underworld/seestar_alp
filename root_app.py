@@ -7,6 +7,7 @@ import threading
 import time
 import sys
 import os
+import waitress
 
 from front.app import FrontMain
 
@@ -89,4 +90,4 @@ if __name__ == "__main__":
         return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(mode),
                         mimetype='multipart/x-mixed-replace; boundary=frame')
 
-    app.run(host=Config.ip_address, port=Config.imgport) #, debug=True)  # , threaded=True)
+    waitress.serve(app, host=Config.ip_address, port=Config.imgport)

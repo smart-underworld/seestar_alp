@@ -89,14 +89,15 @@ class SeestarImaging:
             self.mode = mode
 
             response = self.device.send_message_param_sync({"method": "get_view_state"})
-            current_state = None
-            current_mode = None
+            # current_state = None
+            # current_mode = None
             current_stage = None
             if response is not None and response.get("result") is not None:
                 result = response.get("result")
-                current_state = result["View"]["state"]
-                current_mode = result["View"]["mode"]
-                current_stage = result["View"]["stage"]
+                # current_state = result["View"]["state"]
+                # current_mode = result["View"]["mode"]
+                if result is not None and result.get('View') is not None:
+                    current_stage = result["View"].get("stage", None)
             #print("call scope response:", result)
             # todo : set is_viewing mode
 
@@ -391,18 +392,18 @@ class SeestarImaging:
         self.is_streaming = False
         self.is_connected = False
 
-    def blank_frame(self):
+    def blank_frame(self, message="Loading..."):
         blank_image = np.ones((1920, 1080, 3), dtype=np.uint8)
         font = cv2.FONT_HERSHEY_SIMPLEX
-        image = cv2.putText(blank_image, "Loading...",
+        image = cv2.putText(blank_image, message,
                             (200, 900),
                             # (300, 1850),
                             font, 5,
                             (128, 128, 128),
                             4, cv2.LINE_8)
-        imgencode = cv2.imencode('.png', image)[1]
+        imgencode = cv2.imencode('.jpg', image)[1]
         stringData = imgencode.tobytes()
-        return (b'--frame\r\n' b'Content-Type: image/png\r\n\r\n' + stringData + b'\r\n')
+        return (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + stringData + b'\r\n')
 
     def get_video_status(self):
         while True:
@@ -414,14 +415,11 @@ class SeestarImaging:
     def get_frame(self, mode=None):
         yield self.blank_frame()
         yield self.blank_frame()
-        yield self.blank_frame()
-        # yield self.blank_frame()
-        ## yield self.blank_frame()
 
         self.set_mode(mode)
         self.logger.info(f"mode: {self.mode} {type(self.mode)}")
         if self.mode is None or self.mode == "None":
-            self.logger.info("returning none")
+            yield self.blank_frame("Idle")
             return ""
 
         while True:
@@ -462,7 +460,7 @@ class SeestarImaging:
                                             font, 1,
                                             (210, 210, 210),
                                             4, cv2.LINE_8)
-                        imgencode = cv2.imencode('.png', image)[1]
+                        imgencode = cv2.imencode('.jpg', image)[1]
                         stringData = imgencode.tobytes()
                         # print("sending frame bytes=", len(stringData))
 
@@ -482,7 +480,7 @@ class SeestarImaging:
 
                         self.last_frame = self.received_frame
 
-                        frame = (b'--frame\r\n' b'Content-Type: image/png\r\n\r\n' + stringData + b'\r\n')
+                        frame = (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + stringData + b'\r\n')
                         # If stack mode, we just do one and done.
                         if self.exposure_mode == "stack":
                             yield frame

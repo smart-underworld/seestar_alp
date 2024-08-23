@@ -9,6 +9,8 @@ import uuid
 from time import sleep
 
 import tzlocal
+
+from config import Config
 from seestar_util import Util
 
 
@@ -107,7 +109,7 @@ class Seestar:
             self.disconnect()
 
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.s.settimeout(5)
+            self.s.settimeout(Config.timeout)
             self.s.connect((self.host, self.port))
             # self.s.settimeout(None)
             self.is_connected = True

@@ -112,7 +112,7 @@ class action:
 
         try:
             params = json.loads(parameters)
-            print(f'Received request: Action {action_name} with params {params}')
+            # print(f'Received request: Action {action_name} with params {params}')
             if action_name == "play_sound":
                 cur_dev.play_sound(params['id'])
                 resp.text = MethodResponse(req).json
