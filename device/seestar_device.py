@@ -152,7 +152,9 @@ class Seestar:
 
     def update_view_state(self, parsed_data):
         if parsed_data['method'] == "get_view_state" and 'result' in parsed_data:
-            self.view_state = parsed_data['result']['View']
+            view = parsed_data['result'].get('View')
+            if view:
+                self.view_state = view
 
     def heartbeat_message_thread_fn(self):
         while self.is_watch_events:
