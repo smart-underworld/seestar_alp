@@ -155,6 +155,8 @@ class Seestar:
             view = parsed_data['result'].get('View')
             if view:
                 self.view_state = view
+            #else:
+            #    self.view_state = {}
 
     def heartbeat_message_thread_fn(self):
         while self.is_watch_events:

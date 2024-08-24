@@ -40,7 +40,7 @@ class RtspClient:
         if self._verbose:
             self.logger.info("Connected to video source {}.".format(self.rtsp_server_uri))
         self._bg_run = True
-        t = Thread(target=self._update, args=())
+        t = Thread(target=self._update, args=(), daemon=True)
         t.daemon = True
         t.start()
         self._bgt = t

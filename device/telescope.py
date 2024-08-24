@@ -87,16 +87,16 @@ def end_seestar_device(device_num: int):
 # RESOURCE CONTROLLERS
 # --------------------
 
-@before(PreProcessRequest(maxdev))
-class vid:
-    def on_get(self, req: Request, resp: Response, devnum: int):
-        if devnum not in seestar_imager:
-            err = DevNotConnectedException("device not connected.")
-            resp.text = PropertyResponse(None, req, err).json
-            return
-        cur_dev = seestar_imager[devnum]
-        resp.content_type = 'multipart/x-mixed-replace; boundary=frame'
-        resp.stream = cur_dev.get_frame()
+# @before(PreProcessRequest(maxdev))
+# class vid:
+#     def on_get(self, req: Request, resp: Response, devnum: int):
+#         if devnum not in seestar_imager:
+#             err = DevNotConnectedException("device not connected.")
+#             resp.text = PropertyResponse(None, req, err).json
+#             return
+#         cur_dev = seestar_imager[devnum]
+#         resp.content_type = 'multipart/x-mixed-replace; boundary=frame'
+#         resp.stream = cur_dev.get_frame()
 
 
 @before(PreProcessRequest(maxdev))
