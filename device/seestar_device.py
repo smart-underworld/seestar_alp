@@ -1007,11 +1007,11 @@ class Seestar:
                 self.op_watch = ""
 
                 self.get_msg_thread = threading.Thread(target=self.receive_message_thread_fn, daemon=True)
-                self.get_msg_thread.name = f"ReceiveMessageThread.{self.device_name}"
+                self.get_msg_thread.name = f"ALPReceiveMessageThread.{self.device_name}"
                 self.get_msg_thread.start()
 
                 self.heartbeat_msg_thread = threading.Thread(target=self.heartbeat_message_thread_fn, daemon=True)
-                self.heartbeat_msg_thread.name = f"HeartbeatMessageThread.{self.device_name}"
+                self.heartbeat_msg_thread.name = f"ALPHeartbeatMessageThread.{self.device_name}"
                 self.heartbeat_msg_thread.start()
             except Exception as ex:
                 # todo : Disconnect socket and set is_watch_events false
@@ -1020,6 +1020,7 @@ class Seestar:
     def end_watch_thread(self):
         # I think it should be is_watch_events instead of is_connected...
         if self.is_connected == True:
+            self.logger.info("End watch thread!")
             self.is_watch_events = False
             self.get_msg_thread.join(timeout=7)
             self.heartbeat_msg_thread.join(timeout=7)

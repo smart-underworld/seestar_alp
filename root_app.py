@@ -29,22 +29,22 @@ class AppRunner:
     def start(self):
         self.logger.info(f"Starting {self.name}")
         self.thread = threading.Thread(target=self.runner, args=(1,), daemon=True)
-        self.thread.name = f"StartupThread{self.name}"
+        self.thread.name = f"{self.name}MainThread"
         self.thread.start()
 
-    def on_get_start(self, req, resp):
-        self.start()
-        resp.status = falcon.HTTP_200
-        resp.content_type = 'application/text'
-        resp.text = 'Started, yo!'
-
-    def on_get_stop(self, req, resp):
-        self.logger.info(f"Stopping {self.name}")
-        self.app_main.stop()
-        self.thread.join()
-        resp.status = falcon.HTTP_200
-        resp.content_type = 'application/text'
-        resp.text = 'Stopped'
+    # def on_get_start(self, req, resp):
+    #     self.start()
+    #     resp.status = falcon.HTTP_200
+    #     resp.content_type = 'application/text'
+    #     resp.text = 'Started, yo!'
+    #
+    # def on_get_stop(self, req, resp):
+    #     self.logger.info(f"Stopping {self.name}")
+    #     self.app_main.stop()
+    #     self.thread.join()
+    #     resp.status = falcon.HTTP_200
+    #     resp.content_type = 'application/text'
+    #     resp.text = 'Stopped'
 
     def get_imager(self, device_num: int):
         return self.app_main.get_imager(device_num)
