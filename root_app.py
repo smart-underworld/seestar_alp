@@ -13,12 +13,6 @@ from front.app import FrontMain
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "device"))
 
-# from device.app import DeviceMain
-# from device.config import Config
-#
-# from device import log
-# import device.telescope
-
 from app import DeviceMain
 from config import Config
 import log
@@ -60,6 +54,9 @@ class AppRunner:
         self.app_main.start()
         self.logger.info(f"Seestar{self.name} %s: finishing", name)
 
+    def join(self):
+        self.thread.join()
+
 
 if __name__ == "__main__":
     # We want to initialize ALP logger
@@ -77,26 +74,23 @@ if __name__ == "__main__":
 
     time.sleep(1)
 
-    logger.info("Setting up imaging web server")
-    app = Flask(__name__)
+    if Config.experimental:
+        logger.info("Setting up imaging web server")
+        app = Flask(__name__)
 
 
-    @app.route("/<dev_num>/vid/status")
-    def vid_status(dev_num):
-        return Response(telescope.get_seestar_imager(int(dev_num)).get_video_status(),
-                        mimetype='text/event-stream')
+        @app.route("/<dev_num>/vid/status")
+        def vid_status(dev_num):
+            return Response(telescope.get_seestar_imager(int(dev_num)).get_video_status(),
+                            mimetype='text/event-stream')
 
 
-    # @app.route('/<dev_num>/vid/<mode>')
-    # def vid(dev_num, mode):
-    #     return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(mode),
-    #                     mimetype='multipart/x-mixed-replace; boundary=frame')
+        @app.route('/<dev_num>/vid')
+        def vid(dev_num):
+            return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(),
+                            mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
-    @app.route('/<dev_num>/vid')
-    def vid(dev_num):
-        return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(),
-                        mimetype='multipart/x-mixed-replace; boundary=frame')
-
-
-    waitress.serve(app, host=Config.ip_address, port=Config.imgport)
+        waitress.serve(app, host=Config.ip_address, port=Config.imgport)
+    else:
+        front.join()

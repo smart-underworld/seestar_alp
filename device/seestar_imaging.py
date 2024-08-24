@@ -451,10 +451,8 @@ class SeestarImaging:
         yield self.blank_frame()
         yield self.blank_frame()
 
-        # self.set_mode(mode)
-        # todo : check the mode from device...
-        view_state = self.device.view_state
-        self.logger.info(f"mode: {self.mode} {type(self.mode)} view_state: {view_state}")
+        # view_state = self.device.view_state
+        # self.logger.info(f"mode: {self.mode} {type(self.mode)} view_state: {view_state}")
 
         while not self.is_idle():
             image = None
@@ -560,7 +558,6 @@ if __name__ == '__main__':
     host, port, device_num, listen_port = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
     logger = log.init_logging()
     imager = SeestarImaging(logger, host, port, 'SeestarB', device_num)
-    imager.set_mode(None)  # Perhaps not necessary?
 
 
     @app.route('/vid/<mode>')
