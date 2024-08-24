@@ -6,24 +6,57 @@
 {% endblock %}
 
 {% block content %}
-    <div hx-get="{{ root }}/live/status" hx-trigger="load, every 5s">Loading live status...</div>
+    <script>
+        document.body.addEventListener("liveViewModeChange", function (evt) {
+            // evt.detail.value is mode
+            const mode = evt.detail.value;
+            console.log(`liveViewModeChange was triggered! mode=${mode}`);
+            const img = document.getElementById('liveViewImg');
+            let currentSrc = "{{ imager_root }}/vid";
+            // Add a cache-busting parameter
+            if (currentSrc.indexOf('?') > -1) {
+                currentSrc = currentSrc.substring(0, currentSrc.indexOf('?'));
+            }
+            const newSrc = currentSrc + "?timestamp=" + new Date().getTime();
+
+            img.src = newSrc;
+
+            const buttons = document.getElementsByClassName("mode-button");
+            for (const el of buttons) {
+                // console.log('looking at id', el.id)
+                if (el.id === mode) {
+                    el.classList.add('btn-primary');
+                    el.classList.remove('btn-secondary');
+                } else {
+                    el.classList.remove('btn-primary');
+                    el.classList.add('btn-secondary');
+                }
+            }
+            // const element = document.getElementById(mode);
+            // element.classList.remove('btn-secondary');
+            // element.classList.add("btn-primary");
+        })
+    </script>
+
+    <div class="mb-3" hx-get="{{ root }}/live/status" hx-trigger="load, every 5s">Loading live status...</div>
 
     <p>
-        <a href="{{ root }}/live">None</a> |
-        <a href="{{ root }}/live/star">Star</a> |
-        <a href="{{ root }}/live/sun">Sun</a> |
-        <a href="{{ root }}/live/moon">Moon</a> |
-        <a href="{{ root }}/live/planet">Planet</a> |
-        <a href="{{ root }}/live/scenery">Scenery</a>
+        <button id="none" class="mode-button btn btn-secondary m-1" hx-delete="{{ root }}/live/mode">none</button>
+        <button id="star" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "star"}'>star</button>
+        <button id="sun" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "sun"}'>sun</button>
+        <button id="moon" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "moon"}'>moon</button>
+        <button id="planet" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "planet"}'>planet</button>
+        <button id="scenery" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "scenery"}'>scenery</button>
     </p>
 
-    <img src="{{ imager_root }}/vid/{{ mode }}" width="360" height="640"/>
+    <img id="liveViewImg" src="{{ imager_root }}/vid" width="360" height="640" alt="Live view image"/>
+    {#    <img src="{{ imager_root }}/vid" width="1080" height="1920"/>#}
 
-{#    {% if root == "/1" %}#}
-{#        <img src="http://localhost:6543/vid/{{ mode }}" width="360" height="640"/>#}
-{#    {% else %}#}
-{#        <img src="http://localhost:7654/vid/{{ mode }}" width="540" height="960"/>#}
-{#    {% endif %}#}
+    {#    {% if root == "/1" %}#}
+    {#        <img src="http://localhost:6543/vid/{{ mode }}" width="360" height="640"/>#}
+    {#    {% else %}#}
+    {#        <img src="http://localhost:7654/vid/{{ mode }}" width="540" height="960"/>#}
+    {#    {% endif %}#}
 
     {#    <img src="http://localhost:6543/vid/{{ mode }}" width="1080" height="1920"/>#}
     {#    <img src="http://localhost:7654/vid/{{ mode }}" width="360" height="640"/>#}

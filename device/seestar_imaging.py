@@ -20,6 +20,11 @@ import os
 from skimage import exposure, img_as_float32, io
 from skimage.util import img_as_uint
 from PIL import Image, ImageEnhance
+from flask import Flask, render_template, Response
+import numpy as np
+import cv2
+
+import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "."))
 
@@ -62,6 +67,8 @@ class SeestarImaging:
         self.s = None
         self.is_connected = False
         self.is_streaming = False
+        self.is_gazing = False
+        self.cache_frame = True
         self.mode = None
         self.exposure_mode = None  # "stream"  # None | preview | stack | stream
         self.received_frame = 0
@@ -78,6 +85,14 @@ class SeestarImaging:
 
     def __repr__(self):
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
+
+    def ensure_mode(self):
+        view_state = self.device.view_state
+        state = view_state.get("state")
+        stage = view_state.get("stage")
+
+        if state == 'working' and stage == 'RTSP':
+            return self.start('stream')
 
     def set_mode(self, mode):
         # If mode didn't change, do nothing?
@@ -98,7 +113,7 @@ class SeestarImaging:
                 # current_mode = result["View"]["mode"]
                 if result is not None and result.get('View') is not None:
                     current_stage = result["View"].get("stage", None)
-            #print("call scope response:", result)
+            # print("call scope response:", result)
             # todo : set is_viewing mode
 
             match mode:
@@ -139,6 +154,8 @@ class SeestarImaging:
             # self.s.settimeout(None)
             self.is_connected = True
             self.logger.info("connected")
+            if self.is_gazing:
+                self.send_star_subscription()
             return True
         except socket.error as e:
             # Let's just delay a fraction of a second to avoid reconnecting too quickly
@@ -157,7 +174,7 @@ class SeestarImaging:
                 pass
 
     def send_message(self, data):
-        self.logger.info(f"sending message: {data}") # temp made info
+        self.logger.debug(f"sending message: {data}")  # temp made info
         try:
             self.s.sendall(data.encode())  # TODO: would utf-8 or unicode_escaped help here
             return True
@@ -171,6 +188,12 @@ class SeestarImaging:
             if self.reconnect():
                 return self.send_message(data)
             return False
+
+    def send_star_subscription(self):
+        if self.exposure_mode == "stack":
+            self.send_message('{"id": 23, "method": "get_stacked_img"}' + "\r\n")
+        else:
+            self.send_message('{"id": 21, "method": "begin_streaming"}' + "\r\n")
 
     def heartbeat_message_thread_fn(self):
         while True:
@@ -215,9 +238,11 @@ class SeestarImaging:
                             self.raw_img = contents['raw_data']
 
                         # xxx Temp hack: just disconnect for now...
-                        self.disconnect()
-                        self.reconnect()
-                        self.send_message('{"id": 23, "method": "get_stacked_img"}' + "\r\n")
+                        if self.is_gazing:
+                            self.disconnect()
+                            self.reconnect()
+                            # self.send_star_subscription()
+                            # self.send_message('{"id": 23, "method": "get_stacked_img"}' + "\r\n")
                     else:
                         continue
 
@@ -249,15 +274,18 @@ class SeestarImaging:
                     empty_images = 0
                     with RtspClient(rtsp_server_uri=f'rtsp://{self.host}:4554/stream', logger=self.logger,
                                     verbose=True) as client:
-                        self.raw_img = client.read(raw=True)
+                        self.raw_img = np.copy(client.read(raw=True))
                         self.received_frame += 1
 
                         while self.is_streaming:
                             image = client.read(raw=True)
                             if image is not None:
-                                self.raw_img = image
+                                self.raw_img = np.copy(image)
                                 self.received_frame += 1
                                 empty_images = 0  # Reset counter...
+
+                                if self.received_frame % 100 == 0:
+                                    self.logger.info(f"Read {self.received_frame} images {self.is_streaming=}")
                             else:
                                 empty_images += 1
 
@@ -298,8 +326,8 @@ class SeestarImaging:
         return data
 
     def get_star_preview(self):
-        if self.exposure_mode == "stack":
-            # 6220800
+        # if self.exposure_mode == "stack" or len(self.raw_img) == 1920 * 1080 * 6:
+        if len(self.raw_img) == 1920 * 1080 * 6:
             # print("raw buffer size:", len(self.raw_img))
             img = np.frombuffer(self.raw_img, dtype=np.uint16).reshape(1920, 1080, 3)
             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
@@ -308,6 +336,7 @@ class SeestarImaging:
         img = np.frombuffer(self.raw_img, np.uint16).reshape(1920, 1080)
         img = cv2.cvtColor(img, cv2.COLOR_BAYER_GRBG2BGR)
         return img
+
 
     def update_saturation(self, img_array, img_display, saturation):
         img_saturated = img_display
@@ -318,8 +347,8 @@ class SeestarImaging:
 
         return img_saturated
 
-    def image_stretch_graxpert(self, img):
 
+    def image_stretch_graxpert(self, img):
         image_array = img_as_float32(img)
 
         if np.min(image_array) < 0 or np.max(image_array > 1):
@@ -336,6 +365,7 @@ class SeestarImaging:
         # image_display = self.update_saturation(image_array, image_display, saturation=1.0)
 
         return image_display
+
 
     def image_stretch(self, img):
         # https://scikit-image.org/docs/stable/auto_examples/color_exposure/plot_equalize.html
@@ -355,10 +385,12 @@ class SeestarImaging:
 
         return img_rescale
 
+
     def start(self, new_exposure_mode=None):
         self.reconnect()
         self.exposure_mode = new_exposure_mode
         self.is_streaming = self.exposure_mode == "stream"
+        self.is_gazing = self.exposure_mode == "preview" or self.exposure_mode == "stack"
         self.received_frame = 0
         self.sent_frame = 0
         self.last_frame = 0
@@ -380,17 +412,23 @@ class SeestarImaging:
                 self.get_image_thread.name = f"ReceiveImageThread.{self.device_name}"
                 self.get_image_thread.start()
 
-            if self.exposure_mode == "stack":
-                self.send_message('{"id": 23, "method": "get_stacked_img"}' + "\r\n")
-            else:
-                self.send_message('{"id": 21, "method": "begin_streaming"}' + "\r\n")
+        # print(f'Start: {self.is_gazing=} {self.exposure_mode=}')
+        # if self.is_gazing:
+        #     if self.exposure_mode == "stack":
+        #         self.send_message('{"id": 23, "method": "get_stacked_img"}' + "\r\n")
+        #     else:
+        #         self.send_message('{"id": 21, "method": "begin_streaming"}' + "\r\n")
+
 
     def stop(self):
         self.disconnect()
         # xxx might want to reset some things?
         self.raw_img = None
+        self.exposure_mode = None
         self.is_streaming = False
+        self.is_gazing = False
         self.is_connected = False
+
 
     def blank_frame(self, message="Loading..."):
         blank_image = np.ones((1920, 1080, 3), dtype=np.uint8)
@@ -401,9 +439,10 @@ class SeestarImaging:
                             font, 5,
                             (128, 128, 128),
                             4, cv2.LINE_8)
-        imgencode = cv2.imencode('.jpg', image)[1]
+        imgencode = cv2.imencode('.png', image)[1]
         stringData = imgencode.tobytes()
-        return (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + stringData + b'\r\n')
+        return (b'--frame\r\n' b'Content-Type: image/png\r\n\r\n' + stringData + b'\r\n')
+
 
     def get_video_status(self):
         while True:
@@ -412,19 +451,64 @@ class SeestarImaging:
             yield frame
             sleep(5)
 
+
+    def is_working(self):
+        view_state = self.device.view_state
+        return view_state.get('state') == 'working'
+
+
+    def is_idle(self):
+        return not self.is_working()
+
+
     def get_frame(self, mode=None):
         yield self.blank_frame()
         yield self.blank_frame()
 
-        self.set_mode(mode)
-        self.logger.info(f"mode: {self.mode} {type(self.mode)}")
-        if self.mode is None or self.mode == "None":
-            yield self.blank_frame("Idle")
-            return ""
+        # self.set_mode(mode)
+        # todo : check the mode from device...
+        view_state = self.device.view_state
+        self.logger.info(f"mode: {self.mode} {type(self.mode)} view_state: {view_state}")
 
-        while True:
+        # while self.is_idle():
+        #     yield self.blank_frame("Idle")
+        #     should probably just return and rely on outer code to restart image...
+        #     sleep(0.1)
+
+        # self.logger.info(f"mode: {self.mode} {type(self.mode)} view_state: {view_state}")
+        # if self.mode is None or self.mode == "None":
+        #     yield self.blank_frame("Idle")
+        #     return ""
+
+        while not self.is_idle():
             image = None
-            match self.exposure_mode:
+            exposure_mode = None
+            view_state = self.device.view_state
+            state = view_state.get("state")
+            stage = view_state.get('stage')
+            mode = view_state.get('mode')
+            if stage == 'RTSP':
+                # if self.is_working():
+                exposure_mode = 'stream'
+                if self.exposure_mode != exposure_mode:
+                    self.start(exposure_mode)
+                # else:
+                #     exposure_mode = None
+                #     if self.exposure_mode != exposure_mode:
+                #         self.stop()
+                #         continue
+            elif stage == 'ContinuousExposure':
+                exposure_mode = 'preview'
+                if self.exposure_mode != exposure_mode:
+                    self.start(exposure_mode)
+            elif stage == 'Stack':
+                exposure_mode = 'stack'
+                if self.exposure_mode != exposure_mode:
+                    self.start(exposure_mode)
+
+            # xxx what other exposure modes?
+
+            match exposure_mode:
                 case "stream":
                     # print starting RTSP stream...
                     if self.raw_img is not None:
@@ -462,7 +546,7 @@ class SeestarImaging:
                                             font, 1,
                                             (210, 210, 210),
                                             4, cv2.LINE_8)
-                        imgencode = cv2.imencode('.jpg', image)[1]
+                        imgencode = cv2.imencode('.png', image)[1]
                         stringData = imgencode.tobytes()
                         # print("sending frame bytes=", len(stringData))
 
@@ -482,12 +566,12 @@ class SeestarImaging:
 
                         self.last_frame = self.received_frame
 
-                        frame = (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + stringData + b'\r\n')
+                        frame = (b'--frame\r\n' b'Content-Type: image/png\r\n\r\n' + stringData + b'\r\n')
                         # If stack mode, we just do one and done.
-                        if self.exposure_mode == "stack":
-                            yield frame
-                        else:
-                            yield frame
+                        # if self.exposure_mode == "stack":
+                        yield frame
+                        # else:
+                        #    yield frame
                     else:
                         pass
                         # self.logger.info("skipping send")
@@ -495,12 +579,9 @@ class SeestarImaging:
                     self.logger.info(f"exception encoding frame. skipping {e=}")
             sleep(delay)
 
+        self.stop()
+        yield self.blank_frame("Idle")
 
-from flask import Flask, render_template, Response
-import numpy as np
-import cv2
-
-import sys
 
 if __name__ == '__main__':
     app = Flask(__name__)

@@ -24,6 +24,7 @@ from config import Config
 import log
 import telescope
 
+
 class AppRunner:
     def __init__(self, log, name, app_main):
         self.app_main = app_main()
@@ -59,6 +60,7 @@ class AppRunner:
         self.app_main.start()
         self.logger.info(f"Seestar{self.name} %s: finishing", name)
 
+
 if __name__ == "__main__":
     # We want to initialize ALP logger
     logger = log.init_logging()
@@ -78,16 +80,23 @@ if __name__ == "__main__":
     logger.info("Setting up imaging web server")
     app = Flask(__name__)
 
+
     @app.route("/<dev_num>/vid/status")
     def vid_status(dev_num):
         return Response(telescope.get_seestar_imager(int(dev_num)).get_video_status(),
                         mimetype='text/event-stream')
 
 
+    # @app.route('/<dev_num>/vid/<mode>')
+    # def vid(dev_num, mode):
+    #     return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(mode),
+    #                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
-    @app.route('/<dev_num>/vid/<mode>')
-    def vid(dev_num, mode):
-        return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(mode),
+
+    @app.route('/<dev_num>/vid')
+    def vid(dev_num):
+        return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(),
                         mimetype='multipart/x-mixed-replace; boundary=frame')
+
 
     waitress.serve(app, host=Config.ip_address, port=Config.imgport)

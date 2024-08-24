@@ -12,6 +12,9 @@ Higher priority items:
 - [ ] Responsive layout in UI!
 - [ ] Scheduler UI improvements (e.g. status, start / stop, clear)
 
+- live view
+- goto object functionality
+
 Lower priority / blue sky items:
 - [ ] visual feedback on schedule
 - [ ] rename directory to ui?

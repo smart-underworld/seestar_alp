@@ -1024,13 +1024,13 @@ class LivePage:
             current_mode = status['View']['mode']
         #current_status = status['View']['status']
         print("Current status:", status, "new mode:", mode)
-        if mode is None:
-            do_action_device("method_async", telescope_id,
-                             {"method": "iscope_stop_view"})
-        else:
-            if current_mode != mode:
-                do_action_device("method_async", telescope_id,
-                                     {"method": "iscope_start_view", "params": {"mode": mode}})
+        # if mode is None:
+        #     do_action_device("method_async", telescope_id,
+        #                      {"method": "iscope_stop_view"})
+        # else:
+        #     if current_mode != mode:
+        #         do_action_device("method_async", telescope_id,
+        #                              {"method": "iscope_start_view", "params": {"mode": mode}})
         logger.info(status)
         # state = method_sync("get_device_state")
         # ip = state["station"]["ip"]
@@ -1050,31 +1050,59 @@ class LiveVideoResource:
 
 
 class LiveModeResource:
+    def on_delete(self, req, resp, telescope_id=1):
+        # shut off watch
+        do_action_device("method_async", telescope_id,
+                         {"method": "iscope_stop_view"})
+        # resp.set_header('HX-Trigger', 'liveViewModeChange')
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'application/text'
+        resp.text = 'none'
+
     def on_post(self, req, resp, telescope_id=1):
         mode = req.media["mode"]
         # xxx: If mode is none, need to cancel things
         response = do_action_device("method_async", telescope_id,
                                     {"method": "iscope_start_view", "params": {"mode": mode}})
         print("iscope_start_view:", response)
-        render_template(req, resp, 'live_mode.html')
+        #render_template(req, resp, 'live_mode.html')
+        #liveViewImg
+        # resp.set_header('HX-Trigger', 'liveViewModeChange')
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'application/text'
+        resp.text = mode
 
 
 class LiveStatusResource:
-    @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def __init__(self):
+        self.stage = None
+        self.mode = None
+        self.state = None
+
+    def on_get(self, req, resp, telescope_id=1):
         status = method_sync('get_view_state', telescope_id)
-        view_state = "Idle"
+        state = "Idle"
         mode = ""
         stage = ""
         if status is not None and status.get("View"):
-            view_state = status["View"]["state"]
+            state = status["View"]["state"]
             mode = status["View"]["mode"]
             stage = status["View"].get("stage")
-        context = get_context(telescope_id, req)
         tm = datetime.now().strftime("%H:%M:%S")
-        render_template(req, resp, 'live_status.html',
-                        view_state=view_state, mode=mode, stage=stage,
-                        time=tm, **context)
+        changed = self.stage != stage or self.mode != mode or self.state != state
+        self.stage = stage
+        self.state = state
+        self.mode = mode
+
+        # If status changes, trigger reload
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'text/html'
+        if changed:
+            resp.set_header('HX-Trigger', json.dumps({"liveViewModeChange": mode}))
+        # if star:
+        #.  target_name, gain, stacked_frame, dropped_frame
+        #.  Exposure: { lapse_ms, exp_ms }
+        resp.text = f'<div> {tm}: View State: {state}, Mode: {mode}, Stage: {stage}</div>'
 
 def status():
     while True:
