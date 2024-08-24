@@ -57,6 +57,7 @@ else
   eval "$(pyenv virtualenv-init -)"
 fi
 
+git pull
 pip install -r requirements.txt
 
 cd raspberry_pi
