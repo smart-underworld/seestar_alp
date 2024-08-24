@@ -13,9 +13,11 @@
                 <li class="nav-item">
                     <a class="nav-link" href="{{ root }}/image">Image</a>
                 </li>
-                {#            <li class="nav-item">#}
-                {#              <a class="nav-link" href="{{ root }}/live">Live</a>#}
-                {#            </li>#}
+                {% if experimental %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ root }}/live">Live</a>
+                </li>
+                {% endif %}
                 <li class="nav-item">
                     <a class="nav-link" href="{{ root }}/mosaic">Mosaic</a>
                 </li>
@@ -50,7 +52,9 @@
                 {#            </li>#}
             </ul>
             <div class="nav-item me-1">
-                <button type="button" id="toggleuitheme" class="btn btn-secondary" title="Toggle Dark/Light Mode" onclick="toggleuitheme()">Dark/Light Mode</button>
+                <button type="button" id="toggleuitheme" class="btn btn-secondary" title="Toggle Dark/Light Mode"
+                        onclick="toggleuitheme()">Dark/Light Mode
+                </button>
             </div>
             <div class="dropdown">
                 <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown"

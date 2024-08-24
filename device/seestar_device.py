@@ -9,6 +9,8 @@ import uuid
 from time import sleep
 
 import tzlocal
+
+from config import Config
 from seestar_util import Util
 
 
@@ -64,6 +66,7 @@ class Seestar:
         self.goto_state = "complete"
         self.connect_count = 0
         self.below_horizon_dec_offset = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
+        self.view_state = {}
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
@@ -107,7 +110,7 @@ class Seestar:
             self.disconnect()
 
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.s.settimeout(2)
+            self.s.settimeout(Config.timeout)
             self.s.connect((self.host, self.port))
             # self.s.settimeout(None)
             self.is_connected = True
@@ -147,6 +150,10 @@ class Seestar:
             self.ra = float(data_result['ra'])
             self.dec = float(data_result['dec'] - self.below_horizon_dec_offset)
 
+    def update_view_state(self, parsed_data):
+        if parsed_data['method'] == "get_view_state" and 'result' in parsed_data:
+            self.view_state = parsed_data['result']['View']
+
     def heartbeat_message_thread_fn(self):
         while self.is_watch_events:
             if not self.is_connected and not self.reconnect():
@@ -176,6 +183,8 @@ class Seestar:
                         # {"jsonrpc":"2.0","Timestamp":"9507.244805160","method":"scope_get_equ_coord","result":{"ra":17.093056,"dec":34.349722},"code":0,"id":83}
                         if parsed_data["method"] == "scope_get_equ_coord":
                             self.update_equ_coord(parsed_data)
+                        if parsed_data["method"] == "get_view_state":
+                            self.update_view_state(parsed_data)
                         # keep a running queue of last 100 responses for sync call results
                         self.response_dict[parsed_data["id"]] = parsed_data
                         while len(parsed_data) > 100:
@@ -223,7 +232,7 @@ class Seestar:
     def send_message_param(self, data):
         cur_cmdid = self.cmdid
         data['id'] = cur_cmdid
-        self.cmdid += 1
+        self.cmdid += 1 # can this overflow?  not in JSON...
         json_data = json.dumps(data)
         self.logger.debug(f'{self.device_name} sending: {json_data}')
         self.send_message(json_data + "\r\n")

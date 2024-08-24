@@ -231,7 +231,8 @@ class DeviceMain:
 
         logger.info(Config.seestars)
         for dev in Config.seestars:
-            telescope.start_seestar_device(logger, dev['name'], dev['ip_address'], 4700, dev['device_num'])
+            controller = telescope.start_seestar_device(logger, dev['name'], dev['ip_address'], 4700, dev['device_num'])
+            telescope.start_seestar_imaging(logger, dev['name'], dev['ip_address'], 4800, dev['device_num'], controller)
 
         #########################
         # FOR EACH ASCOM DEVICE #
@@ -295,6 +296,9 @@ class DeviceMain:
         #    telescope.end_seestar_device(dev['device_num'])
         if self.httpd:
             self.httpd.shutdown()
+
+    def get_imager(self, device_num):
+        return telescope.get_seestar_imager(device_num)
 
 class style():
     YELLOW = '\033[33m'
