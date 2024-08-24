@@ -68,6 +68,7 @@ class SeestarImaging:
         self.is_connected = False
         self.is_streaming = False
         self.is_gazing = False
+        self.sent_subscription = False
         self.cache_frame = True
         self.mode = None
         self.exposure_mode = None  # "stream"  # None | preview | stack | stream
@@ -85,14 +86,6 @@ class SeestarImaging:
 
     def __repr__(self):
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
-
-    def ensure_mode(self):
-        view_state = self.device.view_state
-        state = view_state.get("state")
-        stage = view_state.get("stage")
-
-        if state == 'working' and stage == 'RTSP':
-            return self.start('stream')
 
     def set_mode(self, mode):
         # If mode didn't change, do nothing?
@@ -166,6 +159,7 @@ class SeestarImaging:
     def disconnect(self):
         self.logger.info("disconnect")
         self.is_connected = False
+        self.sent_subscription = False
         if self.s:
             try:
                 self.s.close()
@@ -190,10 +184,12 @@ class SeestarImaging:
             return False
 
     def send_star_subscription(self):
-        if self.exposure_mode == "stack":
-            self.send_message('{"id": 23, "method": "get_stacked_img"}' + "\r\n")
-        else:
-            self.send_message('{"id": 21, "method": "begin_streaming"}' + "\r\n")
+        if not self.sent_subscription:
+            if self.exposure_mode == "stack":
+                self.send_message('{"id": 23, "method": "get_stacked_img"}' + "\r\n")
+            else:
+                self.send_message('{"id": 21, "method": "begin_streaming"}' + "\r\n")
+        self.sent_subscription = True
 
     def heartbeat_message_thread_fn(self):
         while True:
@@ -202,15 +198,12 @@ class SeestarImaging:
                 continue
 
             self.send_message('{  "id" : 2,  "method" : "test_connection"}' + "\r\n")
+            if self.is_gazing:
+                self.send_star_subscription()
+
             sleep(3)
 
     def receive_message_thread_fn(self):
-        # read and discard the initial header
-        # if self.exposure_mode == "preview":
-        #     self.logger.info("starting receive message: starting read initial header")
-        #     header = self.read_bytes(80)
-        #     size, id = self.parse_header(header)
-        #     self.read_bytes(size)
         self.logger.info("starting receive message: main loop")
         while True:
             if self.is_connected and self.exposure_mode is not None:
@@ -241,8 +234,6 @@ class SeestarImaging:
                         if self.is_gazing:
                             self.disconnect()
                             self.reconnect()
-                            # self.send_star_subscription()
-                            # self.send_message('{"id": 23, "method": "get_stacked_img"}' + "\r\n")
                     else:
                         continue
 
@@ -412,13 +403,6 @@ class SeestarImaging:
                 self.get_image_thread.name = f"ReceiveImageThread.{self.device_name}"
                 self.get_image_thread.start()
 
-        # print(f'Start: {self.is_gazing=} {self.exposure_mode=}')
-        # if self.is_gazing:
-        #     if self.exposure_mode == "stack":
-        #         self.send_message('{"id": 23, "method": "get_stacked_img"}' + "\r\n")
-        #     else:
-        #         self.send_message('{"id": 21, "method": "begin_streaming"}' + "\r\n")
-
 
     def stop(self):
         self.disconnect()
@@ -428,6 +412,7 @@ class SeestarImaging:
         self.is_streaming = False
         self.is_gazing = False
         self.is_connected = False
+        self.sent_subscription = False
 
 
     def blank_frame(self, message="Loading..."):
@@ -462,6 +447,7 @@ class SeestarImaging:
 
 
     def get_frame(self, mode=None):
+        # todo : don't send these if we already have an image?
         yield self.blank_frame()
         yield self.blank_frame()
 
@@ -469,16 +455,6 @@ class SeestarImaging:
         # todo : check the mode from device...
         view_state = self.device.view_state
         self.logger.info(f"mode: {self.mode} {type(self.mode)} view_state: {view_state}")
-
-        # while self.is_idle():
-        #     yield self.blank_frame("Idle")
-        #     should probably just return and rely on outer code to restart image...
-        #     sleep(0.1)
-
-        # self.logger.info(f"mode: {self.mode} {type(self.mode)} view_state: {view_state}")
-        # if self.mode is None or self.mode == "None":
-        #     yield self.blank_frame("Idle")
-        #     return ""
 
         while not self.is_idle():
             image = None
@@ -492,11 +468,6 @@ class SeestarImaging:
                 exposure_mode = 'stream'
                 if self.exposure_mode != exposure_mode:
                     self.start(exposure_mode)
-                # else:
-                #     exposure_mode = None
-                #     if self.exposure_mode != exposure_mode:
-                #         self.stop()
-                #         continue
             elif stage == 'ContinuousExposure':
                 exposure_mode = 'preview'
                 if self.exposure_mode != exposure_mode:

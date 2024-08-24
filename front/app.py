@@ -1,5 +1,5 @@
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from tzlocal import get_localzone
 
 import falcon
@@ -618,8 +618,7 @@ def redirect(location):
     raise HTTPFound(location)
     # raise HTTPTemporaryRedirect(location)
 
-
-def render_template(req, resp, template_name, **context):
+def fetch_template(template_name):
     if getattr(sys, "frozen", False):
         ## RWR Testing
         template_dir = os.path.join(os.path.dirname(__file__), 'templates')
@@ -630,7 +629,10 @@ def render_template(req, resp, template_name, **context):
     else:
         template = Environment(
             loader=FileSystemLoader(os.path.join(os.path.dirname(__file__), 'templates'))).get_template(template_name)
+    return template
 
+def render_template(req, resp, template_name, **context):
+    template = fetch_template(template_name)
     resp.status = falcon.HTTP_200
     resp.content_type = 'text/html'
     webui_theme = Config.uitheme
@@ -1084,15 +1086,20 @@ class LiveStatusResource:
         state = "Idle"
         mode = ""
         stage = ""
-        if status is not None and status.get("View"):
-            state = status["View"]["state"]
-            mode = status["View"]["mode"]
-            stage = status["View"].get("stage")
+        view = None
+        if status is not None:
+            view = status.get('View')
+        if view is not None:
+            state = view.get("state")
+            mode = view.get("mode")
+            stage = view.get("stage")
         tm = datetime.now().strftime("%H:%M:%S")
         changed = self.stage != stage or self.mode != mode or self.state != state
         self.stage = stage
         self.state = state
         self.mode = mode
+
+        logger.info(f"on_get view: {view=}")
 
         # If status changes, trigger reload
         resp.status = falcon.HTTP_200
@@ -1102,7 +1109,21 @@ class LiveStatusResource:
         # if star:
         #.  target_name, gain, stacked_frame, dropped_frame
         #.  Exposure: { lapse_ms, exp_ms }
-        resp.text = f'<div> {tm}: View State: {state}, Mode: {mode}, Stage: {stage}</div>'
+        template = fetch_template('live_status.html')
+        stats = None
+
+        if state == 'working' and mode == 'star' and stage == 'Stack' and view.get("Stack"):
+            stack = view.get("Stack")
+            stats = {
+                "target_name": stack.get("target_name"),
+                "gain": stack.get("gain"),
+                "stacked_frame": stack.get("stacked_frame"),
+                "dropped_frame": stack.get("dropped_frame"),
+                "elapsed": str(timedelta(milliseconds=stack["lapse_ms"])),
+            }
+        resp.text = template.render(tm=tm, state=state, mode=mode, stage=stage, stats=stats)
+        #'Annotate': {'state': 'complete', 'lapse_ms': 3370, 'result': {'image_size': [1080, 1920], 'annotations': [
+        #    {'type': 'ngc', 'names': ['NGC 6992', 'C 33'], 'pixelx': 394.698, 'pixely': 611.487, 'radius': 757.869}],
 
 def status():
     while True:

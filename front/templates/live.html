@@ -2,7 +2,6 @@
 
 {% block header %}
     <h1>{% block title %}Live View{% endblock %}</h1>
-    <h2>Mode: {{ mode }}</h2>
 {% endblock %}
 
 {% block content %}
@@ -49,7 +48,7 @@
         <button id="scenery" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "scenery"}'>scenery</button>
     </p>
 
-    <img id="liveViewImg" src="{{ imager_root }}/vid" width="360" height="640" alt="Live view image"/>
+    <img id="liveViewImg" src="{{ imager_root }}/vid" width="540" height="960" alt="Live view image"/>
     {#    <img src="{{ imager_root }}/vid" width="1080" height="1920"/>#}
 
     {#    {% if root == "/1" %}#}
