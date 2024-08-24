@@ -31,7 +31,29 @@ import threading
 
 logger = init_logging()
 
-base_url = "http://localhost:" + str(Config.port)
+def get_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(0)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('10.254.254.254', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
+
+
+def get_listening_ip():
+    if Config.ip_address == "0.0.0.0":
+        # Find the ip
+        ip_address = get_ip()
+    else:
+        ip_address = Config.ip_address
+    return ip_address
+
+base_url = "http://" + get_listening_ip() + ":" + str(Config.port)
 stellarium_url = 'http://' + str(Config.sthost) + ':' + str(Config.stport) + '/api/objects/info'
 simbad_url = 'https://simbad.cds.unistra.fr/simbad/sim-id?output.format=ASCII&obj.bibsel=off&Ident='
 messages = []
@@ -89,7 +111,7 @@ def get_imager_root(telescope_id):
 
         telescope = list(filter(lambda tel: tel['device_num'] == telescope_id, telescopes))[0]
         if telescope:
-            root = f"http://{Config.ip_address}:{Config.imgport}/{telescope['device_num']}"
+            root = f"http://{get_listening_ip()}:{Config.imgport}/{telescope['device_num']}"
             return root
     return ""
 
@@ -112,21 +134,6 @@ def get_flash_cookie(req, resp):
         resp.unset_cookie('flash_cookie', path='/')
         return cookie
     return []
-
-
-def get_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.settimeout(0)
-    try:
-        # doesn't even have to be reachable
-        s.connect(('10.254.254.254', 1))
-        IP = s.getsockname()[0]
-    except Exception:
-        IP = '127.0.0.1'
-    finally:
-        s.close()
-    return IP
-
 
 def update_twilight_times(latitude=None, longitude=None):
     observer = ephem.Observer()
@@ -1019,38 +1026,12 @@ class ScheduleImportResource:
 
 class LivePage:
     @staticmethod
-    def on_get(req, resp, telescope_id=1, mode=None):
-        # XXX need to look at view state before firing off things!
+    def on_get(req, resp, telescope_id=1):
         status = method_sync('get_view_state')
-        current_mode = None
-        print("get_view_state", status)
-        if status is not None and status.get('View'):
-            current_mode = status['View']['mode']
-        #current_status = status['View']['status']
-        print("Current status:", status, "new mode:", mode)
-        # if mode is None:
-        #     do_action_device("method_async", telescope_id,
-        #                      {"method": "iscope_stop_view"})
-        # else:
-        #     if current_mode != mode:
-        #         do_action_device("method_async", telescope_id,
-        #                              {"method": "iscope_start_view", "params": {"mode": mode}})
         logger.info(status)
-        # state = method_sync("get_device_state")
-        # ip = state["station"]["ip"]
         context = get_context(telescope_id, req)
         now = datetime.now()
-        render_template(req, resp, 'live.html', mode=mode, now=now, **context)
-
-
-class LiveVideoResource:
-    def __init__(self, device_main):
-        self.device_main = device_main
-
-    def on_get(self, req, resp, telescope_id=1, mode=None):
-        imager = self.device_main.get_imager(telescope_id)
-        resp.content_type = 'multipart/x-mixed-replace; boundary=frame'
-        resp.stream = imager.get_frame(mode)
+        render_template(req, resp, 'live.html', now=now, **context)
 
 
 class LiveModeResource:
@@ -1058,7 +1039,6 @@ class LiveModeResource:
         # shut off watch
         do_action_device("method_async", telescope_id,
                          {"method": "iscope_stop_view"})
-        # resp.set_header('HX-Trigger', 'liveViewModeChange')
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
         resp.text = 'none'
@@ -1068,10 +1048,6 @@ class LiveModeResource:
         # xxx: If mode is none, need to cancel things
         response = do_action_device("method_async", telescope_id,
                                     {"method": "iscope_start_view", "params": {"mode": mode}})
-        print("iscope_start_view:", response)
-        #render_template(req, resp, 'live_mode.html')
-        #liveViewImg
-        # resp.set_header('HX-Trigger', 'liveViewModeChange')
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
         resp.text = mode
@@ -1127,16 +1103,16 @@ class LiveStatusResource:
         #'Annotate': {'state': 'complete', 'lapse_ms': 3370, 'result': {'image_size': [1080, 1920], 'annotations': [
         #    {'type': 'ngc', 'names': ['NGC 6992', 'C 33'], 'pixelx': 394.698, 'pixely': 611.487, 'radius': 757.869}],
 
-def status():
-    while True:
-        yield 'this is a test' + "\r\n"
-        time.sleep(5)
+# def status():
+#     while True:
+#         yield 'this is a test' + "\r\n"
+#         time.sleep(5)
 
 
-class LiveStateResource:
-    def on_get(self, req, resp, telescope_id=1):
-        resp.content_type = 'text/plain'
-        resp.stream = status()
+# class LiveStateResource:
+#     def on_get(self, req, resp, telescope_id=1):
+#         resp.content_type = 'text/plain'
+#         resp.stream = status()
 
 
 class SearchObjectResource:
@@ -1498,8 +1474,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/live', LivePage())
         app.add_route('/{telescope_id:int}/live/status', LiveStatusResource())
         app.add_route('/{telescope_id:int}/live/mode', LiveModeResource())
-        app.add_route('/{telescope_id:int}/live/state', LiveStateResource())
-        app.add_route('/{telescope_id:int}/live/{mode}', LivePage())
+        # app.add_route('/{telescope_id:int}/live/state', LiveStateResource())
         app.add_route('/{telescope_id:int}/mosaic', MosaicResource())
         app.add_route('/{telescope_id:int}/search', SearchObjectResource())
         app.add_route('/{telescope_id:int}/settings', SettingsResource())
@@ -1524,27 +1499,12 @@ class FrontMain:
         app.add_route('/toggleuitheme', ToggleUIThemeResource())
         app.add_route('/updatetwilighttimes', UpdateTwilightTimesResource())
 
-        #if device_main:
-        #    alp_resource = AlpResource(device_main)
-        #    app.add_route("/alp/stop", alp_resource, suffix="stop")
-        #    app.add_route("/alp/start", alp_resource, suffix="start")
-        #
-        #        alp_resource.start()
-        #
-        #    app.add_route('/{telescope_id:int}/vid/{mode}', LiveVideoResource(alp_resource))
-
         try:
-            # with make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler) as httpd:
             self.httpd = make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler)
             logger.info(f'==STARTUP== Serving on {Config.ip_address}:{Config.uiport}. Time stamps are UTC.')
 
             # Print listening IP:Port to the console
-            if Config.ip_address == "0.0.0.0":
-                # Find the ip
-                ip_address = get_ip()
-            else:
-                ip_address = Config.ip_address
-            logger.info(f'SSC Started: http://{ip_address}:{Config.uiport}')
+            logger.info(f'SSC Started: http://{get_listening_ip()}:{Config.uiport}')
 
             # Check for internet connection
             global internet_connection

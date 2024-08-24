@@ -4,6 +4,7 @@ title = "Alpaca Sample Driver (Rotator)"
 # ip_address should not have to be changed
 ip_address = '127.0.0.1'           # Any address
 port = 5555
+imgport = 5556     # Imaging API port
 stport = 8090      #stellarium port
 sthost = 'localhost'  #stellarium hostname or IP
 

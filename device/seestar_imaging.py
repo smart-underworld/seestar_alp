@@ -11,7 +11,6 @@ import datetime
 import socket
 import threading
 import zipfile
-from copy import deepcopy
 from io import BytesIO
 from struct import unpack, calcsize
 from time import sleep, time
@@ -265,12 +264,15 @@ class SeestarImaging:
                     empty_images = 0
                     with RtspClient(rtsp_server_uri=f'rtsp://{self.host}:4554/stream', logger=self.logger,
                                     verbose=True) as client:
-                        self.raw_img = np.copy(client.read(raw=True))
-                        self.received_frame += 1
+                        # self.raw_img = np.copy(client.read(raw=True))
+                        # self.received_frame += 1
 
                         while self.is_streaming:
                             image = client.read(raw=True)
-                            if image is not None:
+                            if image is not None and not np.array_equal(image, self.raw_img):
+                                # RTSP is async, so when we read we might get the same frame back.
+                                # We could adjust the Rtsp code, but for now just going to brute force compare
+                                # frames.
                                 self.raw_img = np.copy(image)
                                 self.received_frame += 1
                                 empty_images = 0  # Reset counter...
@@ -282,7 +284,8 @@ class SeestarImaging:
 
                             sleep(0.025)
 
-                            if empty_images > 10:
+                            # Let it fail for a few seconds before attempting a reconnect...
+                            if empty_images > 100:
                                 self.logger.info("empty image threshold exceeded.  reconnecting")
                                 break
                 except Exception as e:
