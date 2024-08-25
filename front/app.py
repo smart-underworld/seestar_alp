@@ -1077,7 +1077,7 @@ class LiveStatusResource:
         self.state = state
         self.mode = mode
 
-        logger.info(f"on_get view: {view=}")
+        # logger.info(f"on_get view: {view=}")
 
         # If status changes, trigger reload
         resp.status = falcon.HTTP_200
@@ -1354,40 +1354,6 @@ class StellariumResource:
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
         resp.text = ra_dec_j2000
-
-
-class AlpResource:
-    def __init__(self, device_main):
-        self.device_app = device_main()
-        self.thread = None
-
-    def start(self):
-        logger.info("Starting ALP")
-        self.thread = threading.Thread(target=self.runner, args=(1,), daemon=True)
-        self.thread.name = "StartupThread"
-        self.thread.start()
-
-    def on_get_start(self, req, resp):
-        self.start()
-        resp.status = falcon.HTTP_200
-        resp.content_type = 'application/text'
-        resp.text = 'Started, yo!'
-
-    def on_get_stop(self, req, resp):
-        logger.info("Stopping ALP")
-        self.device_app.stop()
-        self.thread.join()
-        resp.status = falcon.HTTP_200
-        resp.content_type = 'application/text'
-        resp.text = 'Stopped'
-
-    def get_imager(self, device_num: int):
-        return self.device_app.get_imager(device_num)
-
-    def runner(self, name):
-        logging.info("SeestarAlp %s: starting", name)
-        self.device_app.start()
-        logging.info("SeestarAlp %s: finishing", name)
 
 
 class ToggleUIThemeResource:

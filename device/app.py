@@ -284,7 +284,7 @@ class DeviceMain:
             # Serve until process is killed
             self.httpd.serve_forever()
         except KeyboardInterrupt:
-            print("Keyboard interrupt. Server shutting down.")
+            logger.warn("Keyboard interrupt. Server shutting down.")
 
         for dev in Config.seestars:
             telescope.end_seestar_device(dev['device_num'])
