@@ -5,6 +5,7 @@
 .DS_Store
 __pycache__
 device/__pycache__
+device/config.toml
 rotator.log*
 docs/build
 docs/refs
@@ -13,3 +14,5 @@ skeletons/AlpycaDeviceSkeletons.code-workspace
 alpyca.log*
 docker/config.toml
 docker/getopts_long
+front/twilight_times.json
+

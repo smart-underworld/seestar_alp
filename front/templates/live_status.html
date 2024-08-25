@@ -1,0 +1,32 @@
+<div class="container mt-3">
+    <div class="row border-bottom py-1 text-start">
+        <div class="col fw-bold">State</div>
+        <div class="col">{{ state }}</div>
+    </div>
+    <div class="row border-bottom py-1 text-start">
+        <div class="col fw-bold">Mode</div>
+        <div class="col">{{ mode }}</div>
+    </div>
+    <div class="row border-bottom py-1 text-start">
+        <div class="col fw-bold">Stage</div>
+        <div class="col">{{ stage }}</div>
+    </div>
+    {% if stats %}
+        {#        <div class="row border-bottom py-1 text-start">#}
+        {#            <div class="col fw-bold">Target</div>#}
+        {#            <div class="col">{{ stats["target_name"] }}</div>#}
+        {#        </div>#}
+        <div class="row border-bottom py-1 text-start">
+            <div class="col fw-bold">Stacked Frames</div>
+            <div class="col">{{ stats["stacked_frame"] }}</div>
+        </div>
+        <div class="row border-bottom py-1 text-start">
+            <div class="col fw-bold">Dropped Frames</div>
+            <div class="col">{{ stats["dropped_frame"] }}</div>
+        </div>
+{#        <div class="row border-bottom py-1 text-start">#}
+{#            <div class="col fw-bold">Elapsed</div>#}
+{#            <div class="col">{{ stats["elapsed"] }}</div>#}
+{#        </div>#}
+    {% endif %}
+</div>

@@ -9,6 +9,8 @@ import uuid
 from time import sleep
 
 import tzlocal
+
+from config import Config
 from seestar_util import Util
 
 
@@ -59,9 +61,12 @@ class Seestar:
         # self.schedule['current_item_detail']    # Text description for mosaic?
         self.cur_solve_RA = -9999.0  #
         self.cur_solve_Dec = -9999.0
+        self.cur_mosaic_nRA = -1
+        self.cur_mosaic_nDec = -1
         self.goto_state = "complete"
         self.connect_count = 0
         self.below_horizon_dec_offset = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
+        self.view_state = {}
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
@@ -105,7 +110,7 @@ class Seestar:
             self.disconnect()
 
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.s.settimeout(2)
+            self.s.settimeout(Config.timeout)
             self.s.connect((self.host, self.port))
             # self.s.settimeout(None)
             self.is_connected = True
@@ -145,6 +150,14 @@ class Seestar:
             self.ra = float(data_result['ra'])
             self.dec = float(data_result['dec'] - self.below_horizon_dec_offset)
 
+    def update_view_state(self, parsed_data):
+        if parsed_data['method'] == "get_view_state" and 'result' in parsed_data:
+            view = parsed_data['result'].get('View')
+            if view:
+                self.view_state = view
+            #else:
+            #    self.view_state = {}
+
     def heartbeat_message_thread_fn(self):
         while self.is_watch_events:
             if not self.is_connected and not self.reconnect():
@@ -174,6 +187,8 @@ class Seestar:
                         # {"jsonrpc":"2.0","Timestamp":"9507.244805160","method":"scope_get_equ_coord","result":{"ra":17.093056,"dec":34.349722},"code":0,"id":83}
                         if parsed_data["method"] == "scope_get_equ_coord":
                             self.update_equ_coord(parsed_data)
+                        if parsed_data["method"] == "get_view_state":
+                            self.update_view_state(parsed_data)
                         # keep a running queue of last 100 responses for sync call results
                         self.response_dict[parsed_data["id"]] = parsed_data
                         while len(parsed_data) > 100:
@@ -221,7 +236,7 @@ class Seestar:
     def send_message_param(self, data):
         cur_cmdid = self.cmdid
         data['id'] = cur_cmdid
-        self.cmdid += 1
+        self.cmdid += 1 # can this overflow?  not in JSON...
         json_data = json.dumps(data)
         self.logger.debug(f'{self.device_name} sending: {json_data}')
         self.send_message(json_data + "\r\n")
@@ -672,10 +687,14 @@ class Seestar:
         self.mosaic_thread.start()
 
     def mosaic_thread_fn(self, target_name, center_RA, center_Dec, is_use_LP_filter, session_time, nRA, nDec,
-                         overlap_percent, gain, is_use_autofocus):
+                         overlap_percent, gain, is_use_autofocus, selected_panels):
         spacing_result = Util.mosaic_next_center_spacing(center_RA, center_Dec, overlap_percent)
         delta_RA = spacing_result[0]
         delta_Dec = spacing_result[1]
+
+        is_use_selected_panels = not selected_panels == ""
+        if is_use_selected_panels:
+            panel_set = selected_panels.split(';')
 
         # adjust mosaic center if num panels is even
         if nRA % 2 == 0:
@@ -687,19 +706,29 @@ class Seestar:
 
         cur_dec = center_Dec - int(nDec / 2) * delta_Dec
         for index_dec in range(nDec):
+            self.cur_mosaic_nDec = index_dec+1
             spacing_result = Util.mosaic_next_center_spacing(center_RA, cur_dec, overlap_percent)
             delta_RA = spacing_result[0]
             cur_ra = center_RA - int(nRA / 2) * spacing_result[0]
             for index_ra in range(nRA):
+                self.cur_mosaic_nRA = index_ra+1
                 if self.scheduler_state != "Running":
                     self.logger.info("Mosaic mode was requested to stop. Stopping")
                     self.scheduler_state = "Stopped"
                     self.scheduler_item_state = "Stopped"
+                    self.cur_mosaic_nDec = -1
+                    self.cur_mosaic_nRA = -1
                     return
+                
+                # check if we are doing a subset of the panels
+                panel_string = str(index_ra + 1) + str(index_dec + 1)
+                if is_use_selected_panels and panel_string not in panel_set:
+                    continue
+
                 if nRA == 1 and nDec == 1:
                     save_target_name = target_name
                 else:
-                    save_target_name = target_name + "_" + str(index_ra + 1) + str(index_dec + 1)
+                    save_target_name = target_name + "_" + panel_string
                 self.logger.info("goto %s", (cur_ra, cur_dec))
                 # set_settings(x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, heater_enable):
                 # TODO: Need to set correct parameters
@@ -716,14 +745,14 @@ class Seestar:
 
                     if is_use_autofocus == True:
                         result = self.try_auto_focus(2)
-                    else:
+                    if result == False:
+                        self.logger.info("Failed to auto focus, but will continue to next panel anyway.")
                         result = True
                     if result == True:
                         time.sleep(4)
                         if not self.start_stack({"gain": gain, "restart": True}):
                             return
-                        # xxx : is this fully accurate?  as far as way of sleeping per panel?
-                        # xxx : update state to show which panel is running
+
                         for i in range(sleep_time_per_panel):
                             if self.scheduler_state != "Running":
                                 self.logger.info("Scheduler was requested to stop. Stopping current mosaic.")
@@ -742,6 +771,8 @@ class Seestar:
             cur_dec += delta_Dec
         self.logger.info("Finished mosaic.")
         self.scheduler_item_state = "Stopped"
+        self.cur_mosaic_nDec = -1
+        self.cur_mosaic_nRA = -1
 
     def start_mosaic_item(self, params):
         if self.scheduler_state != "Running":
@@ -759,7 +790,14 @@ class Seestar:
         nDec = params['dec_num']
         overlap_percent = params['panel_overlap_percent']
         gain = params['gain']
-        is_use_autofocus = params['is_use_autofocus']
+        if 'is_use_autofocus' in params:
+            is_use_autofocus = params['is_use_autofocus']
+        else:
+            is_use_autofocus = False
+        if not 'selected_panels' in params:
+            selected_panels = ""
+        else:
+            selected_panels = params['selected_panels']
 
         # verify mosaic pattern
         if nRA < 1 or nDec < 0:
@@ -788,10 +826,11 @@ class Seestar:
         self.logger.info("  overlap %%     : %s", overlap_percent)
         self.logger.info("  gain          : %s", gain)
         self.logger.info("  use autofocus : %s", is_use_autofocus)
+        self.logger.info("  select panels : %s", selected_panels)
 
         self.mosaic_thread = threading.Thread(
             target=lambda: self.mosaic_thread_fn(target_name, center_RA, center_Dec, is_use_LP_filter, session_time,
-                                                 nRA, nDec, overlap_percent, gain, is_use_autofocus))
+                                                 nRA, nDec, overlap_percent, gain, is_use_autofocus, selected_panels))
         self.mosaic_thread.start()
 
     def get_schedule(self):

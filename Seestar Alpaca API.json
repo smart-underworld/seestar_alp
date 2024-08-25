@@ -3713,6 +3713,68 @@
         },
         {
           "type": "http",
+          "name": "action-scope_move_to_horizon",
+          "seq": 5,
+          "request": {
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "method": "PUT",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "enabled": true
+              },
+              {
+                "name": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "formUrlEncoded",
+              "formUrlEncoded": [
+                {
+                  "name": "Action",
+                  "value": "method_sync",
+                  "enabled": true
+                },
+                {
+                  "name": "Parameters",
+                  "value": "{\"method\":\"scope_move_to_horizon\"}",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientID",
+                  "value": "1",
+                  "enabled": true
+                },
+                {
+                  "name": "ClientTransactionID",
+                  "value": "999",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none",
+              "basic": {
+                "username": "",
+                "password": ""
+              },
+              "bearer": {
+                "token": ""
+              }
+            },
+            "script": {},
+            "vars": {},
+            "assertions": [],
+            "tests": "",
+            "query": []
+          }
+        },
+        {
+          "type": "http",
           "name": "action-scope_set_track_state",
           "seq": 4,
           "request": {
