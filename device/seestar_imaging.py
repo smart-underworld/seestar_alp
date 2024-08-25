@@ -278,14 +278,14 @@ class SeestarImaging:
                                 empty_images = 0  # Reset counter...
 
                                 if self.received_frame % 100 == 0:
-                                    self.logger.info(f"Read {self.received_frame} images {self.is_streaming=}")
+                                    self.logger.debug(f"Read {self.received_frame} images {self.is_streaming=}")
                             else:
                                 empty_images += 1
 
                             sleep(0.025)
 
                             # Let it fail for a few seconds before attempting a reconnect...
-                            if empty_images > 100:
+                            if empty_images >  200:
                                 self.logger.info("empty image threshold exceeded.  reconnecting")
                                 break
                 except Exception as e:
@@ -392,18 +392,18 @@ class SeestarImaging:
         #   try to connect if necessary?  or disconnect first, then connect if necessary
         if self.heartbeat_msg_thread is None:
             self.heartbeat_msg_thread = threading.Thread(target=self.heartbeat_message_thread_fn, daemon=True)
-            self.heartbeat_msg_thread.name = f"HeartbeatMessageThread.{self.device_name}"
+            self.heartbeat_msg_thread.name = f"ImagingHeartbeatMessageThread.{self.device_name}"
             self.heartbeat_msg_thread.start()
 
         if self.exposure_mode == "stream":
             if self.get_stream_thread is None:
                 self.get_stream_thread = threading.Thread(target=self.streaming_thread_fn, daemon=True)
-                self.get_stream_thread.name = f"ReceiveStreamThread.{self.device_name}"
+                self.get_stream_thread.name = f"ImagingReceiveStreamThread.{self.device_name}"
                 self.get_stream_thread.start()
         else:
             if self.get_image_thread is None:
                 self.get_image_thread = threading.Thread(target=self.receive_message_thread_fn, daemon=True)
-                self.get_image_thread.name = f"ReceiveImageThread.{self.device_name}"
+                self.get_image_thread.name = f"ImagingReceiveImageThread.{self.device_name}"
                 self.get_image_thread.start()
 
 
@@ -530,7 +530,7 @@ class SeestarImaging:
                             if self.last_stat_frames is not None and self.last_stat_frames is not None:
                                 elapsed = now - self.last_stat_time
                                 frames = self.sent_frame - self.last_stat_frames
-                                self.logger.info(
+                                self.logger.debug(
                                     f"Sent frames: {frames} in {elapsed} seconds.  FPS: {frames / elapsed}.  Received frame total: {self.received_frame}")
 
                             self.last_stat_time = now

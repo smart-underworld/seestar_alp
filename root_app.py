@@ -13,12 +13,10 @@ from front.app import FrontMain
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "device"))
 
-from device.app import DeviceMain
-from device.config import Config
-
-from device import log
-from device import telescope
-
+from app import DeviceMain
+from config import Config
+import log
+import telescope
 
 class AppRunner:
     def __init__(self, log, name, app_main):
@@ -30,22 +28,22 @@ class AppRunner:
     def start(self):
         self.logger.info(f"Starting {self.name}")
         self.thread = threading.Thread(target=self.runner, args=(1,), daemon=True)
-        self.thread.name = f"StartupThread{self.name}"
+        self.thread.name = f"{self.name}MainThread"
         self.thread.start()
 
-    def on_get_start(self, req, resp):
-        self.start()
-        resp.status = falcon.HTTP_200
-        resp.content_type = 'application/text'
-        resp.text = 'Started, yo!'
-
-    def on_get_stop(self, req, resp):
-        self.logger.info(f"Stopping {self.name}")
-        self.app_main.stop()
-        self.thread.join()
-        resp.status = falcon.HTTP_200
-        resp.content_type = 'application/text'
-        resp.text = 'Stopped'
+    # def on_get_start(self, req, resp):
+    #     self.start()
+    #     resp.status = falcon.HTTP_200
+    #     resp.content_type = 'application/text'
+    #     resp.text = 'Started, yo!'
+    #
+    # def on_get_stop(self, req, resp):
+    #     self.logger.info(f"Stopping {self.name}")
+    #     self.app_main.stop()
+    #     self.thread.join()
+    #     resp.status = falcon.HTTP_200
+    #     resp.content_type = 'application/text'
+    #     resp.text = 'Stopped'
 
     def get_imager(self, device_num: int):
         return self.app_main.get_imager(device_num)
