@@ -13,12 +13,10 @@ from front.app import FrontMain
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "device"))
 
-from device.app import DeviceMain
-from device.config import Config
-
-from device import log
-from device import telescope
-
+from app import DeviceMain
+from config import Config
+import log
+import telescope
 
 class AppRunner:
     def __init__(self, log, name, app_main):
