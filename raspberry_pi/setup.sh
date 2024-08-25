@@ -9,7 +9,7 @@ if [ -e seestar_alp ] || [ -e ~/seestar_alp ]; then
 fi
 
 sudo apt-get update
-sudo apt-get install --yes git python3-pip libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev libgdbm-dev lzma lzma-dev tcl-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev wget curl make build-essential openssl
+sudo apt-get install --yes git python3-pip libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev libgdbm-dev lzma lzma-dev tcl-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev wget curl make build-essential openssl libgl1
 
 git clone https://github.com/smart-underworld/seestar_alp.git
 cd  seestar_alp
