@@ -723,6 +723,7 @@ class Seestar:
                 # check if we are doing a subset of the panels
                 panel_string = str(index_ra + 1) + str(index_dec + 1)
                 if is_use_selected_panels and panel_string not in panel_set:
+                    cur_ra += delta_RA
                     continue
 
                 if nRA == 1 and nDec == 1:
