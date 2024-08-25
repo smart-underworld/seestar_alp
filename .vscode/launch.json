@@ -8,7 +8,7 @@
             "name": "Sample Driver",
             "type": "python",
             "request": "launch",
-            "program": "device/app.py",
+            "program": "root_app.py",
             "console": "integratedTerminal",
             "justMyCode": true
         },
