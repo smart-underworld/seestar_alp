@@ -15,7 +15,7 @@ import time
 from falcon import Request, Response, HTTPBadRequest, HTTPTemporaryRedirect, before
 from logging import Logger
 
-from device.seestar_imaging import SeestarImaging
+from seestar_imaging import SeestarImaging
 from shr import PropertyResponse, MethodResponse, PreProcessRequest, \
                 get_request_field, to_bool
 from exceptions import *        # Nothing but exception classes
@@ -66,7 +66,7 @@ def start_seestar_device(logger: logger, name: str, ip_address: str, port: int, 
     return seestar_dev[device_num]
 
 
-def start_seestar_imaging(logger: logger, name: str, ip_address: str, port: int, device_num: int, device: Seestar = None):
+def start_seestar_imaging(logger: logger, name: str, ip_address: str, port: int, device_num: int, device: Seestar = None): #type: ignore
     # logger = logger
     global seestar_imager
     seestar_imager[device_num] = SeestarImaging(logger, ip_address, port, name, device_num, device)
