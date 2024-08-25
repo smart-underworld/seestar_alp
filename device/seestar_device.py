@@ -34,7 +34,7 @@ class Seestar:
         self.is_watch_events = False  # Tracks if device has been started even if it never connected
         self.op_watch = ""
         self.op_state = ""
-        self.s = ""
+        self.s = None
         self.get_msg_thread = ""
         self.heartbeat_msg_thread = ""
         self.is_debug = is_debug
@@ -84,21 +84,23 @@ class Seestar:
         except socket.error as e:
             # Don't bother trying to recover if watch events is False
             self.logger.error(f"Device {self.device_name}: send Socket error: {e}")
-            if self.is_watch_events:
-                self.disconnect()
-                if self.reconnect():
-                    return self.send_message(data)
+            self.disconnect()
+            if self.is_watch_events and self.reconnect():
+                return self.send_message(data)
             return False
+
+    def socket_force_close(self):
+        if self.s:
+            try:
+                self.s.close()
+                self.s = None
+            except:
+                pass
 
     def disconnect(self):
         # Disconnect tries to clean up socket if it exists
         self.is_connected = False
-        if self.s:
-            try:
-                self.s.close()
-                self.s = ""
-            except:
-                pass
+        self.socket_force_close()
 
     def reconnect(self):
         if self.is_connected:
@@ -109,6 +111,7 @@ class Seestar:
 
             self.disconnect()
 
+            # note: the below isn't thread safe!  (Reconnect can be called from different threads.)
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.s.settimeout(Config.timeout)
             self.s.connect((self.host, self.port))
@@ -131,10 +134,9 @@ class Seestar:
             # todo : no route to host...
             self.logger.error(f"Device {self.device_name}: read Socket error: {e}")
             # todo : handle message failure
-            if self.is_watch_events:
-                self.disconnect()
-                if self.reconnect():
-                    return self.get_socket_msg()
+            self.disconnect()
+            if self.is_watch_events and self.reconnect():
+                return self.get_socket_msg()
             return None
 
         data = data.decode("utf-8")
