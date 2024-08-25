@@ -31,7 +31,8 @@ jobs:
           cp ./device/config.py ./front
           cp ./device/config.toml.example ./front
           cp ./device/log.py ./front
-          pyinstaller --name="seestar_alp" --hidden-import tzlocal --hidden-import geocoder --hidden-import alpaca.telescope --hidden-import log --hidden-import toml `
+          pyinstaller --name="seestar_alp" --hidden-import tzlocal --hidden-import geocoder --hidden-import alpaca.telescope `
+          --hidden-import log --hidden-import toml --hidden-import logging.handlers `
           --add-data="front/config.toml.example;." --add-data="front/config.py;." --add-data="front/log.py;." `
           --add-data="front/citation;astroquery" --add-data="front/templates;templates" --add-data="front/public;public" `
           --add-data="front;front" --add-data="device;device" root_app.py
@@ -76,7 +77,8 @@ jobs:
           cp ./device/config.py ./front
           cp ./device/config.toml.example ./front
           cp ./device/log.py ./front
-          pyinstaller --name="seestar_alp" --hidden-import tzlocal --hidden-import geocoder --hidden-import alpaca.telescope --hidden-import log --hidden-import toml \
+          pyinstaller --name="seestar_alp" --hidden-import tzlocal --hidden-import geocoder --hidden-import alpaca.telescope \
+          --hidden-import log --hidden-import toml  --hidden-import logging.handlers \
           --add-data="front/config.toml.example:." --add-data="front/config.py:." --add-data="front/log.py:." \
           --add-data="front/CITATION:astroquery" --add-data="front/templates:templates" --add-data="front/public:public" \
           --add-data="front:front" --add-data="device:device"  root_app.py
