@@ -83,7 +83,7 @@ class Seestar:
             return False
         except socket.error as e:
             # Don't bother trying to recover if watch events is False
-            self.logger.error(f"Device {self.device_name}: send Socket error: {e}")
+            self.logger.error(f"Send socket error: {e}")
             self.disconnect()
             if self.is_watch_events and self.reconnect():
                 return self.send_message(data)
@@ -132,7 +132,7 @@ class Seestar:
         except socket.error as e:
             # todo : if general socket error, close socket, and kick off reconnect?
             # todo : no route to host...
-            self.logger.error(f"Device {self.device_name}: read Socket error: {e}")
+            self.logger.error(f"Read socket error: {e}")
             # todo : handle message failure
             self.disconnect()
             if self.is_watch_events and self.reconnect():
