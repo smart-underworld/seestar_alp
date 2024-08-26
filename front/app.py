@@ -246,16 +246,16 @@ def check_api_state(telescope_id):
         r.raise_for_status()
         response = r.json()
         if response.get("ErrorNumber") == 1031 or not response.get("Value"):
-            logger.info(f"Telescope {telescope_id} API is not connected.")
+            logger.warn(f"Telescope {telescope_id} API is not connected. {url=}")
             return False
     except requests.exceptions.ConnectionError:
-        logger.info(f"Telescope {telescope_id} API is not online. (ConnectionError)")
+        logger.warn(f"Telescope {telescope_id} API is not online. (ConnectionError) {url=}")
         return False
     except requests.exceptions.RequestException as e:
-        logger.info(f"Telescope {telescope_id} API is not online. (RequestException)")
+        logger.warn(f"Telescope {telescope_id} API is not online. (RequestException) {url=}")
         return False
     else:
-        logger.info(f"Telescope {telescope_id} API is online.")
+        logger.debug(f"Telescope {telescope_id} API is online.")
         return True
 
 
@@ -280,7 +280,7 @@ def queue_action(dev_num, payload):
     return []
 
 
-def do_action_device(action, dev_num, parameters):
+def do_action_device(action, dev_num, parameters, is_schedule=False):
     url = f"{base_url}/api/v1/telescope/{dev_num}/action"
     payload = {
         "Action": action,
@@ -295,7 +295,8 @@ def do_action_device(action, dev_num, parameters):
         except:
             logger.error(f"do_action_device: Failed to send action to device {dev_num}")
 
-    queue_action(dev_num, payload)
+    if is_schedule:
+        queue_action(dev_num, payload)
 
 
 def do_schedule_action_device(action, parameters, dev_num):
@@ -303,11 +304,11 @@ def do_schedule_action_device(action, parameters, dev_num):
         return do_action_device("add_schedule_item", dev_num, {
             "action": action,
             "params": parameters
-        })
+        }, True)
     else:
         return do_action_device("add_schedule_item", dev_num, {
             "action": action
-        })
+        }, True)
 
 
 def check_response(resp, response):
@@ -334,7 +335,7 @@ def method_sync(method, telescope_id=1):
 
 def get_device_state(telescope_id):
     if check_api_state(telescope_id):
-        print("Device is online", telescope_id)
+        # print("Device is online", telescope_id)
         result = method_sync("get_device_state", telescope_id)
         status = method_sync('get_view_state', telescope_id)
         view_state = "Idle"
