@@ -124,8 +124,9 @@ def get_context(telescope_id, req):
     online = check_api_state(telescope_id)
     partial_path = "/".join(req.relative_uri.split("/", 2)[2:])
     experimental = Config.experimental
+    uitheme = Config.uitheme
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
-            "online": online, "imager_root": imager_root, "experimental": experimental}
+            "online": online, "imager_root": imager_root, "experimental": experimental, "uitheme": uitheme}
 
 
 def get_flash_cookie(req, resp):
