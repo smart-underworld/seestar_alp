@@ -344,38 +344,49 @@ def get_device_state(telescope_id):
         mode = ""
         stage = ""
         wifi_signal = ""
+        device = ""
+        focuser = ""
+        settings = ""
+        pi_status = ""
+        free_storage = ""
         if status is not None and status.get("View"):
             view_state = status["View"]["state"]
             mode = status["View"]["mode"]
             stage = status["View"]["stage"]
-        schedule = do_action_device("get_schedule", telescope_id, {})
-        device = result["device"]
-        focuser = result["focuser"]
-        settings = result["setting"]
-        pi_status = result["pi_status"]
-        if wifi_status['sig_lev'] is not None:
-            wifi_signal = f"{wifi_status['sig_lev']} dBm" # We might need to check if station mode is on.
-        free_storage = humanize.naturalsize(result["storage"]["storage_volume"][0]["freeMB"] * 1024 * 1024)
-        stats = {
-            "Firmware Version": device["firmware_ver_string"],
-            "Focal Position": focuser["step"],
-            "Auto Power Off": settings["auto_power_off"],
-            "Heater?": settings["heater_enable"],
-            "Free Storage": free_storage,
-            "Balance Sensor (angle)": result["balance_sensor"]["data"]["angle"],
-            "Compass Sensor (direction)": result["compass_sensor"]["data"]["direction"],
-            "Temperature Sensor": pi_status["temp"],
-            "Charge Status": pi_status["charger_status"],
-            "Battery %": pi_status["battery_capacity"],
-            "Battery Temp": pi_status["battery_temp"],
-            "Scheduler Status": schedule["Value"]["state"],
-            "View State": view_state,
-            "View Mode": mode,
-            "View Stage": stage,
-            "Wi-Fi Signal": wifi_signal,
-        }
+        # Check for bad data
+        if status is not None and result is not None:
+            schedule = do_action_device("get_schedule", telescope_id, {})
+            if result is not None:
+                device = result["device"]
+                focuser = result["focuser"]
+                settings = result["setting"]
+                pi_status = result["pi_status"]
+                free_storage = humanize.naturalsize(result["storage"]["storage_volume"][0]["freeMB"] * 1024 * 1024)
+            if wifi_status is not None:
+                wifi_signal = f"{wifi_status['sig_lev']} dBm" # We might need to check if station mode is on.
+            stats = {
+                "Firmware Version": device["firmware_ver_string"],
+                "Focal Position": focuser["step"],
+                "Auto Power Off": settings["auto_power_off"],
+                "Heater?": settings["heater_enable"],
+                "Free Storage": free_storage,
+                "Balance Sensor (angle)": result["balance_sensor"]["data"]["angle"],
+                "Compass Sensor (direction)": result["compass_sensor"]["data"]["direction"],
+                "Temperature Sensor": pi_status["temp"],
+                "Charge Status": pi_status["charger_status"],
+                "Battery %": pi_status["battery_capacity"],
+                "Battery Temp": pi_status["battery_temp"],
+                "Scheduler Status": schedule["Value"]["state"],
+                "View State": view_state,
+                "View Mode": mode,
+                "View Stage": stage,
+                "Wi-Fi Signal": wifi_signal,
+            }
+        else:
+            logger.info(f"Stats: Unable to get data.")
+            stats = {}
     else:
-        print("Device is OFFLINE", telescope_id)
+        #print("Device is OFFLINE", telescope_id)
         stats = {}
     return stats
 
