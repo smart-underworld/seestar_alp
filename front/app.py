@@ -338,7 +338,8 @@ def get_device_state(telescope_id):
     if check_api_state(telescope_id):
         # print("Device is online", telescope_id)
         result = method_sync("get_device_state", telescope_id)
-        status = method_sync('get_view_state', telescope_id)
+        status = method_sync("get_view_state", telescope_id)
+        wifi_status = method_sync("pi_station_state", telescope_id)
         view_state = "Idle"
         mode = ""
         stage = ""
@@ -351,6 +352,7 @@ def get_device_state(telescope_id):
         focuser = result["focuser"]
         settings = result["setting"]
         pi_status = result["pi_status"]
+        wifi_signal = f"{wifi_status['sig_lev']} dBm" # We might need to check if station mode is on.
         free_storage = humanize.naturalsize(result["storage"]["storage_volume"][0]["freeMB"] * 1024 * 1024)
         stats = {
             "Firmware Version": device["firmware_ver_string"],
@@ -368,6 +370,7 @@ def get_device_state(telescope_id):
             "View State": view_state,
             "View Mode": mode,
             "View Stage": stage,
+            "Wi-Fi Signal": wifi_signal,
         }
     else:
         print("Device is OFFLINE", telescope_id)
