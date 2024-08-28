@@ -365,6 +365,8 @@ def get_device_state(telescope_id):
             if wifi_status is not None:
                 if wifi_status["server"]: # sig_lev is only there while in station mode.
                     wifi_signal = f"{wifi_status['sig_lev']} dBm"
+                else:
+                    wifi_signal = f"Unavailable in AP mode."
             stats = {
                 "Firmware Version": device["firmware_ver_string"],
                 "Focal Position": focuser["step"],
