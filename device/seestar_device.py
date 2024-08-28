@@ -933,6 +933,11 @@ class Seestar:
                     if local_time.hour == time_hour and local_time.minute == time_minute:
                         break
                     time.sleep(2)
+            elif action == 'set_wheel_position':
+                data = {}
+                data['method'] = action
+                data['params'] = item['params'] 
+                result = self.send_message_param_sync(data)
 
         self.scheduler_state = "Stopped"
         self.schedule['current_item_id'] = ""
