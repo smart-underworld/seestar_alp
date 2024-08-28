@@ -384,7 +384,7 @@ def get_device_state(telescope_id):
             }
         else:
             logger.info(f"Stats: Unable to get data.")
-            stats = {}
+            stats = {"Info": "Unable to get stats."} # Display information for the stats page VS blank page.
     else:
         #print("Device is OFFLINE", telescope_id)
         stats = {}
@@ -1200,7 +1200,11 @@ class SettingsResource:
 
         # Delay for LP filter on (off doesn't need a delay), this is helpful for rendering the current status on page refresh.
         if (FormattedNewSettings["stack_lenhance"]):
-            time.sleep(0.7)  # This is the lowest delay I could use to get the correct status.
+            wheel_state = method_sync("get_wheel_state", telescope_id)
+            if wheel_state is not None:
+                while wheel_state["state"] != "idle":
+                    time.sleep(0.1) # Wait for the filter wheel to complete
+                    wheel_state = method_sync("get_wheel_state", telescope_id)
 
         self.render_settings(req, resp, telescope_id, output)
 
