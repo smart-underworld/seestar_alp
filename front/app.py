@@ -343,6 +343,7 @@ def get_device_state(telescope_id):
         view_state = "Idle"
         mode = ""
         stage = ""
+        wifi_signal = ""
         if status is not None and status.get("View"):
             view_state = status["View"]["state"]
             mode = status["View"]["mode"]
@@ -352,7 +353,8 @@ def get_device_state(telescope_id):
         focuser = result["focuser"]
         settings = result["setting"]
         pi_status = result["pi_status"]
-        wifi_signal = f"{wifi_status['sig_lev']} dBm" # We might need to check if station mode is on.
+        if wifi_status['sig_lev'] is not None:
+            wifi_signal = f"{wifi_status['sig_lev']} dBm" # We might need to check if station mode is on.
         free_storage = humanize.naturalsize(result["storage"]["storage_volume"][0]["freeMB"] * 1024 * 1024)
         stats = {
             "Firmware Version": device["firmware_ver_string"],
