@@ -344,18 +344,24 @@ def get_device_state(telescope_id):
         mode = ""
         stage = ""
         wifi_signal = ""
+        device = ""
+        focuser = ""
+        settings = ""
+        pi_status = ""
+        free_storage = ""
         if status is not None and status.get("View"):
             view_state = status["View"]["state"]
             mode = status["View"]["mode"]
             stage = status["View"]["stage"]
         schedule = do_action_device("get_schedule", telescope_id, {})
-        device = result["device"]
-        focuser = result["focuser"]
-        settings = result["setting"]
-        pi_status = result["pi_status"]
-        if wifi_status['sig_lev'] is not None:
+        if result is not None:
+            device = result["device"]
+            focuser = result["focuser"]
+            settings = result["setting"]
+            pi_status = result["pi_status"]
+            free_storage = humanize.naturalsize(result["storage"]["storage_volume"][0]["freeMB"] * 1024 * 1024)
+        if wifi_status is not None:
             wifi_signal = f"{wifi_status['sig_lev']} dBm" # We might need to check if station mode is on.
-        free_storage = humanize.naturalsize(result["storage"]["storage_volume"][0]["freeMB"] * 1024 * 1024)
         stats = {
             "Firmware Version": device["firmware_ver_string"],
             "Focal Position": focuser["step"],
