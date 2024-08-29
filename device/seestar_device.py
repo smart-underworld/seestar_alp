@@ -918,6 +918,8 @@ class Seestar:
                 self.scheduler_state = "Stopped"
                 self.json_message("pi_shutdown")
                 break
+            # elif action == 'set_wheel_position' or action == 'pi_output_set2':
+                
             elif action == 'wait_for':
                 sleep_time = item['params']['timer_sec']
                 sleep_count = 0
@@ -933,11 +935,9 @@ class Seestar:
                     if local_time.hour == time_hour and local_time.minute == time_minute:
                         break
                     time.sleep(2)
-            elif action == 'set_wheel_position':
-                data = {}
-                data['method'] = action
-                data['params'] = item['params'] 
-                result = self.send_message_param_sync(data)
+            else:
+                request = {'method':action, 'params':item['params']}
+                self.send_message_param_sync(request)
 
         self.scheduler_state = "Stopped"
         self.schedule['current_item_id'] = ""
