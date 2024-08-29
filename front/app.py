@@ -970,6 +970,27 @@ class ScheduleShutdownResource:
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_shutdown.html', 'shutdown', {}, {})
 
+class ScheduleLpfResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_lpf.html', 'lpf', {}, {})
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        form = req.media
+        useLpfilter = form.get("lpf") == "on"
+        values = {
+            "is_use_lp_filter": useLpfilter
+        }
+        if useLpfilter:
+            cmd_vals = [ 2 ]
+        else:
+            cmd_vals = [ 1 ]
+        response = do_action_device("add_schedule_item", telescope_id, {
+            "action": "set_wheel_position",
+            "params": cmd_vals
+        })
+        render_schedule_tab(req, resp, telescope_id, 'schedule_lpf.html', 'lpf', values, {})
 
 class ScheduleToggleResource:
     def on_get(self, req, resp, telescope_id=1):
@@ -1454,6 +1475,7 @@ class FrontMain:
         app.add_route('/schedule/mosaic', ScheduleMosaicResource())
         app.add_route('/schedule/online', ScheduleGoOnlineResource())
         app.add_route('/schedule/shutdown', ScheduleShutdownResource())
+        app.add_route('/schedule/lpf', ScheduleLpfResource())
         app.add_route('/schedule/state', ScheduleToggleResource())
         app.add_route('/schedule/wait-until', ScheduleWaitUntilResource())
         app.add_route('/schedule/wait-for', ScheduleWaitForResource())
@@ -1479,6 +1501,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule/mosaic', ScheduleMosaicResource())
         app.add_route('/{telescope_id:int}/schedule/online', ScheduleGoOnlineResource())
         app.add_route('/{telescope_id:int}/schedule/shutdown', ScheduleShutdownResource())
+        app.add_route('/{telescope_id:int}/schedule/lpf', ScheduleLpfResource())
         app.add_route('/{telescope_id:int}/schedule/state', ScheduleToggleResource())
         app.add_route('/{telescope_id:int}/schedule/wait-until', ScheduleWaitUntilResource())
         app.add_route('/{telescope_id:int}/schedule/wait-for', ScheduleWaitForResource())
