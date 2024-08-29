@@ -995,7 +995,7 @@ class ScheduleLpfResource:
 class ScheduleDewHeaterResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
-        render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'lpf', {}, {})
+        render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', {}, {})
 
     @staticmethod
     def on_post(req, resp, telescope_id=1):
@@ -1017,7 +1017,7 @@ class ScheduleDewHeaterResource:
             "action": "pi_output_set2",
             "params": cmd_payload,
         })
-        render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew_heater', values, {})
+        render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', values, {})
 
 class ScheduleToggleResource:
     def on_get(self, req, resp, telescope_id=1):
