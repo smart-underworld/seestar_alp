@@ -992,6 +992,33 @@ class ScheduleLpfResource:
         })
         render_schedule_tab(req, resp, telescope_id, 'schedule_lpf.html', 'lpf', values, {})
 
+class ScheduleDewHeaterResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'lpf', {}, {})
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        form = req.media
+        useDewHeater = form.get("dewHeaterEnabled")
+        dewHeaterValue = form.get("dewHeaterValue")
+        values = {
+            "use_dew_heater": useDewHeater,
+            "dew_heater_value": int(dewHeaterValue)
+        }
+        cmd_payload = {
+            "heater":{
+                "state": useDewHeater == "on",
+                "value": int(dewHeaterValue)
+            }
+        }
+
+        response = do_action_device("add_schedule_item", telescope_id, {
+            "action": "pi_output_set2",
+            "params": cmd_payload,
+        })
+        render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew_heater', values, {})
+
 class ScheduleToggleResource:
     def on_get(self, req, resp, telescope_id=1):
         self.display_state(req, resp, telescope_id)
@@ -1476,6 +1503,7 @@ class FrontMain:
         app.add_route('/schedule/online', ScheduleGoOnlineResource())
         app.add_route('/schedule/shutdown', ScheduleShutdownResource())
         app.add_route('/schedule/lpf', ScheduleLpfResource())
+        app.add_route('/schedule/dew-heater', ScheduleDewHeaterResource())
         app.add_route('/schedule/state', ScheduleToggleResource())
         app.add_route('/schedule/wait-until', ScheduleWaitUntilResource())
         app.add_route('/schedule/wait-for', ScheduleWaitForResource())
@@ -1502,6 +1530,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule/online', ScheduleGoOnlineResource())
         app.add_route('/{telescope_id:int}/schedule/shutdown', ScheduleShutdownResource())
         app.add_route('/{telescope_id:int}/schedule/lpf', ScheduleLpfResource())
+        app.add_route('/{telescope_id:int}/schedule/dew-heater', ScheduleDewHeaterResource())
         app.add_route('/{telescope_id:int}/schedule/state', ScheduleToggleResource())
         app.add_route('/{telescope_id:int}/schedule/wait-until', ScheduleWaitUntilResource())
         app.add_route('/{telescope_id:int}/schedule/wait-for', ScheduleWaitForResource())

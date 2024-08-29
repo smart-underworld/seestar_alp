@@ -67,6 +67,12 @@
                     <div class="col">{{ item["params"]["is_use_lp_filter"] }}</div>
                     <div class="col">{{ item["params"]["is_use_autofocus"] }}</div>
                     {# <div class="col">{{ item["scheduler_status"] }}</div>#}
+                {% elif item["action"] == 'pi_output_set2' %}
+                    {% if item["params"]["heater"]["state"] == True %}
+                        <div class="col-2">Dew Heater Enable {{ item["params"]["heater"]["value"] }}% </div>
+                    {% else %}
+                        <div class="col-2">Dew Heater Disable</div>
+                    {% endif %}
                 {% else %}
                     <div class="col" colspan="10">Unrecognized schedule item: {{ item }}</div>
                 {% endif %}
