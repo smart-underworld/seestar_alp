@@ -219,7 +219,7 @@ class SeestarImaging:
 
                 if data is not None:
                     # id of 23 should be stack, id of 21 should be stream
-                    print(f"header {id=} message {size=}")
+                    # print(f"header {id=} message {size=}")
                     if id == 21:  # self.exposure_mode == "preview":
                         self.raw_img = data
                     elif id == 23:  # self.exposure_mode == "stream":
@@ -230,6 +230,8 @@ class SeestarImaging:
                             self.raw_img = contents['raw_data']
 
                         # xxx Temp hack: just disconnect for now...
+                        # xxx Ideally we listen for an event that stack count has increased, or we track the stack
+                        #     count ourselves...
                         if self.is_gazing:
                             self.disconnect()
                             self.reconnect()

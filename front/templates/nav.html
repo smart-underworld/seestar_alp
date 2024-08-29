@@ -52,9 +52,14 @@
                 {#            </li>#}
             </ul>
             <div class="nav-item me-1">
-                <button type="button" id="toggleuitheme" class="btn btn-secondary" title="Toggle Dark/Light Mode"
-                        onclick="toggleuitheme()">Dark/Light Mode
-                </button>
+                <div class="form-check form-switch">
+                    {% if uitheme == "dark" %}
+                        <input class="form-check-input" type="checkbox" role="switch" id="toggleuitheme" onclick="toggleuitheme()" checked="checked">
+                    {% else %}
+                        <input class="form-check-input" type="checkbox" role="switch" id="toggleuitheme" onclick="toggleuitheme()">
+                    {% endif %}
+                    <label class="form-check-label" for="toggleuitheme"><span class="text-secondary">Dark Mode</span></label>
+                  </div>
             </div>
             <div class="dropdown">
                 <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown"

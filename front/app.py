@@ -124,8 +124,9 @@ def get_context(telescope_id, req):
     online = check_api_state(telescope_id)
     partial_path = "/".join(req.relative_uri.split("/", 2)[2:])
     experimental = Config.experimental
+    uitheme = Config.uitheme
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
-            "online": online, "imager_root": imager_root, "experimental": experimental}
+            "online": online, "imager_root": imager_root, "experimental": experimental, "uitheme": uitheme}
 
 
 def get_flash_cookie(req, resp):
@@ -246,16 +247,16 @@ def check_api_state(telescope_id):
         r.raise_for_status()
         response = r.json()
         if response.get("ErrorNumber") == 1031 or not response.get("Value"):
-            logger.info(f"Telescope {telescope_id} API is not connected.")
+            logger.warn(f"Telescope {telescope_id} API is not connected. {url=}")
             return False
     except requests.exceptions.ConnectionError:
-        logger.info(f"Telescope {telescope_id} API is not online. (ConnectionError)")
+        logger.warn(f"Telescope {telescope_id} API is not online. (ConnectionError) {url=}")
         return False
     except requests.exceptions.RequestException as e:
-        logger.info(f"Telescope {telescope_id} API is not online. (RequestException)")
+        logger.warn(f"Telescope {telescope_id} API is not online. (RequestException) {url=}")
         return False
     else:
-        logger.info(f"Telescope {telescope_id} API is online.")
+        logger.debug(f"Telescope {telescope_id} API is online.")
         return True
 
 
@@ -280,7 +281,7 @@ def queue_action(dev_num, payload):
     return []
 
 
-def do_action_device(action, dev_num, parameters):
+def do_action_device(action, dev_num, parameters, is_schedule=False):
     url = f"{base_url}/api/v1/telescope/{dev_num}/action"
     payload = {
         "Action": action,
@@ -295,7 +296,8 @@ def do_action_device(action, dev_num, parameters):
         except:
             logger.error(f"do_action_device: Failed to send action to device {dev_num}")
 
-    queue_action(dev_num, payload)
+    if is_schedule:
+        queue_action(dev_num, payload)
 
 
 def do_schedule_action_device(action, parameters, dev_num):
@@ -303,11 +305,11 @@ def do_schedule_action_device(action, parameters, dev_num):
         return do_action_device("add_schedule_item", dev_num, {
             "action": action,
             "params": parameters
-        })
+        }, True)
     else:
         return do_action_device("add_schedule_item", dev_num, {
             "action": action
-        })
+        }, True)
 
 
 def check_response(resp, response):
@@ -334,41 +336,60 @@ def method_sync(method, telescope_id=1):
 
 def get_device_state(telescope_id):
     if check_api_state(telescope_id):
-        print("Device is online", telescope_id)
+        # print("Device is online", telescope_id)
         result = method_sync("get_device_state", telescope_id)
-        status = method_sync('get_view_state', telescope_id)
+        status = method_sync("get_view_state", telescope_id)
+        wifi_status = method_sync("pi_station_state", telescope_id)
         view_state = "Idle"
         mode = ""
         stage = ""
+        wifi_signal = ""
+        device = ""
+        focuser = ""
+        settings = ""
+        pi_status = ""
+        free_storage = ""
         if status is not None and status.get("View"):
             view_state = status["View"]["state"]
             mode = status["View"]["mode"]
             stage = status["View"]["stage"]
-        schedule = do_action_device("get_schedule", telescope_id, {})
-        device = result["device"]
-        focuser = result["focuser"]
-        settings = result["setting"]
-        pi_status = result["pi_status"]
-        free_storage = humanize.naturalsize(result["storage"]["storage_volume"][0]["freeMB"] * 1024 * 1024)
-        stats = {
-            "Firmware Version": device["firmware_ver_string"],
-            "Focal Position": focuser["step"],
-            "Auto Power Off": settings["auto_power_off"],
-            "Heater?": settings["heater_enable"],
-            "Free Storage": free_storage,
-            "Balance Sensor (angle)": result["balance_sensor"]["data"]["angle"],
-            "Compass Sensor (direction)": result["compass_sensor"]["data"]["direction"],
-            "Temperature Sensor": pi_status["temp"],
-            "Charge Status": pi_status["charger_status"],
-            "Battery %": pi_status["battery_capacity"],
-            "Battery Temp": pi_status["battery_temp"],
-            "Scheduler Status": schedule["Value"]["state"],
-            "View State": view_state,
-            "View Mode": mode,
-            "View Stage": stage,
-        }
+        # Check for bad data
+        if status is not None and result is not None:
+            schedule = do_action_device("get_schedule", telescope_id, {})
+            if result is not None:
+                device = result["device"]
+                focuser = result["focuser"]
+                settings = result["setting"]
+                pi_status = result["pi_status"]
+                free_storage = humanize.naturalsize(result["storage"]["storage_volume"][0]["freeMB"] * 1024 * 1024)
+            if wifi_status is not None:
+                if wifi_status["server"]: # sig_lev is only there while in station mode.
+                    wifi_signal = f"{wifi_status['sig_lev']} dBm"
+                else:
+                    wifi_signal = f"Unavailable in AP mode."
+            stats = {
+                "Firmware Version": device["firmware_ver_string"],
+                "Focal Position": focuser["step"],
+                "Auto Power Off": settings["auto_power_off"],
+                "Heater?": settings["heater_enable"],
+                "Free Storage": free_storage,
+                "Balance Sensor (angle)": result["balance_sensor"]["data"]["angle"],
+                "Compass Sensor (direction)": result["compass_sensor"]["data"]["direction"],
+                "Temperature Sensor": pi_status["temp"],
+                "Charge Status": pi_status["charger_status"],
+                "Battery %": pi_status["battery_capacity"],
+                "Battery Temp": pi_status["battery_temp"],
+                "Scheduler Status": schedule["Value"]["state"],
+                "View State": view_state,
+                "View Mode": mode,
+                "View Stage": stage,
+                "Wi-Fi Signal": wifi_signal,
+            }
+        else:
+            logger.info(f"Stats: Unable to get data.")
+            stats = {"Info": "Unable to get stats."} # Display information for the stats page VS blank page.
     else:
-        print("Device is OFFLINE", telescope_id)
+        #print("Device is OFFLINE", telescope_id)
         stats = {}
     return stats
 
@@ -949,6 +970,54 @@ class ScheduleShutdownResource:
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_shutdown.html', 'shutdown', {}, {})
 
+class ScheduleLpfResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_lpf.html', 'lpf', {}, {})
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        form = req.media
+        useLpfilter = form.get("lpf") == "on"
+        values = {
+            "is_use_lp_filter": useLpfilter
+        }
+        if useLpfilter:
+            cmd_vals = [ 2 ]
+        else:
+            cmd_vals = [ 1 ]
+        response = do_action_device("add_schedule_item", telescope_id, {
+            "action": "set_wheel_position",
+            "params": cmd_vals
+        })
+        render_schedule_tab(req, resp, telescope_id, 'schedule_lpf.html', 'lpf', values, {})
+
+class ScheduleDewHeaterResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', {}, {})
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        form = req.media
+        useDewHeater = form.get("dewHeaterEnabled")
+        dewHeaterValue = form.get("dewHeaterValue")
+        values = {
+            "use_dew_heater": useDewHeater,
+            "dew_heater_value": int(dewHeaterValue)
+        }
+        cmd_payload = {
+            "heater":{
+                "state": useDewHeater == "on",
+                "value": int(dewHeaterValue)
+            }
+        }
+
+        response = do_action_device("add_schedule_item", telescope_id, {
+            "action": "pi_output_set2",
+            "params": cmd_payload,
+        })
+        render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', values, {})
 
 class ScheduleToggleResource:
     def on_get(self, req, resp, telescope_id=1):
@@ -1182,7 +1251,11 @@ class SettingsResource:
 
         # Delay for LP filter on (off doesn't need a delay), this is helpful for rendering the current status on page refresh.
         if (FormattedNewSettings["stack_lenhance"]):
-            time.sleep(0.7)  # This is the lowest delay I could use to get the correct status.
+            wheel_state = method_sync("get_wheel_state", telescope_id)
+            if wheel_state is not None:
+                while wheel_state["state"] != "idle":
+                    time.sleep(0.1) # Wait for the filter wheel to complete
+                    wheel_state = method_sync("get_wheel_state", telescope_id)
 
         self.render_settings(req, resp, telescope_id, output)
 
@@ -1429,6 +1502,8 @@ class FrontMain:
         app.add_route('/schedule/mosaic', ScheduleMosaicResource())
         app.add_route('/schedule/online', ScheduleGoOnlineResource())
         app.add_route('/schedule/shutdown', ScheduleShutdownResource())
+        app.add_route('/schedule/lpf', ScheduleLpfResource())
+        app.add_route('/schedule/dew-heater', ScheduleDewHeaterResource())
         app.add_route('/schedule/state', ScheduleToggleResource())
         app.add_route('/schedule/wait-until', ScheduleWaitUntilResource())
         app.add_route('/schedule/wait-for', ScheduleWaitForResource())
@@ -1454,6 +1529,8 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule/mosaic', ScheduleMosaicResource())
         app.add_route('/{telescope_id:int}/schedule/online', ScheduleGoOnlineResource())
         app.add_route('/{telescope_id:int}/schedule/shutdown', ScheduleShutdownResource())
+        app.add_route('/{telescope_id:int}/schedule/lpf', ScheduleLpfResource())
+        app.add_route('/{telescope_id:int}/schedule/dew-heater', ScheduleDewHeaterResource())
         app.add_route('/{telescope_id:int}/schedule/state', ScheduleToggleResource())
         app.add_route('/{telescope_id:int}/schedule/wait-until', ScheduleWaitUntilResource())
         app.add_route('/{telescope_id:int}/schedule/wait-for', ScheduleWaitForResource())

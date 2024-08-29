@@ -49,5 +49,21 @@
            aria-selected="false">Shutdown
         </a>
     </li>
+    <li class="nav-item" role="presentation">
+        <a href="{{ root }}/schedule/lpf"
+           class="nav-link {% if tab == "lpf" %}active{% endif %}"
+           type="button"
+           aria-controls="lpf"
+           aria-selected="false">Light Pollution Filter
+        </a>
+    </li>
+    <li class="nav-item" role="presentation">
+        <a href="{{ root }}/schedule/dew-heater"
+           class="nav-link {% if tab == "dew-heater" %}active{% endif %}"
+           type="button"
+           aria-controls="dew-heater"
+           aria-selected="false">Dew Heater
+        </a>
+    </li>
 </ul>
 

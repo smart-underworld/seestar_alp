@@ -34,7 +34,7 @@ class Seestar:
         self.is_watch_events = False  # Tracks if device has been started even if it never connected
         self.op_watch = ""
         self.op_state = ""
-        self.s = ""
+        self.s = None
         self.get_msg_thread = ""
         self.heartbeat_msg_thread = ""
         self.is_debug = is_debug
@@ -83,22 +83,24 @@ class Seestar:
             return False
         except socket.error as e:
             # Don't bother trying to recover if watch events is False
-            self.logger.error(f"Device {self.device_name}: send Socket error: {e}")
-            if self.is_watch_events:
-                self.disconnect()
-                if self.reconnect():
-                    return self.send_message(data)
+            self.logger.error(f"Send socket error: {e}")
+            self.disconnect()
+            if self.is_watch_events and self.reconnect():
+                return self.send_message(data)
             return False
+
+    def socket_force_close(self):
+        if self.s:
+            try:
+                self.s.close()
+                self.s = None
+            except:
+                pass
 
     def disconnect(self):
         # Disconnect tries to clean up socket if it exists
         self.is_connected = False
-        if self.s:
-            try:
-                self.s.close()
-                self.s = ""
-            except:
-                pass
+        self.socket_force_close()
 
     def reconnect(self):
         if self.is_connected:
@@ -109,6 +111,7 @@ class Seestar:
 
             self.disconnect()
 
+            # note: the below isn't thread safe!  (Reconnect can be called from different threads.)
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.s.settimeout(Config.timeout)
             self.s.connect((self.host, self.port))
@@ -129,12 +132,11 @@ class Seestar:
         except socket.error as e:
             # todo : if general socket error, close socket, and kick off reconnect?
             # todo : no route to host...
-            self.logger.error(f"Device {self.device_name}: read Socket error: {e}")
+            self.logger.error(f"Read socket error: {e}")
             # todo : handle message failure
-            if self.is_watch_events:
-                self.disconnect()
-                if self.reconnect():
-                    return self.get_socket_msg()
+            self.disconnect()
+            if self.is_watch_events and self.reconnect():
+                return self.get_socket_msg()
             return None
 
         data = data.decode("utf-8")
@@ -916,6 +918,8 @@ class Seestar:
                 self.scheduler_state = "Stopped"
                 self.json_message("pi_shutdown")
                 break
+            # elif action == 'set_wheel_position' or action == 'pi_output_set2':
+                
             elif action == 'wait_for':
                 sleep_time = item['params']['timer_sec']
                 sleep_count = 0
@@ -931,6 +935,9 @@ class Seestar:
                     if local_time.hour == time_hour and local_time.minute == time_minute:
                         break
                     time.sleep(2)
+            else:
+                request = {'method':action, 'params':item['params']}
+                self.send_message_param_sync(request)
 
         self.scheduler_state = "Stopped"
         self.schedule['current_item_id'] = ""

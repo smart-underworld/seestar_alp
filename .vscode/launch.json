@@ -5,16 +5,24 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Sample Driver",
-            "type": "python",
+            "name": "Seestar Root",
+            "type": "debugpy",
             "request": "launch",
             "program": "root_app.py",
             "console": "integratedTerminal",
             "justMyCode": true
         },
         {
+            "name": "seestar Daemon",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "device/app.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
             "name": "Python: Current File",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
