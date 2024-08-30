@@ -37,38 +37,128 @@
         })
     </script>
 
-    <div class="mb-3" hx-get="{{ root }}/live/status" hx-trigger="load, every 5s">Loading live status...</div>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-6 order-md-last">
+                <div class="bg-dark-subtle position-relative rounded" style="width: 250px; height: 250px;">
+                    <div id="zone" class="position-absolute"
+                         style="display: block; left: 0; width: 100%; height: 100%; "></div>
+                    {#                        <div class="zone static"><h1>static</h1></div></div>#}
+                </div>
 
-    <p>
-        <button id="none" class="mode-button btn btn-secondary m-1" hx-delete="{{ root }}/live/mode">none</button>
-        <button id="star" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "star"}'>star</button>
-        <button id="sun" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "sun"}'>sun</button>
-        <button id="moon" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "moon"}'>moon</button>
-        <button id="planet" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "planet"}'>planet</button>
-        <button id="scenery" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "scenery"}'>scenery</button>
-    </p>
+                <div class="mb-3" hx-get="{{ root }}/live/status" hx-trigger="load, every 5s">
+                    Loading live status...
+                </div>
 
-    <img id="liveViewImg" src="{{ imager_root }}/vid" width="540" height="960" alt="Live view image"/>
+                <div class="mb-3">
+                    <button id="none" class="mode-button btn btn-secondary m-1" hx-delete="{{ root }}/live/mode">none
+                    </button>
+                    <button id="star" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode"
+                            hx-vals='{"mode": "star"}'>star
+                    </button>
+                    <button id="sun" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode"
+                            hx-vals='{"mode": "sun"}'>sun
+                    </button>
+                    <button id="moon" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode"
+                            hx-vals='{"mode": "moon"}'>moon
+                    </button>
+                    <button id="planet" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode"
+                            hx-vals='{"mode": "planet"}'>planet
+                    </button>
+                    <button id="scenery" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode"
+                            hx-vals='{"mode": "scenery"}'>scenery
+                    </button>
+                </div>
+
+            </div>
+
+            <div class="col-md-6 order-md-first">
+                <img id="liveViewImg" src="{{ imager_root }}/vid" style="width: 100%;" alt="Live view image"/>
+            </div>
+        </div>
+    </div>
+    {#    <img id="liveViewImg" src="{{ imager_root }}/vid" width="540" height="960" alt="Live view image"/>#}
     {#    <img src="{{ imager_root }}/vid" width="1080" height="1920"/>#}
-
-    {#    {% if root == "/1" %}#}
-    {#        <img src="http://localhost:6543/vid/{{ mode }}" width="360" height="640"/>#}
-    {#    {% else %}#}
-    {#        <img src="http://localhost:7654/vid/{{ mode }}" width="540" height="960"/>#}
-    {#    {% endif %}#}
-
-    {#    <img src="http://localhost:6543/vid/{{ mode }}" width="1080" height="1920"/>#}
-    {#    <img src="http://localhost:7654/vid/{{ mode }}" width="360" height="640"/>#}
-    {#    <img src="http://localhost:7654/vid/{{ mode }}" width="360" height="640"/>#}
-    {#    <img src="{{ root }}/vid/{{ mode }}" width="360" height="640"/>#}
-    {#    {% endif %}#}
 
     <footer class="bg-body-tertiary text-center mt-3">
         Last updated: {{ now }}
     </footer>
 
-{% endblock %}
+    <script>
+        const options = {
+            zone: document.getElementById('zone'),
+            color: 'red',
+            position: {left: '50%', top: '50%'},
+            mode: 'static'
+        }
+        const joystick = nipplejs.create(options);
+        const zero_vector = {angle: 0, distance: 0, force: 0};
+        let timer = -1;
+        let vector = zero_vector;
+        let move_data = {};
+        //joystick.on('dir:up', function(evt, data) { console.log('up')})
+        //joystick.on('dir:down', function(evt, data) { console.log('down')})
+        //joystick.on('dir:left', function(evt, data) { console.log('left')})
+        //joystick.on('dir:right', function(evt, data) { console.log('right')})
+        // move dir start end
+        function sendMove() {
+            //console.log(move_data)
+            //console.log({
+            //    angle: move_data.angle.degree,
+            //    distance: move_data.distance,
+            //    force: move_data.force,
+            //})
+            //console.log(vector);
+            fetch('{{ root }}/position', {
+                method: 'POST',
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(vector)
+            })
+        }
 
-{#{% block html_header %}#}
-{#    <meta http-equiv="refresh" content="75">#}
-{#{% endblock %}#}
+        joystick.on('move', function (evt, data) {
+            //console.dir(data);
+            //vector = data.vector;
+            vector = {
+                angle: data.angle.degree,
+                distance: data.distance,
+                force: data.force,
+            }
+            //move_data = data;
+            if (timer === -1) {
+                sendMove()
+                timer = setInterval(() => sendMove(), 1000)
+            }
+        });
+        //joystick.on('start', function (evt, data) {
+        //    console.log('start')
+        //    console.dir(data)
+        //});
+
+        joystick.on('end', function (evt, data) {
+            if (timer !== -1) clearInterval(timer);
+
+            timer = -1;
+            vector = zero_vector;
+            sendMove();
+        });
+        // joystick.on('start end', function (evt, data) {
+        // console.log(evt.type);
+        // console.log(data);
+        // }).on('move', function (evt, data) {
+        //   console.log(data);
+        // }).on('dir:up plain:up dir:left plain:left dir:down ' +
+        //   'plain:down dir:right plain:right',
+        // function (evt, data) {
+        //   console.log(evt.type);
+        //          }
+        //    ).on('pressure', function (evt, data) {
+        //      console.log({
+        //        pressure: data
+        //  });
+        //      });
+    </script>
+
+{% endblock %}
