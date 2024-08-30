@@ -528,7 +528,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
         response = do_action_device("add_schedule_item", telescope_id, {
             "action": "start_mosaic",
             "params": values
-        })
+        }, True)
         logger.info("POST scheduled request %s %s", values, response)
         if online:
             check_response(resp, response)
@@ -582,7 +582,7 @@ def do_create_image(req, resp, schedule, telescope_id):
         response = do_action_device("add_schedule_item", telescope_id, {
             "action": "start_mosaic",
             "params": values
-        })
+        }, True)
         logger.info("POST scheduled request %s %s", values, response)
         if online:
             check_response(resp, response)
@@ -681,8 +681,8 @@ def render_template(req, resp, template_name, **context):
 
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
     if check_api_state(telescope_id):
-        current = do_action_device("get_schedule", telescope_id, {})
-        schedule = current["Value"]
+        get_schedule = do_action_device("get_schedule", telescope_id, {})
+        schedule = get_schedule["Value"]
     else:
         schedule = {"list": get_queue(telescope_id)}
 
@@ -880,8 +880,17 @@ class ScheduleListResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
         if check_api_state(telescope_id):
-            current = do_action_device("get_schedule", telescope_id, {})
-            schedule = current["Value"]
+            get_schedule = do_action_device("get_schedule", telescope_id, {})
+            current_queue_list = get_queue(telescope_id)
+            current_schedule_list = get_schedule["Value"]["list"]
+
+            # Check to see if there are missing items on the schedule
+            if len(current_queue_list) > 0 and len(current_schedule_list) == 0:
+                logger.info(f"Telescope {telescope_id}: Queue has items but schedule does not, processing queue.")
+                # Process missing items from schedule
+                process_queue(resp, telescope_id)
+                get_schedule = do_action_device("get_schedule", telescope_id, {})
+            schedule = get_schedule["Value"]
         else:
             schedule = {"list": get_queue(telescope_id)}
 
@@ -999,6 +1008,7 @@ class ScheduleLpfResource:
             "params": cmd_vals
         })
         render_schedule_tab(req, resp, telescope_id, 'schedule_lpf.html', 'lpf', values, {})
+
 
 class ScheduleDewHeaterResource:
     @staticmethod
