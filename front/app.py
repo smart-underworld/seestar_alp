@@ -31,6 +31,7 @@ import threading
 
 logger = init_logging()
 
+
 def get_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(0)
@@ -52,6 +53,7 @@ def get_listening_ip():
     else:
         ip_address = Config.ip_address
     return ip_address
+
 
 base_url = "http://" + get_listening_ip() + ":" + str(Config.port)
 stellarium_url = 'http://' + str(Config.sthost) + ':' + str(Config.stport) + '/api/objects/info'
@@ -103,6 +105,7 @@ def get_root(telescope_id):
             return root
     return ""
 
+
 def get_imager_root(telescope_id):
     if telescope_id:
         telescopes = get_telescopes()
@@ -114,6 +117,7 @@ def get_imager_root(telescope_id):
             root = f"http://{get_listening_ip()}:{Config.imgport}/{telescope['device_num']}"
             return root
     return ""
+
 
 def get_context(telescope_id, req):
     # probably a better way of doing this...
@@ -135,6 +139,7 @@ def get_flash_cookie(req, resp):
         resp.unset_cookie('flash_cookie', path='/')
         return cookie
     return []
+
 
 def update_twilight_times(latitude=None, longitude=None):
     observer = ephem.Observer()
@@ -648,6 +653,7 @@ def redirect(location):
     raise HTTPFound(location)
     # raise HTTPTemporaryRedirect(location)
 
+
 def fetch_template(template_name):
     if getattr(sys, "frozen", False):
         ## RWR Testing
@@ -660,6 +666,7 @@ def fetch_template(template_name):
         template = Environment(
             loader=FileSystemLoader(os.path.join(os.path.dirname(__file__), 'templates'))).get_template(template_name)
     return template
+
 
 def render_template(req, resp, template_name, **context):
     template = fetch_template(template_name)
@@ -970,6 +977,7 @@ class ScheduleShutdownResource:
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_shutdown.html', 'shutdown', {}, {})
 
+
 class ScheduleLpfResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -1018,6 +1026,7 @@ class ScheduleDewHeaterResource:
             "params": cmd_payload,
         })
         render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', values, {})
+
 
 class ScheduleToggleResource:
     def on_get(self, req, resp, telescope_id=1):
@@ -1429,6 +1438,32 @@ class StellariumResource:
         resp.text = ra_dec_j2000
 
 
+class TelescopePositionResource:
+    def on_post(self, req, resp, telescope_id=1):
+        form = req.media
+        # print("position", form)
+
+        distance = form.get('distance', 0)
+        angle = form.get('angle', 0)
+        force = form.get('force', 0)
+        if distance == 0:
+            do_action_device('method_sync', telescope_id,
+                             {'method': 'scope_speed_move', 'params': {"speed": 0, "angle": 0, "dur_sec": 3}})
+        else:
+            speed = min(distance * 14.4 * force, 1440.0)
+            # print("speed", speed)
+            do_action_device('method_sync', telescope_id,
+                             {'method': 'scope_speed_move',
+                              'params': {"speed": speed, "angle": int(angle), "dur_sec": 3}})
+            # do_action_device('scope_speed_move', telescope_id, {
+            #     "speed": int(distance * 5), "angle": angle, "dur_sec": 1
+            # })
+
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'application/text'
+        resp.text = "Ok"
+
+
 class ToggleUIThemeResource:
     @staticmethod
     def on_get(req, resp):
@@ -1491,6 +1526,7 @@ class FrontMain:
         app.add_route('/image', ImageResource())
         app.add_route('/live', LivePage())
         app.add_route('/mosaic', MosaicResource())
+        app.add_route('/position', TelescopePositionResource())
         app.add_route('/search', SearchObjectResource())
         app.add_route('/settings', SettingsResource())
         app.add_route('/schedule', ScheduleResource())
@@ -1517,6 +1553,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/live/mode', LiveModeResource())
         # app.add_route('/{telescope_id:int}/live/state', LiveStateResource())
         app.add_route('/{telescope_id:int}/mosaic', MosaicResource())
+        app.add_route('/{telescope_id:int}/position', TelescopePositionResource())
         app.add_route('/{telescope_id:int}/search', SearchObjectResource())
         app.add_route('/{telescope_id:int}/settings', SettingsResource())
         app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
