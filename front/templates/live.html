@@ -31,9 +31,6 @@
                     el.classList.add('btn-secondary');
                 }
             }
-            // const element = document.getElementById(mode);
-            // element.classList.remove('btn-secondary');
-            // element.classList.add("btn-primary");
         })
     </script>
 
@@ -95,20 +92,8 @@
         const zero_vector = {angle: 0, distance: 0, force: 0};
         let timer = -1;
         let vector = zero_vector;
-        let move_data = {};
-        //joystick.on('dir:up', function(evt, data) { console.log('up')})
-        //joystick.on('dir:down', function(evt, data) { console.log('down')})
-        //joystick.on('dir:left', function(evt, data) { console.log('left')})
-        //joystick.on('dir:right', function(evt, data) { console.log('right')})
-        // move dir start end
+
         function sendMove() {
-            //console.log(move_data)
-            //console.log({
-            //    angle: move_data.angle.degree,
-            //    distance: move_data.distance,
-            //    force: move_data.force,
-            //})
-            //console.log(vector);
             fetch('{{ root }}/position', {
                 method: 'POST',
                 headers: {
@@ -119,23 +104,16 @@
         }
 
         joystick.on('move', function (evt, data) {
-            //console.dir(data);
-            //vector = data.vector;
             vector = {
                 angle: data.angle.degree,
                 distance: data.distance,
                 force: data.force,
             }
-            //move_data = data;
             if (timer === -1) {
                 sendMove()
                 timer = setInterval(() => sendMove(), 1000)
             }
         });
-        //joystick.on('start', function (evt, data) {
-        //    console.log('start')
-        //    console.dir(data)
-        //});
 
         joystick.on('end', function (evt, data) {
             if (timer !== -1) clearInterval(timer);
@@ -144,21 +122,6 @@
             vector = zero_vector;
             sendMove();
         });
-        // joystick.on('start end', function (evt, data) {
-        // console.log(evt.type);
-        // console.log(data);
-        // }).on('move', function (evt, data) {
-        //   console.log(data);
-        // }).on('dir:up plain:up dir:left plain:left dir:down ' +
-        //   'plain:down dir:right plain:right',
-        // function (evt, data) {
-        //   console.log(evt.type);
-        //          }
-        //    ).on('pressure', function (evt, data) {
-        //      console.log({
-        //        pressure: data
-        //  });
-        //      });
     </script>
 
 {% endblock %}
