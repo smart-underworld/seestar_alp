@@ -366,7 +366,10 @@ def get_device_state(telescope_id):
                 focuser = result["focuser"]
                 settings = result["setting"]
                 pi_status = result["pi_status"]
-                free_storage = humanize.naturalsize(result["storage"]["storage_volume"][0]["freeMB"] * 1024 * 1024)
+                if result["storage"]["storage_volume"][0]["state"] == "mounted":
+                    free_storage = humanize.naturalsize(result["storage"]["storage_volume"][0]["freeMB"] * 1024 * 1024)
+                elif result["storage"]["storage_volume"][0]["state"] == "connected":
+                    free_storage = "Unavailable while in USB storage mode."
             if wifi_status is not None:
                 if wifi_status["server"]: # sig_lev is only there while in station mode.
                     wifi_signal = f"{wifi_status['sig_lev']} dBm"
