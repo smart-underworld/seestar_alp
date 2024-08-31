@@ -338,6 +338,16 @@ def method_sync(method, telescope_id=1):
         else:
             return out["Value"]["result"]
 
+def method_param_sync(method, param, telescope_id=1):
+    out = do_action_device("method_sync", telescope_id, {"method": method, "params":param})
+    # print(f"method_sync {out=}")
+
+    if out:
+        if out["Value"].get("error"):
+            return out["Value"]["error"]
+        else:
+            return out["Value"]["result"]
+
 
 def get_device_state(telescope_id):
     if check_api_state(telescope_id):
@@ -615,10 +625,10 @@ def do_command(req, resp, telescope_id):
             output = method_sync("pi_shutdown", telescope_id)
             return None
         case "start_auto_focus":
-            output = method_sync("start_auto_focus", telescope_id)
+            output = method_sync("start_auto_focuse", telescope_id)
             return None
         case "stop_auto_focus":
-            output = method_sync("stop_auto_focus", telescope_id)
+            output = method_sync("stop_auto_focuse", telescope_id)
             return None
         case "get_focuser_position":
             output = method_sync("get_focuser_position", telescope_id)
@@ -644,8 +654,16 @@ def do_command(req, resp, telescope_id):
         case "get_wheel_setting":
             output = method_sync("get_wheel_setting", telescope_id)
             return output
+        case "set_wheel_position_LP":
+            output = method_param_sync("set_wheel_position", [2], telescope_id)
+            return output
+        case "set_wheel_position_IR_Cut":
+            output = method_param_sync("set_wheel_position", [1], telescope_id)
+            return output
+        case "set_wheel_position_Dark":
+            output = method_param_sync("set_wheel_position", [0], telescope_id)
         case _:
-            print("No command found")
+            logger.warn("No command found: %s", value)
     # print ("Output: ", output)
 
 
