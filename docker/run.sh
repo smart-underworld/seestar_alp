@@ -99,11 +99,11 @@ main() {
         -p 7624:7624
 EOM
 
-    docker_run \
-        SEESTAR_ALP_IMAGE_NAME \
-        SEESTAR_ALP_IMAGE_FULL \
-        "${TIME_ZONE}" \
-        DOCKER_RUN_OPTIONS
+#     docker_run \
+#         SEESTAR_ALP_IMAGE_NAME \
+#         SEESTAR_ALP_IMAGE_FULL \
+#         "${TIME_ZONE}" \
+#         DOCKER_RUN_OPTIONS
 }
 
 # Setup
