@@ -5,70 +5,128 @@
 {% endblock %}
 
 {% block content %}
-    <script>
-        document.body.addEventListener("liveViewModeChange", function (evt) {
-            // evt.detail.value is mode
-            const mode = evt.detail.value;
-            console.log(`liveViewModeChange was triggered! mode=${mode}`);
-            const img = document.getElementById('liveViewImg');
-            let currentSrc = "{{ imager_root }}/vid";
-            // Add a cache-busting parameter
-            if (currentSrc.indexOf('?') > -1) {
-                currentSrc = currentSrc.substring(0, currentSrc.indexOf('?'));
-            }
-            const newSrc = currentSrc + "?timestamp=" + new Date().getTime();
-
-            img.src = newSrc;
-
-            const buttons = document.getElementsByClassName("mode-button");
-            for (const el of buttons) {
-                // console.log('looking at id', el.id)
-                if (el.id === mode) {
-                    el.classList.add('btn-primary');
-                    el.classList.remove('btn-secondary');
-                } else {
-                    el.classList.remove('btn-primary');
-                    el.classList.add('btn-secondary');
+    {% if online %}
+        <script>
+            document.body.addEventListener("liveViewModeChange", function (evt) {
+                // evt.detail.value is mode
+                const mode = evt.detail.value;
+                console.log(`liveViewModeChange was triggered! mode=${mode}`);
+                const img = document.getElementById('liveViewImg');
+                let currentSrc = "{{ imager_root }}/vid";
+                // Add a cache-busting parameter
+                if (currentSrc.indexOf('?') > -1) {
+                    currentSrc = currentSrc.substring(0, currentSrc.indexOf('?'));
                 }
+                const newSrc = currentSrc + "?timestamp=" + new Date().getTime();
+
+                img.src = newSrc;
+
+                const buttons = document.getElementsByClassName("mode-button");
+                for (const el of buttons) {
+                    // console.log('looking at id', el.id)
+                    if (el.id === mode) {
+                        el.classList.add('btn-primary');
+                        el.classList.remove('btn-secondary');
+                    } else {
+                        el.classList.remove('btn-primary');
+                        el.classList.add('btn-secondary');
+                    }
+                }
+            })
+        </script>
+
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6 order-md-last">
+                    <div class="bg-dark-subtle position-relative rounded" style="width: 250px; height: 250px;">
+                        <div id="zone" class="position-absolute"
+                            style="display: block; left: 0; width: 100%; height: 100%; "></div>
+                        {#                        <div class="zone static"><h1>static</h1></div></div>#}
+                    </div>
+
+                    <div class="mb-3" hx-get="{{ root }}/live/status" hx-trigger="load, every 5s">
+                        Loading live status...
+                    </div>
+
+                    <div class="mb-3">
+                        <button id="none" class="mode-button btn btn-secondary m-1" hx-delete="{{ root }}/live/mode">none
+                        </button>
+                        <button id="star" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode"
+                                hx-vals='{"mode": "star"}'>star
+                        </button>
+                        <button id="sun" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode"
+                                hx-vals='{"mode": "sun"}'>sun
+                        </button>
+                        <button id="moon" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode"
+                                hx-vals='{"mode": "moon"}'>moon
+                        </button>
+                        <button id="planet" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode"
+                                hx-vals='{"mode": "planet"}'>planet
+                        </button>
+                        <button id="scenery" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode"
+                                hx-vals='{"mode": "scenery"}'>scenery
+                        </button>
+                    </div>
+
+                </div>
+
+                <div class="col-md-6 order-md-first">
+                    <img id="liveViewImg" src="{{ imager_root }}/vid" style="width: 100%;" alt="Live view image"/>
+                </div>
+            </div>
+        </div>
+        {#    <img id="liveViewImg" src="{{ imager_root }}/vid" width="540" height="960" alt="Live view image"/>#}
+        {#    <img src="{{ imager_root }}/vid" width="1080" height="1920"/>#}
+
+        <footer class="bg-body-tertiary text-center mt-3">
+            Last updated: {{ now }}
+        </footer>
+
+        <script>
+            const options = {
+                zone: document.getElementById('zone'),
+                color: 'red',
+                position: {left: '50%', top: '50%'},
+                mode: 'static'
             }
-            // const element = document.getElementById(mode);
-            // element.classList.remove('btn-secondary');
-            // element.classList.add("btn-primary");
-        })
-    </script>
+            const joystick = nipplejs.create(options);
+            const zero_vector = {angle: 0, distance: 0, force: 0};
+            let timer = -1;
+            let vector = zero_vector;
 
-    <div class="mb-3" hx-get="{{ root }}/live/status" hx-trigger="load, every 5s">Loading live status...</div>
+            function sendMove() {
+                fetch('{{ root }}/position', {
+                    method: 'POST',
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(vector)
+                })
+            }
 
-    <p>
-        <button id="none" class="mode-button btn btn-secondary m-1" hx-delete="{{ root }}/live/mode">none</button>
-        <button id="star" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "star"}'>star</button>
-        <button id="sun" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "sun"}'>sun</button>
-        <button id="moon" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "moon"}'>moon</button>
-        <button id="planet" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "planet"}'>planet</button>
-        <button id="scenery" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode" hx-vals='{"mode": "scenery"}'>scenery</button>
-    </p>
+            joystick.on('move', function (evt, data) {
+                vector = {
+                    angle: data.angle.degree,
+                    distance: data.distance,
+                    force: data.force,
+                }
+                if (timer === -1) {
+                    sendMove()
+                    timer = setInterval(() => sendMove(), 1000)
+                }
+            });
 
-    <img id="liveViewImg" src="{{ imager_root }}/vid" width="540" height="960" alt="Live view image"/>
-    {#    <img src="{{ imager_root }}/vid" width="1080" height="1920"/>#}
+            joystick.on('end', function (evt, data) {
+                if (timer !== -1) clearInterval(timer);
 
-    {#    {% if root == "/1" %}#}
-    {#        <img src="http://localhost:6543/vid/{{ mode }}" width="360" height="640"/>#}
-    {#    {% else %}#}
-    {#        <img src="http://localhost:7654/vid/{{ mode }}" width="540" height="960"/>#}
-    {#    {% endif %}#}
-
-    {#    <img src="http://localhost:6543/vid/{{ mode }}" width="1080" height="1920"/>#}
-    {#    <img src="http://localhost:7654/vid/{{ mode }}" width="360" height="640"/>#}
-    {#    <img src="http://localhost:7654/vid/{{ mode }}" width="360" height="640"/>#}
-    {#    <img src="{{ root }}/vid/{{ mode }}" width="360" height="640"/>#}
-    {#    {% endif %}#}
-
-    <footer class="bg-body-tertiary text-center mt-3">
-        Last updated: {{ now }}
-    </footer>
-
+                timer = -1;
+                vector = zero_vector;
+                sendMove();
+            });
+        </script>
+	{% else %}
+        <div class="container mt-3">
+            <p>You are currently in offline mode</p>
+        </div>
+    {% endif %}
 {% endblock %}
-
-{#{% block html_header %}#}
-{#    <meta http-equiv="refresh" content="75">#}
-{#{% endblock %}#}

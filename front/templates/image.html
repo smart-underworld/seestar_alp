@@ -9,7 +9,6 @@
 {% block content %}
 
 	{% if online %}
-		
 		<div class="container mt-3">
 			<p class="h3 mb-2">Enter a new image</p>
 
@@ -20,7 +19,6 @@
 	{% else %}
 		<div class="container mt-3">
 			<p>You are currently in offline mode</p>
-			<span> {% include 'go_online.html' %}</span>
 		</div>
 	{% endif %}
 

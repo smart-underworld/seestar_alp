@@ -732,7 +732,8 @@ class Seestar:
                     save_target_name = target_name
                 else:
                     save_target_name = target_name + "_" + panel_string
-                self.logger.info("goto %s", (cur_ra, cur_dec))
+                self.logger.info("mosaic goto for panel %s, to location %s", panel_string, (cur_ra, cur_dec))
+
                 # set_settings(x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, heater_enable):
                 # TODO: Need to set correct parameters
                 self.send_message_param_sync({"method": "set_setting", "params": {"stack_lenhance": False}})
