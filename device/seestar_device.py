@@ -88,6 +88,9 @@ class Seestar:
             if self.is_watch_events and self.reconnect():
                 return self.send_message(data)
             return False
+        except:
+            self.logger.error(f"General error trying to send message: ", data)
+            return False
 
     def socket_force_close(self):
         if self.s:
@@ -382,7 +385,7 @@ class Seestar:
         self.logger.info("%s: moving slew angle: %s, speed: %s, dur: %s", self.device_name, in_angle, in_speed, in_dur)
         if self.is_goto():
             self.logger.info("Failed: mount is in goto routine.")
-            return "Failed: mount is in goto routine."
+            return False
         data = {}
         data['method'] = 'scope_speed_move'
         params = {}
@@ -391,6 +394,7 @@ class Seestar:
         params['dur_sec'] = in_dur
         data['params'] = params
         self.send_message_param_sync(data)
+        return True
 
     def start_auto_focus(self):
         self.json_message("start_auto_focuse")
@@ -535,20 +539,25 @@ class Seestar:
     # move from -90 to this latitude
     # speed 1000 for 20 seconds is 90 degrees
     # can move at most 10 secs each
-    def move_up_dec_thread_fn(self):
-        # move 10 degrees from Polaris
-        total_move = 170
-        subtotal_move = 0
-        #        self.sync_target([0.0, -89.0])
-        while subtotal_move < total_move:
-            cur_move = min(45, total_move - subtotal_move)  # 45 = 90/20/10
-            move_time = cur_move * 20.0 / 90.0
-            self.move_scope(90, 1000, round(move_time))
-            subtotal_move += cur_move
-            time.sleep(move_time + 1)
-            #       self.sync_target([0.0, 80.0])
+    def move_up_rotate_thread_fn(self, up_time, clockwise_time):
+        self.logger.info("moving scope up for %d seconds", up_time)
+        start_time = time.time()
+        while time.time() < start_time + up_time:
+            if self.move_scope(90, 2000, 10) == False:
+                return
+            time.sleep(0.2)
+        self.move_scope(90, 0, 0)
+
+        self.logger.info("moving scope closewise for %d seconds", clockwise_time)
+        start_time = time.time()
+        while time.time() < start_time + clockwise_time:
+            if self.move_scope(180, 1000, 10) == False:
+                return
+            time.sleep(0.2)
+        self.move_scope(0, 0, 0)
 
     def action_start_up_sequence(self, params):
+        
         tz_name = tzlocal.get_localzone_name()
         tz = tzlocal.get_localzone()
         now = datetime.now(tz)
@@ -567,18 +576,18 @@ class Seestar:
         loc_data = {}
         loc_param = {}
         # special loc for south pole: (-90, 0)
-        if params['lat'] == 0 and params[
-            'lon'] == 0:  # special case of (0,0,) will use the ip address to estimate the location
+        if Config.init_lat == 0 and Config.init_long == 0:
+        #if params['lat'] == 0 and params['lon'] == 0:  # special case of (0,0,) will use the ip address to estimate the location
             coordinates = Util.get_current_gps_coordinates()
             if coordinates is not None:
                 latitude, longitude = coordinates
                 self.logger.info(f"Your current GPS coordinates are:")
                 self.logger.info(f"Latitude: {latitude}")
                 self.logger.info(f"Longitude: {longitude}")
-                params['lat'] = latitude
-                params['lon'] = longitude
-        loc_param['lon'] = params['lon']
-        loc_param['lat'] = params['lat']
+                Config.init_lat = latitude
+                Config.init_long = longitude
+        loc_param['lon'] = Config.init_long
+        loc_param['lat'] = Config.init_lat
         loc_param['force'] = False
         loc_data['method'] = 'set_user_location'
         loc_data['params'] = loc_param
@@ -594,9 +603,17 @@ class Seestar:
         self.send_message_param_sync(loc_data)
         self.send_message_param_sync(lang_data)
 
+        self.set_setting(Config.init_expo_stack_ms, Config.init_expo_preview_ms, Config.init_dither_length_pixel, 
+                         Config.init_dither_frequency, Config.init_dither_enabled, Config.init_activate_LP_filter, Config.init_dew_heater_power>0)
+        if Config.init_dew_heater_power> 0:
+            self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":True,"value":Config.init_dew_heater_power}}})
+
+        # save frames setting
+        self.send_message_param_sync({"method":"set_stack_setting", "params":{"save_discrete_ok_frame":Config.init_save_good_frames, "save_discrete_frame":Config.init_save_all_frames}})
+
         # move the arm up using a thread runner
         # move 10 degrees from polaris
-        move_up_dec_thread = threading.Thread(target=lambda: self.move_up_dec_thread_fn())
+        move_up_dec_thread = threading.Thread(target=lambda: self.move_up_rotate_thread_fn(Config.init_scope_aim_up_time_s, Config.init_scope_aim_clockwise_time_s))
         move_up_dec_thread.start()
 
     # {"method":"set_sequence_setting","params":[{"group_name":"Kai_goto_target_name"}]}
@@ -835,6 +852,7 @@ class Seestar:
         self.mosaic_thread = threading.Thread(
             target=lambda: self.mosaic_thread_fn(target_name, center_RA, center_Dec, is_use_LP_filter, session_time,
                                                  nRA, nDec, overlap_percent, gain, is_use_autofocus, selected_panels))
+        self.mosaic_thread.name = f"MosaicThread.{self.device_name}"
         self.mosaic_thread.start()
 
     def get_schedule(self):
