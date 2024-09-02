@@ -576,7 +576,7 @@ class Seestar:
         loc_data = {}
         loc_param = {}
         # special loc for south pole: (-90, 0)
-        if Config.init_lat == 0:
+        if Config.init_lat == 0 and Config.init_long == 0:
         #if params['lat'] == 0 and params['lon'] == 0:  # special case of (0,0,) will use the ip address to estimate the location
             coordinates = Util.get_current_gps_coordinates()
             if coordinates is not None:
