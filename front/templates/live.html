@@ -7,6 +7,27 @@
 {% block content %}
     {% if online %}
         <script>
+            function updateModeButtons(mode) {
+                console.log('updateModeButtons')
+                const buttons = document.getElementsByClassName("mode-button");
+                for (const el of buttons) {
+                    // console.log('looking at id', el.id)
+                    if (el.id === mode) {
+                        el.classList.add('btn-primary');
+                        el.classList.remove('btn-secondary');
+                    } else {
+                        el.classList.remove('btn-primary');
+                        el.classList.add('btn-secondary');
+                    }
+                }
+            }
+
+            document.body.addEventListener("statusUpdate", function (evt) {
+                const mode = evt.detail.value;
+                console.log("status update")
+                updateModeButtons(mode);
+            })
+
             document.body.addEventListener("liveViewModeChange", function (evt) {
                 // evt.detail.value is mode
                 const mode = evt.detail.value;
@@ -21,17 +42,7 @@
 
                 img.src = newSrc;
 
-                const buttons = document.getElementsByClassName("mode-button");
-                for (const el of buttons) {
-                    // console.log('looking at id', el.id)
-                    if (el.id === mode) {
-                        el.classList.add('btn-primary');
-                        el.classList.remove('btn-secondary');
-                    } else {
-                        el.classList.remove('btn-primary');
-                        el.classList.add('btn-secondary');
-                    }
-                }
+                updateModeButtons(mode);
             })
         </script>
 
@@ -40,16 +51,18 @@
                 <div class="col-md-6 order-md-last">
                     <div class="bg-dark-subtle position-relative rounded" style="width: 250px; height: 250px;">
                         <div id="zone" class="position-absolute"
-                            style="display: block; left: 0; width: 100%; height: 100%; "></div>
+                             style="display: block; left: 0; width: 100%; height: 100%; "></div>
+                        <div id="position"></div>
                         {#                        <div class="zone static"><h1>static</h1></div></div>#}
                     </div>
 
-                    <div class="mb-3" hx-get="{{ root }}/live/status" hx-trigger="load, every 5s">
+                    <div class="mb-3" hx-get="{{ root }}/live/status" hx-trigger="load, every 10s">
                         Loading live status...
                     </div>
 
                     <div class="mb-3">
-                        <button id="none" class="mode-button btn btn-secondary m-1" hx-delete="{{ root }}/live/mode">none
+                        <button id="none" class="mode-button btn btn-secondary m-1" hx-delete="{{ root }}/live/mode">
+                            none
                         </button>
                         <button id="star" class="mode-button btn btn-secondary m-1" hx-post="{{ root }}/live/mode"
                                 hx-vals='{"mode": "star"}'>star
@@ -91,6 +104,7 @@
             }
             const joystick = nipplejs.create(options);
             const zero_vector = {angle: 0, distance: 0, force: 0};
+            const positionEl = document.getElementById('position');
             let timer = -1;
             let vector = zero_vector;
 
@@ -102,6 +116,10 @@
                     },
                     body: JSON.stringify(vector)
                 })
+                    .then(response => response.text())
+                    .then(body => {
+                        // positionEl.innerText = body;
+                    });
             }
 
             joystick.on('move', function (evt, data) {
@@ -124,7 +142,7 @@
                 sendMove();
             });
         </script>
-	{% else %}
+    {% else %}
         <div class="container mt-3">
             <p>You are currently in offline mode</p>
         </div>
