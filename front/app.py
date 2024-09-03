@@ -1028,7 +1028,7 @@ class ScheduleLpfResource:
         else:
             cmd_vals = [ 1 ]
         response = do_schedule_action_device("set_wheel_position", cmd_vals, telescope_id)
-        render_schedule_tab(req, resp, telescope_id, 'schedule_lpf.html', 'lpf', values, {})
+        render_schedule_tab(req, resp, telescope_id, 'schedule_lpf.html', 'lpf', {}, {})
 
 
 class ScheduleDewHeaterResource:
@@ -1049,7 +1049,7 @@ class ScheduleDewHeaterResource:
         }
 
         response = do_schedule_action_device("pi_output_set2", cmd_payload, telescope_id)
-        render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', values, {})
+        render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', {}, {})
 
 
 class ScheduleToggleResource:
