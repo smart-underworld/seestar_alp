@@ -116,6 +116,7 @@ class Config:
             'device_num': 1
           }
         ]
+
     # ---------------
     # Logging Section
     # ---------------
@@ -125,3 +126,24 @@ class Config:
     num_keep_logs: int = get_toml('logging', 'num_keep_logs', 10)
     log_prefix: str = get_toml('logging', 'log_prefix', '')
 
+
+    # ---------------
+    # seestar_initialization Section
+    # ---------------
+    secion = 'seestar_initialization'
+
+    init_save_good_frames: bool = get_toml(secion, 'save_good_frames', True)
+    init_save_all_frames: bool = get_toml(secion, 'save_all_frames', True)
+    init_lat: float = get_toml(secion, 'lat', 0)
+    init_long: float = get_toml(secion, 'long', 0)
+    init_gain: int = get_toml(secion, 'gain', 80)
+    init_expo_preview_ms: int = get_toml(secion, 'exposure_length_preview_ms', 500)
+    init_expo_stack_ms: int = get_toml(secion, 'exposure_length_stack_ms', 10000)
+    init_dither_enabled: bool = get_toml(secion, 'dither_enabled', True)
+    init_dither_length_pixel: int = get_toml(secion, 'dither_length_pixel', 50)
+    init_dither_frequency: int = get_toml(secion, 'dither_frequency', 10)
+    init_activate_LP_filter: bool = get_toml(secion, 'activate_LP_filter', False)
+    init_dew_heater_power: int = get_toml(secion, 'dew_heater_power', 0)
+    init_scope_aim_up_time_s: float = get_toml(secion, 'scope_aim_up_time_s', 19.4)
+    init_scope_aim_clockwise_time_s: float = get_toml(secion, 'scope_aim_clockwise_time_s', 10.8)
+    

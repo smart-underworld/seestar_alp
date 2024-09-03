@@ -24,6 +24,22 @@ can_reverse = true
 step_size = 1.0
 steps_per_sec = 6
 
+[seestar_initialization]
+save_good_frames = true
+save_all_frames = false             # including good and bad frames
+lat = 37.12                         # telescope location (lat), set to 0 if you want to guess from IP address
+long = -123.45                      # telescope location (long), set to 0 if you want to guess from IP address
+gain = 80
+exposure_length_preview_ms = 500
+exposure_length_stack = 10000
+dither_enabled = true
+dither_length_pixel = 50
+dither_frequency = 10
+activate_LP_filter = false                   
+dew_heater_power = 0                # 0 - off, max - 100?
+scope_aim_up_time_s = 19.4          # time to raise the lens arm in seconds
+scope_aim_clockwise_time_s = 10.8   # time to rotate base clockwise in seconds
+
 [logging]
 log_level = 'INFO'   #'WARN' only if trouble    #'INFO' to output more logging      #'DEBUG' still more output
 log_prefix = ''
