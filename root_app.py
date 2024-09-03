@@ -13,10 +13,10 @@ from front.app import FrontMain
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "device"))
 
-from app import DeviceMain
-from config import Config
-import log
-import telescope
+from app import DeviceMain     # type: ignore
+from config import Config      # type: ignore
+import log                     # type: ignore
+import telescope               # type: ignore
 
 class AppRunner:
     def __init__(self, log, name, app_main):
@@ -64,7 +64,6 @@ if __name__ == "__main__":
     logger.info("Starting ALP web server")
     main = AppRunner(logger, "ALP", DeviceMain)
     main.start()
-
     time.sleep(1)
 
     logger.info("Starting Front web server")
@@ -89,7 +88,8 @@ if __name__ == "__main__":
             return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(),
                             mimetype='multipart/x-mixed-replace; boundary=frame')
 
-
+        print("Startup Complete")
         waitress.serve(app, host=Config.ip_address, port=Config.imgport)
     else:
+        print("Startup Complete")
         front.join()

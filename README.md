@@ -10,7 +10,7 @@ There are many things in this repository to allow you to interact with your Sees
 
 `./front` This directory has the code to render the Web GUI.  It is named SSC for Simple Seestar Controler. It makes communicating with the Seestar easy.
 
-`./raspberry_pi` Here you will find instructions and code to allow you to use a raspberry Pi to host the GUI and the device control software.  If you know RPi this make it very easy to build a standalone device.  You won't have to install anyother softwhere just communicate with it with your browser. Look at the README.md in the directory for more info.
+`./raspberry_pi` Here you will find instructions and code to allow you to use a raspberry Pi to host the GUI and the device control software.  If you know RPi this make it very easy to build a standalone device.  You won't have to install any other softwhere just communicate with it with your browser. Look at the README.md in the directory for more info.
 
 `./templates` This directory contains device driver templates for building a new part of an alpaca driver. It is Python code, you probably won't need this unless you are a very advanced user.
 
@@ -25,22 +25,21 @@ That depends on your goals. (of course)
 
 If you want to get in and learn the code and see how it all works then you can clone this git repository or download the code from the release, or from the main branch.  You will be interested in the ./device and ./front directories at first. 
 
-If you just want to use the GUI and commnicate with your Seestar then the single directory install may be right for you. The standalone install is described below.
+If you just want to use the GUI and commnicate with your Seestar then the standalone install may be right for you. The standalone install is described below.
 
 ## Installation
 
 ### Standalone package
 
 #### Windows/Linux
-The easiest way to install and run on Windows is to download a zip file that will allow you to run from one .exe file
-and everything will come up. If you want to run from source code then you will need to follow the Mac/Source install below.
+The easiest way to install and run on Windows is to download a zip file that will allow you to run from one .exe file and everything will come up. If you want to run from source code then you will need to follow the Mac/Source install below.
 
-Download win_seestar_alp.zip or linux_seestar_alp.zip from the lastest release tagged 1.1.0b1PullXXX at:
+Download win_seestar_alp.zip or linux_seestar_alp.zip from the lastest release tagged 1.1.0b1Pullxxx at:
     <https://github.com/rrowley42/seestar_alp/releases>
 
 Unzip the file and put the enclosed folder anywhere you would like.
 Open a command window and navigate the the foler that contains seestar_alp.exe
-Now execute seestar.exe
+Now execute seestar.exe, you should see the message "Startup Complete" when everything is ready to go.
 If the Seestar is not turned on you will see messages in this command windows.
 
 The web interface should be available in your browser at <http://localhost:5432/>.
@@ -69,6 +68,11 @@ Rename the directory that you are currently using for the code and download and 
     xcode-select --install
     ```
     This will ensure the apps like `git` and `python3` are installed.
+    ##### Check python version
+    You need version 3.12 or greater of python
+    ```
+    python --version
+    ```
 
     ##### Create an alias from `python3` to `python` (optional)
 
@@ -79,7 +83,11 @@ Rename the directory that you are currently using for the code and download and 
     ```
 
 - ##### Windows
-    - Install Python on your system.     <https://www.python.org/downloads/>
+    - Install Python on your system. (Get version 3.12 or above)    <https://www.python.org/downloads/>
+        If you already have python installed verify that it is version 3.12 or above
+        ```
+        python --version
+        ```
 
     - Download and install the following:
         <https://visualstudio.microsoft.com/visual-cpp-build-tools/>
@@ -112,6 +120,7 @@ Now you are ready to run.  In the directory where you unpacked the code enter
 ```
 python root_app.py
 ```
+You should see the message "Startup Complete" when everything is ready to go.
 
 The web interface should be available in your browser at <http://localhost:5432/>.
 
