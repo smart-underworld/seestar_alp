@@ -290,6 +290,7 @@ class DeviceMain:
             telescope.end_seestar_device(dev['device_num'])
         if self.httpd:
             self.httpd.server_close()
+        logger.info('Server stopped')
 
     def stop(self):
         #for dev in Config.seestars:

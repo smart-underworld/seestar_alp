@@ -158,113 +158,6 @@
       }
     },
     {
-      "name": "Actions",
-      "item": [
-        {
-          "name": "action-play_sound",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "play_sound",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"id\":81}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action-heater",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"pi_output_set2\", \"params\":{\"heater\":{\"state\":true,\"value\":90}}}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
       "name": "3ppa",
       "item": [
         {
@@ -299,57 +192,6 @@
                 {
                   "key": "Parameters",
                   "value": "{\"method\":\"get_3p_pa_setting\"}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action-get_calibration",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"get_calibration\"}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -421,6 +263,57 @@
           }
         },
         {
+          "name": "action-get_calibration",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"get_calibration\"}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
           "name": "action-set_seting_effect_offset_deg",
           "event": [],
           "request": {
@@ -452,57 +345,6 @@
                 {
                   "key": "Parameters",
                   "value": "{\"method\":\"set_setting\",\"params\":{\"effect_offset_deg\":[0.03,45.0]}}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action-set_setting_3ppa",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"set_setting\",\"params\":{\"offset_deg_3ppa\":[0.03,45.0]}}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -574,7 +416,7 @@
           }
         },
         {
-          "name": "action-start_polar_align",
+          "name": "action-set_setting_3ppa",
           "event": [],
           "request": {
             "method": "PUT",
@@ -604,7 +446,7 @@
                 },
                 {
                   "key": "Parameters",
-                  "value": "{\"method\":\"start_polar_align\"}",
+                  "value": "{\"method\":\"set_setting\",\"params\":{\"offset_deg_3ppa\":[0.03,45.0]}}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -656,6 +498,164 @@
                 {
                   "key": "Parameters",
                   "value": "{\"method\":\"set_setting\",\"params\":{\"offset_deg_3ppa\":[0.03,45.0]}}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-start_polar_align",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"start_polar_align\"}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Actions",
+      "item": [
+        {
+          "name": "action-heater",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"pi_output_set2\", \"params\":{\"heater\":{\"state\":true,\"value\":90}}}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-play_sound",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "play_sound",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"id\":81}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -783,57 +783,6 @@
           }
         },
         {
-          "name": "action-set_setting_isp",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"set_setting\", \"params\":{ \"isp_gain\": 1,\"isp_exp_ms\":200}}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
           "name": "action-set_setting_exposures",
           "event": [],
           "request": {
@@ -885,7 +834,7 @@
           }
         },
         {
-          "name": "action-stop_exposure",
+          "name": "action-set_setting_isp",
           "event": [],
           "request": {
             "method": "PUT",
@@ -915,7 +864,7 @@
                 },
                 {
                   "key": "Parameters",
-                  "value": "{\"method\":\"stop_exposure\"}",
+                  "value": "{\"method\":\"set_setting\", \"params\":{ \"isp_gain\": 1,\"isp_exp_ms\":200}}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -967,6 +916,57 @@
                 {
                   "key": "Parameters",
                   "value": "{\"method\":\"start_exposure\",\"params\":[\"light\",false]}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-stop_exposure",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"stop_exposure\"}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -1354,57 +1354,6 @@
           }
         },
         {
-          "name": "action-set_img_name_field",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"set_img_name_field\", \"params\":{ \"bin\": true, \"date_time\": true,  \"temp\": true, \"gain\": true, \"camera_name\": false}}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
           "name": "action-get_last_image_DeepSky",
           "event": [],
           "request": {
@@ -1436,6 +1385,57 @@
                 {
                   "key": "Parameters",
                   "value": "{\"group_name\":\"DeepSky\", \"is_subframe\":true, \"is_thumb\":false}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-set_img_name_field",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"set_img_name_field\", \"params\":{ \"bin\": true, \"date_time\": true,  \"temp\": true, \"gain\": true, \"camera_name\": false}}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -1529,526 +1529,6 @@
             "body": {
               "mode": "urlencoded",
               "urlencoded": []
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Focuser",
-      "item": [
-        {
-          "name": "action-get_focuser_position",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"get_focuser_position\"}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action-start_auto_focus",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"start_auto_focuse\"}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action-get_focuser_position_param",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"get_focuser_position\",\"params\":{\"ret_obj\":true}}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action-stop_auto_focus",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"stop_auto_focuse\"}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "GettingStarted",
-      "item": [
-        {
-          "name": "action-capture_target",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "start_mosaic",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"target_name\":\"kai32_NGC2244\", \"ra\":-1.0, \"dec\":-1.0, \"is_use_lp_filter\":true, \"session_time_sec\":3600, \"ra_num\": 1, \"dec_num\": 1, \"panel_overlap_percent\": 100, \"gain\": 80}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action-pi_shutdown",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"pi_shutdown\"}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action-start_mosaic_in_place",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "start_mosaic",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"target_name\":\"kai32_NGC2244\", \"ra\":-1.0, \"dec\":-1.0, \"is_use_lp_filter\":true, \"session_time_sec\":3600, \"ra_num\": 3, \"dec_num\": 1, \"panel_overlap_percent\": 15, \"gain\": 80}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action-start_mosaic_j2000",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "start_mosaic",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"target_name\":\"kai32_NGC2244\", \"ra\":\"6h31m54.23s\", \"dec\":\"+4d56m26.4s\", \"is_j2000\":true, \"is_use_lp_filter\":true, \"session_time_sec\":3600, \"ra_num\": 2, \"dec_num\": 2, \"panel_overlap_percent\": 20, \"gain\": 80}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action_start_up_sequence",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "action_start_up_sequence",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"lat\":0, \"lon\":0}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action-start_mosaic_j2000_selected",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "start_mosaic",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"target_name\":\"kai32_NGC2244\", \"ra\":\"6h31m54.23s\", \"dec\":\"+4d56m26.4s\", \"is_j2000\":true, \"is_use_lp_filter\":true, \"session_time_sec\":3600, \"ra_num\": 2, \"dec_num\": 2, \"panel_overlap_percent\": 20, \"gain\": 80,\"selected_panels\":\"12;22\"}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
             }
           }
         }
@@ -2364,6 +1844,57 @@
           }
         },
         {
+          "name": "action-get_control",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"get_controls\"}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
           "name": "action-get_control_value_exposure",
           "event": [],
           "request": {
@@ -2497,57 +2028,6 @@
                 {
                   "key": "Parameters",
                   "value": "{\"method\":\"get_device_state\"}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action-get_control",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"get_controls\"}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -2772,57 +2252,6 @@
           }
         },
         {
-          "name": "action-get_stack_info",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"get_stack_info\"}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
           "name": "action-get_setting",
           "event": [],
           "request": {
@@ -2874,7 +2303,7 @@
           }
         },
         {
-          "name": "action-get_test_setting",
+          "name": "action-get_stack_info",
           "event": [],
           "request": {
             "method": "PUT",
@@ -2904,7 +2333,7 @@
                 },
                 {
                   "key": "Parameters",
-                  "value": "{\"method\":\"get_test_setting\"}",
+                  "value": "{\"method\":\"get_stack_info\"}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -2956,6 +2385,57 @@
                 {
                   "key": "Parameters",
                   "value": "{\"method\":\"get_stack_setting\"}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-get_test_setting",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"get_test_setting\"}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -3180,6 +2660,57 @@
           }
         },
         {
+          "name": "action-pi_get_time",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"pi_get_time\"}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
           "name": "action-scope_get_equ_coord",
           "event": [],
           "request": {
@@ -3262,57 +2793,6 @@
                 {
                   "key": "Parameters",
                   "value": "{\"method\":\"scope_get_ra_dec\"}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action-pi_get_time",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"pi_get_time\"}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -3692,10 +3172,10 @@
       ]
     },
     {
-      "name": "Mount and Platesolving",
+      "name": "Focuser",
       "item": [
         {
-          "name": "action-get_solve_result",
+          "name": "action-get_focuser_position",
           "event": [],
           "request": {
             "method": "PUT",
@@ -3725,7 +3205,7 @@
                 },
                 {
                   "key": "Parameters",
-                  "value": "{\"method\":\"get_solve_result\"}",
+                  "value": "{\"method\":\"get_focuser_position\"}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -3745,6 +3225,786 @@
             }
           }
         },
+        {
+          "name": "action-get_focuser_position_param",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"get_focuser_position\",\"params\":{\"ret_obj\":true}}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-start_auto_focus",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"start_auto_focuse\"}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-stop_auto_focus",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"stop_auto_focuse\"}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Startup and Shutdown",
+      "item": [
+        {
+          "name": "action-pi_reboot",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"pi_reboot\"}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-pi_shutdown",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"pi_shutdown\"}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-verify",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"pi_is_verified\"}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action_start_up_sequence",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "action_start_up_sequence",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"lat\":0, \"lon\":0}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "startup-set_setting_dithering",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"set_setting\", \"params\":{\"stack_dither\": {   \"pix\": 50,   \"interval\": 15,   \"enable\": true}}}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "startup-set_stack_setting",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"set_stack_setting\", \"params\":{\"save_discrete_frame\":true}}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "GettingStarted",
+      "item": [
+        {
+          "name": "action-capture_target",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "start_mosaic",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"target_name\":\"kai32_NGC2244\", \"ra\":-1.0, \"dec\":-1.0, \"is_use_lp_filter\":true, \"session_time_sec\":3600, \"ra_num\": 1, \"dec_num\": 1, \"panel_overlap_percent\": 100, \"gain\": 80}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-pi_shutdown",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"pi_shutdown\"}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-start_mosaic_in_place",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "start_mosaic",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"target_name\":\"kai32_NGC2244\", \"ra\":-1.0, \"dec\":-1.0, \"is_use_lp_filter\":true, \"session_time_sec\":3600, \"ra_num\": 3, \"dec_num\": 1, \"panel_overlap_percent\": 15, \"gain\": 80}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-start_mosaic_j2000",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "start_mosaic",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"target_name\":\"kai32_NGC2244\", \"ra\":\"6h31m54.23s\", \"dec\":\"+4d56m26.4s\", \"is_j2000\":true, \"is_use_lp_filter\":true, \"session_time_sec\":3600, \"ra_num\": 2, \"dec_num\": 2, \"panel_overlap_percent\": 20, \"gain\": 80}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-start_mosaic_j2000_selected",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "start_mosaic",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"target_name\":\"kai32_NGC2244\", \"ra\":\"6h31m54.23s\", \"dec\":\"+4d56m26.4s\", \"is_j2000\":true, \"is_use_lp_filter\":true, \"session_time_sec\":3600, \"ra_num\": 2, \"dec_num\": 2, \"panel_overlap_percent\": 20, \"gain\": 80,\"selected_panels\":\"12;22\"}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action_start_up_sequence",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "action_start_up_sequence",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"lat\":0, \"lon\":0}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mount and Platesolving",
+      "item": [
         {
           "name": "action-get_last_solve_result",
           "event": [],
@@ -3797,7 +4057,7 @@
           }
         },
         {
-          "name": "action-scope_set_track_state",
+          "name": "action-get_solve_result",
           "event": [],
           "request": {
             "method": "PUT",
@@ -3827,7 +4087,7 @@
                 },
                 {
                   "key": "Parameters",
-                  "value": "{\"method\":\"scope_set_track_state\", \"params\":true}",
+                  "value": "{\"method\":\"get_solve_result\"}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -3879,6 +4139,57 @@
                 {
                   "key": "Parameters",
                   "value": "{\"method\":\"scope_park\"}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-scope_set_track_state",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"scope_set_track_state\", \"params\":true}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -4208,6 +4519,57 @@
               }
             },
             {
+              "name": "action_scope_move_to_horizon",
+              "event": [],
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/x-www-form-urlencoded",
+                    "disabled": false,
+                    "type": "default"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "disabled": false,
+                    "type": "default"
+                  }
+                ],
+                "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "Action",
+                      "value": "method_sync",
+                      "disabled": false,
+                      "type": "default"
+                    },
+                    {
+                      "key": "Parameters",
+                      "value": "{\"method\":\"scope_move_to_horizon\"}",
+                      "disabled": false,
+                      "type": "default"
+                    },
+                    {
+                      "key": "ClientID",
+                      "value": "1",
+                      "disabled": false,
+                      "type": "default"
+                    },
+                    {
+                      "key": "ClientTransactionID",
+                      "value": "999",
+                      "disabled": false,
+                      "type": "default"
+                    }
+                  ]
+                }
+              }
+            },
+            {
               "name": "action-scope_speed_stop",
               "event": [],
               "request": {
@@ -4359,57 +4721,6 @@
                   ]
                 }
               }
-            },
-            {
-              "name": "action_scope_move_to_horizon",
-              "event": [],
-              "request": {
-                "method": "PUT",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/x-www-form-urlencoded",
-                    "disabled": false,
-                    "type": "default"
-                  },
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "disabled": false,
-                    "type": "default"
-                  }
-                ],
-                "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-                "body": {
-                  "mode": "urlencoded",
-                  "urlencoded": [
-                    {
-                      "key": "Action",
-                      "value": "method_sync",
-                      "disabled": false,
-                      "type": "default"
-                    },
-                    {
-                      "key": "Parameters",
-                      "value": "{\"method\":\"scope_move_to_horizon\"}",
-                      "disabled": false,
-                      "type": "default"
-                    },
-                    {
-                      "key": "ClientID",
-                      "value": "1",
-                      "disabled": false,
-                      "type": "default"
-                    },
-                    {
-                      "key": "ClientTransactionID",
-                      "value": "999",
-                      "disabled": false,
-                      "type": "default"
-                    }
-                  ]
-                }
-              }
             }
           ]
         }
@@ -4418,57 +4729,6 @@
     {
       "name": "Schedule - Mosaic",
       "item": [
-        {
-          "name": "action-add_schedule_item_exp_time",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "add_schedule_item",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"action\":\"set_setting_exposures\", \"params\":{  \"exp_ms\": {\"stack_l\": 10000,\"continuous\": 500}}}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
         {
           "name": "action-add_schedule_item_auto_focus",
           "event": [],
@@ -4501,6 +4761,57 @@
                 {
                   "key": "Parameters",
                   "value": "{\"action\":\"auto_focus\", \"params\":{\"ry_count\":2}}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-add_schedule_item_exp_time",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "add_schedule_item",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"action\":\"set_setting_exposures\", \"params\":{  \"exp_ms\": {\"stack_l\": 10000,\"continuous\": 500}}}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -4908,7 +5219,7 @@
                 },
                 {
                   "key": "Parameters",
-                  "value": "{\"target_name\":\"kai32_NGC2244\", \"ra\":-1.0, \"dec\":-1.0, \"is_j2000\": false, \"is_use_lp_filter\":true, \"session_time_sec\":3600, \"ra_num\": 2, \"dec_num\": 2, \"panel_overlap_percent\": 20, \"gain\": 80}",
+                  "value": "{\"target_name\":\"kai32_NGC2244\", \"ra\":\"6h31m54.23s\", \"dec\":\"+4d56m26.4s\", \"is_j2000\": true, \"is_use_lp_filter\":true, \"session_time_sec\":3600, \"ra_num\": 2, \"dec_num\": 2, \"panel_overlap_percent\": 20, \"gain\": 80}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -4959,7 +5270,7 @@
                 },
                 {
                   "key": "Parameters",
-                  "value": "{\"target_name\":\"kai32_NGC2244\", \"ra\":\"6h31m54.23s\", \"dec\":\"+4d56m26.4s\", \"is_j2000\": true, \"is_use_lp_filter\":true, \"session_time_sec\":3600, \"ra_num\": 2, \"dec_num\": 2, \"panel_overlap_percent\": 20, \"gain\": 80}",
+                  "value": "{\"target_name\":\"kai32_NGC2244\", \"ra\":-1.0, \"dec\":-1.0, \"is_j2000\": false, \"is_use_lp_filter\":true, \"session_time_sec\":3600, \"ra_num\": 2, \"dec_num\": 2, \"panel_overlap_percent\": 20, \"gain\": 80}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -5131,6 +5442,108 @@
               ]
             }
           }
+        },
+        {
+          "name": "action-add_schedule_pi_output",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "add_schedule_item",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"action\":\"pi_output_set2\", \"params\":{\"heater\":{\"state\":true,\"value\":90}}}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-add_schedule_set_wheel",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "add_schedule_item",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"action\":\"set_wheel_position\", \"params\":[1]}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -5169,6 +5582,57 @@
                 {
                   "key": "Parameters",
                   "value": "{\"gain\":80, \"restart\": true}",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientID",
+                  "value": "1",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "ClientTransactionID",
+                  "value": "999",
+                  "disabled": false,
+                  "type": "default"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "action-iscope_stop_view_dark",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "disabled": false,
+                "type": "default"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "disabled": false,
+                "type": "default"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "Action",
+                  "value": "method_sync",
+                  "disabled": false,
+                  "type": "default"
+                },
+                {
+                  "key": "Parameters",
+                  "value": "{\"method\":\"iscope_stop_view\",\"params\":{\"stage\":\"DarkLibrary\"}}",
                   "disabled": false,
                   "type": "default"
                 },
@@ -5342,57 +5806,6 @@
           }
         },
         {
-          "name": "action-iscope_stop_view_dark",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"iscope_stop_view\",\"params\":{\"stage\":\"DarkLibrary\"}}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
           "name": "action-sync_scope",
           "event": [],
           "request": {
@@ -5424,317 +5837,6 @@
                 {
                   "key": "Parameters",
                   "value": "{\"method\":\"scope_sync\",\"params\":[18.63,30.8]}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Startup and Shutdown",
-      "item": [
-        {
-          "name": "action-pi_reboot",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"pi_reboot\"}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action-pi_shutdown",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"pi_shutdown\"}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action-verify",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"pi_is_verified\"}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "action_start_up_sequence",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "action_start_up_sequence",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"lat\":0, \"lon\":0}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "startup-set_setting_dithering",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"set_setting\", \"params\":{\"stack_dither\": {   \"pix\": 50,   \"interval\": 15,   \"enable\": true}}}",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientID",
-                  "value": "1",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "ClientTransactionID",
-                  "value": "999",
-                  "disabled": false,
-                  "type": "default"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "startup-set_stack_setting",
-          "event": [],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/x-www-form-urlencoded",
-                "disabled": false,
-                "type": "default"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "disabled": false,
-                "type": "default"
-              }
-            ],
-            "url": "{{base_url}}/api/v1/telescope/{{dev_num}}/action",
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "Action",
-                  "value": "method_sync",
-                  "disabled": false,
-                  "type": "default"
-                },
-                {
-                  "key": "Parameters",
-                  "value": "{\"method\":\"set_stack_setting\", \"params\":{\"save_discrete_frame\":true}}",
                   "disabled": false,
                   "type": "default"
                 },

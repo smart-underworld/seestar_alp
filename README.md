@@ -40,8 +40,7 @@ Download win_seestar_alp.zip or linux_seestar_alp.zip from the lastest release t
 Unzip the file and put the enclosed folder anywhere you would like.
 Open a command window and navigate the the foler that contains seestar_alp.exe
 Now execute seestar.exe
-At first, all you will see here is the path to the config.toml, as commands are sent, more info will be in the terminal window.
-Once the program prints this path it is ready to go.  If the Seestar is not turned on you will see messages in this command windows.
+If the Seestar is not turned on you will see messages in this command windows.
 
 The web interface should be available in your browser at <http://localhost:5432/>.
 
@@ -121,8 +120,6 @@ Now you are ready to run.  In the directory where you unpacked the code enter
 ```
 python root_app.py
 ```
-
-The program should print the location of the config.toml file that it is using.
 
 The web interface should be available in your browser at <http://localhost:5432/>.
 
