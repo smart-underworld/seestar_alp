@@ -719,7 +719,7 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
 
 
 FIXED_PARAMS_KEYS = ["local_time", "timer_sec", "try_count", "target_name", "is_j2000", "ra", "dec", "is_use_lp_filter",
-                     "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus"]
+                     "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus", "heater", "nokey"]
 
 
 def export_schedule(telescope_id):
@@ -748,13 +748,12 @@ def export_schedule(telescope_id):
     # Write the rows
     for entry in data:
         row = OrderedDict({'action': entry['action']})
-        if 'params' in entry:
+        if 'params' in entry and isinstance(entry['params'], dict):
             for key in FIXED_PARAMS_KEYS:
                 row[key] = entry['params'].get(key, '')
         else:
             # If 'params' key is missing, ensure all fixed params are empty
-            for key in FIXED_PARAMS_KEYS:
-                row[key] = ''
+            row['nokey'] = entry['params']
         writer.writerow(row)
 
     output.seek(0)
@@ -767,8 +766,7 @@ def str2bool(v):
 
 def import_schedule(input, telescope_id):
     for line in input:
-        action, local_time, timer_sec, try_count, target_name, is_j2000, ra, dec, is_use_lp_filter, session_time_sec, ra_num, dec_num, panel_overlap_percent, gain, is_use_autofocus = line.split(
-            ',')
+        action, local_time, timer_sec, try_count, target_name, is_j2000, ra, dec, is_use_lp_filter, session_time_sec, ra_num, dec_num, panel_overlap_percent, gain, is_use_autofocus, heater, nokey = line.split(',')
         match action:
             case "action":
                 pass
@@ -780,15 +778,23 @@ def import_schedule(input, telescope_id):
                 do_schedule_action_device("auto_focus", {"try_count": int(try_count)}, telescope_id)
             case "start_mosaic":
                 do_schedule_action_device("start_mosaic",
-                                          {"target_name": target_name, "ra": ra, "dec": dec,
+                                          {"target_name": target_name, 
+                                           "ra": ra, 
+                                           "dec": dec,
                                            "is_j2000": str2bool(is_j2000),
                                            "is_use_lp_filter": str2bool(is_use_lp_filter),
                                            "is_use_autofocus": str2bool(is_use_autofocus),
-                                           "session_time_sec": int(session_time_sec), "ra_num": int(ra_num),
-                                           "dec_num": int(dec_num), "panel_overlap_percent": int(panel_overlap_percent),
+                                           "session_time_sec": int(session_time_sec), 
+                                           "ra_num": int(ra_num),
+                                           "dec_num": int(dec_num), 
+                                           "panel_overlap_percent": int(panel_overlap_percent),
                                            "gain": int(gain)}, int(telescope_id))
             case "shutdown":
                 do_schedule_action_device("shutdown", "", telescope_id)
+            case 'set_wheel_position':
+                do_schedule_action_device("set_wheel_position", nokey, telescope_id)
+            case '_':
+                pass
 
 
 class HomeResource:
@@ -1017,18 +1023,12 @@ class ScheduleLpfResource:
     def on_post(req, resp, telescope_id=1):
         form = req.media
         useLpfilter = form.get("lpf") == "on"
-        values = {
-            "is_use_lp_filter": useLpfilter
-        }
         if useLpfilter:
             cmd_vals = [ 2 ]
         else:
             cmd_vals = [ 1 ]
-        response = do_action_device("add_schedule_item", telescope_id, {
-            "action": "set_wheel_position",
-            "params": cmd_vals
-        })
-        render_schedule_tab(req, resp, telescope_id, 'schedule_lpf.html', 'lpf', values, {})
+        response = do_schedule_action_device("set_wheel_position", cmd_vals, telescope_id)
+        render_schedule_tab(req, resp, telescope_id, 'schedule_lpf.html', 'lpf', {}, {})
 
 
 class ScheduleDewHeaterResource:
@@ -1041,10 +1041,6 @@ class ScheduleDewHeaterResource:
         form = req.media
         useDewHeater = form.get("dewHeaterEnabled")
         dewHeaterValue = form.get("dewHeaterValue")
-        values = {
-            "use_dew_heater": useDewHeater,
-            "dew_heater_value": int(dewHeaterValue)
-        }
         cmd_payload = {
             "heater":{
                 "state": useDewHeater == "on",
@@ -1052,11 +1048,8 @@ class ScheduleDewHeaterResource:
             }
         }
 
-        response = do_action_device("add_schedule_item", telescope_id, {
-            "action": "pi_output_set2",
-            "params": cmd_payload,
-        })
-        render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', values, {})
+        response = do_schedule_action_device("pi_output_set2", cmd_payload, telescope_id)
+        render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', {}, {})
 
 
 class ScheduleToggleResource:
