@@ -1102,6 +1102,8 @@ class ScheduleExportResource:
     @staticmethod
     def on_post(req, resp, telescope_id=1):
         filename = req.media["filename"]
+        if filename[-3:] != 'csv':
+            filename = f'{filename}.csv'
         file_content = export_schedule(telescope_id)
 
         if file_content:
