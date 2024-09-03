@@ -39,7 +39,7 @@ Download win_seestar_alp.zip or linux_seestar_alp.zip from the lastest release t
 
 Unzip the file and put the enclosed folder anywhere you would like.
 Open a command window and navigate the the foler that contains seestar_alp.exe
-Now execute seestar.exe
+Now execute seestar.exe, you should see the message "Startup Complete" when everything is ready to go.
 If the Seestar is not turned on you will see messages in this command windows.
 
 The web interface should be available in your browser at <http://localhost:5432/>.
@@ -120,6 +120,7 @@ Now you are ready to run.  In the directory where you unpacked the code enter
 ```
 python root_app.py
 ```
+You should see the message "Startup Complete" when everything is ready to go.
 
 The web interface should be available in your browser at <http://localhost:5432/>.
 
