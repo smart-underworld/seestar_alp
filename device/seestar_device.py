@@ -254,7 +254,7 @@ class Seestar:
         self.logger.debug(f'{self.device_name} response is {self.response_dict[cur_cmdid]}')
         return self.response_dict[cur_cmdid]
 
-    def set_setting(self, x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, heater_enable):
+    def set_setting(self, x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance):
         # TODO:
         #   heater_enable failed. 
         #   lenhace should be by itself as it moves the wheel and thus need to wait a bit
@@ -604,9 +604,9 @@ class Seestar:
         self.send_message_param_sync(lang_data)
 
         self.set_setting(Config.init_expo_stack_ms, Config.init_expo_preview_ms, Config.init_dither_length_pixel, 
-                         Config.init_dither_frequency, Config.init_dither_enabled, Config.init_activate_LP_filter, Config.init_dew_heater_power>0)
-        if Config.init_dew_heater_power> 0:
-            self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":True,"value":Config.init_dew_heater_power}}})
+                         Config.init_dither_frequency, Config.init_dither_enabled, Config.init_activate_LP_filter)
+
+        self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":Config.init_dew_heater_power> 0,"value":Config.init_dew_heater_power}}})
 
         # save frames setting
         self.send_message_param_sync({"method":"set_stack_setting", "params":{"save_discrete_ok_frame":Config.init_save_good_frames, "save_discrete_frame":Config.init_save_all_frames}})
