@@ -13,10 +13,10 @@ from front.app import FrontMain
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "device"))
 
-from app import DeviceMain
-from config import Config
-import log
-import telescope
+from app import DeviceMain     # type: ignore
+from config import Config      # type: ignore
+import log                     # type: ignore
+import telescope               # type: ignore
 
 class AppRunner:
     def __init__(self, log, name, app_main):
