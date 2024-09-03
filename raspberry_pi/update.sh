@@ -2,6 +2,12 @@
 
 src_home=$(cd $(dirname $0)/.. && pwd)
 
+# check if update is required
+git fetch origin
+if [ $(git rev-parse HEAD) = $(git rev-parse @{u}) ]; then
+    echo "Nothing to do, you're already up-to-date!"
+    exit 0
+fi
 
 if $(systemctl is-active --quiet seestar_device); then
   sudo systemctl stop seestar_device
