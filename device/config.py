@@ -125,6 +125,7 @@ class Config:
     max_size_mb: int = get_toml('logging', 'max_size_mb', 5)
     num_keep_logs: int = get_toml('logging', 'num_keep_logs', 10)
     log_prefix: str = get_toml('logging', 'log_prefix', '')
+    log_events_in_info: bool = get_toml('logging', 'log_events_in_info', False)
 
 
     # ---------------
