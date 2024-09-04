@@ -889,11 +889,18 @@ class Seestar:
             return "scheduler is still active"
         if params['action'] == 'start_mosaic':
             mosaic_params = params['params']
-            if not isinstance(mosaic_params['ra'], str):
+            if isinstance(mosaic_params['ra'], str):
+                # try to trim the seconds to 1 decimal
+                mosaic_params['ra'] = Util.trim_seconds(mosaic_params['ra'])
+                mosaic_params['dec'] = Util.trim_seconds(mosaic_params['dec'])
+            elif isinstance(mosaic_params['ra'], float):
                 if mosaic_params['ra'] < 0:
                     mosaic_params['ra'] = self.ra
                     mosaic_params['dec'] = self.dec
                     mosaic_params['is_j2000'] = False
+                mosaic_params['ra'] = round(mosaic_params['ra'], 4)
+                mosaic_params['dec'] = round(mosaic_params['dec'], 4)                
+                
         params['id'] = str(uuid.uuid4())
         self.schedule['list'].append(params)
         return self.schedule
