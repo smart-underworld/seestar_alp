@@ -146,7 +146,6 @@ class Seestar:
         if len(data) == 0:
             return None
 
-        self.logger.debug(f'{self.device_name} received : {data}')
         return data
 
     def update_equ_coord(self, parsed_data):
@@ -186,12 +185,13 @@ class Seestar:
                     msg_remainder = msg_remainder[first_index + 2:]
                     parsed_data = json.loads(first_msg)  # xxx : check for errors here!
 
-                    self.logger.debug(f'{self.device_name} : {parsed_data}')
-
                     if 'jsonrpc' in parsed_data:
                         # {"jsonrpc":"2.0","Timestamp":"9507.244805160","method":"scope_get_equ_coord","result":{"ra":17.093056,"dec":34.349722},"code":0,"id":83}
                         if parsed_data["method"] == "scope_get_equ_coord":
+                            self.logger.debug(f'{self.device_name} : {parsed_data}')
                             self.update_equ_coord(parsed_data)
+                        else:
+                            self.logger.info(f'{self.device_name} : {parsed_data}')
                         if parsed_data["method"] == "get_view_state":
                             self.update_view_state(parsed_data)
                         # keep a running queue of last 100 responses for sync call results
@@ -200,6 +200,11 @@ class Seestar:
                             self.response_dict.popitem()
 
                     elif 'Event' in parsed_data:
+                        if Config.log_events_in_info:
+                            self.logger.info(f'{self.device_name} received : {data}')
+                        else:
+                            self.logger.debug(f'{self.device_name} received : {data}')
+
                         event_name = parsed_data['Event']
                         if event_name == self.op_watch:  # "AutoGoto" or "AutoFocus"
                             state = parsed_data['state']
@@ -229,21 +234,22 @@ class Seestar:
         data = {"id": self.cmdid, "method": instruction}
         self.cmdid += 1
         json_data = json.dumps(data)
-        self.logger.debug(f'{self.device_name} sending: {json_data}')
+        if instruction == 'scope_get_equ_coord':
+            self.logger.debug(f'{self.device_name} sending: {json_data}')
+        else:
+            self.logger.info(f'{self.device_name} sending: {json_data}')
         self.send_message(json_data + "\r\n")
-
-    def json_message2(self, data):
-        if data:
-            json_data = json.dumps(data)
-            self.logger.debug(f'{self.device_name} sending2: {json_data}')
-            resp = self.send_message(json_data + "\r\n")
 
     def send_message_param(self, data):
         cur_cmdid = self.cmdid
         data['id'] = cur_cmdid
         self.cmdid += 1 # can this overflow?  not in JSON...
         json_data = json.dumps(data)
-        self.logger.debug(f'{self.device_name} sending: {json_data}')
+        if 'method' in data and data['method'] == 'scope_get_equ_coord':
+            self.logger.debug(f'{self.device_name} sending: {json_data}')
+        else:
+            self.logger.info(f'{self.device_name} sending: {json_data}')        
+
         self.send_message(json_data + "\r\n")
         return cur_cmdid
 
@@ -397,6 +403,7 @@ class Seestar:
         return True
 
     def start_auto_focus(self):
+        self.logger.info("start auto focus...")
         self.json_message("start_auto_focuse")
         # todo: wait for focus complete instead of just simply sleep
         time.sleep(1)
@@ -549,15 +556,23 @@ class Seestar:
         self.move_scope(90, 0, 0)
 
         self.logger.info("moving scope closewise for %d seconds", clockwise_time)
-        start_time = time.time()
-        while time.time() < start_time + clockwise_time:
-            if self.move_scope(180, 1000, 10) == False:
-                return
-            time.sleep(0.2)
-        self.move_scope(0, 0, 0)
+        angle = -1
+        if clockwise_time > 0:
+            angle = 180
+        elif clockwise_time < 0:
+            angle = 0
+            clockwise_time = -clockwise_time
+        if angle >= 0:
+            start_time = time.time()
+            while time.time() < start_time + clockwise_time:
+                if self.move_scope(angle, 1000, 10) == False:
+                    return
+                time.sleep(0.2)
+            self.move_scope(0, 0, 0)
+        self.logger.info("finished moving scope to requested position.")
 
     def action_start_up_sequence(self, params):
-        
+        self.logger.info("start up sequence begins ...")
         tz_name = tzlocal.get_localzone_name()
         tz = tzlocal.get_localzone()
         now = datetime.now(tz)
@@ -857,6 +872,8 @@ class Seestar:
 
     def get_schedule(self):
         self.schedule['state'] = self.scheduler_state
+        self.schedule['cur_mosaic_panel_ra'] = self.cur_mosaic_nRA
+        self.schedule['cur_mosaic_panel_dec'] = self.cur_mosaic_nDec
         return self.schedule
 
     def create_schedule(self):
@@ -874,11 +891,18 @@ class Seestar:
             return "scheduler is still active"
         if params['action'] == 'start_mosaic':
             mosaic_params = params['params']
-            if not isinstance(mosaic_params['ra'], str):
+            if isinstance(mosaic_params['ra'], str):
+                # try to trim the seconds to 1 decimal
+                mosaic_params['ra'] = Util.trim_seconds(mosaic_params['ra'])
+                mosaic_params['dec'] = Util.trim_seconds(mosaic_params['dec'])
+            elif isinstance(mosaic_params['ra'], float):
                 if mosaic_params['ra'] < 0:
                     mosaic_params['ra'] = self.ra
                     mosaic_params['dec'] = self.dec
                     mosaic_params['is_j2000'] = False
+                mosaic_params['ra'] = round(mosaic_params['ra'], 4)
+                mosaic_params['dec'] = round(mosaic_params['dec'], 4)                
+                
         params['id'] = str(uuid.uuid4())
         self.schedule['list'].append(params)
         return self.schedule
@@ -917,7 +941,7 @@ class Seestar:
     def scheduler_thread_fn(self):
         self.scheduler_state = "Running"
         self.play_sound(80)
-
+        self.logger.info("schedule started ...")
         for item in self.schedule['list']:
             if self.scheduler_state != "Running":
                 break

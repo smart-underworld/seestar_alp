@@ -81,7 +81,7 @@ class Config:
     # ---------------
     ip_address: str = get_toml('network', 'ip_address', '127.0.0.1')
     port: int = get_toml('network', 'port', 5555)
-    imgport: int = get_toml('network', 'imgport', 5556)
+    imgport: int = get_toml('network', 'imgport', 7556)
     stport: int = get_toml('network', 'stport', 8090)
     sthost: str = get_toml('network', 'sthost', 'localhost')
     timeout: int = get_toml('network', 'timeout', 5)
@@ -125,6 +125,7 @@ class Config:
     max_size_mb: int = get_toml('logging', 'max_size_mb', 5)
     num_keep_logs: int = get_toml('logging', 'num_keep_logs', 10)
     log_prefix: str = get_toml('logging', 'log_prefix', '')
+    log_events_in_info: bool = get_toml('logging', 'log_events_in_info', False)
 
 
     # ---------------

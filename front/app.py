@@ -248,7 +248,7 @@ def get_twilight_times():
 def check_api_state(telescope_id):
     url = f"{base_url}/api/v1/telescope/{telescope_id}/connected?ClientID=1&ClientTransactionID=999"
     try:
-        r = requests.get(url, timeout=2.0)
+        r = requests.get(url, timeout=Config.timeout)
         r.raise_for_status()
         response = r.json()
         if response.get("ErrorNumber") == 1031 or not response.get("Value"):
@@ -296,10 +296,10 @@ def do_action_device(action, dev_num, parameters, is_schedule=False):
     }
     if check_api_state(dev_num):
         try:
-            r = requests.put(url, json=payload, timeout=2.0)
+            r = requests.put(url, json=payload, timeout=Config.timeout)
             return r.json()
-        except:
-            logger.error(f"do_action_device: Failed to send action to device {dev_num}")
+        except Exception as e:
+            logger.error(f"do_action_device: Failed to send action to device {dev_num}: {e}: message={payload}")
 
     if is_schedule:
         queue_action(dev_num, payload)
@@ -1186,8 +1186,12 @@ class LiveStatusResource:
         # If status changes, trigger reload
         resp.status = falcon.HTTP_200
         resp.content_type = 'text/html'
+
+        trigger = {"statusUpdate": mode}
         if changed:
-            resp.set_header('HX-Trigger', json.dumps({"liveViewModeChange": mode}))
+            trigger = trigger | { "liveViewModeChange": mode}
+
+        resp.set_header('HX-Trigger', json.dumps(trigger))
         # if star:
         #.  target_name, gain, stacked_frame, dropped_frame
         #.  Exposure: { lapse_ms, exp_ms }
@@ -1396,6 +1400,8 @@ class SimbadResource:
             resp.text = 'Object not found'
             return
 
+        elements[2] = round(float(elements[2]),1)
+        elements[5] = round(float(elements[5]),1)
         ra_dec_j2000 = f"{elements[0]}h{elements[1]}m{elements[2]}s {elements[3]}d{elements[4]}m{elements[5]}s"
 
         # see if we should recommand the LP Filter

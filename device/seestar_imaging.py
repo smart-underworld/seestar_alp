@@ -68,7 +68,6 @@ class SeestarImaging:
         self.is_streaming = False
         self.is_gazing = False
         self.sent_subscription = False
-        self.cache_frame = True
         self.mode = None
         self.exposure_mode = None  # "stream"  # None | preview | stack | stream
         self.received_frame = 0
@@ -85,54 +84,6 @@ class SeestarImaging:
 
     def __repr__(self):
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
-
-    def set_mode(self, mode):
-        # If mode didn't change, do nothing?
-        # If mode changed, run start
-        new_exposure_mode = None
-        if self.mode != mode:
-            self.logger.info(f"CHANGING mode from {self.mode} to {mode}")
-            self.stop()
-            self.mode = mode
-
-            response = self.device.send_message_param_sync({"method": "get_view_state"})
-            # current_state = None
-            # current_mode = None
-            current_stage = None
-            if response is not None and response.get("result") is not None:
-                result = response.get("result")
-                # current_state = result["View"]["state"]
-                # current_mode = result["View"]["mode"]
-                if result is not None and result.get('View') is not None:
-                    current_stage = result["View"].get("stage", None)
-            # print("call scope response:", result)
-            # todo : set is_viewing mode
-
-            match mode:
-                case 'sun':
-                    new_exposure_mode = 'stream'
-                case 'moon':
-                    new_exposure_mode = 'stream'
-                case 'scenery':
-                    new_exposure_mode = 'stream'
-                case 'planet':
-                    new_exposure_mode = 'stream'
-                case 'star':
-                    if current_stage == 'ContinuousExposure':
-                        new_exposure_mode = 'preview'
-                    else:
-                        new_exposure_mode = 'stack'
-                case _:
-                    new_exposure_mode = None
-            print(f"set_mode {mode=} {self.exposure_mode=} {new_exposure_mode=} {current_stage=}")
-
-            if self.exposure_mode != new_exposure_mode:
-                self.start(new_exposure_mode)
-                return
-
-        if not self.is_connected and (new_exposure_mode == 'stack' or new_exposure_mode == 'preview'):
-            # If we aren't connected, start
-            self.start(new_exposure_mode)
 
     def reconnect(self):
         if self.is_connected:
@@ -253,7 +204,7 @@ class SeestarImaging:
             fmt = ">HHHIHHBBHH"
             self.logger.debug(f"size: {calcsize(fmt)}")
             _s1, _s2, _s3, size, _s5, _s6, code, id, width, height = unpack(fmt, header)
-            self.logger.info(f"header: {size=} {width=} {height=} {_s1=} {_s2=} {_s3=} {code=} {id=}")
+            self.logger.debug(f"header: {size=} {width=} {height=} {_s1=} {_s2=} {_s3=} {code=} {id=}")
 
             return size, id
         return 0, None
@@ -315,10 +266,10 @@ class SeestarImaging:
             return None
 
         # self.logger.debug(f'{self.device_name} received : {len(data)}')
-        self.logger.info(f'{self.device_name} received : {len(data)}')
+        self.logger.debug(f'{self.device_name} received : {len(data)}')
         l = len(data)
         if l < 100 and l != 80:
-            self.logger.info(f'Message: {data}')
+            self.logger.debug(f'Message: {data}')
         return data
 
     def get_star_preview(self):

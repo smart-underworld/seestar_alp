@@ -132,9 +132,9 @@ def log_request(req: Request):
     msg = f'{req.remote_addr} -> {req.method} {req.path}'
     if req.query_string != '':
         msg += f'?{req.query_string}'
-    logger.info(msg)
+    logger.debug(msg)
     if req.method == 'PUT' and req.content_length != 0:
-        logger.info(f'{req.remote_addr} -> {req.media}')
+        logger.debug(f'{req.remote_addr} -> {req.media}')
 
 # ------------------------------------------------
 # Incoming Pre-Logging and Request Quality Control
@@ -219,7 +219,7 @@ class PropertyResponse():
         self.ClientTransactionID = int(get_request_field('ClientTransactionID', req, False, 0))  #Caseless on GET
         if err.number == 0 and not value is None:
             self.Value = value
-            logger.info(f'{req.remote_addr} <- {str(value)}')
+            logger.debug(f'{req.remote_addr} <- {str(value)}')
         self.ErrorNumber = err.number
         self.ErrorMessage = err.message
 
@@ -251,7 +251,7 @@ class MethodResponse():
         self.ClientTransactionID = int(get_request_field('ClientTransactionID', req, False, 0))
         if err.number == 0 and not value is None:
             self.Value = value
-            logger.info(f'{req.remote_addr} <- {str(value)}')
+            logger.debug(f'{req.remote_addr} <- {str(value)}')
         self.ErrorNumber = err.number
         self.ErrorMessage = err.message
 

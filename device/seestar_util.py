@@ -54,3 +54,15 @@ class Util:
         #print("factor: ", factor_RA, ", result: ", delta_RA)
         return [delta_RA, delta_Dec]
 
+    # trim out the seconds to 1 decimal precision
+    def trim_seconds(test_str):
+        out = test_str
+        if isinstance(test_str, str) and test_str.endswith('s'):
+            index =  test_str.find('m')
+            if index > 0:
+                str_seconds = test_str[index+1:len(test_str)-1]
+                float_seconds = float(str_seconds)
+                #bprint(str_seconds)
+                # print(float_seconds)
+                out = "{}{:.1f}s".format(test_str[:index+1], float_seconds)
+        return out
