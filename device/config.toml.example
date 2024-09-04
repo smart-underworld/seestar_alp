@@ -36,9 +36,9 @@ dither_enabled = true
 dither_length_pixel = 50
 dither_frequency = 10
 activate_LP_filter = false                   
-dew_heater_power = 0                # 0 - off, max - 100?
+dew_heater_power = 0                # 0 - 100; 0 is off, 100 is max
 scope_aim_up_time_s = 19.4          # time to raise the lens arm in seconds
-scope_aim_clockwise_time_s = 10.8   # time to rotate base clockwise in seconds
+scope_aim_clockwise_time_s = 10.8   # time to rotate base counter clockwise in seconds, use negative values to rotate clockwise
 
 [logging]
 log_level = 'INFO'   #'WARN' only if trouble    #'INFO' to output more logging      #'DEBUG' still more output
@@ -46,6 +46,7 @@ log_prefix = ''
 log_to_stdout = false
 max_size_mb = 5
 num_keep_logs = 10
+log_events_in_info = false
 
 [[seestars]]
 name = "Seestar Alpha"
