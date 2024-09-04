@@ -872,6 +872,8 @@ class Seestar:
 
     def get_schedule(self):
         self.schedule['state'] = self.scheduler_state
+        self.schedule['cur_mosaic_panel_ra'] = self.cur_mosaic_nRA
+        self.schedule['cur_mosaic_panel_dec'] = self.cur_mosaic_nDec
         return self.schedule
 
     def create_schedule(self):
