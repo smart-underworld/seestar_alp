@@ -1400,6 +1400,8 @@ class SimbadResource:
             resp.text = 'Object not found'
             return
 
+        elements[2] = round(float(elements[2]),1)
+        elements[5] = round(float(elements[5]),1)
         ra_dec_j2000 = f"{elements[0]}h{elements[1]}m{elements[2]}s {elements[3]}d{elements[4]}m{elements[5]}s"
 
         # see if we should recommand the LP Filter
