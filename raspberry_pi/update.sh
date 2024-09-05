@@ -3,6 +3,7 @@
 src_home=$(cd $(dirname $0)/.. && pwd)
 
 # check if update is required
+cd "${src_home}"
 git fetch origin
 if [ $(git rev-parse HEAD) = $(git rev-parse @{u}) ]; then
     echo "Nothing to do, you're already up-to-date!"
