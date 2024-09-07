@@ -1131,7 +1131,7 @@ class ScheduleImportResource:
 class LivePage:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
-        status = method_sync('get_view_state')
+        status = method_sync('get_view_state', telescope_id)
         logger.info(status)
         context = get_context(telescope_id, req)
         now = datetime.now()
@@ -1187,14 +1187,14 @@ class LiveStatusResource:
         resp.status = falcon.HTTP_200
         resp.content_type = 'text/html'
 
-        trigger = {"statusUpdate": mode}
+        trigger = {"statusUpdate": {"mode": mode, "stage": stage}}
         if changed:
-            trigger = trigger | { "liveViewModeChange": mode}
+            trigger = trigger | {"liveViewModeChange": mode}
 
         resp.set_header('HX-Trigger', json.dumps(trigger))
         # if star:
-        #.  target_name, gain, stacked_frame, dropped_frame
-        #.  Exposure: { lapse_ms, exp_ms }
+        # .  target_name, gain, stacked_frame, dropped_frame
+        # .  Exposure: { lapse_ms, exp_ms }
         template = fetch_template('live_status.html')
         stats = None
 
@@ -1208,8 +1208,9 @@ class LiveStatusResource:
                 "elapsed": str(timedelta(milliseconds=stack["lapse_ms"])),
             }
         resp.text = template.render(tm=tm, state=state, mode=mode, stage=stage, stats=stats)
-        #'Annotate': {'state': 'complete', 'lapse_ms': 3370, 'result': {'image_size': [1080, 1920], 'annotations': [
+        # 'Annotate': {'state': 'complete', 'lapse_ms': 3370, 'result': {'image_size': [1080, 1920], 'annotations': [
         #    {'type': 'ngc', 'names': ['NGC 6992', 'C 33'], 'pixelx': 394.698, 'pixely': 611.487, 'radius': 757.869}],
+
 
 # def status():
 #     while True:
