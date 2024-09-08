@@ -18,6 +18,8 @@ from config import Config      # type: ignore
 import log                     # type: ignore
 import telescope               # type: ignore
 
+import os
+
 class AppRunner:
     def __init__(self, log, name, app_main):
         self.app_main = app_main()
@@ -58,6 +60,8 @@ class AppRunner:
 
 
 if __name__ == "__main__":
+    if Config.rtsp_udp:
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;udp"
     # We want to initialize ALP logger
     logger = log.init_logging()
 

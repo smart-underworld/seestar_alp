@@ -766,7 +766,14 @@ def str2bool(v):
 
 def import_schedule(input, telescope_id):
     for line in input:
-        action, local_time, timer_sec, try_count, target_name, is_j2000, ra, dec, is_use_lp_filter, session_time_sec, ra_num, dec_num, panel_overlap_percent, gain, is_use_autofocus, heater, nokey = line.split(',')
+        fields = line.split(',')
+        
+        # Check if the line has the expected number of fields
+        if len(fields) != 17:
+            continue
+            
+        (action, local_time, timer_sec, try_count, target_name, is_j2000, ra, dec, is_use_lp_filter, session_time_sec, ra_num, dec_num, panel_overlap_percent, gain, is_use_autofocus, heater, nokey) = fields
+
         match action:
             case "action":
                 pass
@@ -792,7 +799,14 @@ def import_schedule(input, telescope_id):
             case "shutdown":
                 do_schedule_action_device("shutdown", "", telescope_id)
             case 'set_wheel_position':
-                do_schedule_action_device("set_wheel_position", nokey, telescope_id)
+                int_nokey = int(nokey[1])
+                if int_nokey == 2:
+                    cmd_vals = [ 2 ]
+                else:
+                    cmd_vals = [ 1 ]
+                do_schedule_action_device("set_wheel_position", cmd_vals, telescope_id)
+            case 'action_set_dew_heater':
+                do_schedule_action_device("action_set_dew_heater", {"heater": int(heater)}, telescope_id)
             case '_':
                 pass
 
@@ -1039,16 +1053,9 @@ class ScheduleDewHeaterResource:
     @staticmethod
     def on_post(req, resp, telescope_id=1):
         form = req.media
-        useDewHeater = form.get("dewHeaterEnabled")
         dewHeaterValue = form.get("dewHeaterValue")
-        cmd_payload = {
-            "heater":{
-                "state": useDewHeater == "on",
-                "value": int(dewHeaterValue)
-            }
-        }
-
-        response = do_schedule_action_device("pi_output_set2", cmd_payload, telescope_id)
+  
+        response = do_schedule_action_device("action_set_dew_heater", {"heater": int(dewHeaterValue)}, telescope_id)
         render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', {}, {})
 
 
@@ -1131,7 +1138,7 @@ class ScheduleImportResource:
 class LivePage:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
-        status = method_sync('get_view_state')
+        status = method_sync('get_view_state', telescope_id)
         logger.info(status)
         context = get_context(telescope_id, req)
         now = datetime.now()
@@ -1187,14 +1194,14 @@ class LiveStatusResource:
         resp.status = falcon.HTTP_200
         resp.content_type = 'text/html'
 
-        trigger = {"statusUpdate": mode}
+        trigger = {"statusUpdate": {"mode": mode, "stage": stage}}
         if changed:
-            trigger = trigger | { "liveViewModeChange": mode}
+            trigger = trigger | {"liveViewModeChange": mode}
 
         resp.set_header('HX-Trigger', json.dumps(trigger))
         # if star:
-        #.  target_name, gain, stacked_frame, dropped_frame
-        #.  Exposure: { lapse_ms, exp_ms }
+        # .  target_name, gain, stacked_frame, dropped_frame
+        # .  Exposure: { lapse_ms, exp_ms }
         template = fetch_template('live_status.html')
         stats = None
 
@@ -1208,8 +1215,9 @@ class LiveStatusResource:
                 "elapsed": str(timedelta(milliseconds=stack["lapse_ms"])),
             }
         resp.text = template.render(tm=tm, state=state, mode=mode, stage=stage, stats=stats)
-        #'Annotate': {'state': 'complete', 'lapse_ms': 3370, 'result': {'image_size': [1080, 1920], 'annotations': [
+        # 'Annotate': {'state': 'complete', 'lapse_ms': 3370, 'result': {'image_size': [1080, 1920], 'annotations': [
         #    {'type': 'ngc', 'names': ['NGC 6992', 'C 33'], 'pixelx': 394.698, 'pixely': 611.487, 'radius': 757.869}],
+
 
 # def status():
 #     while True:
