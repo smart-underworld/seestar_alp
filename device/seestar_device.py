@@ -418,7 +418,7 @@ class Seestar:
             if self.start_auto_focus():
                 result = self.wait_end_op("AutoFocus")
                 focus_count += 1
-                if result != True:
+                if result != True and focus_count < try_count:
                     time.sleep(5)
 
         if result == True:
