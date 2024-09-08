@@ -7,20 +7,12 @@
             <div class="card-body">
         
                 <div class="mb-3">
-                    <div id="dewHeaterHelp" class="form-text">Dew Heater</div>
+                    <div id="dewHeaterHelp" class="form-text">Dew Heater (0 = off)</div>
                 </div>
-
-		<input type="radio" name="dewHeaterEnabled" id="dew_heater_on" value="on" autocomplete="off" checked>
-            	<label for="option4">Enable</label>
-		</input>
-		<br>
-		<input type="radio" name="dewHeaterEnabled" id="dew_heater_off" value="off" autocomplete="off">
-        	<label for="option4">Disable</label>
-                </input>
-		<br>	    
-		<input type="range" min="1" max="100" value="90" class="slider" name="dewHeaterValue" id="dewHeaterValue" oninput="rangeValue.innerText = this.value">
+    
+		<input type="range" min="0" max="100" value="90" class="slider" name="dewHeaterValue" id="dewHeaterValue" oninput="rangeValue.innerText = this.value">
                 <label for="option4" id="rangeValue">90</label>
-                </input>
+				</input>
             </div>
         </div>
 

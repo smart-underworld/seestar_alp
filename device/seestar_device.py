@@ -571,6 +571,9 @@ class Seestar:
             self.move_scope(0, 0, 0)
         self.logger.info("finished moving scope to requested position.")
 
+    def action_set_dew_heater(self, params):
+        self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
+        
     def action_start_up_sequence(self, params):
         self.logger.info("start up sequence begins ...")
         tz_name = tzlocal.get_localzone_name()
