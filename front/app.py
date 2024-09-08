@@ -1545,6 +1545,23 @@ class UpdateTwilightTimesResource:
         redirect(f"{referer}")
 
 
+class GetBalanceSensorResource:
+    @staticmethod
+    def on_get(req, resp):
+        referer = req.get_header('Referer')
+        referersplit = referer.split("/")[-2:]
+        telescope_id = int(referersplit[0])
+        result = method_sync("get_device_state", telescope_id)
+        if result is not None:
+            balance_sensor = {
+                "x": result["balance_sensor"]["data"]["x"],
+                "y": result["balance_sensor"]["data"]["y"],
+            }
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'application/json'
+            resp.text = json.dumps(balance_sensor)
+
+
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
 
@@ -1618,6 +1635,7 @@ class FrontMain:
         app.add_route('/stellarium', StellariumResource())
         app.add_route('/toggleuitheme', ToggleUIThemeResource())
         app.add_route('/updatetwilighttimes', UpdateTwilightTimesResource())
+        app.add_route('/getbalancesensor', GetBalanceSensorResource())
 
         try:
             self.httpd = make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler)

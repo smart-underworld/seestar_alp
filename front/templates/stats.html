@@ -13,11 +13,15 @@
 		
 			{% for key, value in stats.items() %}
 				<div class="row border-bottom py-1">
-					<div class="col fw-bold"><p>{{ key }}</p></div>
-					<div class="col"><p class="text-end">{{ value }}</p></div>
+					{% if key == "Balance Sensor (angle)" %}
+						<div class="col fw-bold"><p>{{ key }}</p></div>
+						<div class="col"><p class="text-end">{{ value }}</p><p>{% include 'partials/bubble_level.html' with context %}</p></div>
+					{% else %}
+						<div class="col fw-bold"><p>{{ key }}</p></div>
+						<div class="col"><p class="text-end">{{ value }}</p></div>
+					{% endif %}
 				</div>
 			{% endfor %}
-			
 		</div>
 	{% else %}
 		<div class="container mt-3">
