@@ -1,0 +1,117 @@
+<style>
+    .garden {
+        position: relative;
+        width: 200px;
+        height: 200px;
+        border: 5px solid #ccc;
+        border-radius: 10px;
+    }
+
+    .ball {
+        position: absolute;
+        top: 90px;
+        left: 90px;
+        width: 20px;
+        height: 20px;
+        background: green;
+        border-radius: 100%;
+        z-index: 10;
+    }
+
+    .crosshair {
+        position: absolute;
+        margin:30px;
+        width:6px;
+        height:6px;
+        box-shadow: 15px 0,20px 0,25px 0,-15px 0,-20px 0,-25px 0,0 15px,0 20px,0 25px,0 -15px,0 -20px,0 -25px
+    }
+
+    #bubble_level::after, #bubble_level::before {
+        content: "";
+        background: black;
+        border-radius: 2px;
+        position: absolute;
+    }
+
+    #bubble_level::after {
+        left: 94px;
+        width: 2px;
+        height: 190px;
+    }
+
+    #bubble_level::before {
+        top: 94px;
+        width: 190px;
+        height: 2px;
+    }
+</style>
+<button type="button" class="btn btn-primary btn-open float-end">Show Bubble Level</button>
+<dialog id="bubble_level_modal">
+    <div id="bubble_level" class="garden">
+        <div id="ball" class="ball"></div>
+    </div>
+    <pre class="output"></pre>
+    <button id="close" type="reset">Close</button>
+</dialog>
+<!-- Based on https://developer.mozilla.org/en-US/docs/Web/API/Device_orientation_events/Detecting_device_orientation -->
+<script>
+    const ball = document.getElementById("ball");
+    const garden = document.getElementById("bubble_level");
+    const output = document.querySelector(".output");
+    const modal = document.getElementById("bubble_level_modal");
+    const openModalBtn = document.querySelector(".btn-open");
+    const closeModalBtn = document.getElementById("close");
+    var bubble_interval;
+
+    function update_orientation(x,y) {
+        const maxX = garden.clientWidth - ball.clientWidth;
+        const maxY = garden.clientHeight - ball.clientHeight;
+
+        // Bring up the scale to make easier to visualize
+        x = x * 100;
+        y = y * 100;
+
+        output.textContent = `X: ${x}\n`;
+        output.textContent += `Y: ${y}\n`;
+
+        // To make computation easier we shift the range of
+        // x and y to [0,180]
+        x += 100;
+        y += 100;
+
+        // 10 is half the size of the ball
+        // It centers the positioning point to the center of the ball
+        ball.style.top = `${(maxX * x) / 180 - 10}px`; // rotating device around the x axis moves the ball vertically
+        ball.style.left = `${(maxY * y) / 180 - 10}px`; // rotating device around the y axis moves the ball horizontally
+    }
+
+    async function get_balance_sensor() {
+        try {
+            const baseURL = 
+            `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
+            get_balance_sensor_URL = baseURL + '/getbalancesensor';
+            const response = await fetch(get_balance_sensor_URL);
+            const data = await response.json();
+            update_orientation(data["x"], data["y"]);
+            console.log(data);
+        } catch (error) {
+            console.error('Error fetching data:', error);
+        }
+    }
+
+    function show_bubble_level() {
+        window.stop(); // Stops the meta refresh.
+        modal.showModal();
+        bubble_interval = setInterval(get_balance_sensor, 250);
+    }
+
+    function close_bubble_level() {
+        clearInterval(bubble_interval);
+        modal.close();
+        document.location.reload(true); // Refresh the page so the meta refresh is enabled again.
+    }
+
+    // open modal event
+    openModalBtn.addEventListener("click", show_bubble_level);
+    closeModalBtn.addEventListener("click", close_bubble_level);
+</script>

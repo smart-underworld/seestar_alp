@@ -44,16 +44,13 @@
                 {% elif item["action"] == 'shutdown' %}
                     <div class="col-2">Shutdown</div>
                 {% elif item["action"] == 'set_wheel_position' %}
-                    <div class="col-2">Enable LP Filter</div>
-                    <div class="col"></div>
-                    <div class="col-3"></div>
-                    <div class="col"></div>
-                    <div class="col"></div>
-                    <div class="col"></div>
-                    <div class="col"></div>
-                    <div class="col">{{ item["params"][0] == 2 }}</div>
-                    <div class="col"></div>
-                    {# <div class="col"></div>#}
+					
+					{% if item["params"] == [2] %}
+						<div class="col-2">Enable LP Filter</div>
+					{% elif item["params"] == [1] %}
+						<div class="col-2">Disable LP Filter</div>
+					{% endif %}
+                    
                 {% elif item["action"] == 'start_mosaic' %}
                     <div class="col-2">Start Mosaic</div>
                     <div class="col">{{ item["params"]["target_name"] }}</div>
@@ -66,9 +63,9 @@
                     <div class="col">{{ item["params"]["is_use_lp_filter"] }}</div>
                     <div class="col">{{ item["params"]["is_use_autofocus"] }}</div>
                     {# <div class="col">{{ item["scheduler_status"] }}</div>#}
-                {% elif item["action"] == 'pi_output_set2' %}
-                    {% if item["params"]["heater"]["state"] == True %}
-                        <div class="col-2">Dew Heater Enable {{ item["params"]["heater"]["value"] }}% </div>
+                {% elif item["action"] == 'action_set_dew_heater' %}
+                    {% if item["params"]["heater"] > 0 %}
+                        <div class="col-2">Dew Heater Enable</div> <div class="col">{{ item["params"]["heater"] }}% </div>
                     {% else %}
                         <div class="col-2">Dew Heater Disable</div>
                     {% endif %}

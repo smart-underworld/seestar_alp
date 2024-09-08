@@ -404,26 +404,28 @@ class Seestar:
 
     def start_auto_focus(self):
         self.logger.info("start auto focus...")
-        self.json_message("start_auto_focuse")
-        # todo: wait for focus complete instead of just simply sleep
-        time.sleep(1)
-
+        result = self.send_message_param_sync({"method": "start_auto_focuse"})
+        if 'error' in result:
+            self.logger.error("Faild to start auto focus: %s", result)
+            return False
+        return True
+    
     def try_auto_focus(self, try_count):
         focus_count = 0
         result = False
         while focus_count < try_count and result == False:
-            self.logger.info("%s: focusing try %s of %s...", self.device_name, str(focus_count + 1), str(try_count))
-            self.start_auto_focus()
-            result = self.wait_end_op("AutoFocus")
             focus_count += 1
-            if result != True:
-                time.sleep(5)
+            self.logger.info("%s: focusing try %s of %s...", self.device_name, str(focus_count), str(try_count))
+            if self.start_auto_focus():
+                result = self.wait_end_op("AutoFocus")
+                if result != True and focus_count < try_count:
+                    time.sleep(5)
 
         if result == True:
             self.logger.info("%s: Auto focus completed!", self.device_name)
             return True
         else:
-            self.logger.info("%s: Auto focus failed!", self.device_name)
+            self.logger.error("%s: Auto focus failed!", self.device_name)
             return False
 
     def stop_stack(self):
@@ -571,6 +573,9 @@ class Seestar:
             self.move_scope(0, 0, 0)
         self.logger.info("finished moving scope to requested position.")
 
+    def action_set_dew_heater(self, params):
+        self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
+        
     def action_start_up_sequence(self, params):
         self.logger.info("start up sequence begins ...")
         tz_name = tzlocal.get_localzone_name()
@@ -940,6 +945,7 @@ class Seestar:
 
     def scheduler_thread_fn(self):
         self.scheduler_state = "Running"
+        issue_shutdown = False
         self.play_sound(80)
         self.logger.info("schedule started ...")
         for item in self.schedule['list']:
@@ -959,7 +965,7 @@ class Seestar:
                 self.try_auto_focus(item['params']['try_count'])
             elif action == 'shutdown':
                 self.scheduler_state = "Stopped"
-                self.json_message("pi_shutdown")
+                issue_shutdown = True
                 break
             # elif action == 'set_wheel_position' or action == 'pi_output_set2':
                 
@@ -986,6 +992,8 @@ class Seestar:
         self.schedule['current_item_id'] = ""
         self.logger.info("Scheduler Stopped.")
         self.play_sound(82)
+        if issue_shutdown:
+            self.json_message("pi_shutdown")
 
     def stop_scheduler(self):
         if self.scheduler_state == "Running":

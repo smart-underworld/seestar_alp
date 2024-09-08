@@ -85,6 +85,7 @@ class Config:
     stport: int = get_toml('network', 'stport', 8090)
     sthost: str = get_toml('network', 'sthost', 'localhost')
     timeout: int = get_toml('network', 'timeout', 5)
+    rtsp_udp: bool = get_toml('network', 'rtsp_udp', True)
 
     # --------------
     # WebUI Section
