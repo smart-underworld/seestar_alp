@@ -414,10 +414,10 @@ class Seestar:
         focus_count = 0
         result = False
         while focus_count < try_count and result == False:
-            self.logger.info("%s: focusing try %s of %s...", self.device_name, str(focus_count + 1), str(try_count))
+            focus_count += 1
+            self.logger.info("%s: focusing try %s of %s...", self.device_name, str(focus_count), str(try_count))
             if self.start_auto_focus():
                 result = self.wait_end_op("AutoFocus")
-                focus_count += 1
                 if result != True and focus_count < try_count:
                     time.sleep(5)
 
