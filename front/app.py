@@ -719,7 +719,7 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
 
 
 FIXED_PARAMS_KEYS = ["local_time", "timer_sec", "try_count", "target_name", "is_j2000", "ra", "dec", "is_use_lp_filter",
-                     "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus", "heater", "nokey"]
+                     "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus", "heater", "nokey", "selected_panels"]
 
 
 def export_schedule(telescope_id):
@@ -769,11 +769,11 @@ def import_schedule(input, telescope_id):
         fields = line.split(',')
         
         # Check if the line has the expected number of fields
-        if len(fields) != 17:
+        if len(fields) != 18:
             continue
             
-        (action, local_time, timer_sec, try_count, target_name, is_j2000, ra, dec, is_use_lp_filter, session_time_sec, ra_num, dec_num, panel_overlap_percent, gain, is_use_autofocus, heater, nokey) = fields
-
+        (action, local_time, timer_sec, try_count, target_name, is_j2000, ra, dec, is_use_lp_filter, session_time_sec, ra_num, dec_num, panel_overlap_percent, gain, is_use_autofocus, heater, nokey, selected_panels) = fields
+      
         match action:
             case "action":
                 pass
@@ -795,7 +795,8 @@ def import_schedule(input, telescope_id):
                                            "ra_num": int(ra_num),
                                            "dec_num": int(dec_num), 
                                            "panel_overlap_percent": int(panel_overlap_percent),
-                                           "gain": int(gain)}, int(telescope_id))
+                                           "gain": int(gain), 
+                                           "selected_panels": selected_panels}, int(telescope_id))
             case "shutdown":
                 do_schedule_action_device("shutdown", "", telescope_id)
             case 'set_wheel_position':
@@ -1567,7 +1568,7 @@ class LoggingWSGIRequestHandler(WSGIRequestHandler):
 
     def log_message(self, format: str, *args):
         # if args[1] != '200':  # Log this only on non-200 responses
-        logger.info(f'{datetime.now()} {self.client_address[0]} <- {format % args}')
+        logger.debug(f'{datetime.now()} {self.client_address[0]} <- {format % args}')
 
 
 class FrontMain:
