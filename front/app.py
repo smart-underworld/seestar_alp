@@ -755,7 +755,7 @@ def export_schedule(telescope_id):
                 row[key] = entry['params'].get(key, '')
         else:
             # If 'params' key is missing, ensure all fixed params are empty
-            row['nokey'] = entry['params']
+            row['nokey'] = ''
         writer.writerow(row)
 
     output.seek(0)
