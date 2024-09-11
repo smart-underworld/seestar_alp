@@ -32,6 +32,13 @@ def get_mins(panel_dir):
         "s10": s10_files
     }
 
+def get_dates(panel_dir):
+    dates = []
+    for f in glob.glob(f"{panel_dir}/lights/*.fit"):
+        d = re.search('.*_(202[0-9]*)-.*', f).group(1)
+        dates += d
+    return list(set(dates))
+
 # find max mins
 max_mins=0
 for panel_dir in panel_dirs:
@@ -39,6 +46,7 @@ for panel_dir in panel_dirs:
     if mins > max_mins:
         max_mins = mins
 
+all_dates=[]
 print("Panel   \t30s\t20s\t10s\tHrs\tDiffMins")
 for panel_dir in panel_dirs:
     panel=os.path.basename(panel_dir)
@@ -54,9 +62,13 @@ for panel_dir in panel_dirs:
     hours=round(stats["mins"]/60,2)
     diff=round(max_mins - stats["mins"],2)
 
+    dates=get_dates(panel_dir)
+    all_dates=list(set(all_dates + dates))
+
     print(f"{panel}:\t{s30}\t{s20}\t{s10}\t{hours}\t{diff}")
 
 print(f"\ntotal:\t\t\t\t\t{round(total_mins/60,2)} hours")
+print(f"sessions:\t\t\t\t{len(all_dates)}")
 
 print("")
 
