@@ -35,8 +35,8 @@ class Seestar:
         self.op_watch = ""
         self.op_state = ""
         self.s = None
-        self.get_msg_thread = ""
-        self.heartbeat_msg_thread = ""
+        self.get_msg_thread = None
+        self.heartbeat_msg_thread = None
         self.is_debug = is_debug
         self.response_dict = {}
         self.logger = logger
@@ -52,8 +52,8 @@ class Seestar:
         self.scheduler_item_state = "Stopped"
         self.scheduler_item_id = ""
         self.scheduler_item = "" # Text description of specific scheduler item that's running
-        self.mosaic_thread = ""
-        self.scheduler_thread = ""
+        self.mosaic_thread = None
+        self.scheduler_thread = None
         self.schedule = {}
         self.schedule['list'] = []
         self.schedule['state'] = self.scheduler_state
@@ -73,10 +73,11 @@ class Seestar:
 
     def heartbeat(self):  # I noticed a lot of pairs of test_connection followed by a get if nothing was going on
         #    json_message("test_connection")
-        self.json_message("scope_get_equ_coord")
+        self.json_message("scope_get_equ_coord", id=420)
 
     def send_message(self, data):
         try:
+            # todo : don't send if not connected or socket is null?
             self.s.sendall(data.encode())  # TODO: would utf-8 or unicode_escaped help here
             return True
         except socket.timeout:
@@ -131,6 +132,7 @@ class Seestar:
         try:
             data = self.s.recv(1024 * 60)  # comet data is >50kb
         except socket.timeout:
+            self.logger.warn("Socket timeout")
             return None
         except socket.error as e:
             # todo : if general socket error, close socket, and kick off reconnect?
@@ -164,6 +166,8 @@ class Seestar:
 
     def heartbeat_message_thread_fn(self):
         while self.is_watch_events:
+            threading.current_thread().last_run = datetime.now()
+
             if not self.is_connected and not self.reconnect():
                 sleep(5)
                 continue
@@ -174,6 +178,7 @@ class Seestar:
     def receive_message_thread_fn(self):
         msg_remainder = ""
         while self.is_watch_events:
+            threading.current_thread().last_run = datetime.now()
             # print("checking for msg")
             data = self.get_socket_msg()
             if data:
@@ -183,7 +188,12 @@ class Seestar:
                 while first_index >= 0:
                     first_msg = msg_remainder[0:first_index]
                     msg_remainder = msg_remainder[first_index + 2:]
-                    parsed_data = json.loads(first_msg)  # xxx : check for errors here!
+                    try:
+                        parsed_data = json.loads(first_msg)
+                    except Exception as e:
+                        self.logger.exception(e)
+                        # We just bail for now...
+                        break
 
                     if 'jsonrpc' in parsed_data:
                         # {"jsonrpc":"2.0","Timestamp":"9507.244805160","method":"scope_get_equ_coord","result":{"ra":17.093056,"dec":34.349722},"code":0,"id":83}
@@ -191,7 +201,7 @@ class Seestar:
                             self.logger.debug(f'{self.device_name} : {parsed_data}')
                             self.update_equ_coord(parsed_data)
                         else:
-                            self.logger.info(f'{self.device_name} : {parsed_data}')
+                            self.logger.debug(f'{self.device_name} : {parsed_data}')
                         if parsed_data["method"] == "get_view_state":
                             self.update_view_state(parsed_data)
                         # keep a running queue of last 100 responses for sync call results
@@ -226,36 +236,45 @@ class Seestar:
                                 self.logger.info("Plate Solve Failed")
                                 self.cur_solve_RA = -1.0
                                 self.cur_solve_Dec = -1.0
+                        #else:
+                        #    self.logger.debug(f"Received event {event_name} : {data}")
 
                     first_index = msg_remainder.find("\r\n")
             time.sleep(0.1)
 
-    def json_message(self, instruction):
-        data = {"id": self.cmdid, "method": instruction}
+    def json_message(self, instruction, **kwargs):
+        data = {"id": self.cmdid, "method": instruction, **kwargs}
         self.cmdid += 1
         json_data = json.dumps(data)
         if instruction == 'scope_get_equ_coord':
             self.logger.debug(f'{self.device_name} sending: {json_data}')
         else:
-            self.logger.info(f'{self.device_name} sending: {json_data}')
+            self.logger.debug(f'{self.device_name} sending: {json_data}')
         self.send_message(json_data + "\r\n")
 
     def send_message_param(self, data):
-        cur_cmdid = self.cmdid
+        cur_cmdid = data.get('id') or self.cmdid
         data['id'] = cur_cmdid
         self.cmdid += 1 # can this overflow?  not in JSON...
         json_data = json.dumps(data)
         if 'method' in data and data['method'] == 'scope_get_equ_coord':
             self.logger.debug(f'{self.device_name} sending: {json_data}')
         else:
-            self.logger.info(f'{self.device_name} sending: {json_data}')        
+            self.logger.debug(f'{self.device_name} sending: {json_data}')
 
         self.send_message(json_data + "\r\n")
         return cur_cmdid
 
     def send_message_param_sync(self, data):
         cur_cmdid = self.send_message_param(data)
+        start = time.time()
+        last_slow = start
         while cur_cmdid not in self.response_dict:
+            now = time.time()
+            if now - last_slow > 2:
+                elapsed = now - start
+                last_slow = now
+                self.logger.warn(f'SLOW message response.  {elapsed} seconds. {cur_cmdid=} {data=}')
             time.sleep(0.1)
         self.logger.debug(f'{self.device_name} response is {self.response_dict[cur_cmdid]}')
         return self.response_dict[cur_cmdid]
@@ -944,11 +963,15 @@ class Seestar:
         return "Scheduler started"
 
     def scheduler_thread_fn(self):
+        def update_time():
+            threading.current_thread().last_run = datetime.now()
+
         self.scheduler_state = "Running"
         issue_shutdown = False
         self.play_sound(80)
         self.logger.info("schedule started ...")
         for item in self.schedule['list']:
+            update_time()
             if self.scheduler_state != "Running":
                 break
             self.schedule['current_item_id'] = item.get('id', 'UNKNOWN')
@@ -956,10 +979,12 @@ class Seestar:
             if action == 'start_mosaic':
                 self.start_mosaic_item(item['params'])
                 while self.scheduler_item_state == "Running":
+                    update_time()
                     time.sleep(2)
             elif action == 'start_spectra':
                 self.start_spectra_item(item['params'])
                 while self.scheduler_item_state == "Running":
+                    update_time()
                     time.sleep(2)
             elif action == 'auto_focus':
                 self.try_auto_focus(item['params']['try_count'])
@@ -973,6 +998,7 @@ class Seestar:
                 sleep_time = item['params']['timer_sec']
                 sleep_count = 0
                 while sleep_count < sleep_time and self.scheduler_state == "Running":
+                    update_time()
                     time.sleep(2)
                     sleep_count += 2
             elif action == 'wait_until':
@@ -980,6 +1006,7 @@ class Seestar:
                 time_hour = int(wait_until_time[0])
                 time_minute = int(wait_until_time[1])
                 while self.scheduler_state == "Running":
+                    update_time()
                     local_time = datetime.now()
                     if local_time.hour == time_hour and local_time.minute == time_minute:
                         break
