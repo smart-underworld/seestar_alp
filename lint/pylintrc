@@ -1,0 +1,7 @@
+[MAIN]
+errors-only=true
+persistent=no
+verbose=yes
+jobs=0 # autodetect number of cpus for parallel processing
+py-version=3.12
+disable=
