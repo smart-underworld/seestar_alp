@@ -13,10 +13,10 @@ from front.app import FrontMain
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "device"))
 
-from app import DeviceMain     # type: ignore
-from config import Config      # type: ignore
-import log                     # type: ignore
-import telescope               # type: ignore
+from device.app import DeviceMain     # type: ignore
+from device.config import Config      # type: ignore
+import device.log                     # type: ignore
+import device.telescope               # type: ignore
 
 import os
 
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     if Config.rtsp_udp:
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;udp"
     # We want to initialize ALP logger
-    logger = log.init_logging()
+    logger = device.log.init_logging()
 
     logger.info("Starting ALP web server")
     main = AppRunner(logger, "ALP", DeviceMain)
@@ -83,13 +83,13 @@ if __name__ == "__main__":
 
         @app.route("/<dev_num>/vid/status")
         def vid_status(dev_num):
-            return Response(telescope.get_seestar_imager(int(dev_num)).get_video_status(),
+            return Response(device.telescope.get_seestar_imager(int(dev_num)).get_video_status(),
                             mimetype='text/event-stream')
 
 
         @app.route('/<dev_num>/vid')
         def vid(dev_num):
-            return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(),
+            return Response(device.telescope.get_seestar_imager(int(dev_num)).get_frame(),
                             mimetype='multipart/x-mixed-replace; boundary=frame')
 
         print("Startup Complete")

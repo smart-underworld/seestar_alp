@@ -828,7 +828,7 @@ class HomeResource:
             redirect(f"/{telescope['device_num']}/")
         else:
             root = get_root(telescope['device_num'])
-            render_template(req, resp, 'index.html', now=now, telescopes=telescopes, **context)
+            render_template(req, resp, 'index.html', now=now, telescopes=telescopes, **context) # pylint: disable=repeated-keyword
 
 
 class HomeTelescopeResource:
@@ -838,7 +838,7 @@ class HomeTelescopeResource:
         telescopes = get_telescopes_state()
         context = get_context(telescope_id, req)
         del context["telescopes"]
-        render_template(req, resp, 'index.html', now=now, telescopes=telescopes, **context)
+        render_template(req, resp, 'index.html', now=now, telescopes=telescopes, **context) # pylint: disable=repeated-keyword
 
 
 class ImageResource:
