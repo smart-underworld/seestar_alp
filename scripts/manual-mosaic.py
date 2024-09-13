@@ -7,7 +7,7 @@ import os
 import argparse
 
 current = os.path.dirname(os.path.realpath(__file__))
-parent = os.path.realpath(current + "/..")
+parent = os.path.realpath(os.path.join(current, ".."))
 sys.path.append(parent)
 
 from device.seestar_util import Util
