@@ -21,6 +21,7 @@ from device.shr import PropertyResponse, MethodResponse, PreProcessRequest, \
                 get_request_field, to_bool
 from device.exceptions import *        # Nothing but exception classes
 from device.seestar_device import Seestar
+from seestar_federation import Seestar_Federation
 from alpaca.telescope import *
 import json
 from device.seestar_util import Util    # RWR
@@ -29,7 +30,6 @@ from device.seestar_util import Util    # RWR
 
 seestar_dev = {}
 seestar_imager = {}
-seestar_logcollector = {}
 
 # pylint: disable=no-value-for-parameter
 
@@ -62,6 +62,10 @@ class TelescopeMetadata:
 
 
 # At app init not import :-)
+def start_seestar_federation(logger: logger): # type: ignore
+    global seestar_federation
+    seestar_federation = Seestar_Federation(logger, seestar_dev)
+
 def start_seestar_device(logger: logger, name: str, ip_address: str, port: int, device_num: int): # type: ignore
     # logger = logger
     global seestar_dev
@@ -120,13 +124,17 @@ def get_seestar_logcollector(device_num: int):
 @before(PreProcessRequest(maxdev))
 class action:
     def on_put(self, req: Request, resp: Response, devnum: int):
-        if devnum not in seestar_dev or not seestar_dev[devnum].is_connected:
+        action_name = get_request_field('Action', req)      # Raises 400 bad request if missing
+        parameters = get_request_field('Parameters', req)
+        if devnum == 0:
+            cur_dev = seestar_federation
+        elif devnum not in seestar_dev or not seestar_dev[devnum].is_connected:
             err = DevNotConnectedException("device not connected.")
             resp.text = PropertyResponse(None, req, err).json
             return
-        cur_dev = seestar_dev[devnum]
-        action_name = get_request_field('Action', req)      # Raises 400 bad request if missing
-        parameters = get_request_field('Parameters', req)
+        else:
+            cur_dev = seestar_dev[devnum]
+
 
         try:
             params = json.loads(parameters)
