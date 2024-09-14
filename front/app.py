@@ -366,6 +366,9 @@ def get_device_state(telescope_id):
         settings = ""
         pi_status = ""
         free_storage = ""
+        target = ""
+        stacked = ""
+        failed = ""
         if status is not None and status.get("View"):
             view_state = status["View"]["state"]
             mode = status["View"]["mode"]
@@ -375,15 +378,7 @@ def get_device_state(telescope_id):
                     target = status["View"]["target_name"]
                     stacked = status["View"]["Stack"]["stacked_frame"]
                     failed = status["View"]["Stack"]["dropped_frame"]
-                else:
-                    target = ""
-                    stacked = ""
-                    failed = ""
-            else:
-                target = ""
-                stacked = ""
-                failed = ""
-            
+
                 
         # Check for bad data
         if status is not None and result is not None:
