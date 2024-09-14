@@ -1,5 +1,16 @@
 #!/bin/bash -e
 
+if [ "$(whoami)" = "root" ]; then
+    echo "ERROR: You should not run this script as root"
+    exit 255
+fi
+
+timeout 2 sudo id 2>&1 > /dev/null && sudo="true" || sudo="false"
+if [ "$sudo" = "false" ]; then
+    echo "ERROR: User does not have sudo access required for setup"
+    exit 255
+fi
+
 src_home=$(cd $(dirname $0)/.. && pwd)
 
 # check if update is required

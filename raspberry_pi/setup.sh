@@ -2,6 +2,18 @@
 #
 # This bootstraps the unified application on a Raspberry Pi.
 #
+
+if [ "$(whoami)" = "root" ]; then
+    echo "ERROR: You should not run this script as root"
+    exit 255
+fi
+
+timeout 2 sudo id 2>&1 > /dev/null && sudo="true" || sudo="false"
+if [ "$sudo" = "false" ]; then
+    echo "ERROR: User does not have sudo access required for setup"
+    exit 255
+fi
+
 if [ -e seestar_alp ] || [ -e ~/seestar_alp ]; then
     echo "ERROR: Existing seestar_alp directory detected."
     echo "       You should run the raspberry_pi/update.sh script instead."
