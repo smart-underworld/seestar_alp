@@ -78,6 +78,11 @@ def get_seestar_imager(device_num: int):
     return seestar_imager[device_num]
 
 
+def get_seestar_device(device_num: int):
+    global seestar_dev
+    return seestar_dev[device_num]
+
+
 def end_seestar_device(device_num: int):
     global seestar_dev
     seestar_dev[device_num].end_watch_thread()
