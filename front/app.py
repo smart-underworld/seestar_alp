@@ -368,6 +368,21 @@ def get_device_state(telescope_id):
             view_state = status["View"]["state"]
             mode = status["View"]["mode"]
             stage = status["View"]["stage"]
+            if stage == "Stack":
+                if status["View"]["Stack"]["state"] == "working":
+                    target = status["View"]["target_name"]
+                    stacked = status["View"]["Stack"]["stacked_frame"]
+                    failed = status["View"]["Stack"]["dropped_frame"]
+                else:
+                    target = ""
+                    stacked = ""
+                    failed = ""
+            else:
+                target = ""
+                stacked = ""
+                failed = ""
+            
+                
         # Check for bad data
         if status is not None and result is not None:
             schedule = do_action_device("get_schedule", telescope_id, {})
@@ -401,6 +416,9 @@ def get_device_state(telescope_id):
                 "View State": view_state,
                 "View Mode": mode,
                 "View Stage": stage,
+                "Target Name": target,
+                "Succesful Frames": stacked,
+                "Failed Frames": failed,
                 "Wi-Fi Signal": wifi_signal,
             }
         else:
