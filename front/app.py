@@ -841,7 +841,7 @@ class HomeResource:
             redirect(f"/{telescope['device_num']}/")
         else:
             root = get_root(telescope['device_num'])
-            render_template(req, resp, 'index.html', now=now, telescopes=telescopes, **context)
+            render_template(req, resp, 'index.html', now=now, telescopes=telescopes, **context) # pylint: disable=repeated-keyword
 
 
 class HomeTelescopeResource:
@@ -851,7 +851,7 @@ class HomeTelescopeResource:
         telescopes = get_telescopes_state()
         context = get_context(telescope_id, req)
         del context["telescopes"]
-        render_template(req, resp, 'index.html', now=now, telescopes=telescopes, **context)
+        render_template(req, resp, 'index.html', now=now, telescopes=telescopes, **context) # pylint: disable=repeated-keyword
 
 
 class ImageResource:
@@ -1435,15 +1435,16 @@ class SystemResource:
         threads = []
         for tel in get_telescopes():
             telescope_id = tel["device_num"]
+            telescope_name = tel["name"]
             imager = telescope.get_seestar_imager(telescope_id)
             dev = telescope.get_seestar_device(telescope_id)
-            for t in (self.if_null(dev.get_msg_thread, f"ALPReceiveMessageThread.{tel["name"]}"),
-                      self.if_null(dev.heartbeat_msg_thread, f"ALPHeartbeatMessageThread.{tel["name"]}"),
-                      self.if_null(dev.scheduler_thread, f"SchedulerThread.{tel["name"]}"),
-                      self.if_null(dev.mosaic_thread, f"MosaicThread.{tel["name"]}"),
-                      self.if_null(imager.heartbeat_msg_thread, f"ImagingHeartbeatMessageThread.{tel["name"]}"),
-                      self.if_null(imager.get_stream_thread, f"ImagingStreamThread.{tel["name"]}"),
-                      self.if_null(imager.get_image_thread, f"ImagingReceiveImageThread.{tel["name"]}"),
+            for t in (self.if_null(dev.get_msg_thread, f"ALPReceiveMessageThread.{telescope_name}"),
+                      self.if_null(dev.heartbeat_msg_thread, f"ALPHeartbeatMessageThread.{telescope_name}"),
+                      self.if_null(dev.scheduler_thread, f"SchedulerThread.{telescope_name}"),
+                      self.if_null(dev.mosaic_thread, f"MosaicThread.{telescope_name}"),
+                      self.if_null(imager.heartbeat_msg_thread, f"ImagingHeartbeatMessageThread.{telescope_name}"),
+                      self.if_null(imager.get_stream_thread, f"ImagingStreamThread.{telescope_name}"),
+                      self.if_null(imager.get_image_thread, f"ImagingReceiveImageThread.{telescope_name}"),
                       ):
                 threads.append({
                     "name": t.name,
