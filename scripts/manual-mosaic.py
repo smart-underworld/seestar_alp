@@ -7,7 +7,7 @@ import os
 import argparse
 
 current = os.path.dirname(os.path.realpath(__file__))
-parent = os.path.realpath(current + "/..")
+parent = os.path.realpath(os.path.join(current, ".."))
 sys.path.append(parent)
 
 from device.seestar_util import Util
@@ -59,7 +59,7 @@ class ManualMosaic:
             for index_ra in range(self.tunables.nRA):
                 panel_string = str(index_ra + 1) + str(index_dec + 1)
 
-                panel_line=f"start_mosaic,,,,{self.tunables.target_name}_{panel_string},{self.tunables.is_j2000},{cur_ra},{cur_dec},{self.tunables.use_LPF},{secs_per_panel},1,1,100,{self.tunables.gain},{self.tunables.use_AF},{self.tunables.use_heater},"
+                panel_line=f"start_mosaic,,,,{self.tunables.target_name}_{panel_string},{self.tunables.is_j2000},{cur_ra},{cur_dec},{self.tunables.use_LPF},{secs_per_panel},1,1,100,{self.tunables.gain},{self.tunables.use_AF},{self.tunables.use_heater},,"
                 self.lines[panel_string] = panel_line
                 self.llines.append(panel_line)
 
@@ -68,7 +68,7 @@ class ManualMosaic:
 
     def print_schedule(self):
         # Print panels in order specified
-        print("action,local_time,timer_sec,try_count,target_name,is_j2000,ra,dec,is_use_lp_filter,session_time_sec,ra_num,dec_num,panel_overlap_percent,gain,is_use_autofocus,heater,nokey")
+        print("action,local_time,timer_sec,try_count,target_name,is_j2000,ra,dec,is_use_lp_filter,session_time_sec,ra_num,dec_num,panel_overlap_percent,gain,is_use_autofocus,heater,nokey,selected_panels")
         if self.tunables.panel_order:
             for p in self.tunables.panel_order.split(";"):
                 print(self.lines[p])

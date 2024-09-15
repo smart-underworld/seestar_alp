@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block header %}
+    <div class="container mt-3">
+        <p class="h1">{% block title %}System{% endblock %}</p>
+    </div>
+{% endblock %}
+
+{% block content %}
+
+    <div class="container mt-3">
+        <div class="row fw-bold border-bottom py-1 text-start">
+            <div class="col">Thread</div>
+            <div class="col">Running?</div>
+            <div class="col">Last Loop</div>
+        </div>
+        {% for thread in threads %}
+            <div class="row border-bottom py-2 text-start">
+                <div class="col">{{ thread["name"] }}</div>
+                <div class="col">{{ thread["running"] }}</div>
+                <div class="col">{{ thread["last_run"] }}</div>
+            </div>
+        {% endfor %}
+    </div>
+
+    <footer class="bg-body-tertiary text-center mt-3">
+        Last updated: {{ now }}
+    </footer>
+
+{% endblock %}

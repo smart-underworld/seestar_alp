@@ -135,6 +135,7 @@ class SeestarImaging:
 
     def send_star_subscription(self):
         if not self.sent_subscription:
+            self.logger.info(f"sending star subscription {self.exposure_mode}")
             if self.exposure_mode == "stack":
                 self.send_message('{"id": 23, "method": "get_stacked_img"}' + "\r\n")
             else:
@@ -143,6 +144,8 @@ class SeestarImaging:
 
     def heartbeat_message_thread_fn(self):
         while True:
+            threading.current_thread().last_run = datetime.datetime.now()
+
             if not self.is_connected and not self.reconnect():
                 sleep(5)
                 continue
@@ -156,6 +159,8 @@ class SeestarImaging:
     def receive_message_thread_fn(self):
         self.logger.info("starting receive message: main loop")
         while True:
+            threading.current_thread().last_run = datetime.datetime.now()
+
             if self.is_connected and self.exposure_mode is not None:
                 # todo : make this something that can timeout, but don't make timeout too short...
                 header = self.read_bytes(80)
@@ -212,6 +217,8 @@ class SeestarImaging:
     def streaming_thread_fn(self):
         self.logger.info("starting streaming thread")
         while True:
+            threading.current_thread().last_run = datetime.datetime.now()
+
             if self.is_streaming:
                 try:
                     empty_images = 0
@@ -505,6 +512,7 @@ class SeestarImaging:
             sleep(delay)
 
         self.stop()
+
         yield self.blank_frame("Idle")
 
 

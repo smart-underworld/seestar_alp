@@ -1,4 +1,10 @@
 <div class="container mt-3">
+    {% if target_name %}
+    <div class="row border-bottom py-1 text-start">
+        <div class="col fw-bold">Target Name</div>
+        <div class="col">{{ target_name }}</div>
+    </div>
+    {% endif %}
     <div class="row border-bottom py-1 text-start">
         <div class="col fw-bold">State</div>
         <div class="col">{{ state }}</div>

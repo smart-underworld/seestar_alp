@@ -22,10 +22,10 @@ import os
 
 class AppRunner:
     def __init__(self, log, name, app_main):
-        self.app_main = app_main()
         self.name = name
         self.logger = log
         self.thread = None
+        self.app_main = app_main()
 
     def start(self):
         self.logger.info(f"Starting {self.name}")

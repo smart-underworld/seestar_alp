@@ -29,6 +29,8 @@ from seestar_util import Util    # RWR
 seestar_dev = {}
 seestar_imager = {}
 
+# pylint: disable=no-value-for-parameter
+
 # ----------------------
 # MULTI-INSTANCE SUPPORT
 # ----------------------
@@ -76,6 +78,11 @@ def start_seestar_imaging(logger: logger, name: str, ip_address: str, port: int,
 def get_seestar_imager(device_num: int):
     global seestar_imager
     return seestar_imager[device_num]
+
+
+def get_seestar_device(device_num: int):
+    global seestar_dev
+    return seestar_dev[device_num]
 
 
 def end_seestar_device(device_num: int):
@@ -202,7 +209,7 @@ class connected:
                 seestar_dev[devnum].end_watch_thread()
             resp.text = MethodResponse(req).json
         except Exception as ex:
-            resp.text = MethodResponse(req, DriverException(0x500, 'Telescope.Connected failed', ex)).json
+            resp.text = MethodResponse(req, DevDriverException(0x500, 'Telescope.Connected failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class description:
@@ -249,7 +256,7 @@ class alignmentmode:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Alignmentmode failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Alignmentmode failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class altitude:
@@ -266,7 +273,7 @@ class altitude:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Altitude failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Altitude failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class aperturearea:
@@ -283,7 +290,7 @@ class aperturearea:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Aperturearea failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Aperturearea failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class aperturediameter:
@@ -300,7 +307,7 @@ class aperturediameter:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Aperturediameter failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Aperturediameter failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class athome:
@@ -317,7 +324,7 @@ class athome:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Athome failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Athome failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class atpark:
@@ -334,7 +341,7 @@ class atpark:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Atpark failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Atpark failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class azimuth:
@@ -351,7 +358,7 @@ class azimuth:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Azimuth failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Azimuth failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class canfindhome:
@@ -368,7 +375,7 @@ class canfindhome:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Canfindhome failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Canfindhome failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class canpark:
@@ -385,7 +392,7 @@ class canpark:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Canpark failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Canpark failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class canpulseguide:
@@ -402,7 +409,7 @@ class canpulseguide:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Canpulseguide failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Canpulseguide failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class cansetdeclinationrate:
@@ -419,7 +426,7 @@ class cansetdeclinationrate:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Cansetdeclinationrate failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Cansetdeclinationrate failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class cansetguiderates:
@@ -436,7 +443,7 @@ class cansetguiderates:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Cansetguiderates failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Cansetguiderates failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class cansetpark:
@@ -453,7 +460,7 @@ class cansetpark:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Cansetpark failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Cansetpark failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class cansetpierside:
@@ -470,7 +477,7 @@ class cansetpierside:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Cansetpierside failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Cansetpierside failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class cansetrightascensionrate:
@@ -487,7 +494,7 @@ class cansetrightascensionrate:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Cansetrightascensionrate failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Cansetrightascensionrate failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class cansettracking:
@@ -504,7 +511,7 @@ class cansettracking:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Cansettracking failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Cansettracking failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class canslew:
@@ -521,7 +528,7 @@ class canslew:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Canslew failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Canslew failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class canslewaltaz:
@@ -538,7 +545,7 @@ class canslewaltaz:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Canslewaltaz failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Canslewaltaz failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class canslewaltazasync:
@@ -555,7 +562,7 @@ class canslewaltazasync:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Canslewaltazasync failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Canslewaltazasync failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class canslewasync:
@@ -572,7 +579,7 @@ class canslewasync:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Canslewasync failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Canslewasync failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class cansync:
@@ -589,7 +596,7 @@ class cansync:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Cansync failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Cansync failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class cansyncaltaz:
@@ -606,7 +613,7 @@ class cansyncaltaz:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Cansyncaltaz failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Cansyncaltaz failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class canunpark:
@@ -623,7 +630,7 @@ class canunpark:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Canunpark failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Canunpark failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class declination:
@@ -640,7 +647,7 @@ class declination:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Declination failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Declination failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class declinationrate:
@@ -657,7 +664,7 @@ class declinationrate:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Declinationrate failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Declinationrate failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -679,7 +686,7 @@ class declinationrate:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Declinationrate failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Declinationrate failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class doesrefraction:
@@ -696,7 +703,7 @@ class doesrefraction:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Doesrefraction failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Doesrefraction failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -713,7 +720,7 @@ class doesrefraction:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Doesrefraction failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Doesrefraction failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class equatorialsystem:
@@ -730,7 +737,7 @@ class equatorialsystem:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Equatorialsystem failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Equatorialsystem failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class focallength:
@@ -747,7 +754,7 @@ class focallength:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Focallength failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Focallength failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class guideratedeclination:
@@ -764,7 +771,7 @@ class guideratedeclination:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Guideratedeclination failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Guideratedeclination failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -786,7 +793,7 @@ class guideratedeclination:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Guideratedeclination failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Guideratedeclination failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class guideraterightascension:
@@ -803,7 +810,7 @@ class guideraterightascension:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Guideraterightascension failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Guideraterightascension failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -825,7 +832,7 @@ class guideraterightascension:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Guideraterightascension failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Guideraterightascension failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class ispulseguiding:
@@ -842,7 +849,7 @@ class ispulseguiding:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Ispulseguiding failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Ispulseguiding failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class rightascension:
@@ -859,7 +866,7 @@ class rightascension:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Rightascension failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Rightascension failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class rightascensionrate:
@@ -876,7 +883,7 @@ class rightascensionrate:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Rightascensionrate failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Rightascensionrate failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -898,7 +905,7 @@ class rightascensionrate:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Rightascensionrate failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Rightascensionrate failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class sideofpier:
@@ -915,7 +922,7 @@ class sideofpier:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Sideofpier failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Sideofpier failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -937,7 +944,7 @@ class sideofpier:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Sideofpier failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Sideofpier failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class siderealtime:
@@ -954,7 +961,7 @@ class siderealtime:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Siderealtime failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Siderealtime failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class siteelevation:
@@ -971,7 +978,7 @@ class siteelevation:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Siteelevation failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Siteelevation failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -991,7 +998,7 @@ class siteelevation:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Siteelevation failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Siteelevation failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class sitelatitude:
@@ -1017,7 +1024,7 @@ class sitelatitude:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Sitelatitude failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Sitelatitude failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -1039,7 +1046,7 @@ class sitelatitude:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Sitelatitude failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Sitelatitude failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class sitelongitude:
@@ -1065,7 +1072,7 @@ class sitelongitude:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Sitelongitude failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Sitelongitude failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -1087,7 +1094,7 @@ class sitelongitude:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Sitelongitude failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Sitelongitude failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class slewing:
@@ -1104,7 +1111,7 @@ class slewing:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Slewing failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Slewing failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class slewsettletime:
@@ -1121,7 +1128,7 @@ class slewsettletime:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Slewsettletime failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Slewsettletime failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -1143,7 +1150,7 @@ class slewsettletime:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Slewsettletime failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Slewsettletime failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class targetdeclination:
@@ -1160,7 +1167,7 @@ class targetdeclination:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Targetdeclination failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Targetdeclination failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -1182,7 +1189,7 @@ class targetdeclination:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Targetdeclination failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Targetdeclination failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class targetrightascension:
@@ -1199,7 +1206,7 @@ class targetrightascension:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Targetrightascension failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Targetrightascension failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -1221,7 +1228,7 @@ class targetrightascension:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Targetrightascension failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Targetrightascension failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class tracking:
@@ -1238,7 +1245,7 @@ class tracking:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Tracking failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Tracking failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -1255,7 +1262,7 @@ class tracking:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Tracking failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Tracking failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class trackingrate:
@@ -1272,7 +1279,7 @@ class trackingrate:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Trackingrate failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Trackingrate failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -1294,7 +1301,7 @@ class trackingrate:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Trackingrate failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Trackingrate failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class trackingrates:
@@ -1312,7 +1319,7 @@ class trackingrates:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Trackingrates failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Trackingrates failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class utcdate:
@@ -1329,7 +1336,7 @@ class utcdate:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Utcdate failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Utcdate failed', ex)).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
@@ -1351,7 +1358,7 @@ class utcdate:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Utcdate failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Utcdate failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class abortslew:
@@ -1368,7 +1375,7 @@ class abortslew:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Abortslew failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Abortslew failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class axisrates:
@@ -1385,7 +1392,7 @@ class axisrates:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Axisrates failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Axisrates failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class canmoveaxis:
@@ -1402,7 +1409,7 @@ class canmoveaxis:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Canmoveaxis failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Canmoveaxis failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class destinationsideofpier:
@@ -1419,7 +1426,7 @@ class destinationsideofpier:
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Telescope.Destinationsideofpier failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Destinationsideofpier failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class findhome:
@@ -1436,7 +1443,7 @@ class findhome:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Findhome failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Findhome failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class moveaxis:
@@ -1469,7 +1476,7 @@ class moveaxis:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Moveaxis failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Moveaxis failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class park:
@@ -1486,7 +1493,7 @@ class park:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Park failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Park failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class pulseguide:
@@ -1519,7 +1526,7 @@ class pulseguide:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Pulseguide failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Pulseguide failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class setpark:
@@ -1536,7 +1543,7 @@ class setpark:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Setpark failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Setpark failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class slewtoaltaz:
@@ -1569,7 +1576,7 @@ class slewtoaltaz:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Slewtoaltaz failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Slewtoaltaz failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class slewtoaltazasync:
@@ -1602,7 +1609,7 @@ class slewtoaltazasync:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Slewtoaltazasync failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Slewtoaltazasync failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class slewtocoordinates:
@@ -1635,7 +1642,7 @@ class slewtocoordinates:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Slewtocoordinates failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Slewtocoordinates failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class slewtocoordinatesasync:
@@ -1668,7 +1675,7 @@ class slewtocoordinatesasync:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Slewtocoordinatesasync failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Slewtocoordinatesasync failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class slewtotarget:
@@ -1685,7 +1692,7 @@ class slewtotarget:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Slewtotarget failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Slewtotarget failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class slewtotargetasync:
@@ -1702,7 +1709,7 @@ class slewtotargetasync:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Slewtotargetasync failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Slewtotargetasync failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class synctoaltaz:
@@ -1735,7 +1742,7 @@ class synctoaltaz:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Synctoaltaz failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Synctoaltaz failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class synctocoordinates:
@@ -1768,7 +1775,7 @@ class synctocoordinates:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Synctocoordinates failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Synctocoordinates failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class synctotarget:
@@ -1785,7 +1792,7 @@ class synctotarget:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Synctotarget failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Synctotarget failed', ex)).json
 
 @before(PreProcessRequest(maxdev))
 class unpark:
@@ -1802,5 +1809,5 @@ class unpark:
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Telescope.Unpark failed', ex)).json
+                            DevDriverException(0x500, 'Telescope.Unpark failed', ex)).json
 
