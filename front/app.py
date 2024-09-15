@@ -20,6 +20,7 @@ import sys
 import ephem
 import geocoder
 import pytz
+import re
 
 if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
     sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
@@ -512,6 +513,29 @@ def check_dec_value(decString):
     return any(re.search(pattern, decString) for pattern in valid)
 
 
+def hms_to_sec(timeString):
+    hms_search = re.search(r"^(?!\s*$)\s*(?:(\d+)\s*h\s*)?(?:(\d+)\s*m\s*)?(?:(\d+)\s*s)?\s*$", timeString.lower())
+
+    # Check if convertion is needed.
+    if hms_search:
+        seconds = 0
+        # Convert to sec
+        hms_split = re.split(r"^(?!\s*$)\s*(?:(\d+)\s*h\s*)?(?:(\d+)\s*m\s*)?(?:(\d+)\s*s)?\s*$", timeString.lower())
+        if hms_split[1] is not None:
+            # h
+            seconds = int(hms_split[1]) * 3600
+        if hms_split[2] is not None:
+            # m
+            seconds = seconds + int(hms_split[2]) * 60
+        if hms_split[3] is not None:
+            # s
+            seconds = seconds + int(hms_split[3])
+        return seconds
+    else:
+        return timeString
+    
+
+
 def do_create_mosaic(req, resp, schedule, telescope_id):
     form = req.media
     targetName = form["targetName"]
@@ -520,7 +544,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
     panelOverlap = form["panelOverlap"]
     panelSelect = form["panelSelect"]
     useJ2000 = form.get("useJ2000") == "on"
-    sessionTime = form["sessionTime"]
+    sessionTime = hms_to_sec(form["sessionTime"])
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
@@ -575,7 +599,7 @@ def do_create_image(req, resp, schedule, telescope_id):
     panelOverlap = 100
     panelSelect = ""
     useJ2000 = form.get("useJ2000") == "on"
-    sessionTime = form["sessionTime"]
+    sessionTime = hms_to_sec(form["sessionTime"])
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
