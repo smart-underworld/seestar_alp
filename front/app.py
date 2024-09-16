@@ -444,7 +444,7 @@ def get_device_settings(telescope_id):
         "auto_3ppa_calib": settings_result["auto_3ppa_calib"],
         "frame_calib": settings_result["frame_calib"],
         "stack_masic": settings_result["stack_masic"],
-        "rec_stablzn": settings_result["rec_stablzn"],
+        # "rec_stablzn": settings_result["rec_stablzn"], # Unavailable for firmware 3.11
         "manual_exp": settings_result["manual_exp"],
         # "isp_exp_ms": settings_result["isp_exp_ms"],
         # "calib_location": settings_result["calib_location"],
