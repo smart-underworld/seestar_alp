@@ -632,7 +632,7 @@ class Seestar:
         loc_data = {}
         loc_param = {}
         # special loc for south pole: (-90, 0)
-        if params['lat'] == 0 and params['lon'] == 0:  # special case of (0,0,) will use the ip address to estimate the location
+        if ('lat' not in params or 'lon' not in params) or (params['lat'] == 0 and params['lon'] == 0):  # special case of (0,0,) will use the ip address to estimate the location
             if Config.init_lat == 0 and Config.init_long == 0:
                 coordinates = Util.get_current_gps_coordinates()
                 if coordinates is not None:
@@ -642,12 +642,13 @@ class Seestar:
                     self.logger.info(f"Longitude: {longitude}")
                     Config.init_lat = latitude
                     Config.init_long = longitude
-            loc_param['lon'] = params['lon'] == 0
             loc_param['lat'] = Config.init_lat
-        else:
             loc_param['lon'] = Config.init_long
+        else:
             loc_param['lat'] = params['lat']   
-                    
+            loc_param['lon'] = params['lon']
+        self.logger.info(f"Setting location to {loc_param['lat']}, {loc_param['lon']}")
+        
         loc_param['force'] = False
         loc_data['method'] = 'set_user_location'
         loc_data['params'] = loc_param
