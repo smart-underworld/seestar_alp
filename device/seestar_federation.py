@@ -35,7 +35,7 @@ class Seestar_Federation:
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                result[key] = self.seestar_devices[key].stop_goto_target(params)
+                result[key] = self.seestar_devices[key].goto_target(params)
         return result
 
     # {"method":"scope_goto","params":[1.2345,75.0]}
@@ -261,8 +261,8 @@ class Seestar_Federation:
                         new_item = {}
                         new_item['action'] = "start_mosaic"
                         cur_params = schedule_item['params'].copy()
-                        cur_params['id'] = str(uuid.uuid4())
                         new_item['params'] = cur_params
+                        new_item['id'] = str(uuid.uuid4())
                         cur_device.schedule['list'].append(new_item)
                 else:
                     section_dict = self.get_section_array_for_mosaic(root_schedule["connected_device_list"], cur_params)
@@ -271,9 +271,9 @@ class Seestar_Federation:
                         new_item = {}
                         new_item['action'] = "start_mosaic"
                         cur_params = schedule_item['params'].copy()
-                        cur_params['id'] = str(uuid.uuid4())
                         cur_params['selected_panels'] = section_dict[key]
                         new_item['params'] = cur_params
+                        new_item['id'] = str(uuid.uuid4())
                         cur_device.schedule['list'].append(new_item)
 
             else:
@@ -282,8 +282,8 @@ class Seestar_Federation:
                     new_item = {}
                     new_item['action'] = schedule_item['action']
                     cur_params = schedule_item['params'].copy()
-                    cur_params['id'] = str(uuid.uuid4())
                     new_item['params'] = cur_params
+                    new_item['id'] = str(uuid.uuid4())
                     cur_device.schedule['list'].append(new_item)
 
         root_schedule['device'] = {}

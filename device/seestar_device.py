@@ -444,10 +444,12 @@ class Seestar:
 
         if result == True:
             self.logger.info("%s: Auto focus completed!", self.device_name)
-            return True
+
         else:
             self.logger.error("%s: Auto focus failed!", self.device_name)
-            return False
+
+        time.sleep(3)
+        return result
 
     def stop_stack(self):
         self.logger.info("%s: stop stacking...", self.device_name)
