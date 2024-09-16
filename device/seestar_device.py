@@ -632,18 +632,22 @@ class Seestar:
         loc_data = {}
         loc_param = {}
         # special loc for south pole: (-90, 0)
-        if Config.init_lat == 0 and Config.init_long == 0:
-        #if params['lat'] == 0 and params['lon'] == 0:  # special case of (0,0,) will use the ip address to estimate the location
-            coordinates = Util.get_current_gps_coordinates()
-            if coordinates is not None:
-                latitude, longitude = coordinates
-                self.logger.info(f"Your current GPS coordinates are:")
-                self.logger.info(f"Latitude: {latitude}")
-                self.logger.info(f"Longitude: {longitude}")
-                Config.init_lat = latitude
-                Config.init_long = longitude
-        loc_param['lon'] = Config.init_long
-        loc_param['lat'] = Config.init_lat
+        if params['lat'] == 0 and params['lon'] == 0:  # special case of (0,0,) will use the ip address to estimate the location
+            if Config.init_lat == 0 and Config.init_long == 0:
+                coordinates = Util.get_current_gps_coordinates()
+                if coordinates is not None:
+                    latitude, longitude = coordinates
+                    self.logger.info(f"Your current GPS coordinates are:")
+                    self.logger.info(f"Latitude: {latitude}")
+                    self.logger.info(f"Longitude: {longitude}")
+                    Config.init_lat = latitude
+                    Config.init_long = longitude
+            loc_param['lon'] = params['lon'] == 0
+            loc_param['lat'] = Config.init_lat
+        else:
+            loc_param['lon'] = Config.init_long
+            loc_param['lat'] = params['lat']   
+                    
         loc_param['force'] = False
         loc_data['method'] = 'set_user_location'
         loc_data['params'] = loc_param
