@@ -291,6 +291,7 @@ class Seestar_Federation:
             cur_device = self.seestar_devices[key]
             root_schedule['device'][key] = cur_device.start_scheduler()
 
+        self.schedule['state'] = "Running"
         return root_schedule
 
     def stop_scheduler(self):

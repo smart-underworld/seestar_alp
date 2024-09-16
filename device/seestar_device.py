@@ -970,6 +970,8 @@ class Seestar:
         self.scheduler_thread = threading.Thread(target=lambda: self.scheduler_thread_fn(), daemon=True)
         self.scheduler_thread.name = f"SchedulerThread.{self.device_name}"
         self.scheduler_thread.start()
+        self.scheduler_state = "Running"
+        self.schedule['state'] = self.scheduler_state
         return self.schedule
 
     def scheduler_thread_fn(self):
