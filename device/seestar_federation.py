@@ -113,18 +113,20 @@ class Seestar_Federation:
         return result
     
     def get_schedule(self):
+        connected_device_list = []
         self.schedule['comment'] = 'Test comment'
         self.schedule['state'] = 'Stopped'
         num_connected = 0
         for key in self.seestar_devices:
             cur_device = self.seestar_devices[key]
             if cur_device.is_connected:
+                connected_device_list.append(key)
                 num_connected = num_connected + 1
                 if cur_device.get_schedule()['state'] == "Running" and cur_device.get_schedule()['state'] != "Stopping":
                     self.schedule['state'] = "Running"
                 elif cur_device.get_schedule()['state'] == "Stopping":
                     self.schedule['state'] = "Stopping"
-        self.schedule['num_devices_connected'] = num_connected 
+        self.schedule['connected_device_list'] = connected_device_list
         if num_connected == 0:
             self.schedule['comment'] = 'No connected devices.'
         return self.schedule
@@ -162,7 +164,11 @@ class Seestar_Federation:
 
     # cur_params['selected_panels'] cur_params['ra_num'], cur_params['dec_num']
     # split selected panels into multiple sections. Given num_devices > 1 and num ra and dec is > 1
-    def get_section_array_for_mosaic(self, num_devices, params):
+    def get_section_array_for_mosaic(self, device_id_list, params):
+        num_devices = len(device_id_list)
+        if num_devices == 0:
+            raise Exception("there is no active device connected!")
+        
         if 'selected_panels' in params:
             panel_array = params['selected_panels'].split(';')
             num_panels = len(panel_array)
@@ -172,41 +178,43 @@ class Seestar_Federation:
             index = 0
             for n_dec in range(params['dec_num']):
                 for n_ra in range(params['ra_num']):
-                    panel_array[index] = '{n_ra+1}{n_dec+1}'
+                    panel_array[index] = f'{n_ra+1}{n_dec+1}'
                     index += 1
         start_index = 0
+
         num_panels_per_device = int(num_panels / num_devices)
         if num_panels_per_device * num_devices < num_panels:
             num_panels_per_device += 1
-        result = ['']*num_devices
-        for i in range(num_devices):
+        result = {}
+        for i in device_id_list:
             end_index = start_index + num_panels_per_device
             if end_index > num_panels:
                 end_index = num_panels
-            result[i] = ';'.join(panel_array[start_index:end_index])
+            selected_panels = ';'.join(panel_array[start_index:end_index])
+            if len(selected_panels) > 0:
+                result[i] = selected_panels
             start_index = end_index
         return result
 
     # shortcut to start a new scheduler with only a mosaic request
     def start_mosaic(self, cur_params):
         cur_schedule = self.get_schedule()
-        if cur_schedule["num_devices_connected"] < 1:
+        num_devices = len(cur_schedule["connected_device_list"])
+        if num_devices < 1:
             return "Failed: No connected devices found to perform operation"
         elif cur_schedule['state'] != "Stopped":
             return "Failed: At least one device is still running a schedule."
-
-        num_devices = cur_schedule["num_devices_connected"]
 
         if num_devices  == 1 or 'array_mode' not in cur_params or cur_params['array_mode'] != 'split' or (cur_params['ra_num']==1 and cur_params['dec_num']==1):
             for key in self.seestar_devices:
                 cur_device = self.seestar_devices[key]
                 if cur_device.is_connected:
-                    cur_schedule = cur_device.start_mosaic(cur_params)
+                    cur_schedule[key] = cur_device.start_mosaic(cur_params)
             self.logger.info("started {num_devices} devices for cloned mosaics.")
             return cur_schedule
 
         # remaining case of a split mosaic across multiple devices
-        section_array = self.get_section_array_for_mosaic(num_devices, cur_params)
+        section_dict = self.get_section_array_for_mosaic(cur_schedule["connected_device_list"], cur_params)
 
         self.schedule = {}
         self.schedule['list'] = []
@@ -215,16 +223,14 @@ class Seestar_Federation:
         schedule_item['params'] = cur_params
         self.add_schedule_item(schedule_item)
 
-        cur_index_num = 0
-        for key in self.seestar_devices:
+        self.schedule['device'] = {}
+        for key in section_dict:
             cur_device = self.seestar_devices[key]
             # start the mosaic for this device only if it is connected and has been assigned a set of selected panels 
             if cur_device.is_connected:
-                if section_array[cur_index_num] != '':
-                    cur_params['selected_panels'] = section_array[cur_index_num]
-                    cur_device.start_mosaic(cur_params)
-                cur_index_num += 1
-
+                new_params = cur_params.copy()
+                new_params['selected_panels'] = section_dict[key]
+                self.schedule['device'][key] = cur_device.start_mosaic(new_params)
         self.logger.info(f"started {num_devices} devices for split mosaics.")
         self.schedule['state'] = "Running"
         return self.schedule

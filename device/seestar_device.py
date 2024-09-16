@@ -948,7 +948,7 @@ class Seestar:
         schedule_item['params'] = params
         self.add_schedule_item(schedule_item)
         self.start_scheduler()
-        return "Mosaic started."
+        return self.schedule
 
     # shortcut to start a new scheduler with only a spectra request
     def start_spectra(self, params):
