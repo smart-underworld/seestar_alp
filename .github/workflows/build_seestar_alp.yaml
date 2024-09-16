@@ -33,7 +33,7 @@ jobs:
           cp ./device/log.py ./front
           pyinstaller --name="seestar_alp" --hidden-import tzlocal --hidden-import geocoder --hidden-import alpaca.telescope `
           --hidden-import log --hidden-import toml --hidden-import logging --hidden-import logging.handlers --hidden-import skimage --hidden-import skimage.util --hidden-import PIL `
-          --hidden-import scipy._lib.array_api_compat.numpy.fft --hidden-import PIL.ImageEnhance `
+          --hidden-import scipy._lib.array_api_compat.numpy.fft --hidden-import PIL.ImageEnhance --hidden-import telescope `
           --add-data="front/config.toml.example;." --add-data="front/config.py;." --add-data="front/log.py;." `
           --add-data="front/citation;astroquery" --add-data="front/templates;templates" --add-data="front/public;public" `
           --add-data="front;front" --add-data="device;device" root_app.py
@@ -80,7 +80,7 @@ jobs:
           cp ./device/log.py ./front
           pyinstaller --name="seestar_alp" --hidden-import tzlocal --hidden-import geocoder --hidden-import alpaca.telescope \
           --hidden-import log --hidden-import toml --hidden-import logging.handlers --hidden-import skimage --hidden-import skimage.util --hidden-import PIL \
-          --hidden-import scipy._lib.array_api_compat.numpy.fft --hidden-import PIL.ImageEnhance \
+          --hidden-import scipy._lib.array_api_compat.numpy.fft --hidden-import PIL.ImageEnhance --hidden-import telescope \
           --add-data="front/config.toml.example:." --add-data="front/config.py:." --add-data="front/log.py:." \
           --add-data="front/CITATION:astroquery" --add-data="front/templates:templates" --add-data="front/public:public" \
           --add-data="front:front" --add-data="device:device"  root_app.py
