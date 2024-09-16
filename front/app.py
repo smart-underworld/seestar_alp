@@ -1334,7 +1334,7 @@ class SettingsResource:
             "auto_3ppa_calib": str2bool(PostedSettings["auto_3ppa_calib"]),
             "frame_calib": str2bool(PostedSettings["frame_calib"]),
             "stack_masic": str2bool(PostedSettings["stack_masic"]),
-            "rec_stablzn": str2bool(PostedSettings["rec_stablzn"]),
+            # "rec_stablzn": str2bool(PostedSettings["rec_stablzn"]),
             "manual_exp": str2bool(PostedSettings["manual_exp"])
         }
 
