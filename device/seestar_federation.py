@@ -133,7 +133,7 @@ class Seestar_Federation:
 
     def create_schedule(self):
         cur_schedule = self.get_schedule()
-        if cur_schedule != "Stopped":
+        if cur_schedule['state'] != "Stopped":
             return "scheduler is still active"
         self.schedule = {}
         self.schedule['state'] = "Stopped"
@@ -152,8 +152,13 @@ class Seestar_Federation:
                 mosaic_params['dec'] = Util.trim_seconds(mosaic_params['dec'])
             elif isinstance(mosaic_params['ra'], float):
                 if mosaic_params['ra'] < 0:
-                    mosaic_params['ra'] = self.ra
-                    mosaic_params['dec'] = self.dec
+                    # get the location from first connected device
+                    if len(cur_schedule["connected_device_list"]) == 0:
+                        self.logger.warn("cannot get the location because no connected devices were found.")
+                        return "cannot get the location because no connected devices were found."
+                    first_device = self.seestar_devices[cur_schedule["connected_device_list"][0]]
+                    mosaic_params['ra'] = first_device.ra
+                    mosaic_params['dec'] = first_device.dec
                     mosaic_params['is_j2000'] = False
                 mosaic_params['ra'] = round(mosaic_params['ra'], 4)
                 mosaic_params['dec'] = round(mosaic_params['dec'], 4)                
@@ -236,18 +241,64 @@ class Seestar_Federation:
         return self.schedule
 
     def start_scheduler(self):
-        if self.scheduler_state != "Stopped":
-            return "An existing scheduler is active. Returned with no action."
+        root_schedule = self.get_schedule()
+        num_devices = len(root_schedule["connected_device_list"])
+        if num_devices < 1:
+            return "Failed: No connected devices found to perform operation"
+        elif root_schedule['state'] != "Stopped":
+            return "Failed: At least one device is still running a schedule."
+
+        for key in root_schedule["connected_device_list"]:
+            cur_device = self.seestar_devices[key]
+            cur_device.create_schedule()
+
+        for schedule_item in root_schedule['list']:
+            if schedule_item['action'] == "start_mosaic":
+                cur_params = schedule_item['params']
+                if num_devices  == 1 or 'array_mode' not in cur_params or cur_params['array_mode'] != 'split' or (cur_params['ra_num']==1 and cur_params['dec_num']==1):
+                    for key in root_schedule["connected_device_list"]:
+                        cur_device = self.seestar_devices[key]
+                        new_item = {}
+                        new_item['action'] = "start_mosaic"
+                        cur_params = schedule_item['params'].copy()
+                        cur_params['id'] = str(uuid.uuid4())
+                        new_item['params'] = cur_params
+                        cur_device.schedule['list'].append(new_item)
+                else:
+                    section_dict = self.get_section_array_for_mosaic(root_schedule["connected_device_list"], cur_params)
+                    for key in root_schedule["connected_device_list"]:
+                        cur_device = self.seestar_devices[key]
+                        new_item = {}
+                        new_item['action'] = "start_mosaic"
+                        cur_params = schedule_item['params'].copy()
+                        cur_params['id'] = str(uuid.uuid4())
+                        cur_params['selected_panels'] = section_dict[key]
+                        new_item['params'] = cur_params
+                        cur_device.schedule['list'].append(new_item)
+
+            else:
+                for key in root_schedule["connected_device_list"]:
+                    cur_device = self.seestar_devices[key]
+                    new_item = {}
+                    new_item['action'] = schedule_item['action']
+                    cur_params = schedule_item['params'].copy()
+                    cur_params['id'] = str(uuid.uuid4())
+                    new_item['params'] = cur_params
+                    cur_device.schedule['list'].append(new_item)
+
+        root_schedule['device'] = {}
+        for key in root_schedule["connected_device_list"]:
+            cur_device = self.seestar_devices[key]
+            root_schedule['device'][key] = cur_device.start_scheduler()
+
+        return root_schedule
+
+    def stop_scheduler(self):
+        result = {}
         for key in self.seestar_devices:
             cur_device = self.seestar_devices[key]
             if cur_device.is_connected:
-                cur_device.start_scheduler()
-        return "Scheduler started"
-
-    def stop_scheduler(self):
-         for key in self.seestar_devices:
-            cur_device = self.seestar_devices[key]
-            if cur_device.is_connected:
-                cur_device.stop_scheduler()
+                result[key] = cur_device.stop_scheduler()
+        return result
 
 
