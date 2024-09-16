@@ -20,6 +20,7 @@ import sys
 import ephem
 import geocoder
 import pytz
+import re
 
 if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
     sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
@@ -366,6 +367,9 @@ def get_device_state(telescope_id):
         settings = ""
         pi_status = ""
         free_storage = ""
+        target = ""
+        stacked = ""
+        failed = ""
         if status is not None and status.get("View"):
             view_state = status["View"]["state"]
             mode = status["View"]["mode"]
@@ -387,8 +391,7 @@ def get_device_state(telescope_id):
             else:
                 target = ""
                 stacked = ""
-                failed = ""
-            
+                failed = ""          
                 
         # Check for bad data
         if status is not None and result is not None:
@@ -453,7 +456,7 @@ def get_device_settings(telescope_id):
         "auto_3ppa_calib": settings_result["auto_3ppa_calib"],
         "frame_calib": settings_result["frame_calib"],
         "stack_masic": settings_result["stack_masic"],
-        "rec_stablzn": settings_result["rec_stablzn"],
+        # "rec_stablzn": settings_result["rec_stablzn"], # Unavailable for firmware 3.11
         "manual_exp": settings_result["manual_exp"],
         # "isp_exp_ms": settings_result["isp_exp_ms"],
         # "calib_location": settings_result["calib_location"],
@@ -522,6 +525,29 @@ def check_dec_value(decString):
     return any(re.search(pattern, decString) for pattern in valid)
 
 
+def hms_to_sec(timeString):
+    hms_search = re.search(r"^(?!\s*$)\s*(?:(\d+)\s*h\s*)?(?:(\d+)\s*m\s*)?(?:(\d+)\s*s)?\s*$", timeString.lower())
+
+    # Check if convertion is needed.
+    if hms_search:
+        seconds = 0
+        # Convert to sec
+        hms_split = re.split(r"^(?!\s*$)\s*(?:(\d+)\s*h\s*)?(?:(\d+)\s*m\s*)?(?:(\d+)\s*s)?\s*$", timeString.lower())
+        if hms_split[1] is not None:
+            # h
+            seconds = int(hms_split[1]) * 3600
+        if hms_split[2] is not None:
+            # m
+            seconds = seconds + int(hms_split[2]) * 60
+        if hms_split[3] is not None:
+            # s
+            seconds = seconds + int(hms_split[3])
+        return seconds
+    else:
+        return timeString
+    
+
+
 def do_create_mosaic(req, resp, schedule, telescope_id):
     form = req.media
     targetName = form["targetName"]
@@ -530,7 +556,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
     panelOverlap = form["panelOverlap"]
     panelSelect = form["panelSelect"]
     useJ2000 = form.get("useJ2000") == "on"
-    sessionTime = form["sessionTime"]
+    sessionTime = hms_to_sec(form["sessionTime"])
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
@@ -585,7 +611,7 @@ def do_create_image(req, resp, schedule, telescope_id):
     panelOverlap = 100
     panelSelect = ""
     useJ2000 = form.get("useJ2000") == "on"
-    sessionTime = form["sessionTime"]
+    sessionTime = hms_to_sec(form["sessionTime"])
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
@@ -851,7 +877,7 @@ class HomeResource:
             redirect(f"/{telescope['device_num']}/")
         else:
             root = get_root(telescope['device_num'])
-            render_template(req, resp, 'index.html', now=now, telescopes=telescopes, **context)
+            render_template(req, resp, 'index.html', now=now, telescopes=telescopes, **context) # pylint: disable=repeated-keyword
 
 
 class HomeTelescopeResource:
@@ -861,7 +887,7 @@ class HomeTelescopeResource:
         telescopes = get_telescopes_state()
         context = get_context(telescope_id, req)
         del context["telescopes"]
-        render_template(req, resp, 'index.html', now=now, telescopes=telescopes, **context)
+        render_template(req, resp, 'index.html', now=now, telescopes=telescopes, **context) # pylint: disable=repeated-keyword
 
 
 class ImageResource:
@@ -1445,15 +1471,16 @@ class SystemResource:
         threads = []
         for tel in get_telescopes():
             telescope_id = tel["device_num"]
+            telescope_name = tel["name"]
             imager = telescope.get_seestar_imager(telescope_id)
             dev = telescope.get_seestar_device(telescope_id)
-            for t in (self.if_null(dev.get_msg_thread, f"ALPReceiveMessageThread.{tel["name"]}"),
-                      self.if_null(dev.heartbeat_msg_thread, f"ALPHeartbeatMessageThread.{tel["name"]}"),
-                      self.if_null(dev.scheduler_thread, f"SchedulerThread.{tel["name"]}"),
-                      self.if_null(dev.mosaic_thread, f"MosaicThread.{tel["name"]}"),
-                      self.if_null(imager.heartbeat_msg_thread, f"ImagingHeartbeatMessageThread.{tel["name"]}"),
-                      self.if_null(imager.get_stream_thread, f"ImagingStreamThread.{tel["name"]}"),
-                      self.if_null(imager.get_image_thread, f"ImagingReceiveImageThread.{tel["name"]}"),
+            for t in (self.if_null(dev.get_msg_thread, f"ALPReceiveMessageThread.{telescope_name}"),
+                      self.if_null(dev.heartbeat_msg_thread, f"ALPHeartbeatMessageThread.{telescope_name}"),
+                      self.if_null(dev.scheduler_thread, f"SchedulerThread.{telescope_name}"),
+                      self.if_null(dev.mosaic_thread, f"MosaicThread.{telescope_name}"),
+                      self.if_null(imager.heartbeat_msg_thread, f"ImagingHeartbeatMessageThread.{telescope_name}"),
+                      self.if_null(imager.get_stream_thread, f"ImagingStreamThread.{telescope_name}"),
+                      self.if_null(imager.get_image_thread, f"ImagingReceiveImageThread.{telescope_name}"),
                       ):
                 threads.append({
                     "name": t.name,

@@ -6,6 +6,7 @@ import astropy.units as u
 import math
 
 class Util:
+    @staticmethod
     def get_current_gps_coordinates():
         g = geocoder.ip('me')#this function is used to find the current information using our IP Add
         if g.latlng is not None: #g.latlng tells if the coordiates are found or not
@@ -21,6 +22,7 @@ class Util:
 #        _fk5 = FK5(equinox=Time(datetime.now(datetime.utc).jd, format="jd", scale="utc"))
 #        return _in_j2000.transform_to(_fk5) 
     
+    @staticmethod
     def parse_coordinate(is_j2000, in_ra, in_dec):
         _fk5 = FK5(equinox=Time(Time(datetime.utcnow(), scale='utc').jd, format="jd", scale="utc"))
         if is_j2000:
@@ -36,6 +38,7 @@ class Util:
         return result
 
     # take into account ra spacing factor changes depends on dec position as 1/cos(dec)
+    @staticmethod
     def mosaic_next_center_spacing(in_ra, in_dec, overlap_percent):
         # seestar fov at dec = 0
         dec_length = 1.29 # degrees
@@ -55,6 +58,7 @@ class Util:
         return [delta_RA, delta_Dec]
 
     # trim out the seconds to 1 decimal precision
+    @staticmethod
     def trim_seconds(test_str):
         out = test_str
         if isinstance(test_str, str) and test_str.endswith('s'):

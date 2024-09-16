@@ -688,13 +688,13 @@ class Seestar:
             if self.last_sync_RA >= 0:
                 center_RA = self.ra
                 center_Dec = self.dec
-                self.slew_to_ra_dec(self, [center_RA, center_Dec])
+                self.slew_to_ra_dec([center_RA, center_Dec])
             else:
                 center_RA = self.ra
                 center_Dec = self.dec
         else:
             # move to target
-            self.slew_to_ra_dec(self, [center_RA, center_Dec])
+            self.slew_to_ra_dec([center_RA, center_Dec])
 
         # take one minute exposure for the star
         if self.scheduler_state != "Running":
@@ -753,6 +753,8 @@ class Seestar:
         is_use_selected_panels = not selected_panels == ""
         if is_use_selected_panels:
             panel_set = selected_panels.split(';')
+        else:
+            panel_set = []
 
         # adjust mosaic center if num panels is even
         if nRA % 2 == 0:
