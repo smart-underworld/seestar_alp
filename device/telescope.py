@@ -140,8 +140,8 @@ class action:
             params = json.loads(parameters)
             # print(f'Received request: Action {action_name} with params {params}')
             if action_name == "play_sound":
-                cur_dev.play_sound(params['id'])
-                resp.text = MethodResponse(req).json
+                result = cur_dev.play_sound(params['id'])
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "method_sync":
                 result = cur_dev.send_message_param_sync(params)
                 if params["method"] == 'pi_shutdown': 
@@ -151,23 +151,25 @@ class action:
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "method_async":
                 result = cur_dev.send_message_param(params)
-                resp.text = MethodResponse(req).json
+                resp.text = MethodResponse(req, value="async request sent.").json
             elif action_name == "start_stack":
-                cur_dev.start_stack(params)
-                resp.text = MethodResponse(req).json
+                result = cur_dev.start_stack(params)
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "start_mosaic":
                 result = cur_dev.start_mosaic(params)
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "goto_target":
                 result = cur_dev.goto_target(params)
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "scope_stop_goto_auto_center":
                 result = cur_dev.stop_goto_target()
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "set_below_horizon_dec_offset":
                 result = cur_dev.set_below_horizon_dec_offset(params['offset'])
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "start_spectra":
                 result = cur_dev.start_spectra(params)
-                resp.text = MethodResponse(req).json
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "get_schedule":
                 result = cur_dev.get_schedule()
                 resp.text = MethodResponse(req, value = result).json
@@ -184,11 +186,11 @@ class action:
                 result = cur_dev.stop_scheduler()
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "action_start_up_sequence":
-                cur_dev.action_start_up_sequence(params)
-                resp.text = MethodResponse(req).json
+                result = cur_dev.action_start_up_sequence(params)
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "action_set_dew_heater":
-                cur_dev.action_set_dew_heater(params)
-                resp.text = MethodResponse(req).json
+                result = cur_dev.action_set_dew_heater(params)
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "get_last_image":
                 redirect_url = cur_dev.get_last_image(params)
                 resp.text = MethodResponse(req, value = redirect_url).json   
