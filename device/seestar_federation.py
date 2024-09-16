@@ -18,103 +18,120 @@ class Seestar_Federation:
         self.schedule['list'] = []
 
     def send_message_param_sync(self, data):
+        result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                self.seestar_devices[key].send_message_param_sync(data)
+                result[key] = self.seestar_devices[key].send_message_param_sync(data)
+        return result
                 
     def stop_goto_target(self):
+        result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                self.seestar_devices[key].stop_goto_target()
-
+                result[key] = result[key] = self.seestar_devices[key].stop_goto_target()
+        return result
+    
     def goto_target(self, params):
+        result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                self.seestar_devices[key].stop_goto_target(params)
-
+                result[key] = self.seestar_devices[key].stop_goto_target(params)
+        return result
 
     # {"method":"scope_goto","params":[1.2345,75.0]}
     def slew_to_ra_dec(self, params):
+        result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                self.seestar_devices[key].slew_to_ra_dec[params]
-
+                result[key] = self.seestar_devices[key].slew_to_ra_dec[params]
+        return result
+    
     def set_below_horizon_dec_offset(self, offset):
+        result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                self.seestar_devices[key].set_below_horizon_dec_offset(offset)
-
+                result[key] = self.seestar_devices[key].set_below_horizon_dec_offset(offset)
+        return result
+    
     def stop_slew(self):
+        result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                self.seestar_devices[key].stop_slew()
-
+                result[key] = self.seestar_devices[key].stop_slew()
+        return result
+    
     # {"method":"scope_speed_move","params":{"speed":4000,"angle":270,"dur_sec":10}}
     def move_scope(self, in_angle, in_speed, in_dur=3):
+        result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                self.seestar_devices[key].move_scope(in_angle, in_speed, in_dur)
-
+                result[key] = self.seestar_devices[key].move_scope(in_angle, in_speed, in_dur)
+        return result
+    
     def try_auto_focus(self, try_count):
+        result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
                 af_thread = threading.Thread(target=lambda: self.seestar_devices[key].try_auto_focus(try_count))
                 af_thread.start()
-
+                result[key] = "Auto focus started"
+        return result
+    
     def stop_stack(self):
+        result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                self.seestar_devices[key].stop_stack()
-
+                result[key] = self.seestar_devices[key].stop_stack()
+        return result
+    
     def play_sound(self, in_sound_id: int):
+        result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                self.seestar_devices[key].play_sound(in_sound_id)
-
+                result[key] = self.seestar_devices[key].play_sound(in_sound_id)
+        return result
+    
     def start_stack(self, params={"gain": 80, "restart": True}):
+        result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                self.seestar_devices[key].start_stack(params)
-
+                result[key] = self.seestar_devices[key].start_stack(params)
+        return result
 
     def action_set_dew_heater(self, params):
-         for key in self.seestar_devices:
+        result = {}
+        for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                self.seestar_devices[key].action_set_dew_heater(params)
-       
+                result[key] = self.seestar_devices[key].action_set_dew_heater(params)
+        return result
+           
     def action_start_up_sequence(self, params):
-         for key in self.seestar_devices:
+        result = {}
+        for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                self.seestar_devices[key].action_start_up_sequence(params)
-
+                result[key] = self.seestar_devices[key].action_start_up_sequence(params)
+        return result
+    
     def get_schedule(self):
         self.schedule['comment'] = 'Test comment'
+        self.schedule['state'] = 'Stopped'
         num_connected = 0
         for key in self.seestar_devices:
             cur_device = self.seestar_devices[key]
             if cur_device.is_connected:
                 num_connected = num_connected + 1
-                if cur_device.get_shcedule()['state'] == "Running":
+                if cur_device.get_schedule()['state'] == "Running" and cur_device.get_schedule()['state'] != "Stopping":
                     self.schedule['state'] = "Running"
-                    return self.schedule
-        self.schedule['num_devices_connected'] = num_connected       
+                elif cur_device.get_schedule()['state'] == "Stopping":
+                    self.schedule['state'] = "Stopping"
+        self.schedule['num_devices_connected'] = num_connected 
         if num_connected == 0:
             self.schedule['comment'] = 'No connected devices.'
-            return self.schedule
-        
-        for key in self.seestar_devices:
-            cur_device = self.seestar_devices[key]
-            if cur_device.is_connected:
-                if cur_device.get_shcedule()['state'] == "Stopping":
-                    self.schedule['state'] = "Stopping"
-                    return self.schedule
-        self.schedule['state'] = "Stopped"
-
         return self.schedule
 
     def create_schedule(self):
         cur_schedule = self.get_schedule()
-        if cur_schedule == "Running":
+        if cur_schedule != "Stopped":
             return "scheduler is still active"
         self.schedule = {}
         self.schedule['state'] = "Stopped"
@@ -123,7 +140,7 @@ class Seestar_Federation:
 
     def add_schedule_item(self, params):
         cur_schedule = self.get_schedule()
-        if cur_schedule == "Running":
+        if cur_schedule['state'] != "Stopped":
             return "scheduler is still active"
         if params['action'] == 'start_mosaic':
             mosaic_params = params['params']
@@ -143,42 +160,55 @@ class Seestar_Federation:
         self.schedule['list'].append(params)
         return self.schedule
 
+    # cur_params['selected_panels'] cur_params['ra_num'], cur_params['dec_num']
+    # split selected panels into multiple sections. Given num_devices > 1 and num ra and dec is > 1
+    def get_section_array_for_mosaic(self, num_devices, params):
+        if 'selected_panels' in params:
+            panel_array = params['selected_panels'].split(';')
+            num_panels = len(panel_array)
+        else:
+            num_panels = params['dec_num'] * params['ra_num']
+            panel_array = ['']*num_panels
+            index = 0
+            for n_dec in range(params['dec_num']):
+                for n_ra in range(params['ra_num']):
+                    panel_array[index] = '{n_ra+1}{n_dec+1}'
+                    index += 1
+        start_index = 0
+        num_panels_per_device = int(num_panels / num_devices)
+        if num_panels_per_device * num_devices < num_panels:
+            num_panels_per_device += 1
+        result = ['']*num_devices
+        for i in range(num_devices):
+            end_index = start_index + num_panels_per_device
+            if end_index > num_panels:
+                end_index = num_panels
+            result[i] = ';'.join(panel_array[start_index:end_index])
+            start_index = end_index
+        return result
+
     # shortcut to start a new scheduler with only a mosaic request
-    def start_mosaic(self, params):
+    def start_mosaic(self, cur_params):
         cur_schedule = self.get_schedule()
         if cur_schedule["num_devices_connected"] < 1:
             return "Failed: No connected devices found to perform operation"
         elif cur_schedule['state'] != "Stopped":
             return "Failed: At least one device is still running a schedule."
 
-        cur_params = params['params']
-        if cur_schedule["num_devices_connected"]  == 1 or 'array_mode' not in cur_params or cur_params['array_mode'] != 'split' or (cur_params['ra_num']==1 and cur_params['dec_num']==1):
+        num_devices = cur_schedule["num_devices_connected"]
+
+        if num_devices  == 1 or 'array_mode' not in cur_params or cur_params['array_mode'] != 'split' or (cur_params['ra_num']==1 and cur_params['dec_num']==1):
             for key in self.seestar_devices:
                 cur_device = self.seestar_devices[key]
                 if cur_device.is_connected:
-                    return cur_device.start_mosaic(params)
-            self.logger.warn("Should not reach here when trying to start a mosaic.")
-            return "Should not reach here when trying to start a mosaic."
-        
-        if cur_params['array_mode'] != 'split':
-            num_devices = 0
-            for key in self.seestar_devices:
-                cur_device = self.seestar_devices[key]
-                if cur_device.is_connected:
-                    num_devices = num_devices + 1
-                    cur_schedule = cur_device.start_mosaic(params)
+                    cur_schedule = cur_device.start_mosaic(cur_params)
             self.logger.info("started {num_devices} devices for cloned mosaics.")
             return cur_schedule
 
         # remaining case of a split mosaic across multiple devices
-        num_devices = 0
-        for key in self.seestar_devices:
-            cur_device = self.seestar_devices[key]
-            if cur_device.is_connected:
-                num_devices += num_devices
-        section_array = self.get_section_array_for_mosaic(num_devices, cur_params['ra_num'], cur_params['dec_num'])
+        section_array = self.get_section_array_for_mosaic(num_devices, cur_params)
+
         self.schedule = {}
-        self.schedule['state'] = "Running"
         self.schedule['list'] = []
         schedule_item = {}
         schedule_item['action'] = "start_mosaic"
@@ -188,24 +218,30 @@ class Seestar_Federation:
         cur_index_num = 0
         for key in self.seestar_devices:
             cur_device = self.seestar_devices[key]
+            # start the mosaic for this device only if it is connected and has been assigned a set of selected panels 
             if cur_device.is_connected:
-                cur_params['selected_panels'] = section_array[cur_index_num]
+                if section_array[cur_index_num] != '':
+                    cur_params['selected_panels'] = section_array[cur_index_num]
+                    cur_device.start_mosaic(cur_params)
                 cur_index_num += 1
-                cur_device.start_mosaic(cur_params)
-        self.logger.info("started {num_devices} devices for split mosaics.")
+
+        self.logger.info(f"started {num_devices} devices for split mosaics.")
+        self.schedule['state'] = "Running"
         return self.schedule
 
     def start_scheduler(self):
         if self.scheduler_state != "Stopped":
             return "An existing scheduler is active. Returned with no action."
-        self.scheduler_thread = threading.Thread(target=lambda: self.scheduler_thread_fn(), daemon=True)
-        self.scheduler_thread.name = f"SchedulerThread.{self.device_name}"
-        self.scheduler_thread.start()
+        for key in self.seestar_devices:
+            cur_device = self.seestar_devices[key]
+            if cur_device.is_connected:
+                cur_device.start_scheduler()
         return "Scheduler started"
 
     def stop_scheduler(self):
          for key in self.seestar_devices:
-            if self.seestar_devices[key].is_connected:
-                self.seestar_devices[key].stop_scheduler()
+            cur_device = self.seestar_devices[key]
+            if cur_device.is_connected:
+                cur_device.stop_scheduler()
 
 
