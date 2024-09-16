@@ -67,6 +67,7 @@ class Seestar:
         self.connect_count = 0
         self.below_horizon_dec_offset = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
         self.view_state = {}
+        self.event_state = {}
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
@@ -214,8 +215,8 @@ class Seestar:
                             self.logger.info(f'{self.device_name} received : {data}')
                         else:
                             self.logger.debug(f'{self.device_name} received : {data}')
-
                         event_name = parsed_data['Event']
+                        self.event_state[event_name] = parsed_data
                         if event_name == self.op_watch:  # "AutoGoto" or "AutoFocus"
                             state = parsed_data['state']
                             self.logger.info(f'{self.device_name} state {self.op_watch} : {state}')
@@ -279,6 +280,17 @@ class Seestar:
         self.logger.debug(f'{self.device_name} response is {self.response_dict[cur_cmdid]}')
         return self.response_dict[cur_cmdid]
 
+    def get_event_state(self, params=None):
+        if params != None and 'event_name' in params:
+            event_name = params['event_name']
+            if event_name in self.event_state:
+                return {self.event_state[event_name]}
+            else:
+                return {}
+        else:
+            return self.event_state
+
+        
     def set_setting(self, x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance):
         # TODO:
         #   heater_enable failed. 

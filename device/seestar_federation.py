@@ -17,6 +17,13 @@ class Seestar_Federation:
         self.schedule = {}
         self.schedule['list'] = []
 
+    def get_event_state(self, params=None):
+        result = {}
+        for key in self.seestar_devices:
+            if self.seestar_devices[key].is_connected:
+                result[key] = self.seestar_devices[key].get_event_state(params)
+        return result
+
     def send_message_param_sync(self, data):
         result = {}
         for key in self.seestar_devices:
@@ -188,17 +195,20 @@ class Seestar_Federation:
         start_index = 0
 
         num_panels_per_device = int(num_panels / num_devices)
-        if num_panels_per_device * num_devices < num_panels:
-            num_panels_per_device += 1
         result = {}
         for i in device_id_list:
             end_index = start_index + num_panels_per_device
-            if end_index > num_panels:
-                end_index = num_panels
             selected_panels = ';'.join(panel_array[start_index:end_index])
             if len(selected_panels) > 0:
                 result[i] = selected_panels
             start_index = end_index
+        # take care of the reminder of the selected panels
+        for i in device_id_list:
+            if start_index >= num_panels:
+                break
+            result[i] = f'{result[i]};{panel_array[start_index]}'
+            start_index += 1
+
         return result
 
     # shortcut to start a new scheduler with only a mosaic request
@@ -266,7 +276,7 @@ class Seestar_Federation:
                         cur_device.schedule['list'].append(new_item)
                 else:
                     section_dict = self.get_section_array_for_mosaic(root_schedule["connected_device_list"], cur_params)
-                    for key in root_schedule["connected_device_list"]:
+                    for key in section_dict:
                         cur_device = self.seestar_devices[key]
                         new_item = {}
                         new_item['action'] = "start_mosaic"
