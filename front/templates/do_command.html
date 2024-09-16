@@ -1,18 +1,20 @@
-
 <form method="post" action="{{ action }}">
+<div class="container">
 	<div style="margin-bottom:5px;font-weight:bold">
 		<label for="dropdown">Startup / Shutdown</label>
 	</div>
 	<select id="dropdown" name="command">
-		<option value="start_up_sequence">Start-Up Sequence</option>
 		<option value="scope_move_to_horizon">Scope Move to Horizon</option>
 		<option value="scope_park">Scope Park</option>
 		<option value="pi_reboot">Scope Reboot</option>
 		<option value="pi_shutdown">Scope Shutdown</option>
 	</select>
 	<button type="submit" class="btn btn-primary">Execute</button>
+	<p></p>
+</div>
 </form>
-<form method="post" action="{{ action }}">	
+<form method="post" action="{{ action }}">
+<div class="container">
 	<div style="margin-bottom:5px;font-weight:bold">
 		<label for="dropdown">AutoFocus</label>
 	</div>
@@ -23,8 +25,11 @@
 		<option value="get_last_focuser_position">Get Last Focuser Position</option>
 	</select>
 	<button type="submit" class="btn btn-primary">Execute</button>
+	<p></p>
+</div>
 </form>
-<form method="post" action="{{ action }}">	
+<form method="post" action="{{ action }}">
+<div class="container">
 	<div style="margin-bottom:5px;font-weight:bold">
 		<label for="dropdown">Filter</label>
 	</div>
@@ -37,8 +42,11 @@
 		<option value="set_wheel_position_LP">Use LP Filter</option>		
 	</select>
 	<button type="submit" class="btn btn-primary">Execute</button>
+	<p></p>
+</div>
 </form>
-<form method="post" action="{{ action }}">	
+<form method="post" action="{{ action }}">
+<div class="container">
 	<div style="margin-bottom:5px;font-weight:bold">
 		<label for="dropdown">Plate Solve</label>
 	</div>
@@ -48,4 +56,40 @@
 		<option value="get_last_solve_result">Get Last Plate Solve Result</option>
 	</select>
 	<button type="submit" class="btn btn-primary">Execute</button>
+	<p></p>
+</div>
+</form>
+
+<form method="post" action="{{ action }}" class="bordered-form">
+<div class="container">
+	<div class="mb3 row"><p></p><p></p></div>
+	<div class="mb3 row">
+		<div class="mb3 col-sm-2" style="margin-bottom:5px;font-weight:bold">
+			<label for="param1" style="bold">Start-Up Sequence</label>
+		</div>
+    
+		<input type="hidden" name="command" value="start_up_sequence">
+    
+		<div class="mb3 col-sm-2">
+			<label for="lat" class="form-label" style="margin-bottom:5px;font-weight:bold">Latitude</label>
+			<input type="text" class="form-control form-control-sm" style="width: 100px" id="lat" name="lat" placeholder="0" default="0">
+		</div>
+
+		<div class="mb3 col-sm-2">
+			<label for="long"class="form-label" style="margin-bottom:5px;font-weight:bold">Longitude</label>
+			<input type="text" class="form-control form-control-sm" style="width: 100px" id="long" name="long"placeholder="0" default="0">
+		</div>
+	<div class="mb3 row">
+		<div class = "col-sm-2">
+			<button type="submit" class="btn btn-primary btn-sm">Execute</button>
+		</div>
+	</div>
+	</div>
+	<div class="mb3 row"><p></p></div>
+	<div class="mb3 col-6">
+		<div class="mb3 row">
+			<p>This will override whatever value you have set in config.toml. Specifying a value of 0 will attempt to determine your location based on IP Geolocation. You must have internet service for this to work!</p>
+		</div>
+	</div>
+</div>
 </form>

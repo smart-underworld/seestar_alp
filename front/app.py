@@ -654,7 +654,10 @@ def do_command(req, resp, telescope_id):
     # print ("Selected command: ", value)
     match value:
         case "start_up_sequence":
-            output = do_action_device("action_start_up_sequence", telescope_id, {"lat": 0, "lon": 0})
+            lat = form["lat"]
+            long = form["long"]
+            output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
+            print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
             return None
         case "scope_park":
             output = method_sync("scope_park", telescope_id)
