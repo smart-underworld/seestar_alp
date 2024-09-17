@@ -60,6 +60,34 @@
 </div>
 </form>
 
+<form method="post" action="{{ action }}">
+<div class="container">
+	<div style="margin-bottom:5px;font-weight:bold">
+		<label for="dropdown">Polar Align</label>
+	</div>
+	<select id="dropdown" name="command">
+		<option value="start_polar_align">Start Polar Align</option>
+		<option value="stop_polar_align">Stop Polar Align</option>
+	</select>
+	<button type="submit" class="btn btn-primary">Execute</button>
+	<p></p>
+</div>
+</form>
+
+<form method="post" action="{{ action }}">
+<div class="container">
+	<div style="margin-bottom:5px;font-weight:bold">
+		<label for="dropdown">Dark Frame Generation</label>
+	</div>
+	<select id="dropdown" name="command">
+		<option value="start_create_dark">Start Create Dark</option>
+		<option value="stop_create_dark">Stop Create Dark</option>
+	</select>
+	<button type="submit" class="btn btn-primary">Execute</button>
+	<p></p>
+</div>
+</form>
+
 <form method="post" action="{{ action }}" class="bordered-form">
 <div class="container">
 	<div class="mb3 row"><p></p><p></p></div>

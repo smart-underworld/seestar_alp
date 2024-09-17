@@ -709,6 +709,19 @@ def do_command(req, resp, telescope_id):
             return output
         case "set_wheel_position_Dark":
             output = method_param_sync("set_wheel_position", [0], telescope_id)
+            return output
+        case "start_polar_align":
+            output = method_param_sync("start_polar_align", telescope_id)
+            return output
+        case "stop_polar_align":
+            output = method_param_sync("stop_polar_align", telescope_id)
+            return output
+        case "start_create_dark":
+            output = method_param_sync("start_create_dark", telescope_id)
+            return output
+        case "stop_create_dark":
+            output = method_param_sync("stop_create_dark", telescope_id)
+            return output
         case _:
             logger.warn("No command found: %s", value)
     # print ("Output: ", output)
