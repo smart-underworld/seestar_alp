@@ -8,6 +8,7 @@ from astroquery.simbad import Simbad
 from jinja2 import Template, Environment, FileSystemLoader
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 from collections import OrderedDict
+from pathlib import Path
 import requests
 import humanize
 import json
@@ -21,6 +22,9 @@ import ephem
 import geocoder
 import pytz
 import re
+import zipfile
+import subprocess
+import platform
 
 if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
     sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
@@ -725,6 +729,42 @@ def do_command(req, resp, telescope_id):
         case _:
             logger.warn("No command found: %s", value)
     # print ("Output: ", output)
+
+def do_support_bundle():
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+        # Add logs
+        cwd = Path(os.getcwd())
+        pfx = cwd.joinpath(Config.log_prefix)
+        if pfx == "":
+            pfx = "."
+        for f in list(pfx.glob("alpyca.log*")):
+            fstr=str(f)
+            logger.debug(f"do_support_bundle: Adding {fstr} to zipfile")
+            with open(str(fstr), "rb") as fh:
+                buf = io.BytesIO(fh.read())
+                zip_file.writestr(fstr, buf.getvalue())
+
+        for f in list(pfx.joinpath("device").glob("config.toml*")):
+            fstr=str(f)
+            logger.debug(f"do_support_bundle: Adding {fstr} to zipfile")
+            with open(str(fstr), "rb") as fh:
+                buf = io.BytesIO(fh.read())
+                zip_file.writestr(fstr, buf.getvalue())
+
+        os_name = platform.system()
+        if os_name == "Linux":
+            cmd_result = subprocess.check_output(['journalctl', '-u', 'seestar'])
+            zip_file.writestr("os_info.txt", cmd_result)
+        if os_name == "Darwin" or os_name == "Linux":
+            cmd_result = subprocess.check_output(['pip3', 'freeze'])
+            zip_file.writestr("pip3_info.txt", cmd_result)
+            cmd_result = subprocess.check_output(['python3', '--version'])
+            zip_file.writestr("python_version.txt", cmd_result)
+            cmd_result = subprocess.check_output(['env'])
+            zip_file.writestr("env.txt", cmd_result)
+        # TODO: Add Windows specific things here
+    return zip_buffer
 
 
 def redirect(location):
@@ -1684,6 +1724,14 @@ class GetBalanceSensorResource:
             resp.content_type = 'application/json'
             resp.text = json.dumps(balance_sensor)
 
+class GenSupportBundleResource:
+    @staticmethod
+    def on_get(req, resp):
+        zip_io = do_support_bundle()
+        resp.content_type = 'application/zip'
+        resp.status = falcon.HTTP_200
+        resp.text = zip_io.getvalue()
+        zip_io.close()
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
@@ -1761,6 +1809,7 @@ class FrontMain:
         app.add_route('/toggleuitheme', ToggleUIThemeResource())
         app.add_route('/updatetwilighttimes', UpdateTwilightTimesResource())
         app.add_route('/getbalancesensor', GetBalanceSensorResource())
+        app.add_route('/gensupportbundle', GenSupportBundleResource())
 
         try:
             self.httpd = make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler)
