@@ -755,7 +755,7 @@ def do_support_bundle():
         os_name = platform.system()
         if os_name == "Linux":
             cmd_result = subprocess.check_output(['journalctl', '-u', 'seestar'])
-            zip_file.writestr("os_info.txt", cmd_result)
+            zip_file.writestr("service_journal.txt", cmd_result)
         if os_name == "Darwin" or os_name == "Linux":
             cmd_result = subprocess.check_output(['pip3', 'freeze'])
             zip_file.writestr("pip3_info.txt", cmd_result)
