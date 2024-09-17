@@ -25,7 +25,8 @@ import cv2
 
 import sys
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "."))
+if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
+    sys.path.append(os.path.join(os.path.dirname(__file__), "."))
 
 import log
 from rtspclient import RtspClient
@@ -296,7 +297,7 @@ class SeestarImaging:
         img_saturated = img_display
 
         if img_array.shape[-1] == 3:
-            img_saturated = ImageEnhance.Color(img_display)
+            img_saturated = PIL.ImageEnhance.Color(img_display)
             img_saturated = img_saturated.enhance(saturation)
 
         return img_saturated
