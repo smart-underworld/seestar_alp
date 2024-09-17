@@ -730,8 +730,9 @@ def do_command(req, resp, telescope_id):
             logger.warn("No command found: %s", value)
     # print ("Output: ", output)
 
-def do_support_bundle():
+def do_support_bundle(req):
     zip_buffer = io.BytesIO()
+    desc = req.media["desc"]
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         # Add logs
         cwd = Path(os.getcwd())
@@ -752,7 +753,11 @@ def do_support_bundle():
                 buf = io.BytesIO(fh.read())
                 zip_file.writestr(fstr, buf.getvalue())
 
+        zip_file.writestr("problem_description.txt", desc)
+
         os_name = platform.system()
+        zip_file.writestr("OS_name.txt", os_name)
+
         if os_name == "Linux":
             cmd_result = subprocess.check_output(['journalctl', '-u', 'seestar'])
             zip_file.writestr("service_journal.txt", cmd_result)
@@ -1500,6 +1505,11 @@ class StatsResource:
         context = get_context(telescope_id, req)
         render_template(req, resp, 'stats.html', stats=stats, now=now, **context)
 
+class SupportResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'support.html', **context)
 
 # stackoverflow-fu
 Object = lambda **kwargs: type("Object", (), kwargs)
@@ -1729,8 +1739,8 @@ class GetBalanceSensorResource:
 
 class GenSupportBundleResource:
     @staticmethod
-    def on_get(req, resp):
-        zip_io = do_support_bundle()
+    def on_post(req, resp):
+        zip_io = do_support_bundle(req)
         resp.content_type = 'application/zip'
         resp.status = falcon.HTTP_200
         resp.text = zip_io.getvalue()
@@ -1776,6 +1786,7 @@ class FrontMain:
         app.add_route('/schedule/wait-for', ScheduleWaitForResource())
         app.add_route('/schedule/auto-focus', ScheduleAutoFocusResource())
         app.add_route('/stats', StatsResource())
+        app.add_route('/support', SupportResource())
         app.add_route('/{telescope_id:int}/', HomeTelescopeResource())
         app.add_route('/{telescope_id:int}/command', CommandResource())
         app.add_route('/{telescope_id:int}/image', ImageResource())
@@ -1805,6 +1816,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule/wait-for', ScheduleWaitForResource())
         app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
         app.add_route('/{telescope_id:int}/stats', StatsResource())
+        app.add_route('/{telescope_id:int}/support', SupportResource())
         app.add_route('/{telescope_id:int}/system', SystemResource())
         app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
         app.add_route('/simbad', SimbadResource())

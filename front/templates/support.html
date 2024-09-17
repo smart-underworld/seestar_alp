@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block header %}
+	<div class="container mt-3">
+		<p class="h1">Support</p>
+	</div>
+{% endblock %}
+
+{% block content %}
+
+	<form method="post" action="/gensupportbundle">
+		<label for="desc" class="form-label">Generate a support bundle</label>
+		<textarea class="form-control" id="desc" name="desc" rows="10"
+			aria-describedby="descHelp" value="" required>
+Please describe your problem here in as much detail as you are able to provide.
+
+Reproduction steps, and times it occurred are all helpful details.
+		</textarea>
+		<button type="submit" class="btn btn-primary">Download Bundle</button>
+	</form>
+
+{% endblock %}
