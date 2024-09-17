@@ -10,11 +10,11 @@ sthost = 'localhost'  #stellarium hostname or IP
 rtsp_udp = true
 
 [webui_settings]
-uiport = 5432
+uiport = 5430
 # light/dark theme
 uitheme = "dark" #all lower case
 twilighttimes = false #true/false
-#experimental = true
+experimental = true
 
 [server]
 location = 'Anywhere on Earth'  # Anything you want here
