@@ -16,6 +16,7 @@ from falcon import Request, Response, HTTPBadRequest, HTTPTemporaryRedirect, bef
 from logging import Logger
 
 from seestar_imaging import SeestarImaging
+from seestar_logs import SeestarLogging
 from shr import PropertyResponse, MethodResponse, PreProcessRequest, \
                 get_request_field, to_bool
 from exceptions import *        # Nothing but exception classes
@@ -28,6 +29,7 @@ from seestar_util import Util    # RWR
 
 seestar_dev = {}
 seestar_imager = {}
+seestar_logcollector = {}
 
 # pylint: disable=no-value-for-parameter
 
@@ -74,6 +76,11 @@ def start_seestar_imaging(logger: logger, name: str, ip_address: str, port: int,
     seestar_imager[device_num] = SeestarImaging(logger, ip_address, port, name, device_num, device)
     return seestar_imager[device_num]
 
+def start_seestar_logcollector(logger: logger, name: str, ip_address: str, port: int, device_num: int, device: Seestar = None): #type: ignore
+    # logger = logger
+    global seestar_logcollector
+    seestar_logcollector[device_num] = SeestarLogging(logger, ip_address, 4801, name, device_num, device)
+    return seestar_logcollector[device_num]
 
 def get_seestar_imager(device_num: int):
     global seestar_imager
@@ -89,6 +96,10 @@ def end_seestar_device(device_num: int):
     global seestar_dev
     seestar_dev[device_num].end_watch_thread()
 
+
+def get_seestar_logcollector(device_num: int):
+    global seestar_logcollector
+    return seestar_logcollector[device_num]
 
 # --------------------
 # RESOURCE CONTROLLERS
