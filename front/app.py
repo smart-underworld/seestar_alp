@@ -31,6 +31,7 @@ if not getattr(sys, "frozen", False):  # if we are not running from a bundled ap
 
 from config import Config  # type: ignore
 from log import init_logging  # type: ignore
+from seestar_logs import SeestarLogging
 import telescope
 import logging
 import threading
@@ -730,9 +731,10 @@ def do_command(req, resp, telescope_id):
             logger.warn("No command found: %s", value)
     # print ("Output: ", output)
 
-def do_support_bundle(req):
+def do_support_bundle(req, telescope_id = 1):
     zip_buffer = io.BytesIO()
     desc = req.media["desc"]
+    logger.debug("XXXXX getting logs (starting)")
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         # Add logs
         cwd = Path(os.getcwd())
@@ -772,6 +774,12 @@ def do_support_bundle(req):
             #    cmd_result = subprocess.check_output(['git', 'log', '-n', '1'])
             #    zip_file.writestr("git_version.txt", cmd_result)
         # TODO: Add Windows specific things here
+
+        if telescope_id in telescope.seestar_logcollector:
+            dev_log = telescope.get_seestar_logcollector(telescope_id)
+            zip_data = dev_log.get_logs_sync()
+            zip_file.writestr(f"seestar_{telescope_id}_logs.zip", zip_data)
+
     return zip_buffer
 
 
@@ -1739,8 +1747,8 @@ class GetBalanceSensorResource:
 
 class GenSupportBundleResource:
     @staticmethod
-    def on_post(req, resp):
-        zip_io = do_support_bundle(req)
+    def on_post(req, resp, telescope_id=1):
+        zip_io = do_support_bundle(req, telescope_id)
         resp.content_type = 'application/zip'
         resp.status = falcon.HTTP_200
         resp.text = zip_io.getvalue()
@@ -1818,6 +1826,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/stats', StatsResource())
         app.add_route('/{telescope_id:int}/support', SupportResource())
         app.add_route('/{telescope_id:int}/system', SystemResource())
+        app.add_route('/{telescope_id:int}/gensupportbundle', GenSupportBundleResource())
         app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
         app.add_route('/simbad', SimbadResource())
         app.add_route('/stellarium', StellariumResource())
