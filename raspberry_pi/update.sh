@@ -11,12 +11,16 @@ if [ "$sudo" = "false" ]; then
     exit 255
 fi
 
+if [ "$1" = "--force" ]; then
+    FORCE=true
+fi
+
 src_home=$(cd $(dirname $0)/.. && pwd)
 
 # check if update is required
 cd "${src_home}"
 git fetch origin
-if [ $(git rev-parse HEAD) = $(git rev-parse @{u}) ]; then
+if [ $(git rev-parse HEAD) = $(git rev-parse @{u}) ] && [ "${FORCE}" != "true" ]; then
     echo "Nothing to do, you're already up-to-date!"
     exit 0
 fi
