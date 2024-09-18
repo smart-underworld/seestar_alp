@@ -654,12 +654,12 @@ def do_create_image(req, resp, schedule, telescope_id):
 def do_command(req, resp, telescope_id):
     form = req.media
     # print("Form: ", form)
-    value = form["command"]
+    value = form.get("command","").strip()
     # print ("Selected command: ", value)
     match value:
         case "start_up_sequence":
-            lat = form["lat"]
-            long = form["long"]
+            lat = form.get("lat","").strip()
+            long = form.get("long","").strip()
             output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
             print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
             return None
@@ -725,6 +725,60 @@ def do_command(req, resp, telescope_id):
             return output
         case "stop_create_dark":
             output = method_param_sync("stop_create_dark", telescope_id)
+            return output
+        case "get_app_ap":
+            output = method_param_sync("get_app_ap", telescope_id)
+            return output
+        case "get_app_setting":
+            output = method_param_sync("get_app_setting", telescope_id)
+            return output
+        case "iscope_get_app_state":
+            output = method_param_sync("iscope_get_app_state", telescope_id)
+            return output
+        case "get_camera_exp_and_bin":
+            output = method_param_sync("get_camera_exp_and_bin", telescope_id)
+            return output
+        case "get_camera_state":
+            output = method_param_sync("get_camera_state", telescope_id)
+            return output
+        case "get_controls":
+            output = method_param_sync("get_controls", telescope_id)
+            return output
+        case "get_disk_volume":
+            output = method_param_sync("get_disk_volume", telescope_id)
+            return output
+        case "get_image_save_path":
+            output = method_param_sync("get_image_save_path", telescope_id)
+            return output
+        case "get_img_name_field":
+            output = method_param_sync("get_img_name_field", telescope_id)
+            return output
+        case "get_setting":
+            output = method_param_sync("get_setting", telescope_id)
+            return output
+        case "get_stack_info":
+            output = method_param_sync("get_stack_info", telescope_id)
+            return output
+        case "get_test_setting":
+            output = method_param_sync("get_test_setting", telescope_id)
+            return output
+        case "get_user_location":
+            output = method_param_sync("get_user_location", telescope_id)
+            return output
+        case "get_view_state":
+            output = method_param_sync("get_view_state", telescope_id)
+            return output
+        case "scope_get_equ_coord":
+            output = method_param_sync("scope_get_equ_coord", telescope_id)
+            return output
+        case "scope_get_horiz_coord":
+            output = method_param_sync("scope_get_horiz_coord", telescope_id)
+            return output
+        case "scope_get_ra_dec":
+            output = method_param_sync("scope_get_ra_dec", telescope_id)
+            return output
+        case "scope_get_track_state":
+            output = method_param_sync("scope_get_track_state", telescope_id)
             return output
         case _:
             logger.warn("No command found: %s", value)
