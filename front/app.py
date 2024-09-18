@@ -582,15 +582,12 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
         return values, errors
 
     if schedule:
-        response = do_action_device("add_schedule_item", telescope_id, {
-            "action": "start_mosaic",
-            "params": values
-        }, True)
+        response = do_schedule_action_device("start_mosaic", values, telescope_id)
         logger.info("POST scheduled request %s %s", values, response)
         if online:
             check_response(resp, response)
     else:
-        response = do_action_device("start_mosaic", telescope_id, values)
+        response = do_action_device("start_mosaic", telescope_id, values, False)
         logger.info("POST immediate request %s %s", values, response)
 
     return values, errors
@@ -638,15 +635,12 @@ def do_create_image(req, resp, schedule, telescope_id):
 
     # print("values:", values)
     if schedule:
-        response = do_action_device("add_schedule_item", telescope_id, {
-            "action": "start_mosaic",
-            "params": values
-        }, True)
+        response = do_schedule_action_device("start_mosaic", values, telescope_id)
         logger.info("POST scheduled request %s %s", values, response)
         if online:
             check_response(resp, response)
     else:
-        response = do_action_device("start_mosaic", telescope_id, values)
+        response = do_action_device("start_mosaic", telescope_id, values, False)
         logger.info("POST immediate request %s %s", values, response)
 
     return values, errors
@@ -1037,11 +1031,10 @@ class HomeTelescopeResource:
 
 class ImageResource:
     def on_get(self, req, resp, telescope_id=1):
-        values = {}
         self.image(req, resp, {}, {}, telescope_id)
 
     def on_post(self, req, resp, telescope_id=1):
-        values, errors = do_create_image(req, resp, True, telescope_id)
+        values, errors = do_create_image(req, resp, False, telescope_id)
         self.image(req, resp, values, errors, telescope_id)
 
     @staticmethod
