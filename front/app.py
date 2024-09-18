@@ -8,6 +8,7 @@ from astroquery.simbad import Simbad
 from jinja2 import Template, Environment, FileSystemLoader
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 from collections import OrderedDict
+from pathlib import Path
 import requests
 import humanize
 import json
@@ -20,6 +21,10 @@ import sys
 import ephem
 import geocoder
 import pytz
+import re
+import zipfile
+import subprocess
+import platform
 
 if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
     sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
@@ -372,14 +377,14 @@ def get_device_state(telescope_id):
         if status is not None and status.get("View"):
             view_state = status["View"]["state"]
             mode = status["View"]["mode"]
-            stage = status["View"]["stage"]
-            if stage == "Stack":
-                if status["View"]["Stack"]["state"] == "working":
-                    target = status["View"]["target_name"]
-                    stacked = status["View"]["Stack"]["stacked_frame"]
-                    failed = status["View"]["Stack"]["dropped_frame"]
-
-                
+            if view_state == "working":
+                stage = status["View"]["stage"]           
+                if stage == "Stack":
+                    if status["View"]["Stack"]["state"] == "working":
+                        target = status["View"]["target_name"]
+                        stacked = status["View"]["Stack"]["stacked_frame"]
+                        failed = status["View"]["Stack"]["dropped_frame"]
+                 
         # Check for bad data
         if status is not None and result is not None:
             schedule = do_action_device("get_schedule", telescope_id, {})
@@ -443,7 +448,7 @@ def get_device_settings(telescope_id):
         "auto_3ppa_calib": settings_result["auto_3ppa_calib"],
         "frame_calib": settings_result["frame_calib"],
         "stack_masic": settings_result["stack_masic"],
-        "rec_stablzn": settings_result["rec_stablzn"],
+        # "rec_stablzn": settings_result["rec_stablzn"], # Unavailable for firmware 3.11
         "manual_exp": settings_result["manual_exp"],
         # "isp_exp_ms": settings_result["isp_exp_ms"],
         # "calib_location": settings_result["calib_location"],
@@ -512,6 +517,29 @@ def check_dec_value(decString):
     return any(re.search(pattern, decString) for pattern in valid)
 
 
+def hms_to_sec(timeString):
+    hms_search = re.search(r"^(?!\s*$)\s*(?:(\d+)\s*h\s*)?(?:(\d+)\s*m\s*)?(?:(\d+)\s*s)?\s*$", timeString.lower())
+
+    # Check if convertion is needed.
+    if hms_search:
+        seconds = 0
+        # Convert to sec
+        hms_split = re.split(r"^(?!\s*$)\s*(?:(\d+)\s*h\s*)?(?:(\d+)\s*m\s*)?(?:(\d+)\s*s)?\s*$", timeString.lower())
+        if hms_split[1] is not None:
+            # h
+            seconds = int(hms_split[1]) * 3600
+        if hms_split[2] is not None:
+            # m
+            seconds = seconds + int(hms_split[2]) * 60
+        if hms_split[3] is not None:
+            # s
+            seconds = seconds + int(hms_split[3])
+        return seconds
+    else:
+        return timeString
+    
+
+
 def do_create_mosaic(req, resp, schedule, telescope_id):
     form = req.media
     targetName = form["targetName"]
@@ -520,7 +548,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
     panelOverlap = form["panelOverlap"]
     panelSelect = form["panelSelect"]
     useJ2000 = form.get("useJ2000") == "on"
-    sessionTime = form["sessionTime"]
+    sessionTime = hms_to_sec(form["sessionTime"])
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
@@ -575,7 +603,7 @@ def do_create_image(req, resp, schedule, telescope_id):
     panelOverlap = 100
     panelSelect = ""
     useJ2000 = form.get("useJ2000") == "on"
-    sessionTime = form["sessionTime"]
+    sessionTime = hms_to_sec(form["sessionTime"])
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
@@ -630,7 +658,10 @@ def do_command(req, resp, telescope_id):
     # print ("Selected command: ", value)
     match value:
         case "start_up_sequence":
-            output = do_action_device("action_start_up_sequence", telescope_id, {"lat": 0, "lon": 0})
+            lat = form["lat"]
+            long = form["long"]
+            output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
+            print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
             return None
         case "scope_park":
             output = method_sync("scope_park", telescope_id)
@@ -682,9 +713,61 @@ def do_command(req, resp, telescope_id):
             return output
         case "set_wheel_position_Dark":
             output = method_param_sync("set_wheel_position", [0], telescope_id)
+            return output
+        case "start_polar_align":
+            output = method_param_sync("start_polar_align", telescope_id)
+            return output
+        case "stop_polar_align":
+            output = method_param_sync("stop_polar_align", telescope_id)
+            return output
+        case "start_create_dark":
+            output = method_param_sync("start_create_dark", telescope_id)
+            return output
+        case "stop_create_dark":
+            output = method_param_sync("stop_create_dark", telescope_id)
+            return output
         case _:
             logger.warn("No command found: %s", value)
     # print ("Output: ", output)
+
+def do_support_bundle():
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+        # Add logs
+        cwd = Path(os.getcwd())
+        pfx = cwd.joinpath(Config.log_prefix)
+        if pfx == "":
+            pfx = "."
+        for f in list(pfx.glob("alpyca.log*")):
+            fstr=str(f)
+            logger.debug(f"do_support_bundle: Adding {fstr} to zipfile")
+            with open(str(fstr), "rb") as fh:
+                buf = io.BytesIO(fh.read())
+                zip_file.writestr(fstr, buf.getvalue())
+
+        for f in list(pfx.joinpath("device").glob("config.toml*")):
+            fstr=str(f)
+            logger.debug(f"do_support_bundle: Adding {fstr} to zipfile")
+            with open(str(fstr), "rb") as fh:
+                buf = io.BytesIO(fh.read())
+                zip_file.writestr(fstr, buf.getvalue())
+
+        os_name = platform.system()
+        if os_name == "Linux":
+            cmd_result = subprocess.check_output(['journalctl', '-u', 'seestar'])
+            zip_file.writestr("service_journal.txt", cmd_result)
+        if os_name == "Darwin" or os_name == "Linux":
+            cmd_result = subprocess.check_output(['pip3', 'freeze'])
+            zip_file.writestr("pip3_info.txt", cmd_result)
+            cmd_result = subprocess.check_output(['python3', '--version'])
+            zip_file.writestr("python_version.txt", cmd_result)
+            cmd_result = subprocess.check_output(['env'])
+            zip_file.writestr("env.txt", cmd_result)
+            if os.path.isdir('.git'):
+                cmd_result = subprocess.check_output(['git', 'log', '-n', '1'])
+                zip_file.writestr("git_version.txt", cmd_result)
+        # TODO: Add Windows specific things here
+    return zip_buffer
 
 
 def redirect(location):
@@ -1310,7 +1393,7 @@ class SettingsResource:
             "auto_3ppa_calib": str2bool(PostedSettings["auto_3ppa_calib"]),
             "frame_calib": str2bool(PostedSettings["frame_calib"]),
             "stack_masic": str2bool(PostedSettings["stack_masic"]),
-            "rec_stablzn": str2bool(PostedSettings["rec_stablzn"]),
+            # "rec_stablzn": str2bool(PostedSettings["rec_stablzn"]),
             "manual_exp": str2bool(PostedSettings["manual_exp"])
         }
 
@@ -1644,6 +1727,14 @@ class GetBalanceSensorResource:
             resp.content_type = 'application/json'
             resp.text = json.dumps(balance_sensor)
 
+class GenSupportBundleResource:
+    @staticmethod
+    def on_get(req, resp):
+        zip_io = do_support_bundle()
+        resp.content_type = 'application/zip'
+        resp.status = falcon.HTTP_200
+        resp.text = zip_io.getvalue()
+        zip_io.close()
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
@@ -1721,6 +1812,7 @@ class FrontMain:
         app.add_route('/toggleuitheme', ToggleUIThemeResource())
         app.add_route('/updatetwilighttimes', UpdateTwilightTimesResource())
         app.add_route('/getbalancesensor', GetBalanceSensorResource())
+        app.add_route('/gensupportbundle', GenSupportBundleResource())
 
         try:
             self.httpd = make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler)
