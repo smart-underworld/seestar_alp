@@ -29,9 +29,9 @@ async function fetchSimbad() {
         document.getElementById('ra').value = elements[0];
         document.getElementById('dec').value = elements[1];
         document.getElementById('useLpFilter').checked = false;
+        document.getElementById("useJ2000").checked = true;
         if (elements[2] == 'on') 
             document.getElementById('useLpFilter').checked = true;
-        document.getElementById("useJ2000").checked = true;
     })
     .catch(error => console.error('There was a problem with the fetch operation:', error));
 

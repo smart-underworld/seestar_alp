@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block header %}
+	<div class="container mt-3">
+		<p class="h1">{% block title %}Goto Target{% endblock %}</p>
+	</div>
+{% endblock %}
+
+{% block content %}
+
+	{% if online %}
+		<div class="container mt-3">
+			<p class="h3 mb-2">Enter Target</p>
+
+			{% include 'goto_target.html' with context %}
+		</div>
+	{% else %}
+		<div class="container mt-3">
+			<p>You are currently in offline mode</p>
+		</div>
+	{% endif %}
+
+{% endblock %}

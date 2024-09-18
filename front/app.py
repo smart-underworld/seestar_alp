@@ -650,6 +650,37 @@ def do_create_image(req, resp, schedule, telescope_id):
 
     return values, errors
 
+def do_goto_target(req, resp, schedule, telescope_id):
+    form = req.media
+    targetName = form["targetName"]
+    ra = form["ra"]
+    dec = form["dec"]
+    useJ2000 = form.get("useJ2000") == "on"
+    errors = {}
+    values = {
+        "target_name": targetName,
+        "is_j2000": useJ2000,
+        "ra": ra,
+        "dec": dec
+    }
+
+    if not check_ra_value(ra):
+        flash(resp, "Invalid RA value")
+        errors["ra"] = ra
+
+    if not check_dec_value(dec):
+        flash(resp, "Invalid DEC Value")
+        errors["dec"] = dec
+
+    if errors:
+        flash(resp, "ERROR detected in Coordinates")
+        return values, errors
+
+    response = do_action_device("goto_target", telescope_id, values)
+    logger.info("POST immediate request %s %s", values, response)
+
+    return values, errors
+
 
 def do_command(req, resp, telescope_id):
     form = req.media
@@ -1018,6 +1049,27 @@ class ImageResource:
         # remove values=values to stop remembering values
         render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors,
                         action=f"/{telescope_id}/image", **context)
+
+class GotoResource:  
+    def on_get(self, req, resp, telescope_id=1):
+        values = {}
+        self.goto(req, resp, {}, {}, telescope_id)
+
+    def on_post(self, req, resp, telescope_id=1):
+        values, errors = do_goto_target(req, resp, True, telescope_id)
+        self.goto(req, resp, values, errors, telescope_id)
+
+    @staticmethod
+    def goto(req, resp, values, errors, telescope_id):
+        schedule = {}
+        if check_api_state(telescope_id):            
+            current = do_action_device("get_schedule", telescope_id, {})
+            state = current["Value"]["state"]
+        else:
+            state = "Stopped"
+        context = get_context(telescope_id, req)
+        # remove values=values to stop remembering values
+        render_template(req, resp, 'goto.html', state=state, schedule=schedule, values=values, errors=errors, action=f"/{telescope_id}/goto", **context)
 
 
 class CommandResource:
@@ -1871,6 +1923,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
         app.add_route('/{telescope_id:int}/stats', StatsResource())
         app.add_route('/{telescope_id:int}/support', SupportResource())
+        app.add_route('/{telescope_id:int}/goto', GotoResource())
         app.add_route('/{telescope_id:int}/system', SystemResource())
         app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
         app.add_route('/simbad', SimbadResource())
