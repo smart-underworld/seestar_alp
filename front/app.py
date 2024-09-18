@@ -768,9 +768,9 @@ def do_support_bundle(req):
             zip_file.writestr("python_version.txt", cmd_result)
             cmd_result = subprocess.check_output(['env'])
             zip_file.writestr("env.txt", cmd_result)
-            if os.path.isdir('.git'):
-                cmd_result = subprocess.check_output(['git', 'log', '-n', '1'])
-                zip_file.writestr("git_version.txt", cmd_result)
+            #if os.path.isdir('.git'):
+            #    cmd_result = subprocess.check_output(['git', 'log', '-n', '1'])
+            #    zip_file.writestr("git_version.txt", cmd_result)
         # TODO: Add Windows specific things here
     return zip_buffer
 
