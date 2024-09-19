@@ -70,9 +70,9 @@ jobs:
       - name: run pyinstaller for device
         id: create_device
         run: |
-          pyinstaller --name="seestar_alp" `
-          --add-data="device/config.toml.example:." --add-data="front/citation:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" `
-          --paths=./front --paths=./device `
+          pyinstaller --name="seestar_alp" \
+          --add-data="device/config.toml.example:." --add-data="front/citation:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
+          --paths=./front --paths=./device \
           root_app.py
           cd dist
           zip -r ../linux_seestar_alp.zip  ./seestar_alp/*
