@@ -18,6 +18,7 @@ from device.config import Config      # type: ignore
 from device import log                     # type: ignore
 from device import telescope               # type: ignore
 
+
 import os
 
 class AppRunner:
