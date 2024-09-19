@@ -15,15 +15,15 @@ import time
 from falcon import Request, Response, HTTPBadRequest, HTTPTemporaryRedirect, before
 from logging import Logger
 
-from seestar_imaging import SeestarImaging
-from seestar_logs import SeestarLogging
-from shr import PropertyResponse, MethodResponse, PreProcessRequest, \
+from device.seestar_logs import SeestarLogging
+from device.seestar_imaging import SeestarImaging
+from device.shr import PropertyResponse, MethodResponse, PreProcessRequest, \
                 get_request_field, to_bool
-from exceptions import *        # Nothing but exception classes
-from seestar_device import Seestar
+from device.exceptions import *        # Nothing but exception classes
+from device.seestar_device import Seestar
 from alpaca.telescope import *
 import json
-from seestar_util import Util    # RWR
+from device.seestar_util import Util    # RWR
 
 # logger: Logger = None
 

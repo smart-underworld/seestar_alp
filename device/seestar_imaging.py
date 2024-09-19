@@ -25,11 +25,9 @@ import cv2
 
 import sys
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "."))
-
-import log
-from rtspclient import RtspClient
-from stretch import stretch, StretchParameters
+from device import log
+from device.rtspclient import RtspClient
+from device.stretch import stretch, StretchParameters
 
 
 # view modes:

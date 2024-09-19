@@ -26,14 +26,13 @@ import zipfile
 import subprocess
 import platform
 
-if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
-    sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
+# if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
+#    sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
 
-from config import Config  # type: ignore
-from log import init_logging  # type: ignore
-from seestar_logs import SeestarLogging
-import telescope
-import logging
+from device.seestar_logs import SeestarLogging
+from device.config import Config  # type: ignore
+from device.log import init_logging  # type: ignore
+from device import telescope
 import threading
 
 logger = init_logging()
