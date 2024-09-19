@@ -26,14 +26,13 @@ import zipfile
 import subprocess
 import platform
 
-if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
-    sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
+# if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
+#    sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
 
-from config import Config  # type: ignore
-from log import init_logging  # type: ignore
-from seestar_logs import SeestarLogging
-import telescope
-import logging
+from device.seestar_logs import SeestarLogging
+from device.config import Config  # type: ignore
+from device.log import init_logging  # type: ignore
+from device import telescope
 import threading
 
 logger = init_logging()
@@ -582,15 +581,12 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
         return values, errors
 
     if schedule:
-        response = do_action_device("add_schedule_item", telescope_id, {
-            "action": "start_mosaic",
-            "params": values
-        }, True)
+        response = do_schedule_action_device("start_mosaic", values, telescope_id)
         logger.info("POST scheduled request %s %s", values, response)
         if online:
             check_response(resp, response)
     else:
-        response = do_action_device("start_mosaic", telescope_id, values)
+        response = do_action_device("start_mosaic", telescope_id, values, False)
         logger.info("POST immediate request %s %s", values, response)
 
     return values, errors
@@ -638,15 +634,12 @@ def do_create_image(req, resp, schedule, telescope_id):
 
     # print("values:", values)
     if schedule:
-        response = do_action_device("add_schedule_item", telescope_id, {
-            "action": "start_mosaic",
-            "params": values
-        }, True)
+        response = do_schedule_action_device("start_mosaic", values, telescope_id)
         logger.info("POST scheduled request %s %s", values, response)
         if online:
             check_response(resp, response)
     else:
-        response = do_action_device("start_mosaic", telescope_id, values)
+        response = do_action_device("start_mosaic", telescope_id, values, False)
         logger.info("POST immediate request %s %s", values, response)
 
     return values, errors
@@ -692,8 +685,8 @@ def do_command(req, resp, telescope_id):
         case "start_up_sequence":
             lat = form.get("lat","").strip()
             long = form.get("long","").strip()
+            #print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
             output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
-            print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
             return None
         case "scope_park":
             output = method_sync("scope_park", telescope_id)
@@ -758,8 +751,8 @@ def do_command(req, resp, telescope_id):
         case "stop_create_dark":
             output = method_param_sync("stop_create_dark", telescope_id)
             return output
-        case "get_app_ap":
-            output = method_param_sync("get_app_ap", telescope_id)
+        case "pi_get_ap":
+            output = method_param_sync("pi_get_ap", telescope_id)
             return output
         case "get_app_setting":
             output = method_param_sync("get_app_setting", telescope_id)
@@ -1037,11 +1030,10 @@ class HomeTelescopeResource:
 
 class ImageResource:
     def on_get(self, req, resp, telescope_id=1):
-        values = {}
         self.image(req, resp, {}, {}, telescope_id)
 
     def on_post(self, req, resp, telescope_id=1):
-        values, errors = do_create_image(req, resp, True, telescope_id)
+        values, errors = do_create_image(req, resp, False, telescope_id)
         self.image(req, resp, values, errors, telescope_id)
 
     @staticmethod

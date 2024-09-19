@@ -59,7 +59,7 @@
 #               response, and omit Value if error is not success().
 
 from threading import Lock
-from exceptions import Success
+from device.exceptions import Success
 import json
 from falcon import Request, Response, HTTPBadRequest
 from logging import Logger

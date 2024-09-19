@@ -51,7 +51,7 @@
 		<label for="dropdown">Get Infomation / Settings</label>
 	</div>
 	<select id="dropdown" name="command">
-        <option value="get_app_ap">Get AP (WiFi) Info</option>
+        <option value="pi_get_ap">Get AP (WiFi) Info</option>
         <option value="get_app_setting">Get App Setting</option>
         <option value="iscope_get_app_state">Get App State</option>
         <option value="get_camera_exp_and_bin">Get Camera Exposure & Bin</option>
@@ -121,7 +121,7 @@
 <form method="post" action="{{ action }}" class="bordered-form">
 <div class="container">
 	<div class="mb3 row"><p></p><p></p></div>
-	<div class="mb3 row">
+	<div class="mb3 row align-items-end">
 		<div class="mb3 col-sm-2" style="margin-bottom:5px;font-weight:bold">
 			<label for="param1" style="bold">Start-Up Sequence</label>
 		</div>
@@ -130,23 +130,21 @@
     
 		<div class="mb3 col-sm-2">
 			<label for="lat" class="form-label" style="margin-bottom:5px;font-weight:bold">Latitude</label>
-			<input type="text" class="form-control form-control-sm" style="width: 100px" id="lat" name="lat" placeholder="0" default="0">
+			<input type="text" class="form-control form-control-sm" style="width: 100px" id="lat" name="lat">
 		</div>
 
 		<div class="mb3 col-sm-2">
 			<label for="long"class="form-label" style="margin-bottom:5px;font-weight:bold">Longitude</label>
-			<input type="text" class="form-control form-control-sm" style="width: 100px" id="long" name="long"placeholder="0" default="0">
+			<input type="text" class="form-control form-control-sm" style="width: 100px" id="long" name="long">
 		</div>
-	<div class="mb3 row">
 		<div class = "col-sm-2">
 			<button type="submit" class="btn btn-primary btn-sm">Execute</button>
 		</div>
 	</div>
-	</div>
 	<div class="mb3 row"><p></p></div>
-	<div class="mb3 col-6">
+	<div class="mb3 col-7">
 		<div class="mb3 row">
-			<p>This will override whatever value you have set in config.toml. Specifying a value of 0 will attempt to determine your location based on IP Geolocation. You must have internet service for this to work!</p>
+			<p>This will override whatever value you have set in config.toml. Leaving this blank will not override your values specified in config.toml.  Specifying a value of 0 will attempt to determine your location based on IP Geolocation. <b>The machine you run seestar_alp on must have internet service for this to work!</b></p>
 		</div>
 	</div>
 </div>

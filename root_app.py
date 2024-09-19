@@ -11,13 +11,13 @@ import waitress
 
 from front.app import FrontMain
 
-if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
-    sys.path.append(os.path.join(os.path.dirname(__file__), "device"))
+# sys.path.append(os.path.join(os.path.dirname(__file__), "device"))
 
 from device.app import DeviceMain     # type: ignore
-from config import Config      # type: ignore
-import log                     # type: ignore
-import telescope               # type: ignore
+from device.config import Config      # type: ignore
+from device import log                     # type: ignore
+from device import telescope               # type: ignore
+
 
 import os
 
