@@ -14,7 +14,7 @@ uiport = 5432
 # light/dark theme
 uitheme = "dark" #all lower case
 twilighttimes = false #true/false
-experimental = true
+#experimental = true
 
 [server]
 location = 'Anywhere on Earth'  # Anything you want here
