@@ -686,8 +686,8 @@ def do_command(req, resp, telescope_id):
         case "start_up_sequence":
             lat = form.get("lat","").strip()
             long = form.get("long","").strip()
+            #print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
             output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
-            print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
             return None
         case "scope_park":
             output = method_sync("scope_park", telescope_id)
@@ -752,8 +752,8 @@ def do_command(req, resp, telescope_id):
         case "stop_create_dark":
             output = method_param_sync("stop_create_dark", telescope_id)
             return output
-        case "get_app_ap":
-            output = method_param_sync("get_app_ap", telescope_id)
+        case "pi_get_ap":
+            output = method_param_sync("pi_get_ap", telescope_id)
             return output
         case "get_app_setting":
             output = method_param_sync("get_app_setting", telescope_id)
