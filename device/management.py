@@ -43,11 +43,11 @@
 #               GitHub issue #1
 #
 from falcon import Request, Response
-from shr import PropertyResponse, DeviceMetadata
-from config import Config
+from device.shr import PropertyResponse, DeviceMetadata
+from device.config import Config
 from logging import Logger
 # For each *type* of device served
-from telescope import TelescopeMetadata
+from device.telescope import TelescopeMetadata
 
 logger: Logger = None
 #logger = None                   # Safe on Python 3.7 but no intellisense in VSCode etc.

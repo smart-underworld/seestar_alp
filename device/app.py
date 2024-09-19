@@ -58,24 +58,24 @@ import inspect
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 import os
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "."))
+# sys.path.append(os.path.join(os.path.dirname(__file__), "."))
 
 # -- isort wants the above line to be blank --
 # Controller classes (for routing)
-import discovery
-import exceptions
+from device import discovery
+from device import exceptions
 from falcon import Request, Response, App, HTTPInternalServerError
-import management
-import setup
-import log
-from config import Config
-from discovery import DiscoveryResponder
-from shr import set_shr_logger
+from device import management
+from device import setup
+from device import log
+from device.config import Config
+from device.discovery import DiscoveryResponder
+from device.shr import set_shr_logger
 
 #########################
 # FOR EACH ASCOM DEVICE #
 #########################
-import telescope
+from device import telescope
 
 #--------------
 API_VERSION = 1

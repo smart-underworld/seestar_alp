@@ -43,7 +43,7 @@
 # 16-Jan-2023   rbd 0.1 Docstrings for other exception classes
 #
 import traceback
-from config import Config
+from device.config import Config
 from logging import Logger
 
 global logger
