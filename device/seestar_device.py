@@ -10,8 +10,8 @@ from time import sleep
 
 import tzlocal
 
-from config import Config
-from seestar_util import Util
+from device.config import Config
+from device.seestar_util import Util
 
 
 class Seestar:

@@ -37,7 +37,7 @@
 # 30-Dec-2022   rbd V0.1 Device number captured and sent to responder
 #
 from falcon import Request, Response
-from shr import PropertyResponse, DeviceMetadata, log_request
+from device.shr import PropertyResponse, DeviceMetadata, log_request
 
 class svrsetup:
     def on_get(self, req: Request, resp: Response):

@@ -39,7 +39,7 @@
 import logging
 import logging.handlers
 import time
-from config import Config
+from device.config import Config
 
 global logger
 # logger: logging.Logger = None  # Master copy (root) of the logger
