@@ -896,7 +896,7 @@ def fetch_template(template_name):
     if getattr(sys, "frozen", False):
         ## RWR Testing
         template_dir = os.path.join(os.path.dirname(__file__), 'templates')
-        logger.info(template_dir)
+        logger.debug(template_dir)
         env = Environment(loader=FileSystemLoader(template_dir))
         template = env.get_template(template_name)
         ## RWR
