@@ -58,7 +58,6 @@ import inspect
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 import os
 
-# sys.path.append(os.path.join(os.path.dirname(__file__), "."))
 
 # -- isort wants the above line to be blank --
 # Controller classes (for routing)

@@ -6,6 +6,10 @@
 __pycache__
 device/__pycache__
 device/config.toml
+dist
+build
+seestar_alp.spec
+ssc_win_bld.ps1
 rotator.log*
 docs/build
 docs/refs
