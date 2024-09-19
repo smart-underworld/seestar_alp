@@ -70,15 +70,10 @@ jobs:
       - name: run pyinstaller for device
         id: create_device
         run: |
-          cp ./device/config.py ./front
-          cp ./device/config.toml.example ./front
-          cp ./device/log.py ./front
-          pyinstaller --name="seestar_alp" --hidden-import tzlocal --hidden-import geocoder --hidden-import alpaca.telescope \
-          --hidden-import log --hidden-import toml --hidden-import logging.handlers --hidden-import skimage --hidden-import skimage.util --hidden-import PIL \
-          --hidden-import scipy._lib.array_api_compat.numpy.fft --hidden-import PIL.ImageEnhance --hidden-import SeestarImaging \
-          --add-data="front/config.toml.example:." --add-data="front/config.py:." --add-data="front/log.py:." \
-          --add-data="front/CITATION:astroquery" --add-data="front/templates:templates" --add-data="front/public:public" \
-          --add-data="front:front" --add-data="device:device" --add-data="device/telescope.py:." root_app.py
+          pyinstaller --name="seestar_alp" \
+          --add-data="device/config.toml.example:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
+          --paths=./front --paths=./device \
+          root_app.py
           cd dist
           zip -r ../linux_seestar_alp.zip  ./seestar_alp/*
           echo "device_script_result=linux_seestar_alp.zip" >> $GITHUB_ENV
