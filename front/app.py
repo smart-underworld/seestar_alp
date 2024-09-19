@@ -31,6 +31,7 @@ if not getattr(sys, "frozen", False):  # if we are not running from a bundled ap
 
 from config import Config  # type: ignore
 from log import init_logging  # type: ignore
+from seestar_logs import SeestarLogging
 import telescope
 import logging
 import threading
@@ -581,15 +582,12 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
         return values, errors
 
     if schedule:
-        response = do_action_device("add_schedule_item", telescope_id, {
-            "action": "start_mosaic",
-            "params": values
-        }, True)
+        response = do_schedule_action_device("start_mosaic", values, telescope_id)
         logger.info("POST scheduled request %s %s", values, response)
         if online:
             check_response(resp, response)
     else:
-        response = do_action_device("start_mosaic", telescope_id, values)
+        response = do_action_device("start_mosaic", telescope_id, values, False)
         logger.info("POST immediate request %s %s", values, response)
 
     return values, errors
@@ -637,16 +635,44 @@ def do_create_image(req, resp, schedule, telescope_id):
 
     # print("values:", values)
     if schedule:
-        response = do_action_device("add_schedule_item", telescope_id, {
-            "action": "start_mosaic",
-            "params": values
-        }, True)
+        response = do_schedule_action_device("start_mosaic", values, telescope_id)
         logger.info("POST scheduled request %s %s", values, response)
         if online:
             check_response(resp, response)
     else:
-        response = do_action_device("start_mosaic", telescope_id, values)
+        response = do_action_device("start_mosaic", telescope_id, values, False)
         logger.info("POST immediate request %s %s", values, response)
+
+    return values, errors
+
+def do_goto_target(req, resp, schedule, telescope_id):
+    form = req.media
+    targetName = form["targetName"]
+    ra = form["ra"]
+    dec = form["dec"]
+    useJ2000 = form.get("useJ2000") == "on"
+    errors = {}
+    values = {
+        "target_name": targetName,
+        "is_j2000": useJ2000,
+        "ra": ra,
+        "dec": dec
+    }
+
+    if not check_ra_value(ra):
+        flash(resp, "Invalid RA value")
+        errors["ra"] = ra
+
+    if not check_dec_value(dec):
+        flash(resp, "Invalid DEC Value")
+        errors["dec"] = dec
+
+    if errors:
+        flash(resp, "ERROR detected in Coordinates")
+        return values, errors
+
+    response = do_action_device("goto_target", telescope_id, values)
+    logger.info("POST immediate request %s %s", values, response)
 
     return values, errors
 
@@ -654,12 +680,12 @@ def do_create_image(req, resp, schedule, telescope_id):
 def do_command(req, resp, telescope_id):
     form = req.media
     # print("Form: ", form)
-    value = form["command"]
+    value = form.get("command","").strip()
     # print ("Selected command: ", value)
     match value:
         case "start_up_sequence":
-            lat = form["lat"]
-            long = form["long"]
+            lat = form.get("lat","").strip()
+            long = form.get("long","").strip()
             output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
             print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
             return None
@@ -726,12 +752,68 @@ def do_command(req, resp, telescope_id):
         case "stop_create_dark":
             output = method_param_sync("stop_create_dark", telescope_id)
             return output
+        case "get_app_ap":
+            output = method_param_sync("get_app_ap", telescope_id)
+            return output
+        case "get_app_setting":
+            output = method_param_sync("get_app_setting", telescope_id)
+            return output
+        case "iscope_get_app_state":
+            output = method_param_sync("iscope_get_app_state", telescope_id)
+            return output
+        case "get_camera_exp_and_bin":
+            output = method_param_sync("get_camera_exp_and_bin", telescope_id)
+            return output
+        case "get_camera_state":
+            output = method_param_sync("get_camera_state", telescope_id)
+            return output
+        case "get_controls":
+            output = method_param_sync("get_controls", telescope_id)
+            return output
+        case "get_disk_volume":
+            output = method_param_sync("get_disk_volume", telescope_id)
+            return output
+        case "get_image_save_path":
+            output = method_param_sync("get_image_save_path", telescope_id)
+            return output
+        case "get_img_name_field":
+            output = method_param_sync("get_img_name_field", telescope_id)
+            return output
+        case "get_setting":
+            output = method_param_sync("get_setting", telescope_id)
+            return output
+        case "get_stack_info":
+            output = method_param_sync("get_stack_info", telescope_id)
+            return output
+        case "get_test_setting":
+            output = method_param_sync("get_test_setting", telescope_id)
+            return output
+        case "get_user_location":
+            output = method_param_sync("get_user_location", telescope_id)
+            return output
+        case "get_view_state":
+            output = method_param_sync("get_view_state", telescope_id)
+            return output
+        case "scope_get_equ_coord":
+            output = method_param_sync("scope_get_equ_coord", telescope_id)
+            return output
+        case "scope_get_horiz_coord":
+            output = method_param_sync("scope_get_horiz_coord", telescope_id)
+            return output
+        case "scope_get_ra_dec":
+            output = method_param_sync("scope_get_ra_dec", telescope_id)
+            return output
+        case "scope_get_track_state":
+            output = method_param_sync("scope_get_track_state", telescope_id)
+            return output
         case _:
             logger.warn("No command found: %s", value)
     # print ("Output: ", output)
 
-def do_support_bundle():
+def do_support_bundle(req, telescope_id = 1):
     zip_buffer = io.BytesIO()
+    desc = req.media["desc"]
+    logger.debug("XXXXX getting logs (starting)")
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         # Add logs
         cwd = Path(os.getcwd())
@@ -752,7 +834,11 @@ def do_support_bundle():
                 buf = io.BytesIO(fh.read())
                 zip_file.writestr(fstr, buf.getvalue())
 
+        zip_file.writestr("problem_description.txt", desc)
+
         os_name = platform.system()
+        zip_file.writestr("OS_name.txt", os_name)
+
         if os_name == "Linux":
             cmd_result = subprocess.check_output(['journalctl', '-u', 'seestar'])
             zip_file.writestr("service_journal.txt", cmd_result)
@@ -763,10 +849,16 @@ def do_support_bundle():
             zip_file.writestr("python_version.txt", cmd_result)
             cmd_result = subprocess.check_output(['env'])
             zip_file.writestr("env.txt", cmd_result)
-            if os.path.isdir('.git'):
-                cmd_result = subprocess.check_output(['git', 'log', '-n', '1'])
-                zip_file.writestr("git_version.txt", cmd_result)
+            #if os.path.isdir('.git'):
+            #    cmd_result = subprocess.check_output(['git', 'log', '-n', '1'])
+            #    zip_file.writestr("git_version.txt", cmd_result)
         # TODO: Add Windows specific things here
+
+        if telescope_id in telescope.seestar_logcollector:
+            dev_log = telescope.get_seestar_logcollector(telescope_id)
+            zip_data = dev_log.get_logs_sync()
+            zip_file.writestr(f"seestar_{telescope_id}_logs.zip", zip_data)
+
     return zip_buffer
 
 
@@ -939,11 +1031,10 @@ class HomeTelescopeResource:
 
 class ImageResource:
     def on_get(self, req, resp, telescope_id=1):
-        values = {}
         self.image(req, resp, {}, {}, telescope_id)
 
     def on_post(self, req, resp, telescope_id=1):
-        values, errors = do_create_image(req, resp, True, telescope_id)
+        values, errors = do_create_image(req, resp, False, telescope_id)
         self.image(req, resp, values, errors, telescope_id)
 
     @staticmethod
@@ -959,6 +1050,27 @@ class ImageResource:
         # remove values=values to stop remembering values
         render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors,
                         action=f"/{telescope_id}/image", **context)
+
+class GotoResource:  
+    def on_get(self, req, resp, telescope_id=1):
+        values = {}
+        self.goto(req, resp, {}, {}, telescope_id)
+
+    def on_post(self, req, resp, telescope_id=1):
+        values, errors = do_goto_target(req, resp, True, telescope_id)
+        self.goto(req, resp, values, errors, telescope_id)
+
+    @staticmethod
+    def goto(req, resp, values, errors, telescope_id):
+        schedule = {}
+        if check_api_state(telescope_id):            
+            current = do_action_device("get_schedule", telescope_id, {})
+            state = current["Value"]["state"]
+        else:
+            state = "Stopped"
+        context = get_context(telescope_id, req)
+        # remove values=values to stop remembering values
+        render_template(req, resp, 'goto.html', state=state, schedule=schedule, values=values, errors=errors, action=f"/{telescope_id}/goto", **context)
 
 
 class CommandResource:
@@ -1500,6 +1612,11 @@ class StatsResource:
         context = get_context(telescope_id, req)
         render_template(req, resp, 'stats.html', stats=stats, now=now, **context)
 
+class SupportResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'support.html', **context)
 
 # stackoverflow-fu
 Object = lambda **kwargs: type("Object", (), kwargs)
@@ -1729,8 +1846,8 @@ class GetBalanceSensorResource:
 
 class GenSupportBundleResource:
     @staticmethod
-    def on_get(req, resp):
-        zip_io = do_support_bundle()
+    def on_post(req, resp, telescope_id=1):
+        zip_io = do_support_bundle(req, telescope_id)
         resp.content_type = 'application/zip'
         resp.status = falcon.HTTP_200
         resp.text = zip_io.getvalue()
@@ -1776,6 +1893,7 @@ class FrontMain:
         app.add_route('/schedule/wait-for', ScheduleWaitForResource())
         app.add_route('/schedule/auto-focus', ScheduleAutoFocusResource())
         app.add_route('/stats', StatsResource())
+        app.add_route('/support', SupportResource())
         app.add_route('/{telescope_id:int}/', HomeTelescopeResource())
         app.add_route('/{telescope_id:int}/command', CommandResource())
         app.add_route('/{telescope_id:int}/image', ImageResource())
@@ -1805,7 +1923,10 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule/wait-for', ScheduleWaitForResource())
         app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
         app.add_route('/{telescope_id:int}/stats', StatsResource())
+        app.add_route('/{telescope_id:int}/support', SupportResource())
+        app.add_route('/{telescope_id:int}/goto', GotoResource())
         app.add_route('/{telescope_id:int}/system', SystemResource())
+        app.add_route('/{telescope_id:int}/gensupportbundle', GenSupportBundleResource())
         app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
         app.add_route('/simbad', SimbadResource())
         app.add_route('/stellarium', StellariumResource())
