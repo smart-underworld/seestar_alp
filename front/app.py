@@ -25,6 +25,7 @@ import re
 import zipfile
 import subprocess
 import platform
+import shutil
 
 # if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
 #    sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
@@ -802,9 +803,6 @@ def do_command(req, resp, telescope_id):
         case "scope_get_ra_dec":
             output = method_param_sync("scope_get_ra_dec", telescope_id)
             return output
-        case "scope_get_track_state":
-            output = method_param_sync("scope_get_track_state", telescope_id)
-            return output
         case _:
             logger.warn("No command found: %s", value)
     # print ("Output: ", output)
@@ -820,16 +818,16 @@ def do_support_bundle(req, telescope_id = 1):
         if pfx == "":
             pfx = "."
         for f in list(pfx.glob("alpyca.log*")):
-            fstr=str(f)
+            fstr=f.name
             logger.debug(f"do_support_bundle: Adding {fstr} to zipfile")
-            with open(str(fstr), "rb") as fh:
+            with open(str(f), "rb") as fh:
                 buf = io.BytesIO(fh.read())
                 zip_file.writestr(fstr, buf.getvalue())
 
         for f in list(pfx.joinpath("device").glob("config.toml*")):
-            fstr=str(f)
+            fstr=f.name
             logger.debug(f"do_support_bundle: Adding {fstr} to zipfile")
-            with open(str(fstr), "rb") as fh:
+            with open(str(f), "rb") as fh:
                 buf = io.BytesIO(fh.read())
                 zip_file.writestr(fstr, buf.getvalue())
 
@@ -841,17 +839,32 @@ def do_support_bundle(req, telescope_id = 1):
         if os_name == "Linux":
             cmd_result = subprocess.check_output(['journalctl', '-u', 'seestar'])
             zip_file.writestr("service_journal.txt", cmd_result)
-        if os_name == "Darwin" or os_name == "Linux":
-            cmd_result = subprocess.check_output(['pip3', 'freeze'])
-            zip_file.writestr("pip3_info.txt", cmd_result)
-            cmd_result = subprocess.check_output(['python3', '--version'])
+        #if os.path.isdir('.git'):
+        #    cmd_result = subprocess.check_output(['git', 'log', '-n', '1'])
+        #    zip_file.writestr("git_version.txt", cmd_result)
+        path = shutil.which('pip')
+        if path is not None:
+            cmd_result = subprocess.check_output(['pip', 'freeze'])
+            zip_file.writestr("pip_info.txt", cmd_result)
+        else:
+            path = shutil.which('pip3')
+            if path is not None:
+                cmd_result = subprocess.check_output(['pip3', 'freeze'])
+                zip_file.writestr("pip3_info.txt", cmd_result)
+        path = shutil.which('python')
+        if path is not None:
+            cmd_result = subprocess.check_output(['python', '--version'])
             zip_file.writestr("python_version.txt", cmd_result)
-            cmd_result = subprocess.check_output(['env'])
-            zip_file.writestr("env.txt", cmd_result)
-            #if os.path.isdir('.git'):
-            #    cmd_result = subprocess.check_output(['git', 'log', '-n', '1'])
-            #    zip_file.writestr("git_version.txt", cmd_result)
-        # TODO: Add Windows specific things here
+        else:
+            path = shutil.which('python3')
+            if path is not None:
+                cmd_result = subprocess.check_output(['python3', '--version'])
+                zip_file.writestr("python3_version.txt", cmd_result)
+                    
+        env_vars = os.environ
+        env_content = "\n".join(f"{key}={value}" for key, value in env_vars.items())
+        zip_file.writestr("env.txt", env_content)
+                    
 
         if telescope_id in telescope.seestar_logcollector:
             dev_log = telescope.get_seestar_logcollector(telescope_id)
