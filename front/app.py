@@ -33,6 +33,7 @@ import shutil
 from device.seestar_logs import SeestarLogging
 from device.config import Config  # type: ignore
 from device.log import init_logging  # type: ignore
+from device.version import Version # type: ignore
 from device import telescope
 import threading
 
@@ -898,9 +899,12 @@ def render_template(req, resp, template_name, **context):
     resp.status = falcon.HTTP_200
     resp.content_type = 'text/html'
     webui_theme = Config.uitheme
+    version = Version.app_version()
+
     resp.text = template.render(flashed_messages=get_flash_cookie(req, resp),
                                 messages=get_messages(),
                                 webui_theme=webui_theme,
+                                version=version,
                                 **context)
 
 
