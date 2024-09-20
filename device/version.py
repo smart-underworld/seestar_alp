@@ -7,6 +7,8 @@ if getattr(sys, "frozen",  False):
 else:
     search_path = os.path.join(os.path.dirname(__file__))
 
+version = None
+
 class Version:
     # https://stackoverflow.com/questions/14989858/get-the-current-git-hash-in-a-python-script
     # Return the git revision as a string
@@ -36,13 +38,17 @@ class Version:
 
     @staticmethod
     def app_version():
-        path_to_ver = os.path.abspath(os.path.join(search_path, "version.txt"))
-        if not os.path.exists(path_to_ver):
-            return Version.git_version()
-        else:
-            with open(path_to_ver, 'r') as file:
-                return file.read().replace('\n', '')
-
+        global version
+        if version is None:
+            path_to_ver = os.path.abspath(os.path.join(search_path, "version.txt"))
+            if not os.path.exists(path_to_ver):
+                print("XXXX Getting git version")
+                version = Version.git_version()
+            else:
+                print(f"XXXX Found version file: {path_to_ver}")
+                with open(path_to_ver, 'r') as file:
+                    version = file.read().replace('\n', '')
+        return version
 
 
 if __name__ == "__main__":
