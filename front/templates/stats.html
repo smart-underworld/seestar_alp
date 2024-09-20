@@ -10,7 +10,7 @@
 
 	{% if online %}	
 		<div class="container mt-3">
-		
+
 			{% for key, value in stats.items() %}
 				<div class="row border-bottom py-1">
 					{% if key == "Balance Sensor (angle)" %}
@@ -30,9 +30,9 @@
 	{% endif %}
 
 	<footer class="bg-body-tertiary text-center mt-3">
-			Last updated: {{ now }}
+		Version: {{ version }} | Last updated: {{ now }}
 	</footer>
-	
+
 {% endblock %}
 
 {% block html_header %}
