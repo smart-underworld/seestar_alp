@@ -11,11 +11,17 @@ class Seestar_Federation:
     # <ip_address> <port> <device name> <device num>
     def __init__(self, logger, seestar_devices):
         logger.info( "Initialize the new instance of Seestar federation")
-
+        self.is_connected = True
         self.logger = logger
         self.seestar_devices = seestar_devices
         self.schedule = {}
         self.schedule['list'] = []
+
+    def disconnect(self):
+        return
+
+    def reconnect(self):
+        return True
 
     def get_event_state(self, params=None):
         result = {}
