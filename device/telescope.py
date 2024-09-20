@@ -30,6 +30,7 @@ from device.seestar_util import Util    # RWR
 
 seestar_dev = {}
 seestar_imager = {}
+seestar_logcollector = {}
 
 # pylint: disable=no-value-for-parameter
 
