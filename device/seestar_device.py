@@ -284,7 +284,7 @@ class Seestar:
         if params != None and 'event_name' in params:
             event_name = params['event_name']
             if event_name in self.event_state:
-                return {self.event_state[event_name]}
+                return self.event_state[event_name]
             else:
                 return {}
         else:
