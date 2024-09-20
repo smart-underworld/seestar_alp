@@ -383,8 +383,8 @@ def get_device_state(telescope_id):
                 stage = status["View"]["stage"]           
                 if stage == "Stack":
                     if status["View"]["Stack"]["state"] == "working":
-                        target = status.get("View", {}).get("stacked_frame", "")
-                        stacked = status.get("View", {}).get("target_name", "")
+                        target = status.get("View", {}).get("target_name", "")
+                        stacked = status.get("View", {}).get("stacked_frame", "")
                         failed = status.get("View", {}).get("dropped_frame", "")
                  
         # Check for bad data
