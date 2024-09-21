@@ -16,3 +16,4 @@ Flask==3.0.3
 waitress==3.0.0
 Pillow==10.4.0
 pylint==3.2.7
+skyfield==1.49

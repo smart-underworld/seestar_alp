@@ -7,18 +7,24 @@
                 <div class="col">
                     <label for="targetName" class="form-label">Target Name</label>
                     <input type="text" class="form-control" id="targetName" name="targetName"
-                        aria-describedby="targetNameHelp" value="{{ values.target_name }}" required>
+                           aria-describedby="targetNameHelp" value="{{ values.target_name }}" required>
                     <div id="targetNameHelp" class="form-text">Enter a descriptive name for the target. (e.g. ...)</div>
                 </div>
                 <div class="col">
-                    <label for="getSimbad" class="form-label">&nbsp;</label><br>
-                    <button type="button" id="getSimbad" class="btn btn-primary" title="Retreive RA/Dec from Simbad" onclick="fetchSimbad()">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
-                            <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
-                          </svg>                    </button>                    
-                    <div id="targetNameHelp" class="form-text">Enter target name and press</div>
-                    <div id="targetNameHelp" class="form-text">to retreive RA/Dec from Simbad</div>
+                    <div class="d-flex align-items-center"> <!-- Wrap the radio buttons and button in a flex container -->
+                        <input class="form-check-input me-2" type="radio" name="searchFor" id="DS" checked>
+                        <label class="form-check-label" for="DS">Deepsky</label>
+                        <input class="form-check-input mx-2" type="radio" name="searchFor" id="PL">
+                        <label class="form-check-label" for="PL">Planet</label>
+                        <button type="button" id="getSimbad" class="btn btn-primary ms-2" title="Retrieve RA/Dec from Simbad" onclick="fetchCoordinates()">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
+                                <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="form-text">Enter target name, select type, and press the button to retrieve RA/Dec from Simbad / Planet Server.</div>
                 </div>
+            </div>
             </div>
 
             <div class="mb-3 row">
