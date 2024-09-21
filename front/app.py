@@ -135,7 +135,8 @@ def get_context(telescope_id, req):
     root = get_root(telescope_id)
     imager_root = get_imager_root(telescope_id)
     online = check_api_state(telescope_id)
-    partial_path = "/".join(req.relative_uri.split("/", 2)[2:])
+    segments = req.relative_uri.lstrip("/").split("/", 1)
+    partial_path = segments[1] if len(segments) > 1 else segments[0]
     experimental = Config.experimental
     uitheme = Config.uitheme
 
@@ -1909,7 +1910,7 @@ class FrontMain:
         app.add_route('/search', SearchObjectResource())
         app.add_route('/settings', SettingsResource())
         app.add_route('/schedule', ScheduleResource())
-        app.add_route('/schedule/auto-focus', ScheduleResource())
+        app.add_route('/schedule/auto-focus', ScheduleAutoFocusResource())
         app.add_route('/schedule/clear', ScheduleClearResource())
         app.add_route('/schedule/export', ScheduleExportResource())
         app.add_route('/schedule/image', ScheduleImageResource())
