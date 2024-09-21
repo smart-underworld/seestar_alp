@@ -27,6 +27,9 @@ import subprocess
 import platform
 import shutil
 
+
+from skyfield.api import load
+
 # if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
 #    sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
 
@@ -1877,6 +1880,28 @@ class LoggingWSGIRequestHandler(WSGIRequestHandler):
         logger.debug(f'{datetime.now()} {self.client_address[0]} <- {format % args}')
 
 
+class GetPlanetCoordinates():
+    @staticmethod
+    def on_get(req, resp):
+        # Load planetary ephemeris data
+        pDataFile = load('de421.bsp')
+        earth = pDataFile['earth']
+
+        planetName = req.get_param('planetname')
+
+        # Load the current time
+        ts = load.timescale()
+        t = ts.now()
+        # Choose the planet you want to observe
+        planet = pDataFile[planetName]
+        # Calculate the astrometric position
+        astrometric = earth.at(t).observe(planet)
+        ra, dec, distance = astrometric.radec()
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'application/text'
+        resp.text = (f"{ra}, {dec}")
+
+
 class FrontMain:
     def __init__(self):
         self.httpd = None
@@ -1950,6 +1975,7 @@ class FrontMain:
         app.add_route('/updatetwilighttimes', UpdateTwilightTimesResource())
         app.add_route('/getbalancesensor', GetBalanceSensorResource())
         app.add_route('/gensupportbundle', GenSupportBundleResource())
+        app.add_route('/getplanetcoordinates', GetPlanetCoordinates() )
 
         try:
             self.httpd = make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler)
