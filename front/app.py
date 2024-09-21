@@ -101,14 +101,18 @@ def get_telescope(telescope_id):
 
 def get_root(telescope_id):
     if telescope_id:
-        telescopes = get_telescopes()
+        if telescope_id == 0:
+            root = f"/0"
+            return root
+        else:
+            telescopes = get_telescopes()
         # if len(telescopes) == 1:
         #     return ""
 
-        telescope = list(filter(lambda tel: tel['device_num'] == telescope_id, telescopes))[0]
-        if telescope:
-            root = f"/{telescope['device_num']}"
-            return root
+            telescope = list(filter(lambda tel: tel['device_num'] == telescope_id, telescopes))[0]
+            if telescope:
+                root = f"/{telescope['device_num']}"
+                return root
     return ""
 
 
@@ -1056,10 +1060,10 @@ class HomeTelescopeResource:
 
 
 class ImageResource:
-    def on_get(self, req, resp, telescope_id=1):
+    def on_get(self, req, resp, telescope_id=0):
         self.image(req, resp, {}, {}, telescope_id)
 
-    def on_post(self, req, resp, telescope_id=1):
+    def on_post(self, req, resp, telescope_id=0):
         values, errors = do_create_image(req, resp, False, telescope_id)
         self.image(req, resp, values, errors, telescope_id)
 
@@ -1078,11 +1082,11 @@ class ImageResource:
                         action=f"/{telescope_id}/image", **context)
 
 class GotoResource:  
-    def on_get(self, req, resp, telescope_id=1):
+    def on_get(self, req, resp, telescope_id=0):
         values = {}
         self.goto(req, resp, {}, {}, telescope_id)
 
-    def on_post(self, req, resp, telescope_id=1):
+    def on_post(self, req, resp, telescope_id=0):
         values, errors = do_goto_target(req, resp, True, telescope_id)
         self.goto(req, resp, values, errors, telescope_id)
 
@@ -1100,10 +1104,10 @@ class GotoResource:
 
 
 class CommandResource:
-    def on_get(self, req, resp, telescope_id=1):
+    def on_get(self, req, resp, telescope_id=0):
         self.command(req, resp, telescope_id, {})
 
-    def on_post(self, req, resp, telescope_id=1):
+    def on_post(self, req, resp, telescope_id=0):
         output = do_command(req, resp, telescope_id)
         self.command(req, resp, telescope_id, output)
 
@@ -1124,10 +1128,10 @@ class CommandResource:
 
 
 class MosaicResource:
-    def on_get(self, req, resp, telescope_id=1):
+    def on_get(self, req, resp, telescope_id=0):
         self.mosaic(req, resp, {}, {}, telescope_id)
 
-    def on_post(self, req, resp, telescope_id=1):
+    def on_post(self, req, resp, telescope_id=0):
         values, errors = do_create_mosaic(req, resp, False, telescope_id)
         self.mosaic(req, resp, values, errors, telescope_id)
 
@@ -1148,17 +1152,17 @@ class MosaicResource:
 
 class ScheduleResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=0):
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=1):
+    def on_post(req, resp, telescope_id=0):
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
 
 
 class ScheduleListResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=0):
         if check_api_state(telescope_id):
             get_schedule = do_action_device("get_schedule", telescope_id, {})
             current_queue_list = get_queue(telescope_id)
@@ -1180,11 +1184,11 @@ class ScheduleListResource:
 
 class ScheduleWaitUntilResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=0):
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=1):
+    def on_post(req, resp, telescope_id=0):
         waitUntil = req.media["waitUntil"]
         response = do_schedule_action_device("wait_until", {"local_time": waitUntil}, telescope_id)
         logger.info("POST scheduled request %s", response)
@@ -1195,11 +1199,11 @@ class ScheduleWaitUntilResource:
 
 class ScheduleWaitForResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=0):
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_for.html', 'wait-for', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=1):
+    def on_post(req, resp, telescope_id=0):
         waitFor = req.media["waitFor"]
         response = do_schedule_action_device("wait_for", {"timer_sec": int(waitFor)}, telescope_id)
         logger.info("POST scheduled request %s", response)
@@ -1210,11 +1214,11 @@ class ScheduleWaitForResource:
 
 class ScheduleAutoFocusResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=0):
         render_schedule_tab(req, resp, telescope_id, 'schedule_auto_focus.html', 'auto-focus', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=1):
+    def on_post(req, resp, telescope_id=0):
         autoFocus = req.media["autoFocus"]
         response = do_schedule_action_device("auto_focus", {"try_count": int(autoFocus)}, telescope_id)
         logger.info("POST scheduled request %s", response)
@@ -1225,7 +1229,7 @@ class ScheduleAutoFocusResource:
 
 class ScheduleGoOnlineResource:
     @staticmethod
-    def on_post(req, resp, telescope_id=1):
+    def on_post(req, resp, telescope_id=0):
         referer = req.get_header('Referer')
         logger.info(f"Referer: {referer}")
         process_queue(resp, telescope_id)
@@ -1234,33 +1238,33 @@ class ScheduleGoOnlineResource:
 
 class ScheduleImageResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=0):
         render_schedule_tab(req, resp, telescope_id, 'schedule_image.html', 'image', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=1):
+    def on_post(req, resp, telescope_id=0):
         values, errors = do_create_image(req, resp, True, telescope_id)
         render_schedule_tab(req, resp, telescope_id, 'schedule_image.html', 'image', values, errors)
 
 
 class ScheduleMosaicResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=0):
         render_schedule_tab(req, resp, telescope_id, 'schedule_mosaic.html', 'mosaic', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=1):
+    def on_post(req, resp, telescope_id=0):
         values, errors = do_create_mosaic(req, resp, True, telescope_id)
         render_schedule_tab(req, resp, telescope_id, 'schedule_mosaic.html', 'mosaic', values, errors)
 
 
 class ScheduleShutdownResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=0):
         render_schedule_tab(req, resp, telescope_id, 'schedule_shutdown.html', 'shutdown', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=1):
+    def on_post(req, resp, telescope_id=0):
         response = do_schedule_action_device("shutdown", "", telescope_id)
         if check_api_state(telescope_id):
             check_response(resp, response)
@@ -1269,11 +1273,11 @@ class ScheduleShutdownResource:
 
 class ScheduleLpfResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=0):
         render_schedule_tab(req, resp, telescope_id, 'schedule_lpf.html', 'lpf', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=1):
+    def on_post(req, resp, telescope_id=0):
         form = req.media
         useLpfilter = form.get("lpf") == "on"
         if useLpfilter:
@@ -1286,11 +1290,11 @@ class ScheduleLpfResource:
 
 class ScheduleDewHeaterResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=0):
         render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=1):
+    def on_post(req, resp, telescope_id=0):
         form = req.media
         dewHeaterValue = form.get("dewHeaterValue")
 
@@ -1299,10 +1303,10 @@ class ScheduleDewHeaterResource:
 
 
 class ScheduleToggleResource:
-    def on_get(self, req, resp, telescope_id=1):
+    def on_get(self, req, resp, telescope_id=0):
         self.display_state(req, resp, telescope_id)
 
-    def on_post(self, req, resp, telescope_id=1):
+    def on_post(self, req, resp, telescope_id=0):
         current = do_action_device("get_schedule", telescope_id, {})
         state = current["Value"]["state"]
         if state == "Stopped":
@@ -1324,7 +1328,7 @@ class ScheduleToggleResource:
 
 class ScheduleClearResource:
     @staticmethod
-    def on_post(req, resp, telescope_id=1):
+    def on_post(req, resp, telescope_id=0):
         if check_api_state(telescope_id):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
@@ -1346,7 +1350,7 @@ class ScheduleClearResource:
 
 class ScheduleExportResource:
     @staticmethod
-    def on_post(req, resp, telescope_id=1):
+    def on_post(req, resp, telescope_id=0):
         filename = req.media["filename"]
         if filename[-3:] != 'csv':
             filename = f'{filename}.csv'
@@ -1364,7 +1368,7 @@ class ScheduleExportResource:
 
 class ScheduleImportResource:
     @staticmethod
-    def on_post(req, resp, telescope_id=1):
+    def on_post(req, resp, telescope_id=0):
         data = req.get_media()
         for part in data:
             string_data = part.data.decode('utf-8').splitlines()
@@ -1393,7 +1397,7 @@ class LiveModeResource:
         resp.content_type = 'application/text'
         resp.text = 'none'
 
-    def on_post(self, req, resp, telescope_id=1):
+    def on_post(self, req, resp, telescope_id=0):
         mode = req.media["mode"]
         # xxx: If mode is none, need to cancel things
         response = do_action_device("method_async", telescope_id,
@@ -1489,7 +1493,7 @@ class LiveStatusResource:
 
 
 # class LiveStateResource:
-#     def on_get(self, req, resp, telescope_id=1):
+#     def on_get(self, req, resp, telescope_id=0):
 #         resp.content_type = 'text/plain'
 #         resp.stream = status()
 
@@ -1511,10 +1515,10 @@ class SearchObjectResource:
 
 
 class SettingsResource:
-    def on_get(self, req, resp, telescope_id=1):
+    def on_get(self, req, resp, telescope_id=0):
         self.render_settings(req, resp, telescope_id, {})
 
-    def on_post(self, req, resp, telescope_id=1):
+    def on_post(self, req, resp, telescope_id=0):
         PostedSettings = req.media
 
         # Convert the form names back into the required format
@@ -1687,7 +1691,7 @@ class SystemResource:
 
 class SimbadResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=0):
         objName = req.get_param('name')  # get the name to lookup from the request
         try:
             r = requests.get(simbad_url + objName)
@@ -1743,7 +1747,7 @@ class SimbadResource:
 
 class StellariumResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=0):
         try:
             r = requests.get(stellarium_url)
             html_content = r.text
@@ -1788,7 +1792,7 @@ class StellariumResource:
 
 
 class TelescopePositionResource:
-    def on_post(self, req, resp, telescope_id=1):
+    def on_post(self, req, resp, telescope_id=0):
         form = req.media
         # print("position", form)
 
@@ -1897,6 +1901,7 @@ class FrontMain:
         app = falcon.App()
         app.add_route('/', HomeResource())
         app.add_route('/command', CommandResource())
+        app.add_route('/goto', GotoResource())
         app.add_route('/image', ImageResource())
         app.add_route('/live', LivePage())
         app.add_route('/mosaic', MosaicResource())
@@ -1904,6 +1909,7 @@ class FrontMain:
         app.add_route('/search', SearchObjectResource())
         app.add_route('/settings', SettingsResource())
         app.add_route('/schedule', ScheduleResource())
+        app.add_route('/schedule/auto-focus', ScheduleResource())
         app.add_route('/schedule/clear', ScheduleClearResource())
         app.add_route('/schedule/export', ScheduleExportResource())
         app.add_route('/schedule/image', ScheduleImageResource())
@@ -1917,11 +1923,11 @@ class FrontMain:
         app.add_route('/schedule/state', ScheduleToggleResource())
         app.add_route('/schedule/wait-until', ScheduleWaitUntilResource())
         app.add_route('/schedule/wait-for', ScheduleWaitForResource())
-        app.add_route('/schedule/auto-focus', ScheduleAutoFocusResource())
         app.add_route('/stats', StatsResource())
         app.add_route('/support', SupportResource())
         app.add_route('/{telescope_id:int}/', HomeTelescopeResource())
         app.add_route('/{telescope_id:int}/command', CommandResource())
+        app.add_route('/{telescope_id:int}/goto', GotoResource())
         app.add_route('/{telescope_id:int}/image', ImageResource())
         app.add_route('/{telescope_id:int}/live', LivePage())
         app.add_route('/{telescope_id:int}/live/status', LiveStatusResource())
@@ -1950,7 +1956,6 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
         app.add_route('/{telescope_id:int}/stats', StatsResource())
         app.add_route('/{telescope_id:int}/support', SupportResource())
-        app.add_route('/{telescope_id:int}/goto', GotoResource())
         app.add_route('/{telescope_id:int}/system', SystemResource())
         app.add_route('/{telescope_id:int}/gensupportbundle', GenSupportBundleResource())
         app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
