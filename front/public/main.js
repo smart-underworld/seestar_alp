@@ -28,7 +28,7 @@ async function fetchCoordinates() {
             // data should come back in the form of 'ra dec'
             const elements = data.trim().split(/\s+/);
             document.getElementById('ra').value = elements[0];
-            document.getElementById('dec').value = elements[1];pip3 install 
+            document.getElementById('dec').value = elements[1];
             document.getElementById('useLpFilter').checked = false;
             document.getElementById("useJ2000").checked = true;
             if (elements[2] == 'on') 
