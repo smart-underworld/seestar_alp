@@ -806,7 +806,7 @@ def do_command(req, resp, telescope_id):
             output = method_param_sync("scope_get_ra_dec", telescope_id)
             return output
         case "scope_get_track_state":
-            output = method_sync("scope_get_track_state", telescope_id)
+            output = method_param_sync("scope_get_track_state", telescope_id)
             return output
         case _:
             logger.warn("No command found: %s", value)
