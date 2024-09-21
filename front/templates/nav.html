@@ -74,7 +74,7 @@
                                href="/{{ tel["device_num"] }}/{{ partial_path }}">{{ tel["name"] }}
                             ({{ tel["ip_address"] }})</a></li>
                     {% endfor %}
-					{% if partial_path in ["command", "goto", "image", "mosaic", "schedule", "settings"] %}
+					{% if partial_path in ["command", "goto", "image", "mosaic", "settings"] or "schedule" %}
 						<li><a class="dropdown-item" href="/0/{{ partial_path }}">Seestar Federation</a></li>
 					{% endif %}
 							  
