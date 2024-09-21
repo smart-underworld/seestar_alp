@@ -1,6 +1,6 @@
 <ul class="nav nav-pills mb-3" id="actionTab">
     <li class="nav-item" role="presentation">
-        <a href="{{ root }}/{% if telescope["device_num"] == 0 %}0/{% else %}{% endif %}schedule/wait-until"
+        <a href="{{ root }}/schedule/wait-until"
            class="nav-link {% if tab == "wait-until" %}active{% endif %}"
            id="wait-until-tab"
            type="button"
@@ -9,16 +9,16 @@
            aria-selected="false">Wait Until
         </a>
     </li>
-<li class="nav-item" role="presentation">
-    <a href="{{ root }}/{% if telescope["device_num"] == 0 %}0/{% else %}{% endif %}schedule/wait-for"
-       class="nav-link {% if tab == "wait-for" %}active{% endif %}"
-       type="button"
-       aria-controls="wait-for"
-       aria-selected="true">Wait For
-    </a>
-</li>
     <li class="nav-item" role="presentation">
-        <a href="{{ root }}/{% if telescope["device_num"] == 0 %}0/{% else %}{% endif %}schedule/auto-focus"
+        <a href="{{ root }}/schedule/wait-for"
+           class="nav-link {% if tab == "wait-for" %}active{% endif %}"
+           type="button"
+           aria-controls="wait-for"
+           aria-selected="true">Wait For
+        </a>
+    </li>
+    <li class="nav-item" role="presentation">
+        <a href="{{ root }}/schedule/auto-focus"
            class="nav-link {% if tab == "auto-focus" %}active{% endif %}"
            type="button"
            aria-controls="auto-focus"
@@ -26,7 +26,7 @@
         </a>
     </li>
     <li class="nav-item" role="presentation">
-        <a href="{{ root }}/{% if telescope["device_num"] == 0 %}0/{% else %}{% endif %}schedule/image"
+        <a href="{{ root }}/schedule/image"
            class="nav-link {% if tab == "image" %}active{% endif %}"
            type="button"
            aria-controls="image"
@@ -34,7 +34,7 @@
         </a>
     </li>
     <li class="nav-item" role="presentation">
-        <a href="{{ root }}/{% if telescope["device_num"] == 0 %}0/{% else %}{% endif %}schedule/mosaic"
+        <a href="{{ root }}/schedule/mosaic"
            class="nav-link {% if tab == "mosaic" %}active{% endif %}"
            type="button"
            aria-controls="mosaic"
@@ -42,7 +42,7 @@
         </a>
     </li>
     <li class="nav-item" role="presentation">
-        <a href="{{ root }}/{% if telescope["device_num"] == 0 %}0/{% else %}{% endif %}schedule/shutdown"
+        <a href="{{ root }}/schedule/shutdown"
            class="nav-link {% if tab == "shutdown" %}active{% endif %}"
            type="button"
            aria-controls="shutdown"
@@ -50,7 +50,7 @@
         </a>
     </li>
     <li class="nav-item" role="presentation">
-        <a href="{{ root }}/{% if telescope["device_num"] == 0 %}0/{% else %}{% endif %}schedule/lpf"
+        <a href="{{ root }}/schedule/lpf"
            class="nav-link {% if tab == "lpf" %}active{% endif %}"
            type="button"
            aria-controls="lpf"
@@ -58,7 +58,7 @@
         </a>
     </li>
     <li class="nav-item" role="presentation">
-        <a href="{{ root }}/{% if telescope["device_num"] == 0 %}0/{% else %}{% endif %}schedule/dew-heater"
+        <a href="{{ root }}/schedule/dew-heater"
            class="nav-link {% if tab == "dew-heater" %}active{% endif %}"
            type="button"
            aria-controls="dew-heater"
