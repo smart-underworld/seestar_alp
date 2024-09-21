@@ -25,7 +25,6 @@ import re
 import zipfile
 import subprocess
 import platform
-import shutil
 
 # if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
 #    sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
@@ -33,7 +32,6 @@ import shutil
 from device.seestar_logs import SeestarLogging
 from device.config import Config  # type: ignore
 from device.log import init_logging  # type: ignore
-from device.version import Version # type: ignore
 from device import telescope
 import threading
 
@@ -103,18 +101,14 @@ def get_telescope(telescope_id):
 
 def get_root(telescope_id):
     if telescope_id:
-        if telescope_id == 0:
-            root = f"/0"
-            return root
-        else:
-            telescopes = get_telescopes()
+        telescopes = get_telescopes()
         # if len(telescopes) == 1:
         #     return ""
 
-            telescope = list(filter(lambda tel: tel['device_num'] == telescope_id, telescopes))[0]
-            if telescope:
-                root = f"/{telescope['device_num']}"
-                return root
+        telescope = list(filter(lambda tel: tel['device_num'] == telescope_id, telescopes))[0]
+        if telescope:
+            root = f"/{telescope['device_num']}"
+            return root
     return ""
 
 
@@ -137,8 +131,7 @@ def get_context(telescope_id, req):
     root = get_root(telescope_id)
     imager_root = get_imager_root(telescope_id)
     online = check_api_state(telescope_id)
-    segments = req.relative_uri.lstrip("/").split("/", 1)
-    partial_path = segments[1] if len(segments) > 1 else segments[0]
+    partial_path = "/".join(req.relative_uri.split("/", 2)[2:])
     experimental = Config.experimental
     uitheme = Config.uitheme
 
@@ -376,18 +369,10 @@ def method_param_sync(method, param, telescope_id=1):
     # print(f"method_sync {out=}")
 
     if out:
-        if telescope_id == 0:
-            for tel in get_telescopes():
-                devnum = str(tel.get("device_num"))
-                if out["Value"].get(devnum).get("error"):
-                    return out["Value"][devnum]["error"]
-                else:
-                    return out["Value"][devnum]["result"]
+        if out["Value"].get("error"):
+            return out["Value"]["error"]
         else:
-            if out["Value"].get("error"):
-                return out["Value"]["error"]
-            else:
-                return out["Value"]["result"]
+            return out["Value"]["result"]
 
 
 def get_device_state(telescope_id):
@@ -415,9 +400,9 @@ def get_device_state(telescope_id):
                 stage = status["View"]["stage"]           
                 if stage == "Stack":
                     if status["View"]["Stack"]["state"] == "working":
-                        target = status.get("View", {}).get("target_name", "")
-                        stacked = status.get("View", {}).get("stacked_frame", "")
-                        failed = status.get("View", {}).get("dropped_frame", "")
+                        target = status["View"]["target_name"]
+                        stacked = status["View"]["Stack"]["stacked_frame"]
+                        failed = status["View"]["Stack"]["dropped_frame"]
                  
         # Check for bad data
         if status is not None and result is not None:
@@ -836,6 +821,9 @@ def do_command(req, resp, telescope_id):
         case "scope_get_ra_dec":
             output = method_sync("scope_get_ra_dec", telescope_id)
             return output
+        case "scope_get_track_state":
+            output = method_sync("scope_get_track_state", telescope_id)
+            return output
         case _:
             logger.warn("No command found: %s", value)
     # print ("Output: ", output)
@@ -851,16 +839,16 @@ def do_support_bundle(req, telescope_id = 1):
         if pfx == "":
             pfx = "."
         for f in list(pfx.glob("alpyca.log*")):
-            fstr=f.name
+            fstr=str(f)
             logger.debug(f"do_support_bundle: Adding {fstr} to zipfile")
-            with open(str(f), "rb") as fh:
+            with open(str(fstr), "rb") as fh:
                 buf = io.BytesIO(fh.read())
                 zip_file.writestr(fstr, buf.getvalue())
 
         for f in list(pfx.joinpath("device").glob("config.toml*")):
-            fstr=f.name
+            fstr=str(f)
             logger.debug(f"do_support_bundle: Adding {fstr} to zipfile")
-            with open(str(f), "rb") as fh:
+            with open(str(fstr), "rb") as fh:
                 buf = io.BytesIO(fh.read())
                 zip_file.writestr(fstr, buf.getvalue())
 
@@ -872,32 +860,17 @@ def do_support_bundle(req, telescope_id = 1):
         if os_name == "Linux":
             cmd_result = subprocess.check_output(['journalctl', '-u', 'seestar'])
             zip_file.writestr("service_journal.txt", cmd_result)
-        #if os.path.isdir('.git'):
-        #    cmd_result = subprocess.check_output(['git', 'log', '-n', '1'])
-        #    zip_file.writestr("git_version.txt", cmd_result)
-        path = shutil.which('pip')
-        if path is not None:
-            cmd_result = subprocess.check_output(['pip', 'freeze'])
-            zip_file.writestr("pip_info.txt", cmd_result)
-        else:
-            path = shutil.which('pip3')
-            if path is not None:
-                cmd_result = subprocess.check_output(['pip3', 'freeze'])
-                zip_file.writestr("pip3_info.txt", cmd_result)
-        path = shutil.which('python')
-        if path is not None:
-            cmd_result = subprocess.check_output(['python', '--version'])
+        if os_name == "Darwin" or os_name == "Linux":
+            cmd_result = subprocess.check_output(['pip3', 'freeze'])
+            zip_file.writestr("pip3_info.txt", cmd_result)
+            cmd_result = subprocess.check_output(['python3', '--version'])
             zip_file.writestr("python_version.txt", cmd_result)
-        else:
-            path = shutil.which('python3')
-            if path is not None:
-                cmd_result = subprocess.check_output(['python3', '--version'])
-                zip_file.writestr("python3_version.txt", cmd_result)
-                    
-        env_vars = os.environ
-        env_content = "\n".join(f"{key}={value}" for key, value in env_vars.items())
-        zip_file.writestr("env.txt", env_content)
-                    
+            cmd_result = subprocess.check_output(['env'])
+            zip_file.writestr("env.txt", cmd_result)
+            #if os.path.isdir('.git'):
+            #    cmd_result = subprocess.check_output(['git', 'log', '-n', '1'])
+            #    zip_file.writestr("git_version.txt", cmd_result)
+        # TODO: Add Windows specific things here
 
         if telescope_id in telescope.seestar_logcollector:
             dev_log = telescope.get_seestar_logcollector(telescope_id)
@@ -931,12 +904,9 @@ def render_template(req, resp, template_name, **context):
     resp.status = falcon.HTTP_200
     resp.content_type = 'text/html'
     webui_theme = Config.uitheme
-    version = Version.app_version()
-
     resp.text = template.render(flashed_messages=get_flash_cookie(req, resp),
                                 messages=get_messages(),
                                 webui_theme=webui_theme,
-                                version=version,
                                 **context)
 
 
@@ -1078,10 +1048,10 @@ class HomeTelescopeResource:
 
 
 class ImageResource:
-    def on_get(self, req, resp, telescope_id=0):
+    def on_get(self, req, resp, telescope_id=1):
         self.image(req, resp, {}, {}, telescope_id)
 
-    def on_post(self, req, resp, telescope_id=0):
+    def on_post(self, req, resp, telescope_id=1):
         values, errors = do_create_image(req, resp, False, telescope_id)
         self.image(req, resp, values, errors, telescope_id)
 
@@ -1100,11 +1070,11 @@ class ImageResource:
                         action=f"/{telescope_id}/image", **context)
 
 class GotoResource:  
-    def on_get(self, req, resp, telescope_id=0):
+    def on_get(self, req, resp, telescope_id=1):
         values = {}
         self.goto(req, resp, {}, {}, telescope_id)
 
-    def on_post(self, req, resp, telescope_id=0):
+    def on_post(self, req, resp, telescope_id=1):
         values, errors = do_goto_target(req, resp, True, telescope_id)
         self.goto(req, resp, values, errors, telescope_id)
 
@@ -1122,10 +1092,10 @@ class GotoResource:
 
 
 class CommandResource:
-    def on_get(self, req, resp, telescope_id=0):
+    def on_get(self, req, resp, telescope_id=1):
         self.command(req, resp, telescope_id, {})
 
-    def on_post(self, req, resp, telescope_id=0):
+    def on_post(self, req, resp, telescope_id=1):
         output = do_command(req, resp, telescope_id)
         self.command(req, resp, telescope_id, output)
 
@@ -1146,10 +1116,10 @@ class CommandResource:
 
 
 class MosaicResource:
-    def on_get(self, req, resp, telescope_id=0):
+    def on_get(self, req, resp, telescope_id=1):
         self.mosaic(req, resp, {}, {}, telescope_id)
 
-    def on_post(self, req, resp, telescope_id=0):
+    def on_post(self, req, resp, telescope_id=1):
         values, errors = do_create_mosaic(req, resp, False, telescope_id)
         self.mosaic(req, resp, values, errors, telescope_id)
 
@@ -1170,17 +1140,17 @@ class MosaicResource:
 
 class ScheduleResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=0):
+    def on_get(req, resp, telescope_id=1):
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=0):
+    def on_post(req, resp, telescope_id=1):
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
 
 
 class ScheduleListResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=0):
+    def on_get(req, resp, telescope_id=1):
         if check_api_state(telescope_id):
             get_schedule = do_action_device("get_schedule", telescope_id, {})
             current_queue_list = get_queue(telescope_id)
@@ -1202,11 +1172,11 @@ class ScheduleListResource:
 
 class ScheduleWaitUntilResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=0):
+    def on_get(req, resp, telescope_id=1):
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=0):
+    def on_post(req, resp, telescope_id=1):
         waitUntil = req.media["waitUntil"]
         response = do_schedule_action_device("wait_until", {"local_time": waitUntil}, telescope_id)
         logger.info("POST scheduled request %s", response)
@@ -1217,11 +1187,11 @@ class ScheduleWaitUntilResource:
 
 class ScheduleWaitForResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=0):
+    def on_get(req, resp, telescope_id=1):
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_for.html', 'wait-for', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=0):
+    def on_post(req, resp, telescope_id=1):
         waitFor = req.media["waitFor"]
         response = do_schedule_action_device("wait_for", {"timer_sec": int(waitFor)}, telescope_id)
         logger.info("POST scheduled request %s", response)
@@ -1232,11 +1202,11 @@ class ScheduleWaitForResource:
 
 class ScheduleAutoFocusResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=0):
+    def on_get(req, resp, telescope_id=1):
         render_schedule_tab(req, resp, telescope_id, 'schedule_auto_focus.html', 'auto-focus', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=0):
+    def on_post(req, resp, telescope_id=1):
         autoFocus = req.media["autoFocus"]
         response = do_schedule_action_device("auto_focus", {"try_count": int(autoFocus)}, telescope_id)
         logger.info("POST scheduled request %s", response)
@@ -1247,7 +1217,7 @@ class ScheduleAutoFocusResource:
 
 class ScheduleGoOnlineResource:
     @staticmethod
-    def on_post(req, resp, telescope_id=0):
+    def on_post(req, resp, telescope_id=1):
         referer = req.get_header('Referer')
         logger.info(f"Referer: {referer}")
         process_queue(resp, telescope_id)
@@ -1256,33 +1226,33 @@ class ScheduleGoOnlineResource:
 
 class ScheduleImageResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=0):
+    def on_get(req, resp, telescope_id=1):
         render_schedule_tab(req, resp, telescope_id, 'schedule_image.html', 'image', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=0):
+    def on_post(req, resp, telescope_id=1):
         values, errors = do_create_image(req, resp, True, telescope_id)
         render_schedule_tab(req, resp, telescope_id, 'schedule_image.html', 'image', values, errors)
 
 
 class ScheduleMosaicResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=0):
+    def on_get(req, resp, telescope_id=1):
         render_schedule_tab(req, resp, telescope_id, 'schedule_mosaic.html', 'mosaic', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=0):
+    def on_post(req, resp, telescope_id=1):
         values, errors = do_create_mosaic(req, resp, True, telescope_id)
         render_schedule_tab(req, resp, telescope_id, 'schedule_mosaic.html', 'mosaic', values, errors)
 
 
 class ScheduleShutdownResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=0):
+    def on_get(req, resp, telescope_id=1):
         render_schedule_tab(req, resp, telescope_id, 'schedule_shutdown.html', 'shutdown', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=0):
+    def on_post(req, resp, telescope_id=1):
         response = do_schedule_action_device("shutdown", "", telescope_id)
         if check_api_state(telescope_id):
             check_response(resp, response)
@@ -1291,11 +1261,11 @@ class ScheduleShutdownResource:
 
 class ScheduleLpfResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=0):
+    def on_get(req, resp, telescope_id=1):
         render_schedule_tab(req, resp, telescope_id, 'schedule_lpf.html', 'lpf', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=0):
+    def on_post(req, resp, telescope_id=1):
         form = req.media
         useLpfilter = form.get("lpf") == "on"
         if useLpfilter:
@@ -1308,11 +1278,11 @@ class ScheduleLpfResource:
 
 class ScheduleDewHeaterResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=0):
+    def on_get(req, resp, telescope_id=1):
         render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', {}, {})
 
     @staticmethod
-    def on_post(req, resp, telescope_id=0):
+    def on_post(req, resp, telescope_id=1):
         form = req.media
         dewHeaterValue = form.get("dewHeaterValue")
 
@@ -1321,10 +1291,10 @@ class ScheduleDewHeaterResource:
 
 
 class ScheduleToggleResource:
-    def on_get(self, req, resp, telescope_id=0):
+    def on_get(self, req, resp, telescope_id=1):
         self.display_state(req, resp, telescope_id)
 
-    def on_post(self, req, resp, telescope_id=0):
+    def on_post(self, req, resp, telescope_id=1):
         current = do_action_device("get_schedule", telescope_id, {})
         state = current["Value"]["state"]
         if state == "Stopped":
@@ -1346,7 +1316,7 @@ class ScheduleToggleResource:
 
 class ScheduleClearResource:
     @staticmethod
-    def on_post(req, resp, telescope_id=0):
+    def on_post(req, resp, telescope_id=1):
         if check_api_state(telescope_id):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
@@ -1368,7 +1338,7 @@ class ScheduleClearResource:
 
 class ScheduleExportResource:
     @staticmethod
-    def on_post(req, resp, telescope_id=0):
+    def on_post(req, resp, telescope_id=1):
         filename = req.media["filename"]
         if filename[-3:] != 'csv':
             filename = f'{filename}.csv'
@@ -1386,7 +1356,7 @@ class ScheduleExportResource:
 
 class ScheduleImportResource:
     @staticmethod
-    def on_post(req, resp, telescope_id=0):
+    def on_post(req, resp, telescope_id=1):
         data = req.get_media()
         for part in data:
             string_data = part.data.decode('utf-8').splitlines()
@@ -1415,7 +1385,7 @@ class LiveModeResource:
         resp.content_type = 'application/text'
         resp.text = 'none'
 
-    def on_post(self, req, resp, telescope_id=0):
+    def on_post(self, req, resp, telescope_id=1):
         mode = req.media["mode"]
         # xxx: If mode is none, need to cancel things
         response = do_action_device("method_async", telescope_id,
@@ -1511,7 +1481,7 @@ class LiveStatusResource:
 
 
 # class LiveStateResource:
-#     def on_get(self, req, resp, telescope_id=0):
+#     def on_get(self, req, resp, telescope_id=1):
 #         resp.content_type = 'text/plain'
 #         resp.stream = status()
 
@@ -1533,10 +1503,10 @@ class SearchObjectResource:
 
 
 class SettingsResource:
-    def on_get(self, req, resp, telescope_id=0):
+    def on_get(self, req, resp, telescope_id=1):
         self.render_settings(req, resp, telescope_id, {})
 
-    def on_post(self, req, resp, telescope_id=0):
+    def on_post(self, req, resp, telescope_id=1):
         PostedSettings = req.media
 
         # Convert the form names back into the required format
@@ -1709,7 +1679,7 @@ class SystemResource:
 
 class SimbadResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=0):
+    def on_get(req, resp, telescope_id=1):
         objName = req.get_param('name')  # get the name to lookup from the request
         try:
             r = requests.get(simbad_url + objName)
@@ -1765,7 +1735,7 @@ class SimbadResource:
 
 class StellariumResource:
     @staticmethod
-    def on_get(req, resp, telescope_id=0):
+    def on_get(req, resp, telescope_id=1):
         try:
             r = requests.get(stellarium_url)
             html_content = r.text
@@ -1810,7 +1780,7 @@ class StellariumResource:
 
 
 class TelescopePositionResource:
-    def on_post(self, req, resp, telescope_id=0):
+    def on_post(self, req, resp, telescope_id=1):
         form = req.media
         # print("position", form)
 
@@ -1919,7 +1889,6 @@ class FrontMain:
         app = falcon.App()
         app.add_route('/', HomeResource())
         app.add_route('/command', CommandResource())
-        app.add_route('/goto', GotoResource())
         app.add_route('/image', ImageResource())
         app.add_route('/live', LivePage())
         app.add_route('/mosaic', MosaicResource())
@@ -1927,7 +1896,6 @@ class FrontMain:
         app.add_route('/search', SearchObjectResource())
         app.add_route('/settings', SettingsResource())
         app.add_route('/schedule', ScheduleResource())
-        app.add_route('/schedule/auto-focus', ScheduleAutoFocusResource())
         app.add_route('/schedule/clear', ScheduleClearResource())
         app.add_route('/schedule/export', ScheduleExportResource())
         app.add_route('/schedule/image', ScheduleImageResource())
@@ -1941,11 +1909,11 @@ class FrontMain:
         app.add_route('/schedule/state', ScheduleToggleResource())
         app.add_route('/schedule/wait-until', ScheduleWaitUntilResource())
         app.add_route('/schedule/wait-for', ScheduleWaitForResource())
+        app.add_route('/schedule/auto-focus', ScheduleAutoFocusResource())
         app.add_route('/stats', StatsResource())
         app.add_route('/support', SupportResource())
         app.add_route('/{telescope_id:int}/', HomeTelescopeResource())
         app.add_route('/{telescope_id:int}/command', CommandResource())
-        app.add_route('/{telescope_id:int}/goto', GotoResource())
         app.add_route('/{telescope_id:int}/image', ImageResource())
         app.add_route('/{telescope_id:int}/live', LivePage())
         app.add_route('/{telescope_id:int}/live/status', LiveStatusResource())
@@ -1974,6 +1942,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
         app.add_route('/{telescope_id:int}/stats', StatsResource())
         app.add_route('/{telescope_id:int}/support', SupportResource())
+        app.add_route('/{telescope_id:int}/goto', GotoResource())
         app.add_route('/{telescope_id:int}/system', SystemResource())
         app.add_route('/{telescope_id:int}/gensupportbundle', GenSupportBundleResource())
         app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
