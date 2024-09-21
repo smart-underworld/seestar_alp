@@ -369,10 +369,18 @@ def method_param_sync(method, param, telescope_id=1):
     # print(f"method_sync {out=}")
 
     if out:
-        if out["Value"].get("error"):
-            return out["Value"]["error"]
+        if telescope_id == 0:
+            for tel in get_telescopes():
+                devnum = str(tel.get("device_num"))
+                if out["Value"].get(devnum).get("error"):
+                    return out["Value"][devnum]["error"]
+                else:
+                    return out["Value"][devnum]["result"]
         else:
-            return out["Value"]["result"]
+            if out["Value"].get("error"):
+                return out["Value"]["error"]
+            else:
+                return out["Value"]["result"]
 
 
 def get_device_state(telescope_id):
