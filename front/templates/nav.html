@@ -30,9 +30,6 @@
                 <li class="nav-item">
                     <a class="nav-link" href="{{ root }}/command">Commands</a>
                 </li>
-                {#            <li class="nav-item">#}
-                {#              <a class="nav-link" href="/settings">Settings</a>#}
-                {#            </li>#}
                 <li class="nav-item">
                     <a class="nav-link" href="{{ root }}/stats">Stats</a>
                 </li>
@@ -68,9 +65,8 @@
                   </div>
             </div>
             <div class="dropdown">
-                <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown"
-                        aria-expanded="false">
-                    {{ telescope["name"] }} ({{ telescope["ip_address"] }})
+				<button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+						{{ telescope["name"] }} ({{ telescope["ip_address"] }})
                 </button>
                 <ul class="dropdown-menu">
                     {% for tel in telescopes %}
@@ -78,6 +74,10 @@
                                href="/{{ tel["device_num"] }}/{{ partial_path }}">{{ tel["name"] }}
                             ({{ tel["ip_address"] }})</a></li>
                     {% endfor %}
+					{% if partial_path in ["command", "goto", "image", "mosaic", "settings"] or "schedule" %}
+						<li><a class="dropdown-item" href="/0/{{ partial_path }}">Seestar Federation</a></li>
+					{% endif %}
+							  
                 </ul>
             </div>
         </div>

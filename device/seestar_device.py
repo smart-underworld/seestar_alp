@@ -67,6 +67,7 @@ class Seestar:
         self.connect_count = 0
         self.below_horizon_dec_offset = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
         self.view_state = {}
+        self.event_state = {}
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
@@ -214,8 +215,8 @@ class Seestar:
                             self.logger.info(f'{self.device_name} received : {data}')
                         else:
                             self.logger.debug(f'{self.device_name} received : {data}')
-
                         event_name = parsed_data['Event']
+                        self.event_state[event_name] = parsed_data
                         if event_name == self.op_watch:  # "AutoGoto" or "AutoFocus"
                             state = parsed_data['state']
                             self.logger.info(f'{self.device_name} state {self.op_watch} : {state}')
@@ -279,6 +280,17 @@ class Seestar:
         self.logger.debug(f'{self.device_name} response is {self.response_dict[cur_cmdid]}')
         return self.response_dict[cur_cmdid]
 
+    def get_event_state(self, params=None):
+        if params != None and 'event_name' in params:
+            event_name = params['event_name']
+            if event_name in self.event_state:
+                return self.event_state[event_name]
+            else:
+                return {}
+        else:
+            return self.event_state
+
+        
     def set_setting(self, x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance):
         # TODO:
         #   heater_enable failed. 
@@ -287,14 +299,16 @@ class Seestar:
         data = {"method": "set_setting", "params": {"exp_ms": {"stack_l": x_stack_l, "continuous": x_continuous},
                                                     "stack_dither": {"pix": d_pix, "interval": d_interval,
                                                                      "enable": d_enable}, "stack_lenhance": l_enhance}}
-        self.send_message_param(data)
+        result = self.send_message_param_sync(data)
         time.sleep(2)  # to wait for filter change
+        return result
 
     def stop_goto_target(self):
         if self.goto_state == "working":
             if self.below_horizon_dec_offset == 0:
-                self.stop_slew()
+                return self.stop_slew()
             self.op_state = "fail"
+        return "no action taken"
 
     def is_goto(self):
         result = self.send_message_param_sync({"method": "iscope_get_app_state"})
@@ -329,10 +343,10 @@ class Seestar:
             params['lp_filter'] = False
             data['params'] = params
             self.actual_dec = in_dec
-            self.send_message_param(data)
+            return self.send_message_param_sync(data)
         else:
             # do the same, but when trying to center on target, need to implement ourselves to platesolve correctly to compensate for the dec offset
-            self.goto_target_with_dec_offset_async(params)
+            return self.goto_target_with_dec_offset_async(params)
 
     # {"method":"scope_goto","params":[1.2345,75.0]}
     def slew_to_ra_dec(self, params):
@@ -377,7 +391,7 @@ class Seestar:
                 self.sync_target([self.ra, old_dec])
                 self.logger.info(result)
                 self.logger.info("Failed to set dec offset. Move the mount up first?")
-                return result
+            return result
 
     def sync_target(self, params):
         in_ra = params[0]
@@ -402,7 +416,7 @@ class Seestar:
         params = {}
         params['stage'] = 'AutoGoto'
         data['params'] = params
-        self.send_message_param(data)
+        return self.send_message_param_sync(data)
         # TODO: need to handle this for our custom goto for below horizon too
 
     # {"method":"scope_speed_move","params":{"speed":4000,"angle":270,"dur_sec":10}}
@@ -442,10 +456,12 @@ class Seestar:
 
         if result == True:
             self.logger.info("%s: Auto focus completed!", self.device_name)
-            return True
+
         else:
             self.logger.error("%s: Auto focus failed!", self.device_name)
-            return False
+
+        time.sleep(3)
+        return result
 
     def stop_stack(self):
         self.logger.info("%s: stop stacking...", self.device_name)
@@ -454,7 +470,7 @@ class Seestar:
         params = {}
         params['stage'] = 'Stack'
         data['params'] = params
-        self.send_message_param(data)
+        return self.send_message_param_sync(data)
 
     def play_sound(self, in_sound_id: int):
         self.logger.info("%s: playing sound...", self.device_name)
@@ -463,8 +479,9 @@ class Seestar:
         params = {}
         params['num'] = in_sound_id
         req['params'] = params
-        self.send_message_param(req)
+        result = self.send_message_param_sync(req)
         time.sleep(1)
+        return result
 
     # {"target_name":"test_target","ra":1.234, "dec":-12.34}
     # take into account self.below_horizon_dec_offset for platesolving, using low level move and custom plate solving logic
@@ -593,7 +610,7 @@ class Seestar:
         self.logger.info("finished moving scope to requested position.")
 
     def action_set_dew_heater(self, params):
-        self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
+        return self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
         
     def action_start_up_sequence(self, params):
         self.logger.info("start up sequence begins ...")
@@ -615,18 +632,23 @@ class Seestar:
         loc_data = {}
         loc_param = {}
         # special loc for south pole: (-90, 0)
-        if Config.init_lat == 0 and Config.init_long == 0:
-        #if params['lat'] == 0 and params['lon'] == 0:  # special case of (0,0,) will use the ip address to estimate the location
-            coordinates = Util.get_current_gps_coordinates()
-            if coordinates is not None:
-                latitude, longitude = coordinates
-                self.logger.info(f"Your current GPS coordinates are:")
-                self.logger.info(f"Latitude: {latitude}")
-                self.logger.info(f"Longitude: {longitude}")
-                Config.init_lat = latitude
-                Config.init_long = longitude
-        loc_param['lon'] = Config.init_long
-        loc_param['lat'] = Config.init_lat
+        if ('lat' not in params or 'lon' not in params) or (params['lat'] == 0 and params['lon'] == 0):  # special case of (0,0,) will use the ip address to estimate the location
+            if Config.init_lat == 0 and Config.init_long == 0:
+                coordinates = Util.get_current_gps_coordinates()
+                if coordinates is not None:
+                    latitude, longitude = coordinates
+                    self.logger.info(f"Your current GPS coordinates are:")
+                    self.logger.info(f"Latitude: {latitude}")
+                    self.logger.info(f"Longitude: {longitude}")
+                    Config.init_lat = latitude
+                    Config.init_long = longitude
+            loc_param['lat'] = Config.init_lat
+            loc_param['lon'] = Config.init_long
+        else:
+            loc_param['lat'] = params['lat']   
+            loc_param['lon'] = params['lon']
+        self.logger.info(f"Setting location to {loc_param['lat']}, {loc_param['lon']}")
+        
         loc_param['force'] = False
         loc_data['method'] = 'set_user_location'
         loc_data['params'] = loc_param
@@ -654,6 +676,7 @@ class Seestar:
         # move 10 degrees from polaris
         move_up_dec_thread = threading.Thread(target=lambda: self.move_up_rotate_thread_fn(Config.init_scope_aim_up_time_s, Config.init_scope_aim_clockwise_time_s))
         move_up_dec_thread.start()
+        return "sequence started"
 
     # {"method":"set_sequence_setting","params":[{"group_name":"Kai_goto_target_name"}]}
     def set_target_name(self, name):
@@ -662,7 +685,7 @@ class Seestar:
         params = {}
         params['group_name'] = name
         req['params'] = [params]
-        self.send_message_param_sync(req)
+        return self.send_message_param_sync(req)
 
     def spectra_thread_fn(self, params):
 
@@ -743,6 +766,7 @@ class Seestar:
         self.scheduler_item_state = "Running"
         self.mosaic_thread = threading.Thread(target=lambda: self.spectra_thread_fn(params))
         self.mosaic_thread.start()
+        return "spectra mosiac started"
 
     def mosaic_thread_fn(self, target_name, center_RA, center_Dec, is_use_LP_filter, session_time, nRA, nDec,
                          overlap_percent, gain, is_use_autofocus, selected_panels):
@@ -943,7 +967,7 @@ class Seestar:
         schedule_item['params'] = params
         self.add_schedule_item(schedule_item)
         self.start_scheduler()
-        return "Mosaic started."
+        return self.schedule
 
     # shortcut to start a new scheduler with only a spectra request
     def start_spectra(self, params):
@@ -955,6 +979,7 @@ class Seestar:
         schedule_item['params'] = params
         self.add_schedule_item(schedule_item)
         self.start_scheduler()
+        return "spectra acquistion started"
 
     def start_scheduler(self):
         if self.scheduler_state != "Stopped":
@@ -962,7 +987,9 @@ class Seestar:
         self.scheduler_thread = threading.Thread(target=lambda: self.scheduler_thread_fn(), daemon=True)
         self.scheduler_thread.name = f"SchedulerThread.{self.device_name}"
         self.scheduler_thread.start()
-        return "Scheduler started"
+        self.scheduler_state = "Running"
+        self.schedule['state'] = self.scheduler_state
+        return self.schedule
 
     def scheduler_thread_fn(self):
         def update_time():
@@ -1030,9 +1057,11 @@ class Seestar:
             self.stop_slew()
             self.stop_stack()
             self.play_sound(83)
+            return "scheduler stopped"
         else:
             self.scheduler_state = "Stopping"
             self.logger.info("Scheduler is not running while trying to stop!")
+            return "scheduler requested to stop"
 
     def wait_end_op(self, in_op_name):
         self.op_watch = in_op_name

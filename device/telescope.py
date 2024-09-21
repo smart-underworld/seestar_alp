@@ -21,6 +21,7 @@ from device.shr import PropertyResponse, MethodResponse, PreProcessRequest, \
                 get_request_field, to_bool
 from device.exceptions import *        # Nothing but exception classes
 from device.seestar_device import Seestar
+from seestar_federation import Seestar_Federation
 from alpaca.telescope import *
 import json
 from device.seestar_util import Util    # RWR
@@ -62,6 +63,10 @@ class TelescopeMetadata:
 
 
 # At app init not import :-)
+def start_seestar_federation(logger: logger): # type: ignore
+    global seestar_federation
+    seestar_federation = Seestar_Federation(logger, seestar_dev)
+
 def start_seestar_device(logger: logger, name: str, ip_address: str, port: int, device_num: int): # type: ignore
     # logger = logger
     global seestar_dev
@@ -120,20 +125,27 @@ def get_seestar_logcollector(device_num: int):
 @before(PreProcessRequest(maxdev))
 class action:
     def on_put(self, req: Request, resp: Response, devnum: int):
-        if devnum not in seestar_dev or not seestar_dev[devnum].is_connected:
+        action_name = get_request_field('Action', req)      # Raises 400 bad request if missing
+        parameters = get_request_field('Parameters', req)
+        if devnum == 0:
+            cur_dev = seestar_federation
+        elif devnum not in seestar_dev or not seestar_dev[devnum].is_connected:
             err = DevNotConnectedException("device not connected.")
             resp.text = PropertyResponse(None, req, err).json
             return
-        cur_dev = seestar_dev[devnum]
-        action_name = get_request_field('Action', req)      # Raises 400 bad request if missing
-        parameters = get_request_field('Parameters', req)
+        else:
+            cur_dev = seestar_dev[devnum]
+
 
         try:
             params = json.loads(parameters)
             # print(f'Received request: Action {action_name} with params {params}')
-            if action_name == "play_sound":
-                cur_dev.play_sound(params['id'])
-                resp.text = MethodResponse(req).json
+            if action_name == "get_event_state":
+                result = cur_dev.get_event_state(params)
+                resp.text = MethodResponse(req, value = result).json
+            elif action_name == "play_sound":
+                result = cur_dev.play_sound(params['id'])
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "method_sync":
                 result = cur_dev.send_message_param_sync(params)
                 if params["method"] == 'pi_shutdown': 
@@ -143,23 +155,25 @@ class action:
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "method_async":
                 result = cur_dev.send_message_param(params)
-                resp.text = MethodResponse(req).json
+                resp.text = MethodResponse(req, value="async request sent.").json
             elif action_name == "start_stack":
-                cur_dev.start_stack(params)
-                resp.text = MethodResponse(req).json
+                result = cur_dev.start_stack(params)
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "start_mosaic":
                 result = cur_dev.start_mosaic(params)
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "goto_target":
                 result = cur_dev.goto_target(params)
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "scope_stop_goto_auto_center":
                 result = cur_dev.stop_goto_target()
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "set_below_horizon_dec_offset":
                 result = cur_dev.set_below_horizon_dec_offset(params['offset'])
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "start_spectra":
                 result = cur_dev.start_spectra(params)
-                resp.text = MethodResponse(req).json
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "get_schedule":
                 result = cur_dev.get_schedule()
                 resp.text = MethodResponse(req, value = result).json
@@ -176,11 +190,11 @@ class action:
                 result = cur_dev.stop_scheduler()
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "action_start_up_sequence":
-                cur_dev.action_start_up_sequence(params)
-                resp.text = MethodResponse(req).json
+                result = cur_dev.action_start_up_sequence(params)
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "action_set_dew_heater":
-                cur_dev.action_set_dew_heater(params)
-                resp.text = MethodResponse(req).json
+                result = cur_dev.action_set_dew_heater(params)
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "get_last_image":
                 redirect_url = cur_dev.get_last_image(params)
                 resp.text = MethodResponse(req, value = redirect_url).json   
