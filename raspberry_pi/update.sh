@@ -39,9 +39,6 @@ fi
 
 cd ${src_home}
 
-user=$(whoami)
-group=$(id -gn)
-sudo chown ${user}:${group} ./logs/*
 if [ ! -e device/config.toml ]; then
   cp device/config.toml.example device/config.toml
   sed -i -e 's/127.0.0.1/0.0.0.0/g' device/config.toml
@@ -89,7 +86,6 @@ cd raspberry_pi
 
 cat systemd/seestar.service | sed \
   -e "s|/home/.*/seestar_alp|$src_home|g" \
-  -e "s|^User=.*|User=${user}|g" \
   -e "s|^ExecStart=.*|ExecStart=$HOME/.pyenv/versions/ssc-3.12.5/bin/python3 $src_home/root_app.py|" > /tmp/seestar.service
 sudo chown root:root /tmp/seestar*.service
 
