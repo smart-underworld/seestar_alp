@@ -123,6 +123,16 @@
                     </label>
                 </div>
             </div>
+			{% if telescope["device_num"] == 0 %}
+				<div class="mb-3">
+					<div class="form-check">
+						<input class="form-check-input" type="checkbox" id="array_mode" name="array_mode" value="split">
+						<label class="form-check-label" for="array_mode">
+							Split Mosaic Across Multiple Seestar?
+						</label>
+					</div>
+				</div>
+			{% endif %}
         </div>
     </div>
 
