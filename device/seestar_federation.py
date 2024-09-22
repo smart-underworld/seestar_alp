@@ -126,37 +126,28 @@ class Seestar_Federation:
         return result
     
     def get_schedule(self):
-        connected_device_list = []
-        self.schedule['comment'] = 'Test comment'
-        self.schedule['state'] = 'Stopped'
-        num_connected = 0
+        result = {}
+        result['device'] = {}
+        availiable_device_list = []
+
         for key in self.seestar_devices:
             cur_device = self.seestar_devices[key]
             if cur_device.is_connected:
-                connected_device_list.append(key)
-                num_connected = num_connected + 1
-                if cur_device.get_schedule()['state'] == "Running" and cur_device.get_schedule()['state'] != "Stopping":
-                    self.schedule['state'] = "Running"
-                elif cur_device.get_schedule()['state'] == "Stopping":
-                    self.schedule['state'] = "Stopping"
-        self.schedule['connected_device_list'] = connected_device_list
-        if num_connected == 0:
-            self.schedule['comment'] = 'No connected devices.'
-        return self.schedule
+                device_schedule = cur_device.get_schedule()
+                if device_schedule['state'] == "Stopped":
+                    availiable_device_list.append(key)
+                result['device'][key] = device_schedule
+        result['schedule'] = self.schedule
+        result['available_device_list'] = availiable_device_list
+        result['comment'] = 'Test comment'
+        return result
 
     def create_schedule(self):
-        cur_schedule = self.get_schedule()
-        if cur_schedule['state'] != "Stopped":
-            return "scheduler is still active"
         self.schedule = {}
-        self.schedule['state'] = "Stopped"
         self.schedule['list'] = []
         return self.schedule
 
     def add_schedule_item(self, params):
-        cur_schedule = self.get_schedule()
-        if cur_schedule['state'] != "Stopped":
-            return "scheduler is still active"
         if params['action'] == 'start_mosaic':
             mosaic_params = params['params']
             if isinstance(mosaic_params['ra'], str):
@@ -165,14 +156,8 @@ class Seestar_Federation:
                 mosaic_params['dec'] = Util.trim_seconds(mosaic_params['dec'])
             elif isinstance(mosaic_params['ra'], float):
                 if mosaic_params['ra'] < 0:
-                    # get the location from first connected device
-                    if len(cur_schedule["connected_device_list"]) == 0:
-                        self.logger.warn("cannot get the location because no connected devices were found.")
-                        return "cannot get the location because no connected devices were found."
-                    first_device = self.seestar_devices[cur_schedule["connected_device_list"][0]]
-                    mosaic_params['ra'] = first_device.ra
-                    mosaic_params['dec'] = first_device.dec
-                    mosaic_params['is_j2000'] = False
+                    self.logger.warn("Failed. Must specify an proper coordinate for a federated schedule.")
+                    return "Failed. Must specify an proper coordinate for a federated schedule."
                 mosaic_params['ra'] = round(mosaic_params['ra'], 4)
                 mosaic_params['dec'] = round(mosaic_params['dec'], 4)                
                 
@@ -220,22 +205,9 @@ class Seestar_Federation:
     # shortcut to start a new scheduler with only a mosaic request
     def start_mosaic(self, cur_params):
         cur_schedule = self.get_schedule()
-        num_devices = len(cur_schedule["connected_device_list"])
+        num_devices = len(cur_schedule["available_device_list"])
         if num_devices < 1:
-            return "Failed: No connected devices found to perform operation"
-        elif cur_schedule['state'] != "Stopped":
-            return "Failed: At least one device is still running a schedule."
-
-        if num_devices  == 1 or 'array_mode' not in cur_params or cur_params['array_mode'] != 'split' or (cur_params['ra_num']==1 and cur_params['dec_num']==1):
-            for key in self.seestar_devices:
-                cur_device = self.seestar_devices[key]
-                if cur_device.is_connected:
-                    cur_schedule[key] = cur_device.start_mosaic(cur_params)
-            self.logger.info("started {num_devices} devices for cloned mosaics.")
-            return cur_schedule
-
-        # remaining case of a split mosaic across multiple devices
-        section_dict = self.get_section_array_for_mosaic(cur_schedule["connected_device_list"], cur_params)
+            return "Failed: No available devices found to execute a schedule."
 
         self.schedule = {}
         self.schedule['list'] = []
@@ -243,36 +215,27 @@ class Seestar_Federation:
         schedule_item['action'] = "start_mosaic"
         schedule_item['params'] = cur_params
         self.add_schedule_item(schedule_item)
-
-        self.schedule['device'] = {}
-        for key in section_dict:
-            cur_device = self.seestar_devices[key]
-            # start the mosaic for this device only if it is connected and has been assigned a set of selected panels 
-            if cur_device.is_connected:
-                new_params = cur_params.copy()
-                new_params['selected_panels'] = section_dict[key]
-                self.schedule['device'][key] = cur_device.start_mosaic(new_params)
-        self.logger.info(f"started {num_devices} devices for split mosaics.")
-        self.schedule['state'] = "Running"
-        return self.schedule
+        return self.start_scheduler()
 
     def start_scheduler(self):
         root_schedule = self.get_schedule()
-        num_devices = len(root_schedule["connected_device_list"])
+        available_devices = root_schedule["available_device_list"]
+        num_devices = len(available_devices)
         if num_devices < 1:
-            return "Failed: No connected devices found to perform operation"
-        elif root_schedule['state'] != "Stopped":
-            return "Failed: At least one device is still running a schedule."
-
-        for key in root_schedule["connected_device_list"]:
+            return "Failed: No available devices found to execute a schedule."
+        if len(self.schedule['list']) == 0:
+            return "Failed: The schedule is empty."
+        
+        for key in available_devices:
             cur_device = self.seestar_devices[key]
             cur_device.create_schedule()
 
-        for schedule_item in root_schedule['list']:
+
+        for schedule_item in self.schedule['list']:
             if schedule_item['action'] == "start_mosaic":
                 cur_params = schedule_item['params']
                 if num_devices  == 1 or 'array_mode' not in cur_params or cur_params['array_mode'] != 'split' or (cur_params['ra_num']==1 and cur_params['dec_num']==1):
-                    for key in root_schedule["connected_device_list"]:
+                    for key in root_schedule["available_device_list"]:
                         cur_device = self.seestar_devices[key]
                         new_item = {}
                         new_item['action'] = "start_mosaic"
@@ -281,7 +244,7 @@ class Seestar_Federation:
                         new_item['id'] = str(uuid.uuid4())
                         cur_device.schedule['list'].append(new_item)
                 else:
-                    section_dict = self.get_section_array_for_mosaic(root_schedule["connected_device_list"], cur_params)
+                    section_dict = self.get_section_array_for_mosaic(root_schedule["available_device_list"], cur_params)
                     for key in section_dict:
                         cur_device = self.seestar_devices[key]
                         new_item = {}
@@ -293,7 +256,7 @@ class Seestar_Federation:
                         cur_device.schedule['list'].append(new_item)
 
             else:
-                for key in root_schedule["connected_device_list"]:
+                for key in root_schedule["available_device_list"]:
                     cur_device = self.seestar_devices[key]
                     new_item = {}
                     new_item['action'] = schedule_item['action']
@@ -302,13 +265,11 @@ class Seestar_Federation:
                     new_item['id'] = str(uuid.uuid4())
                     cur_device.schedule['list'].append(new_item)
 
-        root_schedule['device'] = {}
-        for key in root_schedule["connected_device_list"]:
+        for key in root_schedule["available_device_list"]:
             cur_device = self.seestar_devices[key]
-            root_schedule['device'][key] = cur_device.start_scheduler()
+            cur_device.start_scheduler()
 
-        self.schedule['state'] = "Running"
-        return root_schedule
+        return self.get_schedule()
 
     def stop_scheduler(self):
         result = {}
