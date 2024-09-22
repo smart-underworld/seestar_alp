@@ -10,18 +10,22 @@
 
 	{% if online %}	
 		<div class="container mt-3">
-		
-			{% for key, value in stats.items() %}
-				<div class="row border-bottom py-1">
-					{% if key == "Balance Sensor (angle)" %}
-						<div class="col fw-bold"><p>{{ key }}</p></div>
-						<div class="col"><p class="text-end">{{ value }}</p><p>{% include 'partials/bubble_level.html' with context %}</p></div>
-					{% else %}
-						<div class="col fw-bold"><p>{{ key }}</p></div>
-						<div class="col"><p class="text-end">{{ value }}</p></div>
-					{% endif %}
-				</div>
-			{% endfor %}
+			{% if stats %}
+				{% for key, value in stats.items() %}
+					<div class="row border-bottom py-1">
+						{% if key == "Balance Sensor (angle)" %}
+							<div class="col fw-bold"><p>{{ key }}</p></div>
+							<div class="col"><p class="text-end">{{ value }}</p><p>{% include 'partials/bubble_level.html' with context %}</p></div>
+						{% else %}
+							<div class="col fw-bold"><p>{{ key }}</p></div>
+							<div class="col"><p class="text-end">{{ value }}</p></div>
+						{% endif %}
+					</div>
+				{% endfor %}
+			{% else %}
+				<div class="mb-3">
+					<p>You have the Seestar Federation Device selected. Please select an actual telescope from the dropdown.</p>
+			{% endif %}
 		</div>
 	{% else %}
 		<div class="container mt-3">
