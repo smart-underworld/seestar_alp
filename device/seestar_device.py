@@ -281,6 +281,7 @@ class Seestar:
         return self.response_dict[cur_cmdid]
 
     def get_event_state(self, params=None):
+        self.event_state['Scheduler'] = self.scheduler_state
         if params != None and 'event_name' in params:
             event_name = params['event_name']
             if event_name in self.event_state:
