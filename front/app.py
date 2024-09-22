@@ -1733,51 +1733,83 @@ class SimbadResource:
         resp.text = ra_dec_j2000
         return
 
-
 class StellariumResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
         try:
-            r = requests.get(stellarium_url)
+            r = requests.get(stellarium_url + '?format=json')
             html_content = r.text
         except:
             resp.status = falcon.HTTP_404
             resp.content_type = 'application/text'
             resp.text = 'Requst had communications error.'
             return
-
-        # Find the start of the RA/Dec (J2000.0) information
-        start_index = html_content.find("RA/Dec (J2000.0):")
-
-        # Find the end of the RA/Dec (J2000.0) information (end of the line)
-        end_index = html_content.find("<br/>", start_index)
-
-        # Extract the RA/Dec (J2000.0) information
-        ra_dec_j2000 = html_content[start_index:end_index]
-        ra_dec_j2000 = ra_dec_j2000.replace("Â°", "d").strip()
-        ra_dec_j2000 = ra_dec_j2000.replace("'", "m")
-        ra_dec_j2000 = ra_dec_j2000.replace('"', "s")
-
-        # Clean up the extracted information
-        ra_dec_j2000 = ra_dec_j2000.replace("RA/Dec (J2000.0):", "").strip()
-
-        substrings = ["Type: <b>HII region", "Type: <b>emission nebula", "Type: <b>supernova remnant",
-                      "Type: <b>planetary nebula"]
-
-        lpFilter = False
-        for substring in substrings:
-            if substring in html_content:
-                lpFilter = True
-                break
-        lpStr = "/off"
-        if (lpFilter == True):
-            lpStr = "/on"
-
-        ra_dec_j2000 += lpStr
-
+        StelJSON = json.loads(html_content)
+        ra_j2000 = StelJSON['raJ2000']
+        dec_J2000 = StelJSON['decJ2000']
+        if (StelJSON['localized-name'] != "" ):
+            objName = StelJSON['localized-name']
+        elif (StelJSON['name'] != "" and objName != ""):
+            objname = StelJSON['localized-name']
+        else:
+            tmpObj = StelJSON['designations']
+            objName = tmpObj.split(" - ")[0]
+        
+        lpFilter = "off"
+        objType = StelJSON['type']
+        filterTypes = ["HII region", "emission nebula", "supernova remnant", "planetary nebula"]
+        if objType in filterTypes:
+            lpFilter = "on"
+        
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
-        resp.text = ra_dec_j2000
+        resp.text = str(ra_j2000) + "/" + str(dec_J2000) + "/" + lpFilter + "/" + objName
+
+
+# class StellariumResource:
+#     @staticmethod
+#     def on_get(req, resp, telescope_id=1):
+#         try:
+#             r = requests.get(stellarium_url)
+#             html_content = r.text
+#         except:
+#             resp.status = falcon.HTTP_404
+#             resp.content_type = 'application/text'
+#             resp.text = 'Requst had communications error.'
+#             return
+
+#         # Find the start of the RA/Dec (J2000.0) information
+#         start_index = html_content.find("RA/Dec (J2000.0):")
+
+#         # Find the end of the RA/Dec (J2000.0) information (end of the line)
+#         end_index = html_content.find("<br/>", start_index)
+
+#         # Extract the RA/Dec (J2000.0) information
+#         ra_dec_j2000 = html_content[start_index:end_index]
+#         ra_dec_j2000 = ra_dec_j2000.replace("Â°", "d").strip()
+#         ra_dec_j2000 = ra_dec_j2000.replace("'", "m")
+#         ra_dec_j2000 = ra_dec_j2000.replace('"', "s")
+
+#         # Clean up the extracted information
+#         ra_dec_j2000 = ra_dec_j2000.replace("RA/Dec (J2000.0):", "").strip()
+
+#         substrings = ["Type: <b>HII region", "Type: <b>emission nebula", "Type: <b>supernova remnant",
+#                       "Type: <b>planetary nebula"]
+
+#         lpFilter = False
+#         for substring in substrings:
+#             if substring in html_content:
+#                 lpFilter = True
+#                 break
+#         lpStr = "/off"
+#         if (lpFilter == True):
+#             lpStr = "/on"
+
+#         ra_dec_j2000 += lpStr
+
+#         resp.status = falcon.HTTP_200
+#         resp.content_type = 'application/text'
+#         resp.text = ra_dec_j2000
 
 
 class TelescopePositionResource:
@@ -1884,7 +1916,7 @@ class GetPlanetCoordinates():
     @staticmethod
     def on_get(req, resp):
         # Load planetary ephemeris data
-        pDataFile = load('de421.bsp')
+        pDataFile = load('de440s.bsp')
         earth = pDataFile['earth']
 
         planetName = req.get_param('planetname')
@@ -1896,7 +1928,8 @@ class GetPlanetCoordinates():
         planet = pDataFile[planetName]
         # Calculate the astrometric position
         astrometric = earth.at(t).observe(planet)
-        ra, dec, distance = astrometric.radec()
+        # Using 'date' forces JNOW rather than ICRS or J2000
+        ra, dec, distance = astrometric.radec('date')
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
         resp.text = (f"{ra}, {dec}")
