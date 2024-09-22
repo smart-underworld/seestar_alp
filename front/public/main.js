@@ -41,7 +41,11 @@ async function fetchCoordinates() {
                 alert('You must supply a planet name to be looked up');
                 return;
             }
-            queryURL = '/getplanetcoordinates?planetname=' + document.getElementById('targetName').value + " BARYCENTER";
+            // Grab request text
+            planet = document.getElementById('targetName').value
+            queryURL = '/getplanetcoordinates?planetname=' + planet;
+            // Moon / Sun doesn't have 'BARYCENTER' after it but more checks needed for Sun first so just do Moon
+            if (planet.toLowerCase() != 'moon') {queryURL += " BARYCENTER"};
             fetch(queryURL)
             .then(response => {
             if (!response.ok) {
@@ -56,7 +60,6 @@ async function fetchCoordinates() {
             return response.text();
         })
         .then(data => {
-            console.log(data);
             // data should come back in the form of 05h 18m 48.04s, +22deg 23' 10.8"
             data = data.replace(/\s/g, '');
             data = data.replace("deg","d");
@@ -65,7 +68,7 @@ async function fetchCoordinates() {
             const elements = data.trim().split(",");
             document.getElementById('ra').value = elements[0];
             document.getElementById('dec').value = elements[1];
-            document.getElementById("useJ2000").checked = true
+            document.getElementById("useJ2000").checked = false
         })
     }
 }
@@ -141,7 +144,9 @@ try {
         return response.text();
     })
     .then(data => {
+        console.log(data);
         const elements = data.trim().split("/");
+        document.getElementById('targetName').value = elements[3];
         document.getElementById('ra').value = elements[0];
         document.getElementById('dec').value = elements[1];
         document.getElementById('useLpFilter').checked = false;
