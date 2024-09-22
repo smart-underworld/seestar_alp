@@ -200,7 +200,7 @@ class action:
                 resp.text = MethodResponse(req, value = redirect_url).json   
         except Exception as ex:
             resp.text = MethodResponse(req,
-                            DevDriverException(0x500, 'Telescope.Action failed', ex)).json
+                            DevDriverException(0x500, '\n'.join(ex.args), ex)).json
 
 
 @before(PreProcessRequest(maxdev))

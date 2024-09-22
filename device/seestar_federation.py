@@ -157,7 +157,7 @@ class Seestar_Federation:
             elif isinstance(mosaic_params['ra'], float):
                 if mosaic_params['ra'] < 0:
                     self.logger.warn("Failed. Must specify an proper coordinate for a federated schedule.")
-                    return "Failed. Must specify an proper coordinate for a federated schedule."
+                    raise Exception( "Failed. Must specify an proper coordinate for a federated schedule.")
                 mosaic_params['ra'] = round(mosaic_params['ra'], 4)
                 mosaic_params['dec'] = round(mosaic_params['dec'], 4)                
                 
@@ -207,7 +207,7 @@ class Seestar_Federation:
         cur_schedule = self.get_schedule()
         num_devices = len(cur_schedule["available_device_list"])
         if num_devices < 1:
-            return "Failed: No available devices found to execute a schedule."
+            raise "Failed: No available devices found to execute a schedule."
 
         self.schedule = {}
         self.schedule['list'] = []
@@ -222,9 +222,9 @@ class Seestar_Federation:
         available_devices = root_schedule["available_device_list"]
         num_devices = len(available_devices)
         if num_devices < 1:
-            return "Failed: No available devices found to execute a schedule."
+            raise "Failed: No available devices found to execute a schedule."
         if len(self.schedule['list']) == 0:
-            return "Failed: The schedule is empty."
+            raise "Failed: The schedule is empty."
         
         for key in available_devices:
             cur_device = self.seestar_devices[key]
