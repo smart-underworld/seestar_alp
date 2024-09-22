@@ -352,20 +352,25 @@ def method_sync(method, telescope_id=1, **kwargs):
     # print(f"method_sync {out=}")
 
     def err_extractor(obj):
-        if obj.get("error"):
+        if obj and obj.get("error"):
             return obj["error"]
-        else:
+        elif obj:
             return obj["result"]
 
     if out:
+        value = out.get("Value")
         if telescope_id == 0:
             results = {}
             for tel in get_telescopes():
                 devnum = str(tel.get("device_num"))
-                results[devnum] = err_extractor(out["Value"][devnum])
+                dev_value = value.get(devnum) if value else None
+                results[devnum] = err_extractor(dev_value)
+                if results[devnum] is None:
+                    results[devnum] = "Offline"
         else:
-            results = err_extractor(out["Value"])
+            results = err_extractor(value) if value else "Offline"
         return results
+    return None
 
 def get_device_state(telescope_id):
     if check_api_state(telescope_id):
