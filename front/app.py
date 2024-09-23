@@ -1639,7 +1639,7 @@ class SupportResource:
 
 class ReloadResource:
     @staticmethod
-    def on_get(req, resp):
+    def on_put(req, resp):
         pid = os.getpid()
         os.kill(pid, signal.SIGHUP)
         resp.status = falcon.HTTP_200
