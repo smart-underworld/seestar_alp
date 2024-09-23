@@ -675,7 +675,20 @@ class Seestar:
 
         # move the arm up using a thread runner
         # move 10 degrees from polaris
-        move_up_dec_thread = threading.Thread(target=lambda: self.move_up_rotate_thread_fn(Config.init_scope_aim_up_time_s, Config.init_scope_aim_clockwise_time_s))
+        # first check if a device specific setting is available
+
+        for device in Config.seestars:
+            if device['device_num'] == self.device_num:
+                break
+        
+        aim_up_time = Config.init_scope_aim_up_time_s
+        aim_clockwise_time = Config.init_scope_aim_clockwise_time_s
+        if 'scope_aim_up_time_s' in device:
+            aim_up_time = device['scope_aim_up_time_s']
+        if 'scope_aim_clockwise_time_s' in device:
+            aim_clockwise_time = device['scope_aim_clockwise_time_s']
+
+        move_up_dec_thread = threading.Thread(target=lambda: self.move_up_rotate_thread_fn(aim_up_time, aim_clockwise_time))
         move_up_dec_thread.start()
         return "sequence started"
 

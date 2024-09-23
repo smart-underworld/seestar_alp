@@ -56,7 +56,8 @@ name = "Seestar Alpha"
 # ip_address should not have to be changed unless you have more than 1 seestar
 ip_address = "seestar.local"
 device_num = 1
-
+scope_aim_up_time_s = 19.4          # (override default) time to raise the lens arm in seconds
+scope_aim_clockwise_time_s = 10.8   # (override default) time to rotate base counter clockwise in seconds, use negative values to rotate clockwise
 
 #[[seestars]]
 #name = "Seestar Beta"
