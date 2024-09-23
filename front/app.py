@@ -927,7 +927,7 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
 
     context = get_context(telescope_id, req)
     render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values,
-                    twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes,
+                    twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes, clear_sky_href=Config.clear_sky_href, clear_sky_img_src=Config.clear_sky_img_src,
                     **context)
 
 
@@ -1851,7 +1851,6 @@ class UpdateTwilightTimesResource:
         PostedLon = PostedForm["Longitude"]  # TODO: This should have some type of input check
         update_twilight_times(PostedLat, PostedLon)
         redirect(f"{referer}")
-
 
 class GetBalanceSensorResource:
     @staticmethod

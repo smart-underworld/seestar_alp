@@ -15,6 +15,8 @@ uiport = 5432
 uitheme = "dark" #all lower case
 twilighttimes = false #true/false
 #experimental = true
+clear_sky_img_src = 'https://www.cleardarksky.com/c/LvrmrCAcsk.gif?c=1969222'
+clear_sky_href = 'https://www.cleardarksky.com/c/LvrmrCAkey.html'
 
 [server]
 location = 'Anywhere on Earth'  # Anything you want here
