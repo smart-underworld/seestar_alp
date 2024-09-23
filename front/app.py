@@ -1160,8 +1160,14 @@ class ScheduleListResource:
         if check_api_state(telescope_id):
             get_schedule = do_action_device("get_schedule", telescope_id, {})
             current_queue_list = get_queue(telescope_id)
-            current_schedule_list = get_schedule["Value"]["list"]
-
+            if get_schedule == None:
+                #todo seems like SSC tries to connect to daemon before it is ready for the Federation device, and thus raise exception here. 
+                # will return without any action for now
+                return
+            elif telescope_id == 0:
+                current_schedule_list = get_schedule["Value"]['schedule']["list"]
+            else:
+                current_schedule_list = get_schedule["Value"]["list"]
             # Check to see if there are missing items on the schedule
             if len(current_queue_list) > 0 and len(current_schedule_list) == 0:
                 logger.info(f"Telescope {telescope_id}: Queue has items but schedule does not, processing queue.")
