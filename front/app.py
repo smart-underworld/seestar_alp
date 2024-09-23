@@ -26,8 +26,8 @@ import zipfile
 import subprocess
 import platform
 
-
 from skyfield.api import load
+
 
 # if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
 #    sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
