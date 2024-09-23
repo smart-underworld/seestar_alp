@@ -183,6 +183,12 @@ class action:
             elif action_name == "add_schedule_item":
                 result = cur_dev.add_schedule_item(params)
                 resp.text = MethodResponse(req, value = result).json
+            elif action_name == "insert_schedule_item_before":
+                result = cur_dev.insert_schedule_item_before(params)
+                resp.text = MethodResponse(req, value = result).json
+            elif action_name == "remove_schedule_item":
+                result = cur_dev.remove_schedule_item(params)
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "start_scheduler":
                 result = cur_dev.start_scheduler()
                 resp.text = MethodResponse(req, value = result).json

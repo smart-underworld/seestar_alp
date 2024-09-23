@@ -228,6 +228,15 @@ class PropertyResponse():
         """Return the JSON for the Property Response"""
         return json.dumps(self.__dict__)
 
+from json import JSONEncoder
+from collections import deque
+
+class DequeEncoder(JSONEncoder):
+    def default(self, obj):
+       if isinstance(obj, deque):
+          return list(obj)
+       return JSONEncoder.default(self, obj)
+    
 # --------------
 # MethodResponse
 # --------------
@@ -259,7 +268,7 @@ class MethodResponse():
     @property
     def json(self) -> str:
         """Return the JSON for the Method Response"""
-        return json.dumps(self.__dict__)
+        return json.dumps(self.__dict__, cls=DequeEncoder)
 
 
 # -------------------------------
