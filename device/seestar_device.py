@@ -7,6 +7,7 @@ import sys, os
 import math
 import uuid
 from time import sleep
+import collections
 
 import tzlocal
 
@@ -50,12 +51,11 @@ class Seestar:
         self.utcdate = time.time()
         self.scheduler_state = "Stopped"
         self.scheduler_item_state = "Stopped"
-        self.scheduler_item_id = ""
         self.scheduler_item = "" # Text description of specific scheduler item that's running
         self.mosaic_thread = None
         self.scheduler_thread = None
         self.schedule = {}
-        self.schedule['list'] = []
+        self.schedule['list'] = collections.deque()
         self.schedule['state'] = self.scheduler_state
         self.schedule['current_item_id'] = ""
         # self.schedule['current_item_detail']    # Text description for mosaic?
@@ -934,12 +934,10 @@ class Seestar:
             self.scheduler_state = "Stopped"
         self.schedule = {}
         self.schedule['state'] = self.scheduler_state
-        self.schedule['list'] = []
+        self.schedule['list'] = self.schedule['list'].clear()
         return self.schedule
 
-    def add_schedule_item(self, params):
-        if self.scheduler_state != "Stopped":
-            return "scheduler is still active"
+    def construct_schedule_item(self, params):
         if params['action'] == 'start_mosaic':
             mosaic_params = params['params']
             if isinstance(mosaic_params['ra'], str):
@@ -952,10 +950,60 @@ class Seestar:
                     mosaic_params['dec'] = self.dec
                     mosaic_params['is_j2000'] = False
                 mosaic_params['ra'] = round(mosaic_params['ra'], 4)
-                mosaic_params['dec'] = round(mosaic_params['dec'], 4)                
-                
+                mosaic_params['dec'] = round(mosaic_params['dec'], 4)
         params['id'] = str(uuid.uuid4())
+        return params
+
+    def add_schedule_item(self, params):
+        new_item = self.construct_schedule_item(params)
         self.schedule['list'].append(params)
+        return self.schedule
+
+    def insert_schedule_item_before(self, params):
+        targeted_item_id = params['before_id']
+        index = 0
+        if self.scheduler_state == 'Running':
+            active_schedule_item_id = self.schedule['current_item_id']
+            reached_cur_item = False
+            while index < len(self.schedule['list']) and not reached_cur_item:
+                item_id = self.schedule['list'][index].get('id', 'UNKNOWN')
+                if item_id == targeted_item_id:
+                    self.logger.warn("Cannot insert schedule item that has already been executed")
+                    return self.schedule
+                if item_id == active_schedule_item_id:
+                    reached_cur_item = True
+                index += 1
+        while index < len(self.schedule['list']):
+            item = self.schedule['list'][index]
+            item_id = item.get('id', 'UNKNOWN')
+            if item_id == targeted_item_id:
+                new_item = self.construct_schedule_item(params)
+                self.schedule['list'].insert(index, new_item)
+                break
+            index += 1
+        return self.schedule
+
+    def remove_schedule_item(self, params):
+        targeted_item_id = params['id']
+        index = 0
+        if self.scheduler_state == 'Running':
+            active_schedule_item_id = self.schedule['current_item_id']
+            reached_cur_item = False
+            while index < len(self.schedule['list']) and not reached_cur_item:
+                item_id = self.schedule['list'][index].get('id', 'UNKNOWN')
+                if item_id == targeted_item_id:
+                    self.logger.warn("Cannot remove schedule item that has already been executed")
+                    return self.schedule
+                if item_id == active_schedule_item_id:
+                    reached_cur_item = True
+                index += 1
+        while index < len(self.schedule['list']):
+            item = self.schedule['list'][index]
+            item_id = item.get('id', 'UNKNOWN')
+            if item_id == targeted_item_id:
+                self.schedule['list'].remove(item)
+                break
+            index += 1
         return self.schedule
 
     # shortcut to start a new scheduler with only a mosaic request
@@ -1000,10 +1048,12 @@ class Seestar:
         issue_shutdown = False
         self.play_sound(80)
         self.logger.info("schedule started ...")
-        for item in self.schedule['list']:
+        index = 0
+        while index < len(self.schedule['list']):
             update_time()
             if self.scheduler_state != "Running":
                 break
+            item = self.schedule['list'][index]
             self.schedule['current_item_id'] = item.get('id', 'UNKNOWN')
             action = item['action']
             if action == 'start_mosaic':
@@ -1021,9 +1071,7 @@ class Seestar:
             elif action == 'shutdown':
                 self.scheduler_state = "Stopped"
                 issue_shutdown = True
-                break
-            # elif action == 'set_wheel_position' or action == 'pi_output_set2':
-                
+                break                
             elif action == 'wait_for':
                 sleep_time = item['params']['timer_sec']
                 sleep_count = 0
@@ -1044,6 +1092,7 @@ class Seestar:
             else:
                 request = {'method':action, 'params':item['params']}
                 self.send_message_param_sync(request)
+            index += 1
 
         self.scheduler_state = "Stopped"
         self.schedule['current_item_id'] = ""
