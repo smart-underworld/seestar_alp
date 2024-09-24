@@ -25,7 +25,6 @@
                     <div class="form-text">Enter target name, select type, and press the button to retrieve RA/Dec from Simbad / Planet Server.</div>
                 </div>
             </div>
-            </div>
 
             <div class="mb-3 row">
                 <div class="col">
@@ -39,7 +38,7 @@
 						   <div id="raError" class="form-text" style="color:red;">The RA value you provided {{errors.ra}} is not valid.
 					{% endif %}
                 </div>
-                <div class="col " >
+                <div class="col">
                     <label for="getClipboard" class="form-label">&nbsp;</label><br>
                     <button type="button" id="getStallarium" class="btn btn-primary" title="Parse RA/Dec from clipboard" onclick="fetchClipboard()">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard-fill" viewBox="0 0 16 16">
@@ -82,7 +81,7 @@
                         +6d32m32.5s)						
                     </div>
 					{% if errors.dec %}
-							<div id="raError" class="form-text" style="color:red;">The DEC value you provided {{errors.dec}} is not valid.
+							<div id="raError" class="form-text" style="color:red;">The DEC value you provided {{errors.dec}} is not valid.</div>
 					{% endif %}
                 </div>
 
