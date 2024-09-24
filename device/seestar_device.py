@@ -945,9 +945,8 @@ class Seestar:
             return "scheduler is still active"
         if self.scheduler_state == "Stopping":
             self.scheduler_state = "Stopped"
-        self.schedule = {}
         self.schedule['state'] = self.scheduler_state
-        self.schedule['list'] = self.schedule['list'].clear()
+        self.schedule['list'].clear()
         return self.schedule
 
     def construct_schedule_item(self, params):

@@ -244,7 +244,7 @@ class Seestar_Federation:
                         cur_params = schedule_item['params'].copy()
                         new_item['params'] = cur_params
                         new_item['id'] = str(uuid.uuid4())
-                        cur_device.schedule['list'].append(new_item)
+                        cur_device.add_schedule_item(new_item)
                 else:
                     section_dict = self.get_section_array_for_mosaic(root_schedule["available_device_list"], cur_params)
                     for key in section_dict:
@@ -255,7 +255,7 @@ class Seestar_Federation:
                         cur_params['selected_panels'] = section_dict[key]
                         new_item['params'] = cur_params
                         new_item['id'] = str(uuid.uuid4())
-                        cur_device.schedule['list'].append(new_item)
+                        cur_device.add_schedule_item(new_item)
 
             else:
                 for key in root_schedule["available_device_list"]:
@@ -265,7 +265,7 @@ class Seestar_Federation:
                     cur_params = schedule_item['params'].copy()
                     new_item['params'] = cur_params
                     new_item['id'] = str(uuid.uuid4())
-                    cur_device.schedule['list'].append(new_item)
+                    cur_device.add_schedule_item(new_item)
 
         for key in root_schedule["available_device_list"]:
             cur_device = self.seestar_devices[key]
