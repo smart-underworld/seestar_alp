@@ -1109,8 +1109,11 @@ class CommandResource:
     def command(req, resp, telescope_id, output):
         if check_api_state(telescope_id):
             current = do_action_device("get_schedule", telescope_id, {})
-            state = current["Value"]["state"]
+            if current == None:
+                return
             schedule = current["Value"]
+            state = schedule["state"]
+            
         else:
             schedule = {"list": get_queue(telescope_id)}
             state = "Stopped"
@@ -1164,8 +1167,6 @@ class ScheduleListResource:
                 #todo seems like SSC tries to connect to daemon before it is ready for the Federation device, and thus raise exception here. 
                 # will return without any action for now
                 return
-            elif telescope_id == 0:
-                current_schedule_list = get_schedule["Value"]['schedule']["list"]
             else:
                 current_schedule_list = get_schedule["Value"]["list"]
             # Check to see if there are missing items on the schedule
