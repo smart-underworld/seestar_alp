@@ -8,7 +8,8 @@
 {% endblock %}
 
 {% block content %}
-    {% if online %}
+
+    {% if online and settings %}
         <div class="container mt-3">
             {% if output %}
                 <div class="alert alert-primary" role="alert">{{output}}</div>

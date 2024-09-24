@@ -1576,11 +1576,18 @@ class SettingsResource:
 
     @staticmethod
     def render_settings(req, resp, telescope_id, output):
+        settings = {}
         context = get_context(telescope_id, req)
-        if check_api_state(telescope_id):
-            settings = get_device_settings(telescope_id)
+        if telescope_id == 0:
+            telescopes = get_telescopes()
+            for tel in telescopes:
+                tel_id = tel["device_num"]
+                if check_api_state(tel_id):
+                    settings = get_device_settings(tel_id)
+                    break
         else:
-            settings = {}
+            if check_api_state(telescope_id):
+                settings = get_device_settings(telescope_id)
         # Maybe we can store this better?
         settings_friendly_names = {
             "stack_dither_pix": "Stack Dither Pixels",
