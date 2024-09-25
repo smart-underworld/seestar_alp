@@ -16,58 +16,106 @@
 
     <div class="container mt-3">
         <div class="row fw-bold border-bottom py-1 text-start">
-            <div class="col-2">Action</div>
-            <div class="col">Target</div>
-            <div class="col-3">Coords</div>
-            <div class="col">Panels</div>
-            <div class="col">Overlap</div>
-            <div class="col">J2000?</div>
-            <div class="col">Total Exp</div>
-            <div class="col">Gain</div>
-            <div class="col">LP filter?</div>
-            <div class="col">AutoFocus</div>
-            {# <div class="col">Status</div>#}
+            <div class="col-2 align-self-start">Action</div>
+            <div class="col align-self-start">Target</div>
+            <div class="col-2 align-self-start">Coords</div>
+            <div class="col align-self-start">Panels</div>
+            <div class="col align-self-start">Ov%</div>
+            <div class="col align-self-start">J2000</div>
+            <div class="col align-self-start">Exp</div>
+            <div class="col align-self-start">Gain</div>
+            <div class="col align-self-start">LP</div>
+            <div class="col align-self-start">AF</div>
+			<div class="col align-self-start">Split</div>
+			<div class="col-2 align-self-start">Selected Panels</div>
         </div>
         {% for item in schedule.list %}
             <div class="row border-bottom py-2 text-start {% if schedule['current_item_id'] == item['id'] %}bg-primary{% endif %}">
                 {% if item["action"] == 'wait_until' %}
-                    <div class="col-2">Wait Until</div>
-                    <div class="col">{{ item["params"]["local_time"] }}</div>
+                    <div class="col-2 align-self-start">Wait Until</div>
+                    <div class="col align-self-start">{{ item["params"]["local_time"] }}</div>
                 {% elif item["action"] == 'wait_for' %}
-                    <div class="col-2">Wait For</div>
-                    <div class="col">{{ item["params"]["timer_sec"] }}s</div>
+                    <div class="col-2 align-self-start">Wait For</div>
+                    <div class="col align-self-start">{{ item["params"]["timer_sec"] }}s</div>
                 {% elif item["action"] == 'auto_focus' %}
-                    <div class="col-2">Auto Focus</div>
-                    <div class="col">{{ item["params"]["try_count"] }}x</div>
+                    <div class="col-2 align-self-start">Auto Focus</div>
+                    <div class="col align-self-start">{{ item["params"]["try_count"] }}x</div>
                 {% elif item["action"] == 'set_setting_exposures' %}
-                    <div class="col-2">Set exposure ...</div>
+                    <div class="col-2 align-self-start">Set exposure ...</div>
                 {% elif item["action"] == 'shutdown' %}
-                    <div class="col-2">Shutdown</div>
+                    <div class="col-2 align-self-start">Shutdown</div>
                 {% elif item["action"] == 'set_wheel_position' %}
 					
 					{% if item["params"] == [2] %}
-						<div class="col-2">Enable LP Filter</div>
+						<div class="col-2 align-self-start">Enable LP Filter</div>
 					{% elif item["params"] == [1] %}
-						<div class="col-2">Disable LP Filter</div>
+						<div class="col-2 align-self-start">Disable LP Filter</div>
 					{% endif %}
                     
                 {% elif item["action"] == 'start_mosaic' %}
-                    <div class="col-2">Start Mosaic</div>
-                    <div class="col">{{ item["params"]["target_name"] }}</div>
-                    <div class="col-3">{{ item["params"]["ra"] }} / {{ item["params"]["dec"] }}</div>
-                    <div class="col">{{ item["params"]["ra_num"] }} / {{ item["params"]["dec_num"] }}</div>
-                    <div class="col">{{ item["params"]["panel_overlap_percent"] }}</div>
-                    <div class="col">{{ item["params"]["is_j2000"] }}</div>
-                    <div class="col">{{ item["params"]["session_time_sec"] }}s</div>
-                    <div class="col">{{ item["params"]["gain"] }}</div>
-                    <div class="col">{{ item["params"]["is_use_lp_filter"] }}</div>
-                    <div class="col">{{ item["params"]["is_use_autofocus"] }}</div>
-                    {# <div class="col">{{ item["scheduler_status"] }}</div>#}
+                    <div class="col-2 align-self-start">Start Mosaic</div>
+                    <div class="col align-self-start">{{ item["params"]["target_name"] }}</div>
+                    <div class="col-2 align-self-start">
+						<p class="mt-0 mb-0">RA: {{ item["params"]["ra"] }}</p>
+						<p class="mt-0 mb-0">DEC: {{ item["params"]["dec"] }}</p>
+					</div>
+                    <div class="col align-self-start">
+						<p class="mt-0 mb-0"> RA: {{ item["params"]["ra_num"] }}</p>
+						<p class="mt-0 mb-0"> DEC: {{ item["params"]["dec_num"] }}</p>
+					</div>
+                    <div class="col align-self-start">{{ item["params"]["panel_overlap_percent"] }}</div>
+					<div class="col align-self-start">
+						{% if item["params"]["is_j2000"] == True %}
+							<div class="form-check-inline">
+								<input class="form-check-input" type="checkbox" value="" id="isJ2000" checked disabled>
+							</div>
+						{% else %}
+							<div class="form-check-inline">
+								<input class="form-check-input" type="checkbox" value="" id="isNotJ2000" disabled>
+							</div>
+						{% endif %}
+					</div>
+                    <div class="col align-self-start">{{ item["params"]["session_time_sec"] }}s</div>
+                    <div class="col align-self-start">{{ item["params"]["gain"] }}</div>
+					<div class="col align-self-start">
+						{% if item["params"]["is_use_lp_filter"] == True %}
+							<div class="form-check-inline">
+								<input class="form-check-input" type="checkbox" value="" id="isUseLPFilter" checked disabled>
+							</div>
+						{% else %}
+							<div class="form-check-inline">
+								<input class="form-check-input" type="checkbox" value="" id="isNotUseLPFilter" disabled>
+							</div>
+						{% endif %}
+					</div>
+					<div class="col align-self-start">
+						{% if item["params"]["is_use_autofocus"] == True %}
+							<div class="form-check-inline">
+								<input class="form-check-input" type="checkbox" value="" id="isUseAutoFocus" checked disabled>
+							</div>
+						{% else %}
+							<div class="form-check-inline">
+								<input class="form-check-input" type="checkbox" value="" id="isNotUseAutoFocus" disabled>
+							</div>
+						{% endif %}
+					</div>
+					<div class="col align-self-start">
+						{% if item["params"]["array_mode"] == "split" %}
+							<div class="form-check-inline">
+								<input class="form-check-input" type="checkbox" value="" id="arrayMode" checked disabled>
+							</div>
+						{% else %}
+							<div class="form-check-inline">
+								<input class="form-check-input" type="checkbox" value="" id="notArrayMode" disabled>
+							</div>
+						{% endif %}
+					</div>
+					<div class="col-2 align-self-start">{{ item["params"]["selected_panels"] }}</div>
                 {% elif item["action"] == 'action_set_dew_heater' %}
                     {% if item["params"]["heater"] > 0 %}
-                        <div class="col-2">Dew Heater Enable</div> <div class="col">{{ item["params"]["heater"] }}% </div>
+                        <div class="col-2 align-self-start">Dew Heater Enable</div> <div class="col">{{ item["params"]["heater"] }}% </div>
                     {% else %}
-                        <div class="col-2">Dew Heater Disable</div>
+                        <div class="col-2 align-self-start">Dew Heater Disable</div>
                     {% endif %}
                 {% else %}
                     <div class="col" colspan="10">Unrecognized schedule item: {{ item }}</div>

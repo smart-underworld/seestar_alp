@@ -94,6 +94,8 @@ class Config:
     uitheme: str = get_toml('webui_settings', 'uitheme', 'dark')
     twilighttimes: bool = get_toml('webui_settings', 'twilighttimes', False)
     experimental: bool = get_toml('webui_settings', 'experimental', False)
+    clear_sky_img_src: str = get_toml('webui_settings', 'clear_sky_img_src', 'https://www.cleardarksky.com/c/LvrmrCAcsk.gif?c=1969222')
+    clear_sky_href: str = get_toml('webui_settings', 'clear_sky_href', 'https://www.cleardarksky.com/c/LvrmrCAkey.html')
 
     # --------------
     # Server Section

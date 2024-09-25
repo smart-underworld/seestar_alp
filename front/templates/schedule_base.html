@@ -17,8 +17,22 @@
                 <span> {% include 'clear_schedule.html' %}</span>
             </div>
         </div>
+
+        <p class="d-inline-flex gap-1">
+            <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#clearsky"
+                aria-expanded="false" aria-controls="clearsky">
+                Hide/Show Clear Sky
+            </button>
+        </p>
+
+        <div class="collapse" id="clearsky">
+            <a href={{clear_sky_href}}>
+            <img src="{{clear_sky_img_src}}"></a>
+        </div>  
+
+
         {% if twilight_times_enabled %}
-            <p class="h3">Twilight Times</p>
+            <p></p>
             <p class="d-inline-flex gap-1">
                 <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#twilightcollapse"
                         aria-expanded="false" aria-controls="twilightcollapse">
@@ -71,9 +85,4 @@
             </div>
         </div>
     </div>
-
-    <footer class="bg-body-tertiary text-center mt-3">
-        Version: {{ version }}
-    </footer>
-
 {% endblock %}
