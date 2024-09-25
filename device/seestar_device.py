@@ -55,6 +55,7 @@ class Seestar:
         self.mosaic_thread = None
         self.scheduler_thread = None
         self.schedule = {}
+        self.schedule['schedule_id'] = str(uuid.uuid4())
         self.schedule['list'] = collections.deque()
         self.schedule['state'] = self.scheduler_state
         self.schedule['current_item_id'] = ""
@@ -208,7 +209,8 @@ class Seestar:
                         # keep a running queue of last 100 responses for sync call results
                         self.response_dict[parsed_data["id"]] = parsed_data
                         while len(parsed_data) > 100:
-                            self.response_dict.popitem()
+                            d= self.response_dict
+                            (k := next(iter(d)), d.pop(k))
 
                     elif 'Event' in parsed_data:
                         if Config.log_events_in_info:
@@ -268,6 +270,8 @@ class Seestar:
 
     def send_message_param_sync(self, data):
         cur_cmdid = self.send_message_param(data)
+        if data['method'] == 'pi_shutodwn' or data['method'] == 'pi_reboot':
+            return
         start = time.time()
         last_slow = start
         while cur_cmdid not in self.response_dict:
@@ -276,7 +280,7 @@ class Seestar:
                 elapsed = now - start
                 last_slow = now
                 self.logger.warn(f'SLOW message response.  {elapsed} seconds. {cur_cmdid=} {data=}')
-            time.sleep(0.1)
+            time.sleep(0.5)
         self.logger.debug(f'{self.device_name} response is {self.response_dict[cur_cmdid]}')
         return self.response_dict[cur_cmdid]
 
@@ -905,7 +909,7 @@ class Seestar:
             self.scheduler_item_state = "Stopped"
             return
 
-        if not isinstance(center_RA, str) and center_RA < 0:
+        if not isinstance(center_RA, str) and center_RA == -1 and center_Dec == -1:
             center_RA = self.ra
             center_Dec = self.dec
             is_j2000 = False
@@ -934,17 +938,28 @@ class Seestar:
         self.mosaic_thread.name = f"MosaicThread.{self.device_name}"
         self.mosaic_thread.start()
 
-    def get_schedule(self):
+    def get_schedule(self, params):
+        if 'schedule_id' in params:
+            if self.schedule['schedule_id'] != params['schedule_id']:
+                return {}
+            
         self.schedule['state'] = self.scheduler_state
         self.schedule['cur_mosaic_panel_ra'] = self.cur_mosaic_nRA
         self.schedule['cur_mosaic_panel_dec'] = self.cur_mosaic_nDec
         return self.schedule
 
-    def create_schedule(self):
+    def create_schedule(self, params):
         if self.scheduler_state == "Running":
             return "scheduler is still active"
         if self.scheduler_state == "Stopping":
             self.scheduler_state = "Stopped"
+        
+        if 'schedule_id' in params:
+            schedule_id = params['schedule_id']
+        else:
+            schedule_id = str(uuid.uuid4())
+
+        self.schedule['schedule_id'] = schedule_id
         self.schedule['state'] = self.scheduler_state
         self.schedule['list'].clear()
         return self.schedule
@@ -1022,27 +1037,27 @@ class Seestar:
     def start_mosaic(self, params):
         if self.scheduler_state != "Stopped":
             return "An existing scheduler is active. Returned with no action."
-        self.create_schedule()
+        self.create_schedule(params)
         schedule_item = {}
         schedule_item['action'] = "start_mosaic"
         schedule_item['params'] = params
         self.add_schedule_item(schedule_item)
-        self.start_scheduler()
+        self.start_scheduler(params)
         return self.schedule
 
     # shortcut to start a new scheduler with only a spectra request
     def start_spectra(self, params):
         if self.scheduler_state != "Stopped":
             return "An existing scheduler is active. Returned with no action."
-        self.create_schedule()
+        self.create_schedule(params)
         schedule_item = {}
         schedule_item['action'] = "start_spectra"
         schedule_item['params'] = params
         self.add_schedule_item(schedule_item)
-        self.start_scheduler()
+        self.start_scheduler(params)
         return "spectra acquistion started"
 
-    def start_scheduler(self):
+    def start_scheduler(self, params):
         if self.scheduler_state != "Stopped":
             return "An existing scheduler is active. Returned with no action."
         self.scheduler_thread = threading.Thread(target=lambda: self.scheduler_thread_fn(), daemon=True)
@@ -1113,17 +1128,22 @@ class Seestar:
         if issue_shutdown:
             self.json_message("pi_shutdown")
 
-    def stop_scheduler(self):
+    def stop_scheduler(self, params):
+        if 'schedule_id' in params:
+            if self.schedule['schedule_id'] != params['schedule_id']:
+                return "schedule id not matched. No action taken"
+            
         if self.scheduler_state == "Running":
             self.scheduler_state = "Stopping"
             self.stop_slew()
             self.stop_stack()
             self.play_sound(83)
             return "scheduler stopped"
-        else:
-            self.scheduler_state = "Stopping"
+        elif self.scheduler_state == "Stopped":
             self.logger.info("Scheduler is not running while trying to stop!")
-            return "scheduler requested to stop"
+            return "Scheduler is not running while trying to stop!"
+        else:
+            return "scheduler has already been requested to stop"
 
     def wait_end_op(self, in_op_name):
         self.op_watch = in_op_name

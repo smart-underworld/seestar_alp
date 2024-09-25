@@ -528,7 +528,7 @@ def check_ra_value(raString):
         r"^\d+h\s*\d+m\s*([0-9.]+s)?$",
         r"^\d+(\.\d+)?$",
         r"^\d+\s+\d+\s+[0-9.]+$",
-        r"^-1(\.0+)?$",
+        r"^[+-]?([0-9]*[.])?[0-9]+$"
     ]
     return any(re.search(pattern, raString) for pattern in valid)
 
@@ -537,10 +537,10 @@ def check_dec_value(decString):
     valid = [
         r"^[+-]?\d+d\s*\d+m\s*([0-9.]+s)?$",
         r"^[+-]?\d+(\.\d+)?$",
-        r"^[+-]?\d+\s+\d+\s+[0-9.]+$"
+        r"^[+-]?\d+\s+\d+\s+[0-9.]+$",
+        r"^[+-]?([0-9]*[.])?[0-9]+$"
     ]
     return any(re.search(pattern, decString) for pattern in valid)
-
 
 def hms_to_sec(timeString):
     hms_search = re.search(r"^(?!\s*$)\s*(?:(\d+)\s*h\s*)?(?:(\d+)\s*m\s*)?(?:(\d+)\s*s)?\s*$", timeString.lower())
@@ -919,6 +919,8 @@ def render_template(req, resp, template_name, **context):
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
     if check_api_state(telescope_id):
         get_schedule = do_action_device("get_schedule", telescope_id, {})
+        if get_schedule == None:
+            return
         schedule = get_schedule["Value"]
     else:
         schedule = {"list": get_queue(telescope_id)}
@@ -1768,8 +1770,8 @@ class StellariumResource:
             resp.text = 'Requst had communications error.'
             return
         StelJSON = json.loads(html_content)
-        ra_j2000 = StelJSON['raJ2000']
-        dec_J2000 = StelJSON['decJ2000']
+        ra_j2000 = round(StelJSON['raJ2000'],3)
+        dec_J2000 = round(StelJSON['decJ2000'],3)
         if (StelJSON['localized-name'] != "" ):
             objName = StelJSON['localized-name']
         elif (StelJSON['name'] != "" and objName != ""):

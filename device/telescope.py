@@ -175,10 +175,10 @@ class action:
                 result = cur_dev.start_spectra(params)
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "get_schedule":
-                result = cur_dev.get_schedule()
+                result = cur_dev.get_schedule(params)
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "create_schedule":
-                result = cur_dev.create_schedule()
+                result = cur_dev.create_schedule(params)
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "add_schedule_item":
                 result = cur_dev.add_schedule_item(params)
@@ -190,10 +190,10 @@ class action:
                 result = cur_dev.remove_schedule_item(params)
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "start_scheduler":
-                result = cur_dev.start_scheduler()
+                result = cur_dev.start_scheduler(params)
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "stop_scheduler":
-                result = cur_dev.stop_scheduler()
+                result = cur_dev.stop_scheduler(params)
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "action_start_up_sequence":
                 result = cur_dev.action_start_up_sequence(params)
