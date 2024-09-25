@@ -217,7 +217,8 @@ def falcon_uncaught_exception_handler(req: Request, resp: Response, ex: BaseExce
 class DeviceMain:
     def __init__(self):
         self.httpd = None
-        signal.signal(signal.SIGHUP, self.reload)
+        if sys.platform != 'win32':
+            signal.signal(signal.SIGHUP, self.reload)
 
     def start(self):
         """ Application startup"""
