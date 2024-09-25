@@ -25,6 +25,8 @@ import re
 import zipfile
 import subprocess
 import platform
+import shutil
+import signal
 
 from skyfield.api import load
 
@@ -1662,6 +1664,13 @@ class SupportResource:
         context = get_context(telescope_id, req)
         render_template(req, resp, 'support.html', **context)
 
+class ReloadResource:
+    @staticmethod
+    def on_put(req, resp):
+        pid = os.getpid()
+        os.kill(pid, signal.SIGHUP)
+        resp.status = falcon.HTTP_200
+
 # stackoverflow-fu
 Object = lambda **kwargs: type("Object", (), kwargs)
 
@@ -1993,6 +2002,7 @@ class FrontMain:
         app.add_route('/schedule/wait-for', ScheduleWaitForResource())
         app.add_route('/stats', StatsResource())
         app.add_route('/support', SupportResource())
+        app.add_route('/reload', ReloadResource())
         app.add_route('/{telescope_id:int}/', HomeTelescopeResource())
         app.add_route('/{telescope_id:int}/goto', GotoResource())
         app.add_route('/{telescope_id:int}/command', CommandResource())

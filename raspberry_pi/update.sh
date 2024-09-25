@@ -39,6 +39,14 @@ fi
 
 cd ${src_home}
 
+user=$(whoami)
+group=$(id -gn)
+if [ -d ./logs ]; then
+    sudo chown ${user}:${group} ./logs/* || true
+else
+    mkdir logs
+fi
+
 if [ ! -e device/config.toml ]; then
   cp device/config.toml.example device/config.toml
   sed -i -e 's/127.0.0.1/0.0.0.0/g' device/config.toml

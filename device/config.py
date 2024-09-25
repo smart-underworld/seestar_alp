@@ -38,7 +38,7 @@
 #               var here. MIT license and module header. No mcast.
 #
 import sys
-import toml
+import tomlkit
 import logging
 import shutil
 ### rwr
@@ -67,7 +67,7 @@ if not os.path.exists(path_to_dat):
 
 #print(path_to_dat)
 ### RWR _dict = toml.load(f'{sys.path[0]}/config.toml')    # Errors here are fatal.
-_dict = toml.load(path_to_dat)    # Errors here are fatal.
+_dict = tomlkit.loads(open(path_to_dat).read())
 def get_toml(sect: str, item: str, default : typing.Any):
     if not _dict is {} and sect in _dict and item in _dict[sect]:
         return _dict[sect][item]
@@ -150,4 +150,10 @@ class Config:
     init_dew_heater_power: int = get_toml(secion, 'dew_heater_power', 0)
     init_scope_aim_up_time_s: float = get_toml(secion, 'scope_aim_up_time_s', 19.4)
     init_scope_aim_clockwise_time_s: float = get_toml(secion, 'scope_aim_clockwise_time_s', 10.8)
-    
+
+    def set_toml(section, key, value):
+        _dict[section][key] = value
+
+    def save_toml(save_name = path_to_dat):
+        with open(save_name, "w") as toml_file:
+            toml_file.write(tomlkit.dumps(_dict))
