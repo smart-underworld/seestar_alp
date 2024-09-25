@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block header %}
+	<div class="container mt-3">
+		<p class="h1">Support</p>
+	</div>
+{% endblock %}
+
+{% block content %}
+
+	<form method="post" action="/config">
+		<label for="desc" class="form-label">Config</label>
+		<select id="log_level" name="log_level">
+			<option value="DEBUG">DEBUG</option>
+			<option value="INFO">INFO</option>
+			<option value="WARN">WARN</option>
+			<option value="ERROR">ERROR</option>
+		  </select>
+		<button type="submit" class="btn btn-primary">Save</button>
+	</form>
+
+	<footer class="bg-body-tertiary text-center mt-3">
+		Version: {{ version }}
+	</footer>
+{% endblock %}
+
+{% block html_header %}
+    <meta http-equiv="refresh" content="15">
+{% endblock %}

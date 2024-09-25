@@ -1911,6 +1911,15 @@ class GenSupportBundleResource:
         resp.text = zip_io.getvalue()
         zip_io.close()
 
+class ConfigResource:
+    def on_get(req, resp, telescope_id = 1):
+        now = datetime.now()
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'config.html', now = now, config = Config, **context) # pylint: disable=repeated-keyword
+
+    def on_post(req, resp, telescope_id = 1):
+        resp.status = falcon.HTTP_200
+
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
 
@@ -2017,6 +2026,7 @@ class FrontMain:
         app.add_route('/getbalancesensor', GetBalanceSensorResource())
         app.add_route('/gensupportbundle', GenSupportBundleResource())
         app.add_route('/getplanetcoordinates', GetPlanetCoordinates() )
+        app.add_route('/config', ConfigResource() )
 
         try:
             self.httpd = make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler)
