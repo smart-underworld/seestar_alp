@@ -297,5 +297,7 @@ class Seestar_Federation:
             if cur_device.is_connected:
                 result[key] = cur_device.stop_scheduler(params)
         return result
+    
+    
 
 
