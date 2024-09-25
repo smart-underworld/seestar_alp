@@ -1,151 +1,161 @@
-<form method="post" action="{{ action }}">
-<div class="container">
-	<div style="margin-bottom:5px;font-weight:bold">
-		<label for="dropdown">Startup / Shutdown</label>
-	</div>
-	<select id="dropdown" name="command">
-		<option value="scope_move_to_horizon">Scope Move to Horizon</option>
-		<option value="scope_park">Scope Park</option>
-		<option value="pi_reboot">Scope Reboot</option>
-		<option value="pi_shutdown">Scope Shutdown</option>
-	</select>
-	<button type="submit" class="btn btn-primary">Execute</button>
-	<p></p>
-</div>
-</form>
-<form method="post" action="{{ action }}">
-<div class="container">
-	<div style="margin-bottom:5px;font-weight:bold">
-		<label for="dropdown">AutoFocus</label>
-	</div>
-	<select id="dropdown" name="command">
-		<option value="start_auto_focus">Start AutoFocus</option>
-		<option value="stop_auto_focus">Stop AutoFocus</option>
-		<option value="get_focuser_position">Get Current Focuser Position</option>
-		<option value="get_last_focuser_position">Get Last Focuser Position</option>
-	</select>
-	<button type="submit" class="btn btn-primary">Execute</button>
-	<p></p>
-</div>
-</form>
-<form method="post" action="{{ action }}">
-<div class="container">
-	<div style="margin-bottom:5px;font-weight:bold">
-		<label for="dropdown">Filter</label>
-	</div>
-	<select id="dropdown" name="command">
-		<option value="get_wheel_position">Get Wheel Position</option>
-		<option value="get_wheel_state">Get Wheel State</option>
-		<option value="get_wheel_setting">Get Wheel Setting</option>
-		<option value="set_wheel_position_Dark">Use Dark Filter</option>
-		<option value="set_wheel_position_IR_Cut">Use IR Cut Filter</option>	
-		<option value="set_wheel_position_LP">Use LP Filter</option>		
-	</select>
-	<button type="submit" class="btn btn-primary">Execute</button>
-	<p></p>
-</div>
-</form>
-<form method="post" action="{{ action }}">
-<div class="container">
-	<div style="margin-bottom:5px;font-weight:bold">
-		<label for="dropdown">Get Infomation / Settings</label>
-	</div>
-	<select id="dropdown" name="command">
-        <option value="pi_get_ap">Get AP (WiFi) Info</option>
-        <option value="get_app_setting">Get App Setting</option>
-        <option value="iscope_get_app_state">Get App State</option>
-        <option value="get_camera_exp_and_bin">Get Camera Exposure & Bin</option>
-        <option value="get_camera_state">Get Camera State</option>
-        <option value="get_controls">Get Controls</option>
-        <option value="get_disk_volume">Get Disk Volume</option>
-        <option value="get_image_save_path">Get Image Save Path</option>
-        <option value="get_img_name_field">Get Image Name Field</option>
-        <option value="get_setting">Get Settings</option>
-        <option value="get_stack_info">Get Stack Info</option>
-        <option value="get_test_setting">Get Test Settings</option>
-        <option value="get_user_location">Get User Location</option>
-        <option value="get_view_state">Get View State</option>
-        <option value="scope_get_equ_coord">Get Equatorial Coordinate</option>
-        <option value="scope_get_horiz_coord">Get Horizon Coordinates</option>
-        <option value="scope_get_ra_dec">Get RA/Dec</option>
-        <option value="scope_get_track_state">Get Tracking State</option>
-	</select>
-	<button type="submit" class="btn btn-primary">Execute</button>
-	<p></p>
-</div>
-</form>
+ <div class="container">
+	<div class="row">
+		<div class="col-md-6 border border-primary">
+			<h5 class="card-title">Start-Up Sequence</h5>
+			<form method="post" action="{{ action }}" class="bordered-form">
+			<div class="container">
+				<div class="mb3 row align-items-end">
+					<input type="hidden" name="command" value="start_up_sequence">
+					<div class="mb3 col-sm-2">
+						<label for="lat" class="form-label" style="margin-bottom:5px;font-weight:bold">Latitude</label>
+						<input type="text" class="form-control form-control-sm" style="width: 100px" id="lat" name="lat">
+					</div>
 
-<form method="post" action="{{ action }}">
-<div class="container">
-	<div style="margin-bottom:5px;font-weight:bold">
-		<label for="dropdown">Plate Solve</label>
-	</div>
-	<select id="dropdown" name="command">
-		<option value="start_solve">Start Plate Solve</option>
-		<option value="get_solve_result">Get Current Plate Solve Result</option>
-		<option value="get_last_solve_result">Get Last Plate Solve Result</option>
-	</select>
-	<button type="submit" class="btn btn-primary">Execute</button>
-	<p></p>
-</div>
-</form>
-
-<form method="post" action="{{ action }}">
-<div class="container">
-	<div style="margin-bottom:5px;font-weight:bold">
-		<label for="dropdown">Polar Align</label>
-	</div>
-	<select id="dropdown" name="command">
-		<option value="start_polar_align">Start Polar Align</option>
-		<option value="stop_polar_align">Stop Polar Align</option>
-	</select>
-	<button type="submit" class="btn btn-primary">Execute</button>
-	<p></p>
-</div>
-</form>
-
-<form method="post" action="{{ action }}">
-<div class="container">
-	<div style="margin-bottom:5px;font-weight:bold">
-		<label for="dropdown">Dark Frame Generation</label>
-	</div>
-	<select id="dropdown" name="command">
-		<option value="start_create_dark">Start Create Dark</option>
-		<option value="stop_create_dark">Stop Create Dark</option>
-	</select>
-	<button type="submit" class="btn btn-primary">Execute</button>
-	<p></p>
-</div>
-</form>
-
-<form method="post" action="{{ action }}" class="bordered-form">
-<div class="container">
-	<div class="mb3 row"><p></p><p></p></div>
-	<div class="mb3 row align-items-end">
-		<div class="mb3 col-sm-2" style="margin-bottom:5px;font-weight:bold">
-			<label for="param1" style="bold">Start-Up Sequence</label>
+					<div class="mb3 col-sm-2">
+						<label for="long"class="form-label" style="margin-bottom:5px;font-weight:bold">Longitude</label>
+						<input type="text" class="form-control form-control-sm" style="width: 100px" id="long" name="long">
+					</div>
+					<div class = "col-sm-2">
+						<button type="submit" class="btn btn-primary btn-sm">Execute</button>
+					</div>
+				</div>
+				<div class="mb3 row"><p></p></div>
+					<div class="mb3 col-7">
+						<div class="mb3 row">
+							<p>This will override whatever value you have set in config.toml. Leaving this blank will not override your values specified in config.toml.  Specifying a value of 0 will attempt to determine your location based on IP Geolocation. <b>The machine you run seestar_alp on must have internet service for this to work!</b></p>
+						</div>
+					</div>
+				</div>
+			</form>
 		</div>
-    
-		<input type="hidden" name="command" value="start_up_sequence">
-    
-		<div class="mb3 col-sm-2">
-			<label for="lat" class="form-label" style="margin-bottom:5px;font-weight:bold">Latitude</label>
-			<input type="text" class="form-control form-control-sm" style="width: 100px" id="lat" name="lat">
-		</div>
-
-		<div class="mb3 col-sm-2">
-			<label for="long"class="form-label" style="margin-bottom:5px;font-weight:bold">Longitude</label>
-			<input type="text" class="form-control form-control-sm" style="width: 100px" id="long" name="long">
-		</div>
-		<div class = "col-sm-2">
-			<button type="submit" class="btn btn-primary btn-sm">Execute</button>
-		</div>
-	</div>
-	<div class="mb3 row"><p></p></div>
-	<div class="mb3 col-7">
-		<div class="mb3 row">
-			<p>This will override whatever value you have set in config.toml. Leaving this blank will not override your values specified in config.toml.  Specifying a value of 0 will attempt to determine your location based on IP Geolocation. <b>The machine you run seestar_alp on must have internet service for this to work!</b></p>
+			<div class="col-md-6 border border-primary">
+				<h5 class="card-title">Output</h5>
+				{% if output %}
+					<div class="alert alert-primary" role="alert">{{output}}</div>
+				{% endif %}
+			</div>
 		</div>
 	</div>
 </div>
-</form>
+<div class="container">
+	<div class="card border-primary mb-3">
+		<div class="card-body">
+			<div class="row mb-2">
+				<div class="col">
+					<form method="post" action="{{ action }}">
+						<div style="margin-bottom:5px;font-weight:bold">
+							<label for="dropdown">Startup / Shutdown</label>
+						</div>
+						<select id="dropdown" name="command">
+							<option value="scope_move_to_horizon">Scope Move to Horizon</option>
+							<option value="scope_park">Scope Park</option>
+							<option value="pi_reboot">Scope Reboot</option>
+							<option value="pi_shutdown">Scope Shutdown</option>
+						</select>
+						<button type="submit" class="btn btn-primary">Execute</button>
+					</form>
+				</div>
+				<div class="col">
+					<form method="post" action="{{ action }}">
+						<div style="margin-bottom:5px;font-weight:bold">
+							<label for="dropdown">Polar Align</label>
+						</div>
+						<select id="dropdown" name="command">
+							<option value="start_polar_align">Start Polar Align</option>
+							<option value="stop_polar_align">Stop Polar Align</option>
+						</select>
+						<button type="submit" class="btn btn-primary">Execute</button>
+					</form>
+				</div>
+				<div class="col">
+					<form method="post" action="{{ action }}">
+						<div style="margin-bottom:5px;font-weight:bold">
+							<label for="dropdown">AutoFocus</label>
+						</div>
+						<select id="dropdown" name="command">
+							<option value="start_auto_focus">Start AutoFocus</option>
+							<option value="stop_auto_focus">Stop AutoFocus</option>
+							<option value="get_focuser_position">Get Current Focuser Position</option>
+							<option value="get_last_focuser_position">Get Last Focuser Position</option>
+						</select>
+						<button type="submit" class="btn btn-primary">Execute</button>
+					</form>
+				</div>
+			</div>
+			<div class="row mb-2">
+				<div class ="col">
+					<form method="post" action="{{ action }}">
+						<div style="margin-bottom:5px;font-weight:bold">
+							<label for="dropdown">Dark Frame Generation</label>
+						</div>
+						<select id="dropdown" name="command">
+							<option value="start_create_dark">Start Create Dark</option>
+							<option value="stop_create_dark">Stop Create Dark</option>
+						</select>
+						<button type="submit" class="btn btn-primary">Execute</button>
+					</form>
+				</div>
+				<div class="col">
+					<form method="post" action="{{ action }}">
+						<div style="margin-bottom:5px;font-weight:bold">
+							<label for="dropdown">Filter</label>
+						</div>
+						<select id="dropdown" name="command">
+							<option value="set_wheel_position_LP">Use LP Filter</option>
+							<option value="set_wheel_position_IR_Cut">Use IR Cut Filter</option>
+							<option value="set_wheel_position_Dark">Use Dark Filter</option>
+							<option value="get_wheel_state">Get Wheel State</option>
+							<option value="get_wheel_setting">Get Wheel Setting</option>
+						</select>
+						<button type="submit" class="btn btn-primary">Execute</button>
+					</form>
+				</div>
+				<div class="col">
+					<form method="post" action="{{ action }}">
+						<div style="margin-bottom:5px;font-weight:bold">
+							<label for="dropdown">Plate Solve</label>
+						</div>
+						<select id="dropdown" name="command">
+							<option value="start_solve">Start Plate Solve</option>
+							<option value="get_solve_result">Get Current Plate Solve Result</option>
+							<option value="get_last_solve_result">Get Last Plate Solve Result</option>
+						</select>
+						<button type="submit" class="btn btn-primary">Execute</button>
+					</form>
+				</div>
+			</div>
+			<div class="row mb-2">
+				<div class="col">
+					<form method="post" action="{{ action }}">
+						<div style="margin-bottom:5px;font-weight:bold">
+							<label for="dropdown">Get Infomation / Settings</label>
+						</div>
+						<select id="dropdown" name="command">
+							<option value="pi_get_ap">Get AP (WiFi) Info</option>
+							<option value="get_app_setting">Get App Setting</option>
+							<option value="iscope_get_app_state">Get App State</option>
+							<option value="get_camera_exp_and_bin">Get Camera Exposure & Bin</option>
+							<option value="get_camera_state">Get Camera State</option>
+							<option value="get_controls">Get Controls</option>
+							<option value="get_disk_volume">Get Disk Volume</option>
+							<option value="get_image_save_path">Get Image Save Path</option>
+							<option value="get_img_name_field">Get Image Name Field</option>
+							<option value="get_setting">Get Settings</option>
+							<option value="get_stack_info">Get Stack Info</option>
+							<option value="get_test_setting">Get Test Settings</option>
+							<option value="get_user_location">Get User Location</option>
+							<option value="get_view_state">Get View State</option>
+							<option value="scope_get_equ_coord">Get Equatorial Coordinate</option>
+							<option value="scope_get_horiz_coord">Get Horizon Coordinates</option>
+							<option value="scope_get_ra_dec">Get RA/Dec</option>
+							<option value="scope_get_track_state">Get Tracking State</option>
+						</select>
+						<button type="submit" class="btn btn-primary">Execute</button>
+					</form>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+
