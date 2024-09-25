@@ -717,7 +717,10 @@ def do_command(req, resp, telescope_id):
             lat = form.get("lat","").strip()
             long = form.get("long","").strip()
             #print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
-            output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
+            if not lat or not long:
+                output = do_action_device("action_start_up_sequence", telescope_id, {})
+            else:
+                output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
             return None
         case "scope_park":
             output = method_sync("scope_park", telescope_id)
