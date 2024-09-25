@@ -411,7 +411,7 @@ def get_device_state(telescope_id):
             schedule = do_action_device("get_schedule", telescope_id, {})
             if result is not None:
                 device = result.get("device",{})
-                focuser = result.get("user",{})
+                focuser = result.get("focuser",{})
                 settings = result.get("setting",{})
                 pi_status = result.get("pi_status",{})
                 storage = result.get("storage", {}).get("storage_volume", [{}])[0]
