@@ -42,7 +42,7 @@ cd ${src_home}
 user=$(whoami)
 group=$(id -gn)
 if [ -d ./logs ]; then
-    sudo chown ${user}:${group} ./logs/*
+    sudo chown ${user}:${group} ./logs/* || true
 else
     mkdir logs
 fi
