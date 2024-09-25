@@ -8,7 +8,8 @@
 {% endblock %}
 
 {% block content %}
-    {% if online %}
+
+    {% if online and settings %}
         <div class="container mt-3">
             {% if output %}
                 <div class="alert alert-primary" role="alert">{{output}}</div>
@@ -61,7 +62,4 @@
             <p>You are currently in offline mode</p>
         </div>
     {% endif %}
-    <footer class="bg-body-tertiary text-center mt-3">
-        Version: {{ version }}
-    </footer>
 {% endblock %}

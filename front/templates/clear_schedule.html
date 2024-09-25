@@ -1,33 +1,29 @@
-<div class="form-row">
-	<form action="{{ root }}/schedule/clear" method="post">
-		<div class="form row aliign-items-center">
-			<div class="col-auto">
-				<button type="submit" class="btn btn-primary mb-2">Clear Schedule</button>
-			</div>
+<div class="container mt-3">
+	<div class="row d-flex justify-content-between">
+
+		<div class="col-auto">
+			<form action="{{ root }}/schedule/clear" method="post">
+				<button type="submit" class="btn btn-primary me-2">Clear Schedule</button>
+			</form>
 		</div>
-	</form>
-</div>
-<div class="form-row">
-	<form action="{{ root }}/schedule/import" method="post" enctype="multipart/form-data">
-		<div class="form row align-items-center">
-			<div class="col-auto">
-				<button type="submit" class="btn btn-primary mb-2">Import Schedule</button>
-			</div>
-			<div class="col-auto">
-				<input type="file" class="form-control-file" name="schedule_file" accept=".csv" required>
-			</div>
+
+		<div class="col-auto">
+			<form action="{{ root }}/schedule/import" method="post" enctype="multipart/form-data">
+				<div class="input-group">
+					<button type="submit" class="btn btn-primary">Import Schedule</button>
+                    <input type="file" class="form-control me-2" name="schedule_file" accept=".csv" required>
+				</div>
+			</form>
 		</div>
-	</form>
-</div>
-<div class="form-row">
-	<form action="{{ root }}/schedule/export" method="post">
-		<div class="form row align-items-center">
-			<div class="col-auto">
-				<button type="submit" class="btn btn-primary mb-2">Export Schedule</button>
-			</div>
-			<div class="col-auto">
-				<input type="text" class="form-control" name="filename" placeholder="Filename.csv" required>
-			</div>
+
+		<div class="col-auto">
+			<form action="{{ root }}/schedule/export" method="post">
+				<div class="input-group">
+					<button type="submit" class="btn btn-primary me-2">Export Schedule</button>
+                    <input type="text" class="form-control me-2" name="filename" placeholder="Filename.csv" required>
+				</div>
+			</form>
 		</div>
-	</form>
+
+	</div>
 </div>
