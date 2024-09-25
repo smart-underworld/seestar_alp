@@ -410,13 +410,14 @@ def get_device_state(telescope_id):
         if status is not None and result is not None:
             schedule = do_action_device("get_schedule", telescope_id, {})
             if result is not None:
-                device = result["device"]
-                focuser = result["focuser"]
-                settings = result["setting"]
-                pi_status = result["pi_status"]
-                if result["storage"]["storage_volume"][0]["state"] == "mounted":
-                    free_storage = humanize.naturalsize(result["storage"]["storage_volume"][0]["freeMB"] * 1024 * 1024)
-                elif result["storage"]["storage_volume"][0]["state"] == "connected":
+                device = result.get("device",{})
+                focuser = result.get("user",{})
+                settings = result.get("setting",{})
+                pi_status = result.get("pi_status",{})
+                storage = result.get("storage", {}).get("storage_volume", [{}])[0]
+                if storage.get("state") == "mounted":
+                    free_storage = humanize.naturalsize(storage.get("freeMB",0) * 1024 * 1024)
+                elif  storage.get("state") == "connected":
                     free_storage = "Unavailable while in USB storage mode."
             if wifi_status is not None:
                 if wifi_status["server"]:  # sig_lev is only there while in station mode.
