@@ -71,7 +71,6 @@ def init_logging():
 
     # Reinitializing the causes issues, so don't do it...
     if logger is None:
-        print(f"XXX INIT LOGGER to {Config.log_level}")
         logging.basicConfig(level=Config.log_level)  # This creates the default handler
         logger = logging.getLogger()  # Root logger, see above
         formatter = logging.Formatter('%(asctime)s.%(msecs)03d %(levelname)s %(threadName)s %(message)s',

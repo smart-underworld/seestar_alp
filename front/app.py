@@ -36,7 +36,7 @@ from skyfield.api import load
 
 from device.seestar_logs import SeestarLogging
 from device.config import Config  # type: ignore
-from device.log import init_logging  # type: ignore
+from device.log import init_logging, get_logger  # type: ignore
 from device import telescope
 import threading
 
