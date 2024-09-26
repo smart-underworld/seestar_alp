@@ -153,6 +153,57 @@ class _Config:
         self.init_scope_aim_up_time_s: float = self.get_toml(section, 'scope_aim_up_time_s', 19.4)
         self.init_scope_aim_clockwise_time_s: float = self.get_toml(section, 'scope_aim_clockwise_time_s', 10.8)
 
+    def load_from_form(self, req):
+        # network
+        self.set_toml('network', 'ip_address', req.media['ip_address'])
+        self.set_toml('network', 'port', int(req.media['port']))
+        self.set_toml('network', 'imgport', int(req.media['imgport']))
+        self.set_toml('network', 'stport', int(req.media['stport']))
+        self.set_toml('network', 'sthost', req.media['sthost'])
+        self.set_toml('network', 'timeout', int(req.media['timeout']))
+        self.set_toml('network', 'rtsp_udp', 'rtsp_udp' in req.media)
+
+        # webUI
+        self.set_toml('webui_settings', 'uiport', int(req.media['uiport']))
+        self.set_toml('webui_settings', 'uitheme', req.media['uitheme'])
+        self.set_toml('webui_settings', 'twilighttimes', 'twilighttimes' in req.media)
+        self.set_toml('webui_settings', 'experimental', 'experimental' in req.media)
+        self.set_toml('webui_settings', 'clear_sky_img_src', req.media['clear_sky_img_src'])
+        self.set_toml('webui_settings', 'clear_sky_href', req.media['clear_sky_href'])
+
+        # server
+        self.set_toml('server', 'location', req.media['location'])
+        self.set_toml('server', 'verbose_driver_exceptions', 'verbose_driver_exceptions' in req.media)
+
+        # device
+        self.set_toml('device', 'can_reverse', 'can_reverse' in req.media)
+        self.set_toml('device', 'step_size', float(req.media['step_size']))
+        self.set_toml('device', 'steps_per_sec', int(req.media['steps_per_sec']))
+
+        # logging
+        self.set_toml('logging', 'log_level', req.media['log_level'])
+        self.set_toml('logging', 'log_prefix', req.media['log_prefix'])
+        self.set_toml('logging', 'log_to_stdout', 'log_to_stdout' in req.media)
+        self.set_toml('logging', 'max_size_mb', int(req.media['max_size_mb']))
+        self.set_toml('logging', 'num_keep_logs', int(req.media['num_keep_logs']))
+        self.set_toml('logging', 'log_events_in_info', 'log_events_in_info' in req.media)
+
+        # seestar_initialization
+        self.set_toml('seestar_initialization', 'save_good_frames', 'init_save_good_frames' in req.media)
+        self.set_toml('seestar_initialization', 'save_all_frames', 'init_save_all_frames' in req.media)
+        self.set_toml('seestar_initialization', 'lat', float(req.media['init_lat']))
+        self.set_toml('seestar_initialization', 'long', float(req.media['init_long']))
+        self.set_toml('seestar_initialization', 'gain', int(req.media['init_gain']))
+        self.set_toml('seestar_initialization', 'exposure_length_preview_ms', int(req.media['init_expo_preview_ms']))
+        self.set_toml('seestar_initialization', 'exposure_length_stack_ms', int(req.media['init_expo_stack_ms']))
+        self.set_toml('seestar_initialization', 'dither_enabled', 'init_dither_enabled' in req.media)
+        self.set_toml('seestar_initialization', 'dither_length_pixel', int(req.media['init_dither_length_pixel']))
+        self.set_toml('seestar_initialization', 'dither_frequency', int(req.media['init_dither_frequency']))
+        self.set_toml('seestar_initialization', 'activate_LP_filter', 'init_activate_LP_filter' in req.media)
+        self.set_toml('seestar_initialization', 'dew_heater_power', int(req.media['init_dew_heater_power']))
+        self.set_toml('seestar_initialization', 'scope_aim_up_time_s', float(req.media['init_scope_aim_up_time_s']))
+        self.set_toml('seestar_initialization', 'scope_aim_clockwise_time_s', float(req.media['init_scope_aim_clockwise_time_s']))
+
     def load_toml(self, load_name = None):
         if load_name == None:
             load_name = self.path_to_dat
