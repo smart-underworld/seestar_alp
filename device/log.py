@@ -97,3 +97,15 @@ def init_logging():
             logger.debug('Logging to stdout disabled in settings')
             logger.removeHandler(logger.handlers[0])  # This is the stdout handler
     return logger
+
+def reinit_logging():
+    print(f"XXX REINIT LOGGER")
+    global logger
+    logger.setLevel(Config.log_level)
+    for handler in logger.handlers:
+        handler.setLevel(Config.log_level)
+    return logger
+
+def get_logger():
+    global logger
+    return logger

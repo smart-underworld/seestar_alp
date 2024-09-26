@@ -57,7 +57,6 @@ import traceback
 import inspect
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 import os
-import signal
 import time
 
 # -- isort wants the above line to be blank --
@@ -217,11 +216,10 @@ def falcon_uncaught_exception_handler(req: Request, resp: Response, ex: BaseExce
 class DeviceMain:
     def __init__(self):
         self.httpd = None
-        if sys.platform != 'win32':
-            signal.signal(signal.SIGHUP, self.reload)
 
     def start(self):
         """ Application startup"""
+        Config.load_toml()
 
         logger = log.init_logging()
         # Share this logger throughout
@@ -303,11 +301,8 @@ class DeviceMain:
         if self.httpd:
             self.httpd.shutdown()
 
-    def reload(self, signum, frame):
-        log.logger.info("Got SIGHUP, reloading DeviceMain")
-        self.stop()
-        time.sleep(2)
-        self.start()
+    def reload(self):
+        log.logger.debug("DeviceMain got reload; noop")
 
     def get_imager(self, device_num):
         return telescope.get_seestar_imager(device_num)
