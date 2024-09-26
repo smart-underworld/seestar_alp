@@ -2,6 +2,7 @@
 Description=SeeStar ALP communications
 After=network-online.target
 [Service]
+User=<username>
 Type=simple
 Restart=always
 WorkingDirectory=/home/<username>/seestar_alp
