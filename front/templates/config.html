@@ -54,13 +54,13 @@
 				{% endif %}
 			</select><br>
 			<label for="twilighttimes" class="form-label">Twilight times</label>
-			{% if config.log_to_stdout == true %}
+			{% if config.twilighttimes == true %}
 			<input id="twilighttimes" name="twilighttimes" type="checkbox" checked><br>
 			{% else %}
 			<input id="twilighttimes" name="twilighttimes" type="checkbox"><br>
 			{% endif %}
 			<label for="experimental" class="form-label">Experimental</label>
-			{% if config.log_to_stdout == true %}
+			{% if config.experimental == true %}
 			<input id="experimental" name="experimental" type="checkbox" checked><br>
 			{% else %}
 			<input id="experimental" name="experimental" type="checkbox"><br>
@@ -167,7 +167,7 @@
 			<input id="init_save_good_frames" name="init_save_good_frames" type="checkbox"><br>
 			{% endif %}
 			<label for="init_save_all_frames" class="form-label">Save all frames:</label>
-			{% if config.save_good_frames == true %}
+			{% if config.save_all_frames == true %}
 			<input id="init_save_all_frames" name="init_save_all_frames" type="checkbox" checked><br>
 			{% else %}
 			<input id="init_save_all_frames" name="init_save_all_frames" type="checkbox"><br>
