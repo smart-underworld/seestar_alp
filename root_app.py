@@ -8,6 +8,8 @@ import time
 import sys
 import os
 import waitress
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
 from front.app import FrontMain
 
@@ -59,6 +61,27 @@ class AppRunner:
     def join(self):
         self.thread.join()
 
+    def reload(self):
+        logger.setLevel(Config.log_level)
+        for handler in logger.handlers:
+            handler.setLevel(Config.log_level)
+        self.app_main.reload()
+
+class ConfigChangeHandler(FileSystemEventHandler):
+    def __init__(self, path, alp, front):
+        self.path = path
+        self.alp = alp
+        self.front = front
+        self.last_restart = time.time()
+
+    def on_modified(self, event):
+        if event.src_path == self.path:
+            #print(f'ConfigChangeHandler event type: {event.event_type}  path : {event.src_path}')
+            Config.load_toml()
+            self.alp.reload()
+            self.front.reload()
+        #else:
+        #    print(f"ConfigChangeHandler Ignoring event type: {event.event_type}  path : {event.src_path}")
 
 if __name__ == "__main__":
     if Config.rtsp_udp:
@@ -74,6 +97,12 @@ if __name__ == "__main__":
     logger.info("Starting Front web server")
     front = AppRunner(logger, "Front", FrontMain)
     front.start()
+
+    event_handler = ConfigChangeHandler(Config.path_to_dat, main, front)
+    observer = Observer()
+    #print(f"XXX observing {Config.path_to_dat}")
+    observer.schedule(event_handler, path=Config.path_to_dat, recursive=True)
+    observer.start()
 
     time.sleep(1)
 

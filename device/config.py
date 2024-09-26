@@ -53,107 +53,170 @@ import typing
 # initialized or ?!?!?!?!? If you try to use getcwd() in the file name
 # here, it will also choke Sphinx. This cost me a day.
 #
-_dict = {}
 ### RWR Added
 if getattr(sys, "frozen",  False):
     search_path = sys._MEIPASS
 else:
     search_path = path.join(path.dirname(__file__))
 
-path_to_dat = os.path.abspath(os.path.join(search_path, "config.toml"))
-if not os.path.exists(path_to_dat):
-  path_to_ex = os.path.abspath(os.path.join(search_path, "config.toml.example"))
-  shutil.copy(path_to_ex, path_to_dat)
+class _Config:
+    def __init__(self):
+        self.path_to_dat = os.path.abspath(os.path.join(search_path, "config.toml"))
+        if not os.path.exists(self.path_to_dat):
+            path_to_ex = os.path.abspath(os.path.join(search_path, "config.toml.example"))
+            shutil.copy(path_to_ex, self.path_to_dat)
 
-#print(path_to_dat)
-### RWR _dict = toml.load(f'{sys.path[0]}/config.toml')    # Errors here are fatal.
-_dict = tomlkit.loads(open(path_to_dat).read())
-def get_toml(sect: str, item: str, default : typing.Any):
-    if not _dict is {} and sect in _dict and item in _dict[sect]:
-        return _dict[sect][item]
-    else:
-        return default
+        self.load_toml(self.path_to_dat)
 
-class Config:
-    """Device configuration in ``config.toml``"""
-    # ---------------
-    # Network Section
-    # ---------------
-    ip_address: str = get_toml('network', 'ip_address', '127.0.0.1')
-    port: int = get_toml('network', 'port', 5555)
-    imgport: int = get_toml('network', 'imgport', 7556)
-    stport: int = get_toml('network', 'stport', 8090)
-    sthost: str = get_toml('network', 'sthost', 'localhost')
-    timeout: int = get_toml('network', 'timeout', 5)
-    rtsp_udp: bool = get_toml('network', 'rtsp_udp', True)
+    def get_toml(self, sect: str, item: str, default : typing.Any):
+        if not self._dict is {} and sect in self._dict and item in self._dict[sect]:
+            return self._dict[sect][item]
+        else:
+            return default
 
-    # --------------
-    # WebUI Section
-    # --------------
-    uiport: int = get_toml('webui_settings', 'uiport', 5432)
-    uitheme: str = get_toml('webui_settings', 'uitheme', 'dark')
-    twilighttimes: bool = get_toml('webui_settings', 'twilighttimes', False)
-    experimental: bool = get_toml('webui_settings', 'experimental', False)
-    clear_sky_img_src: str = get_toml('webui_settings', 'clear_sky_img_src', 'https://www.cleardarksky.com/c/LvrmrCAcsk.gif?c=1969222')
-    clear_sky_href: str = get_toml('webui_settings', 'clear_sky_href', 'https://www.cleardarksky.com/c/LvrmrCAkey.html')
+    def load(self, toml_path):
+        self._dict = tomlkit.loads(open(toml_path).read())
 
-    # --------------
-    # Server Section
-    # --------------
-    location: str = get_toml('server', 'location', 'Anywhere on Earth')
-    verbose_driver_exceptions: bool = get_toml('server', 'verbose_driver_exceptions', True)
+        """Device configuration in ``config.toml``"""
+        # ---------------
+        # Network Section
+        # ---------------
+        self.ip_address: str = self.get_toml('network', 'ip_address', '127.0.0.1')
+        self.port: int = self.get_toml('network', 'port', 5555)
+        self.imgport: int = self.get_toml('network', 'imgport', 7556)
+        self.stport: int = self.get_toml('network', 'stport', 8090)
+        self.sthost: str = self.get_toml('network', 'sthost', 'localhost')
+        self.timeout: int = self.get_toml('network', 'timeout', 5)
+        self.rtsp_udp: bool = self.get_toml('network', 'rtsp_udp', True)
 
-    # --------------
-    # Device Section
-    # --------------
-    can_reverse: bool = get_toml('device', 'can_reverse', True)
-    step_size: float = get_toml('device', 'step_size', 1.0)
-    steps_per_sec: int = get_toml('device', 'steps_per_sec', 6)
-    if 'seestars' in _dict:
-        seestars = _dict['seestars']
-    else:
-        seestars = [
-          {
-            'name': 'Seestar Alpha',
-            'ip_address': 'seestar.local',
-            'device_num': 1
-          }
-        ]
+        # --------------
+        # WebUI Section
+        # --------------
+        self.uiport: int = self.get_toml('webui_settings', 'uiport', 5432)
+        self.uitheme: str = self.get_toml('webui_settings', 'uitheme', 'dark')
+        self.twilighttimes: bool = self.get_toml('webui_settings', 'twilighttimes', False)
+        self.experimental: bool = self.get_toml('webui_settings', 'experimental', False)
+        self.clear_sky_img_src: str = self.get_toml('webui_settings', 'clear_sky_img_src', 'https://www.cleardarksky.com/c/LvrmrCAcsk.gif?c=1969222')
+        self.clear_sky_href: str = self.get_toml('webui_settings', 'clear_sky_href', 'https://www.cleardarksky.com/c/LvrmrCAkey.html')
 
-    # ---------------
-    # Logging Section
-    # ---------------
-    log_level: int = logging.getLevelName(get_toml('logging', 'log_level', 'INFO'))  # Not documented but works (!!!!)
-    log_to_stdout: str = get_toml('logging', 'log_to_stdout', False)
-    max_size_mb: int = get_toml('logging', 'max_size_mb', 5)
-    num_keep_logs: int = get_toml('logging', 'num_keep_logs', 10)
-    log_prefix: str = get_toml('logging', 'log_prefix', '')
-    log_events_in_info: bool = get_toml('logging', 'log_events_in_info', False)
+        # --------------
+        # Server Section
+        # --------------
+        self.location: str = self.get_toml('server', 'location', 'Anywhere on Earth')
+        self.verbose_driver_exceptions: bool = self.get_toml('server', 'verbose_driver_exceptions', True)
+
+        # --------------
+        # Device Section
+        # --------------
+        self.can_reverse: bool = self.get_toml('device', 'can_reverse', True)
+        self.step_size: float = self.get_toml('device', 'step_size', 1.0)
+        self.steps_per_sec: int = self.get_toml('device', 'steps_per_sec', 6)
+        if 'seestars' in self._dict:
+            self.seestars = self._dict['seestars']
+        else:
+            self.seestars = [
+            {
+                'name': 'Seestar Alpha',
+                'ip_address': 'seestar.local',
+                'device_num': 1
+            }
+            ]
+
+        # ---------------
+        # Logging Section
+        # ---------------
+        self.log_level: int = logging.getLevelName(self.get_toml('logging', 'log_level', 'INFO'))  # Not documented but works (!!!!)
+        self.log_to_stdout: str = self.get_toml('logging', 'log_to_stdout', False)
+        self.max_size_mb: int = self.get_toml('logging', 'max_size_mb', 5)
+        self.num_keep_logs: int = self.get_toml('logging', 'num_keep_logs', 10)
+        self.log_prefix: str = self.get_toml('logging', 'log_prefix', '')
+        self.log_events_in_info: bool = self.get_toml('logging', 'log_events_in_info', False)
 
 
-    # ---------------
-    # seestar_initialization Section
-    # ---------------
-    secion = 'seestar_initialization'
+        # ---------------
+        # seestar_initialization Section
+        # ---------------
+        section = 'seestar_initialization'
 
-    init_save_good_frames: bool = get_toml(secion, 'save_good_frames', True)
-    init_save_all_frames: bool = get_toml(secion, 'save_all_frames', True)
-    init_lat: float = get_toml(secion, 'lat', 0)
-    init_long: float = get_toml(secion, 'long', 0)
-    init_gain: int = get_toml(secion, 'gain', 80)
-    init_expo_preview_ms: int = get_toml(secion, 'exposure_length_preview_ms', 500)
-    init_expo_stack_ms: int = get_toml(secion, 'exposure_length_stack_ms', 10000)
-    init_dither_enabled: bool = get_toml(secion, 'dither_enabled', True)
-    init_dither_length_pixel: int = get_toml(secion, 'dither_length_pixel', 50)
-    init_dither_frequency: int = get_toml(secion, 'dither_frequency', 10)
-    init_activate_LP_filter: bool = get_toml(secion, 'activate_LP_filter', False)
-    init_dew_heater_power: int = get_toml(secion, 'dew_heater_power', 0)
-    init_scope_aim_up_time_s: float = get_toml(secion, 'scope_aim_up_time_s', 19.4)
-    init_scope_aim_clockwise_time_s: float = get_toml(secion, 'scope_aim_clockwise_time_s', 10.8)
+        self.init_save_good_frames: bool = self.get_toml(section, 'save_good_frames', True)
+        self.init_save_all_frames: bool = self.get_toml(section, 'save_all_frames', True)
+        self.init_lat: float = self.get_toml(section, 'lat', 0)
+        self.init_long: float = self.get_toml(section, 'long', 0)
+        self.init_gain: int = self.get_toml(section, 'gain', 80)
+        self.init_expo_preview_ms: int = self.get_toml(section, 'exposure_length_preview_ms', 500)
+        self.init_expo_stack_ms: int = self.get_toml(section, 'exposure_length_stack_ms', 10000)
+        self.init_dither_enabled: bool = self.get_toml(section, 'dither_enabled', True)
+        self.init_dither_length_pixel: int = self.get_toml(section, 'dither_length_pixel', 50)
+        self.init_dither_frequency: int = self.get_toml(section, 'dither_frequency', 10)
+        self.init_activate_LP_filter: bool = self.get_toml(section, 'activate_LP_filter', False)
+        self.init_dew_heater_power: int = self.get_toml(section, 'dew_heater_power', 0)
+        self.init_scope_aim_up_time_s: float = self.get_toml(section, 'scope_aim_up_time_s', 19.4)
+        self.init_scope_aim_clockwise_time_s: float = self.get_toml(section, 'scope_aim_clockwise_time_s', 10.8)
 
-    def set_toml(section, key, value):
-        _dict[section][key] = value
+    def load_from_form(self, req):
+        # network
+        self.set_toml('network', 'ip_address', req.media['ip_address'])
+        self.set_toml('network', 'port', int(req.media['port']))
+        self.set_toml('network', 'imgport', int(req.media['imgport']))
+        self.set_toml('network', 'stport', int(req.media['stport']))
+        self.set_toml('network', 'sthost', req.media['sthost'])
+        self.set_toml('network', 'timeout', int(req.media['timeout']))
+        self.set_toml('network', 'rtsp_udp', 'rtsp_udp' in req.media)
 
-    def save_toml(save_name = path_to_dat):
+        # webUI
+        self.set_toml('webui_settings', 'uiport', int(req.media['uiport']))
+        self.set_toml('webui_settings', 'uitheme', req.media['uitheme'])
+        self.set_toml('webui_settings', 'twilighttimes', 'twilighttimes' in req.media)
+        self.set_toml('webui_settings', 'experimental', 'experimental' in req.media)
+        self.set_toml('webui_settings', 'clear_sky_img_src', req.media['clear_sky_img_src'])
+        self.set_toml('webui_settings', 'clear_sky_href', req.media['clear_sky_href'])
+
+        # server
+        self.set_toml('server', 'location', req.media['location'])
+        self.set_toml('server', 'verbose_driver_exceptions', 'verbose_driver_exceptions' in req.media)
+
+        # device
+        self.set_toml('device', 'can_reverse', 'can_reverse' in req.media)
+        self.set_toml('device', 'step_size', float(req.media['step_size']))
+        self.set_toml('device', 'steps_per_sec', int(req.media['steps_per_sec']))
+
+        # logging
+        self.set_toml('logging', 'log_level', req.media['log_level'])
+        self.set_toml('logging', 'log_prefix', req.media['log_prefix'])
+        self.set_toml('logging', 'log_to_stdout', 'log_to_stdout' in req.media)
+        self.set_toml('logging', 'max_size_mb', int(req.media['max_size_mb']))
+        self.set_toml('logging', 'num_keep_logs', int(req.media['num_keep_logs']))
+        self.set_toml('logging', 'log_events_in_info', 'log_events_in_info' in req.media)
+
+        # seestar_initialization
+        self.set_toml('seestar_initialization', 'save_good_frames', 'init_save_good_frames' in req.media)
+        self.set_toml('seestar_initialization', 'save_all_frames', 'init_save_all_frames' in req.media)
+        self.set_toml('seestar_initialization', 'lat', float(req.media['init_lat']))
+        self.set_toml('seestar_initialization', 'long', float(req.media['init_long']))
+        self.set_toml('seestar_initialization', 'gain', int(req.media['init_gain']))
+        self.set_toml('seestar_initialization', 'exposure_length_preview_ms', int(req.media['init_expo_preview_ms']))
+        self.set_toml('seestar_initialization', 'exposure_length_stack_ms', int(req.media['init_expo_stack_ms']))
+        self.set_toml('seestar_initialization', 'dither_enabled', 'init_dither_enabled' in req.media)
+        self.set_toml('seestar_initialization', 'dither_length_pixel', int(req.media['init_dither_length_pixel']))
+        self.set_toml('seestar_initialization', 'dither_frequency', int(req.media['init_dither_frequency']))
+        self.set_toml('seestar_initialization', 'activate_LP_filter', 'init_activate_LP_filter' in req.media)
+        self.set_toml('seestar_initialization', 'dew_heater_power', int(req.media['init_dew_heater_power']))
+        self.set_toml('seestar_initialization', 'scope_aim_up_time_s', float(req.media['init_scope_aim_up_time_s']))
+        self.set_toml('seestar_initialization', 'scope_aim_clockwise_time_s', float(req.media['init_scope_aim_clockwise_time_s']))
+
+    def load_toml(self, load_name = None):
+        if load_name == None:
+            load_name = self.path_to_dat
+        self.load(load_name)
+
+    def set_toml(self, section, key, value):
+        self._dict[section][key] = value
+
+    def save_toml(self, save_name = None):
+        if save_name == None:
+            save_name = self.path_to_dat
+        print(f"save_toml: writing toml to {save_name}")
         with open(save_name, "w") as toml_file:
-            toml_file.write(tomlkit.dumps(_dict))
+            toml_file.write(tomlkit.dumps(self._dict))
+
+Config = _Config()

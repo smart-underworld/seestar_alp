@@ -36,7 +36,8 @@ from skyfield.api import load
 
 from device.seestar_logs import SeestarLogging
 from device.config import Config  # type: ignore
-from device.log import init_logging  # type: ignore
+from device.log import init_logging, get_logger  # type: ignore
+from device.version import Version # type: ignore
 from device import telescope
 import threading
 
@@ -402,9 +403,9 @@ def get_device_state(telescope_id):
                 stage = status["View"]["stage"]           
                 if stage == "Stack":
                     if status["View"]["Stack"]["state"] == "working":
-                        target = status["View"]["target_name"]
-                        stacked = status["View"]["Stack"]["stacked_frame"]
-                        failed = status["View"]["Stack"]["dropped_frame"]
+                        target = status.get("View", {}).get("target_name", "")
+                        stacked = status.get("View", {}).get("stacked_frame", "")
+                        failed = status.get("View", {}).get("dropped_frame", "")
                  
         # Check for bad data
         if status is not None and result is not None:
@@ -717,7 +718,10 @@ def do_command(req, resp, telescope_id):
             lat = form.get("lat","").strip()
             long = form.get("long","").strip()
             #print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
-            output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
+            if not lat or not long:
+                output = do_action_device("action_start_up_sequence", telescope_id, {})
+            else:
+                output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
             return None
         case "scope_park":
             output = method_sync("scope_park", telescope_id)
@@ -840,7 +844,7 @@ def do_command(req, resp, telescope_id):
 def do_support_bundle(req, telescope_id = 1):
     zip_buffer = io.BytesIO()
     desc = req.media["desc"]
-    logger.debug("XXXXX getting logs (starting)")
+    logger.debug("do_support_bundle: getting logs (starting)")
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         # Add logs
         cwd = Path(os.getcwd())
@@ -848,16 +852,16 @@ def do_support_bundle(req, telescope_id = 1):
         if pfx == "":
             pfx = "."
         for f in list(pfx.glob("alpyca.log*")):
-            fstr=str(f)
+            fstr=f.name
             logger.debug(f"do_support_bundle: Adding {fstr} to zipfile")
-            with open(str(fstr), "rb") as fh:
+            with open(str(f), "rb") as fh:
                 buf = io.BytesIO(fh.read())
                 zip_file.writestr(fstr, buf.getvalue())
 
         for f in list(pfx.joinpath("device").glob("config.toml*")):
-            fstr=str(f)
+            fstr=f.name
             logger.debug(f"do_support_bundle: Adding {fstr} to zipfile")
-            with open(str(fstr), "rb") as fh:
+            with open(str(f), "rb") as fh:
                 buf = io.BytesIO(fh.read())
                 zip_file.writestr(fstr, buf.getvalue())
 
@@ -869,17 +873,32 @@ def do_support_bundle(req, telescope_id = 1):
         if os_name == "Linux":
             cmd_result = subprocess.check_output(['journalctl', '-u', 'seestar'])
             zip_file.writestr("service_journal.txt", cmd_result)
-        if os_name == "Darwin" or os_name == "Linux":
-            cmd_result = subprocess.check_output(['pip3', 'freeze'])
-            zip_file.writestr("pip3_info.txt", cmd_result)
-            cmd_result = subprocess.check_output(['python3', '--version'])
+        #if os.path.isdir('.git'):
+        #    cmd_result = subprocess.check_output(['git', 'log', '-n', '1'])
+        #    zip_file.writestr("git_version.txt", cmd_result)
+        path = shutil.which('pip')
+        if path is not None:
+            cmd_result = subprocess.check_output(['pip', 'freeze'])
+            zip_file.writestr("pip_info.txt", cmd_result)
+        else:
+            path = shutil.which('pip3')
+            if path is not None:
+                cmd_result = subprocess.check_output(['pip3', 'freeze'])
+                zip_file.writestr("pip3_info.txt", cmd_result)
+        path = shutil.which('python')
+        if path is not None:
+            cmd_result = subprocess.check_output(['python', '--version'])
             zip_file.writestr("python_version.txt", cmd_result)
-            cmd_result = subprocess.check_output(['env'])
-            zip_file.writestr("env.txt", cmd_result)
-            #if os.path.isdir('.git'):
-            #    cmd_result = subprocess.check_output(['git', 'log', '-n', '1'])
-            #    zip_file.writestr("git_version.txt", cmd_result)
-        # TODO: Add Windows specific things here
+        else:
+            path = shutil.which('python3')
+            if path is not None:
+                cmd_result = subprocess.check_output(['python3', '--version'])
+                zip_file.writestr("python3_version.txt", cmd_result)
+                    
+        env_vars = os.environ
+        env_content = "\n".join(f"{key}={value}" for key, value in env_vars.items())
+        zip_file.writestr("env.txt", env_content)
+                    
 
         if telescope_id in telescope.seestar_logcollector:
             dev_log = telescope.get_seestar_logcollector(telescope_id)
@@ -913,9 +932,12 @@ def render_template(req, resp, template_name, **context):
     resp.status = falcon.HTTP_200
     resp.content_type = 'text/html'
     webui_theme = Config.uitheme
+    version = Version.app_version()
+
     resp.text = template.render(flashed_messages=get_flash_cookie(req, resp),
                                 messages=get_messages(),
                                 webui_theme=webui_theme,
+                                version=version,
                                 **context)
 
 
@@ -1938,6 +1960,24 @@ class GenSupportBundleResource:
         resp.text = zip_io.getvalue()
         zip_io.close()
 
+class ConfigResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id = 1):
+        now = datetime.now()
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'config.html', now = now, config = Config, **context) # pylint: disable=repeated-keyword
+
+    @staticmethod
+    def on_post(req, resp, telescope_id = 1):
+        now = datetime.now()
+        context = get_context(telescope_id, req)
+
+        logger.info(f"GOT POST config: {req.media}")
+        Config.load_from_form(req)
+        Config.save_toml()
+
+        render_template(req, resp, 'config.html', now = now, config = Config, **context) # pylint: disable=repeated-keyword
+
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
 
@@ -1967,7 +2007,6 @@ class GetPlanetCoordinates():
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
         resp.text = (f"{ra}, {dec}")
-
 
 class FrontMain:
     def __init__(self):
@@ -2037,6 +2076,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/support', SupportResource())
         app.add_route('/{telescope_id:int}/system', SystemResource())
         app.add_route('/{telescope_id:int}/gensupportbundle', GenSupportBundleResource())
+        app.add_route('/{telescope_id:int}/config', ConfigResource() )
         app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
         app.add_route('/simbad', SimbadResource())
         app.add_route('/stellarium', StellariumResource())
@@ -2045,6 +2085,7 @@ class FrontMain:
         app.add_route('/getbalancesensor', GetBalanceSensorResource())
         app.add_route('/gensupportbundle', GenSupportBundleResource())
         app.add_route('/getplanetcoordinates', GetPlanetCoordinates() )
+        app.add_route('/config', ConfigResource() )
 
         try:
             self.httpd = make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler)
@@ -2073,6 +2114,10 @@ class FrontMain:
         if self.httpd:
             self.httpd.shutdown()
 
+    def reload(self):
+        global logger
+        logger = get_logger()
+        logger.debug("FrontMain got reload")
 
 class style():
     YELLOW = '\033[33m'
