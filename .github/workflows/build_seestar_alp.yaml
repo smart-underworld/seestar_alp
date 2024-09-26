@@ -28,8 +28,9 @@ jobs:
       - name: run pyinstaller for seestar_alp
         id: create_seestar_alp
         run: |
+          git describe HEAD --tags > ./version.txt
           pyinstaller --name="seestar_alp" `
-          --add-data="device/config.toml.example;." --add-data="front/citation;astroquery" --add-data="front/templates;front/templates" --add-data="front/public;front/public" `
+          --add-data="device/config.toml.example;." --add-data="./version.txt;." --add-data="front/citation;astroquery" --add-data="front/templates;front/templates" --add-data="front/public;front/public" `
           --paths=./front --paths=./device `
           root_app.py
           Compress-Archive -Path ./dist/seestar_alp/* -DestinationPath win_seestar_alp.zip
