@@ -1974,6 +1974,12 @@ class ConfigResource:
 
         logger.info(f"GOT POST config: {req.media}")
         Config.set_toml('logging', 'log_level', req.media['log_level'])
+        Config.set_toml('logging', 'log_prefix', req.media['log_prefix'])
+        Config.set_toml('logging', 'log_to_stdout', 'log_to_stdout' in req.media)
+        Config.set_toml('logging', 'max_size_mb', int(req.media['max_size_mb']))
+        Config.set_toml('logging', 'num_keep_logs', int(req.media['num_keep_logs']))
+        Config.set_toml('logging', 'log_events_in_info', 'log_events_in_info' in req.media)
+
         Config.save_toml()
 
         render_template(req, resp, 'config.html', now = now, config = Config, **context) # pylint: disable=repeated-keyword

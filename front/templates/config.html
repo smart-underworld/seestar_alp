@@ -8,10 +8,10 @@
 
 {% block content %}
 	<div class="card border-primary mb-3">
-		<div class="card-body">
-		<h5 class="card-title">Logging</h5>
 		<form method="post" action="/config">
-			<label for="desc" class="form-label">Log Level</label>
+		<div class="card-body">
+			<h5 class="card-title">Logging</h5>
+			<label for="log_level" class="form-label">Log Level:</label>
 			<select id="log_level" name="log_level">
 				{% if config.log_level == 10 %}
 				<option value="DEBUG" selected>DEBUG</option>
@@ -38,11 +38,38 @@
 				{% endif %}
 
 			</select>
-			
+			<br>
+			<label for="log_prefix" class="form-label">Log Prefix:</label>
+			<input id="log_prefix" name="log_prefix" type="text" value="{{ config.prefix }}">
+
+			<br>
+			<label for="log_to_stdout" class="form-label">Log to stdout:</label>
+			{% if config.log_to_stdout == true %}
+			<input id="log_to_stdout" name="log_to_stdout" type="checkbox" checked>
+			{% else %}
+			<input id="log_to_stdout" name="log_to_stdout" type="checkbox">
+			{% endif %}
+
+			<br>
+			<label for="max_size_mb" class="form-label">Max log size in MB</label>
+			<input id="max_size_mb" name="max_size_mb" type="text" value="{{ config.max_size_mb }}">
+
+			<br>
+			<label for="num_keep_logs" class="form-label">Number of logs to keep</label>
+			<input id="num_keep_logs" name="num_keep_logs" type="text" value="{{ config.num_keep_logs }}">
+
+			<br>
+			<label for="log_events_in_info" class="form-label">Log events in info:</label>
+			{% if config.log_events_in_info == true %}
+			<input id="log_events_in_info" name="log_events_in_info" type="checkbox" checked>
+			{% else %}
+			<input id="log_events_in_info" name="log_events_in_info" type="checkbox">
+			{% endif %}
+
 			<br>
 			<button type="submit" class="btn btn-primary">Save</button>
-		</form>
 		</div>
+		</form>
 	</div>
 
 	<footer class="bg-body-tertiary text-center mt-3">
