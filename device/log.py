@@ -71,6 +71,7 @@ def init_logging():
 
     # Reinitializing the causes issues, so don't do it...
     if logger is None:
+        print(f"XXX INIT LOGGER to {Config.log_level}")
         logging.basicConfig(level=Config.log_level)  # This creates the default handler
         logger = logging.getLogger()  # Root logger, see above
         formatter = logging.Formatter('%(asctime)s.%(msecs)03d %(levelname)s %(threadName)s %(message)s',
@@ -96,4 +97,16 @@ def init_logging():
             """
             logger.debug('Logging to stdout disabled in settings')
             logger.removeHandler(logger.handlers[0])  # This is the stdout handler
+    return logger
+
+def reinit_logging():
+    print(f"XXX REINIT LOGGER")
+    global logger
+    logger.setLevel(Config.log_level)
+    for handler in logger.handlers:
+        handler.setLevel(Config.log_level)
+    return logger
+
+def get_logger():
+    global logger
     return logger

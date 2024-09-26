@@ -35,7 +35,7 @@ from skyfield.api import load
 
 from device.seestar_logs import SeestarLogging
 from device.config import Config  # type: ignore
-from device.log import init_logging  # type: ignore
+from device.log import init_logging, get_logger  # type: ignore
 from device.version import Version # type: ignore
 from device import telescope
 import threading
@@ -1912,13 +1912,22 @@ class GenSupportBundleResource:
         zip_io.close()
 
 class ConfigResource:
+    @staticmethod
     def on_get(req, resp, telescope_id = 1):
         now = datetime.now()
         context = get_context(telescope_id, req)
         render_template(req, resp, 'config.html', now = now, config = Config, **context) # pylint: disable=repeated-keyword
 
+    @staticmethod
     def on_post(req, resp, telescope_id = 1):
-        resp.status = falcon.HTTP_200
+        now = datetime.now()
+        context = get_context(telescope_id, req)
+
+        logger.info(f"GOT POST config: {req.media}")
+        Config.set_toml('logging', 'log_level', req.media['log_level'])
+        Config.save_toml()
+
+        render_template(req, resp, 'config.html', now = now, config = Config, **context) # pylint: disable=repeated-keyword
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
@@ -1949,7 +1958,6 @@ class GetPlanetCoordinates():
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
         resp.text = (f"{ra}, {dec}")
-
 
 class FrontMain:
     def __init__(self):
@@ -2018,6 +2026,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/goto', GotoResource())
         app.add_route('/{telescope_id:int}/system', SystemResource())
         app.add_route('/{telescope_id:int}/gensupportbundle', GenSupportBundleResource())
+        app.add_route('/{telescope_id:int}/config', ConfigResource() )
         app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
         app.add_route('/simbad', SimbadResource())
         app.add_route('/stellarium', StellariumResource())
@@ -2055,6 +2064,10 @@ class FrontMain:
         if self.httpd:
             self.httpd.shutdown()
 
+    def reload(self):
+        global logger
+        logger = get_logger()
+        logger.debug("FrontMain got reload")
 
 class style():
     YELLOW = '\033[33m'
