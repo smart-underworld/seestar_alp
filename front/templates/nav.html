@@ -10,49 +10,38 @@
                 <li class="nav-item">
                     <a class="nav-link" aria-current="page" href="{{ root }}/">Home</a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ root }}/image">Image</a>
-                </li>
-                {% if experimental %}
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ root }}/live">Live</a>
-                </li>
-                {% endif %}
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ root }}/mosaic">Mosaic</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ root }}/schedule">Schedule</a>
-                </li>
-				<li class="nav-item">
-					<a class="nav-link" href="{{ root }}/goto">Goto</a>
+				<li class="nav-item dropdown">
+					<a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">Functions
+					</a>
+					<ul class="dropdown-menu" aria-labelledby="navbarDropdown">
+						<li class="dropdown-item">
+							<a class="nav-link" href="{{ root }}/command">Commands</a>
+						</li>
+						<li class="dropdown-item">
+							<a class="nav-link" href="{{ root }}/goto">Goto</a>
+						</li>
+						<li class="dropdown-item">
+							<a class="nav-link" href="{{ root }}/image">Image</a>
+						</li>
+						{% if experimental %}
+						<li class="dropdown-item">
+							<a class="nav-link" href="{{ root }}/live">Live</a>
+						</li>
+						{% endif %}
+						<li class="dropdown-item">
+							<a class="nav-link" href="{{ root }}/mosaic">Mosaic</a>
+						</li>
+						<li class="dropdown-item">
+							<a class="nav-link" href="{{ root }}/schedule">Schedule</a>
+						</li>
+						<li class="dropdown-item">
+							<a class="nav-link" href="{{ root }}/settings">Settings</a>
+						</li>
+						<li class="dropdown-item">
+							<a class="nav-link" href="{{ root }}/stats">Stats</a>
+						</li>
+					</ul>
 				</li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ root }}/command">Commands</a>
-                </li>
-                {#            <li class="nav-item">#}
-                {#              <a class="nav-link" href="/settings">Settings</a>#}
-                {#            </li>#}
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ root }}/stats">Stats</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ root }}/settings">Settings</a>
-                </li>
-                {#            <li class="nav-item dropdown">#}
-                {#              <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">#}
-                {#                Dropdown#}
-                {#              </a>#}
-                {#              <ul class="dropdown-menu" aria-labelledby="navbarDropdown">#}
-                {#                <li><a class="dropdown-item" href="#">Action</a></li>#}
-                {#                <li><a class="dropdown-item" href="#">Another action</a></li>#}
-                {#                <li><hr class="dropdown-divider"></li>#}
-                {#                <li><a class="dropdown-item" href="#">Something else here</a></li>#}
-                {#              </ul>#}
-                {#            </li>#}
-                {#            <li class="nav-item">#}
-                {#              <a class="nav-link disabled">Disabled</a>#}
-                {#            </li>#}
                 <li class="nav-item">
                     <a class="nav-link" href="{{ root }}/support">Support</a>
                 </li>
@@ -78,6 +67,9 @@
                                href="/{{ tel["device_num"] }}/{{ partial_path }}">{{ tel["name"] }}
                             ({{ tel["ip_address"] }})</a></li>
                     {% endfor %}
+					{% if partial_path in ["command", "goto", "image", "mosaic", "settings"] or "schedule" %}
+						<li><a class="dropdown-item" href="/0/{{ partial_path }}">Seestar Federation</a></li>
+					{% endif %}
                 </ul>
             </div>
         </div>

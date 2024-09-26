@@ -96,6 +96,8 @@ class _Config:
         self.uitheme: str = self.get_toml('webui_settings', 'uitheme', 'dark')
         self.twilighttimes: bool = self.get_toml('webui_settings', 'twilighttimes', False)
         self.experimental: bool = self.get_toml('webui_settings', 'experimental', False)
+        self.clear_sky_img_src: str = self.get_toml('webui_settings', 'clear_sky_img_src', 'https://www.cleardarksky.com/c/LvrmrCAcsk.gif?c=1969222')
+        self.clear_sky_href: str = self.get_toml('webui_settings', 'clear_sky_href', 'https://www.cleardarksky.com/c/LvrmrCAkey.html')
 
         # --------------
         # Server Section
@@ -162,7 +164,7 @@ class _Config:
     def save_toml(self, save_name = None):
         if save_name == None:
             save_name = self.path_to_dat
-        print(f"XXX writing toml to {save_name}")
+        print(f"save_toml: writing toml to {save_name}")
         with open(save_name, "w") as toml_file:
             toml_file.write(tomlkit.dumps(self._dict))
 
