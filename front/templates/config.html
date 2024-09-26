@@ -54,13 +54,13 @@
 				{% endif %}
 			</select><br>
 			<label for="twilighttimes" class="form-label">Twilight times</label>
-			{% if config.log_to_stdout == true %}
+			{% if config.twilighttimes == true %}
 			<input id="twilighttimes" name="twilighttimes" type="checkbox" checked><br>
 			{% else %}
 			<input id="twilighttimes" name="twilighttimes" type="checkbox"><br>
 			{% endif %}
 			<label for="experimental" class="form-label">Experimental</label>
-			{% if config.log_to_stdout == true %}
+			{% if config.experimental == true %}
 			<input id="experimental" name="experimental" type="checkbox" checked><br>
 			{% else %}
 			<input id="experimental" name="experimental" type="checkbox"><br>
@@ -215,8 +215,4 @@
 	<footer class="bg-body-tertiary text-center mt-3">
 		Version: {{ version }}
 	</footer>
-{% endblock %}
-
-{% block html_header %}
-    <meta http-equiv="refresh" content="15">
 {% endblock %}
