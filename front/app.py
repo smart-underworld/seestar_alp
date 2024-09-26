@@ -843,7 +843,7 @@ def do_command(req, resp, telescope_id):
 def do_support_bundle(req, telescope_id = 1):
     zip_buffer = io.BytesIO()
     desc = req.media["desc"]
-    logger.debug("XXXXX getting logs (starting)")
+    logger.debug("do_support_bundle: getting logs (starting)")
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         # Add logs
         cwd = Path(os.getcwd())

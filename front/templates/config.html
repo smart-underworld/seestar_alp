@@ -2,23 +2,48 @@
 
 {% block header %}
 	<div class="container mt-3">
-		<p class="h1">Config</p>
+		<p class="h1">SSC Config</p>
 	</div>
 {% endblock %}
 
 {% block content %}
+	<div class="card border-primary mb-3">
+		<div class="card-body">
+		<h5 class="card-title">Logging</h5>
+		<form method="post" action="/config">
+			<label for="desc" class="form-label">Log Level</label>
+			<select id="log_level" name="log_level">
+				{% if config.log_level == 10 %}
+				<option value="DEBUG" selected>DEBUG</option>
+				{% else %}
+				<option value="DEBUG">DEBUG</option>
+				{% endif %}
 
-	<form method="post" action="/config">
-		<label for="desc" class="form-label">Log Level</label>
-		<select id="log_level" name="log_level">
-			<option value="DEBUG">DEBUG</option>
-			<option value="INFO">INFO</option>
-			<option value="WARN">WARN</option>
-			<option value="ERROR">ERROR</option>
-		  </select>
-		<br>
-		<button type="submit" class="btn btn-primary">Save</button>
-	</form>
+				{% if config.log_level == 20 %}
+				<option value="INFO" selected>INFO</option>
+				{% else %}
+				<option value="INFO">INFO</option>
+				{% endif %}
+
+				{% if config.log_level == 30 %}
+				<option value="WARN" selected>WARN</option>
+				{% else %}
+				<option value="WARN">WARN</option>
+				{% endif %}
+
+				{% if config.log_level == 40 %}
+				<option value="ERROR" selected>ERROR</option>
+				{% else %}
+				<option value="ERROR">ERROR</option>
+				{% endif %}
+
+			</select>
+			
+			<br>
+			<button type="submit" class="btn btn-primary">Save</button>
+		</form>
+		</div>
+	</div>
 
 	<footer class="bg-body-tertiary text-center mt-3">
 		Version: {{ version }}
