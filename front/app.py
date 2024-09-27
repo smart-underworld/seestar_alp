@@ -722,25 +722,25 @@ def do_command(req, resp, telescope_id):
                 output = do_action_device("action_start_up_sequence", telescope_id, {})
             else:
                 output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
-            return None
+            return output
         case "scope_park":
             output = method_sync("scope_park", telescope_id)
-            return None
+            return output
         case "scope_move_to_horizon":
             output = method_sync("scope_move_to_horizon", telescope_id)
-            return None
+            return output
         case "pi_reboot":
             output = method_sync("pi_reboot", telescope_id)
-            return None
+            return output
         case "pi_shutdown":
             output = method_sync("pi_shutdown", telescope_id)
-            return None
+            return output
         case "start_auto_focus":
             output = method_sync("start_auto_focuse", telescope_id)
-            return None
+            return output
         case "stop_auto_focus":
             output = method_sync("stop_auto_focuse", telescope_id)
-            return None
+            return output
         case "get_focuser_position":
             output = method_sync("get_focuser_position", telescope_id)
             return output
@@ -749,7 +749,7 @@ def do_command(req, resp, telescope_id):
             return output
         case "start_solve":
             output = method_sync("start_solve", telescope_id)
-            return None
+            return output
         case "get_solve_result":
             output = method_sync("get_solve_result", telescope_id)
             return output
