@@ -96,6 +96,7 @@ class _Config:
         self.uitheme: str = self.get_toml('webui_settings', 'uitheme', 'dark')
         self.twilighttimes: bool = self.get_toml('webui_settings', 'twilighttimes', False)
         self.experimental: bool = self.get_toml('webui_settings', 'experimental', False)
+        self.confirm: bool = self.get_toml('webui_settings', 'confirm', True)
         self.clear_sky_img_src: str = self.get_toml('webui_settings', 'clear_sky_img_src', 'https://www.cleardarksky.com/c/LvrmrCAcsk.gif?c=1969222')
         self.clear_sky_href: str = self.get_toml('webui_settings', 'clear_sky_href', 'https://www.cleardarksky.com/c/LvrmrCAkey.html')
 
@@ -168,6 +169,7 @@ class _Config:
         self.set_toml('webui_settings', 'uitheme', req.media['uitheme'])
         self.set_toml('webui_settings', 'twilighttimes', 'twilighttimes' in req.media)
         self.set_toml('webui_settings', 'experimental', 'experimental' in req.media)
+        self.set_toml('webui_settings', 'confirm', 'confirm' in req.media)
         self.set_toml('webui_settings', 'clear_sky_img_src', req.media['clear_sky_img_src'])
         self.set_toml('webui_settings', 'clear_sky_href', req.media['clear_sky_href'])
 

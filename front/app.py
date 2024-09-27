@@ -142,6 +142,7 @@ def get_context(telescope_id, req):
     segments = req.relative_uri.lstrip("/").split("/", 1)
     partial_path = segments[1] if len(segments) > 1 else segments[0]
     experimental = Config.experimental
+    confirm = Config.confirm
     uitheme = Config.uitheme
     if telescope_id > 0:
         telescope = get_telescope(telescope_id)
@@ -153,7 +154,7 @@ def get_context(telescope_id, req):
         }
 
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
-            "online": online, "imager_root": imager_root, "experimental": experimental, "uitheme": uitheme}
+            "online": online, "imager_root": imager_root, "experimental": experimental, "confirm": confirm, "uitheme": uitheme}
 
 
 def get_flash_cookie(req, resp):

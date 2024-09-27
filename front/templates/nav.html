@@ -14,31 +14,36 @@
 					<a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">Functions
 					</a>
 					<ul class="dropdown-menu" aria-labelledby="navbarDropdown">
-						<li class="dropdown-item">
-							<a class="nav-link" href="{{ root }}/command">Commands</a>
+						<li>
+							<a class="dropdown-item" href="{{ root }}/command">Commands</a>
 						</li>
-						<li class="dropdown-item">
-							<a class="nav-link" href="{{ root }}/goto">Goto</a>
+						<li>
+							<a class="dropdown-item" href="{{ root }}/goto">Goto</a>
 						</li>
-						<li class="dropdown-item">
-							<a class="nav-link" href="{{ root }}/image">Image</a>
+						<li>
+							<a class="dropdown-item" href="{{ root }}/image">Image</a>
 						</li>
 						{% if experimental %}
-						<li class="dropdown-item">
-							<a class="nav-link" href="{{ root }}/live">Live</a>
+						<li>
+							<a class="dropdown-item" href="{{ root }}/live">Live</a>
 						</li>
 						{% endif %}
-						<li class="dropdown-item">
-							<a class="nav-link" href="{{ root }}/mosaic">Mosaic</a>
+						<li>
+							<a class="dropdown-item" href="{{ root }}/mosaic">Mosaic</a>
 						</li>
-						<li class="dropdown-item">
-							<a class="nav-link" href="{{ root }}/schedule">Schedule</a>
+						<li>
+							<a class="dropdown-item" href="{{ root }}/schedule">Schedule</a>
 						</li>
-						<li class="dropdown-item">
-							<a class="nav-link" href="{{ root }}/settings">Settings</a>
+						<li>
+							<a class="dropdown-item" href="{{ root }}/settings">Settings</a>
 						</li>
-						<li class="dropdown-item">
-							<a class="nav-link" href="{{ root }}/stats">Stats</a>
+						{% if experimental %}
+						<li>
+							<a class="dropdown-item" href="{{ root}}/config">SSC Config</a>
+						</li>
+						{% endif %}
+						<li>
+							<a class="dropdown-item" href="{{ root }}/stats">Stats</a>
 						</li>
 					</ul>
 				</li>
