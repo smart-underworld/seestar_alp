@@ -86,7 +86,7 @@ class Seestar:
             return False
         except socket.error as e:
             # Don't bother trying to recover if watch events is False
-            self.logger.error(f"Send socket error: {e}")
+            self.logger.debug(f"Send socket error: {e}")
             self.disconnect()
             if self.is_watch_events and self.reconnect():
                 return self.send_message(data)
@@ -142,7 +142,7 @@ class Seestar:
         except socket.error as e:
             # todo : if general socket error, close socket, and kick off reconnect?
             # todo : no route to host...
-            self.logger.error(f"Read socket error: {e}")
+            self.logger.debug(f"Read socket error: {e}")
             # todo : handle message failure
             self.disconnect()
             if self.is_watch_events and self.reconnect():
@@ -597,7 +597,7 @@ class Seestar:
         if lat > 80:
             self.logger.warn(f"lat has max value of 80. You requested {lat}.")
             lat = 80
-            
+
         cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
 
         self.logger.info(f"moving scope from lat-lon {cur_latlon[0]}, {cur_latlon[1]} to {lat}, {lon}")
