@@ -151,8 +151,8 @@ class _Config:
         self.init_dither_frequency: int = self.get_toml(section, 'dither_frequency', 10)
         self.init_activate_LP_filter: bool = self.get_toml(section, 'activate_LP_filter', False)
         self.init_dew_heater_power: int = self.get_toml(section, 'dew_heater_power', 0)
-        self.init_scope_aim_up_time_s: float = self.get_toml(section, 'scope_aim_up_time_s', 19.4)
-        self.init_scope_aim_clockwise_time_s: float = self.get_toml(section, 'scope_aim_clockwise_time_s', 10.8)
+        self.scope_aim_lat: float = self.get_toml(section, 'scope_aim_lat', 60.0)
+        self.scope_aim_lon: float = self.get_toml(section, 'scope_aim_lon', 20.0)
 
     def load_from_form(self, req):
         # network
@@ -203,8 +203,8 @@ class _Config:
         self.set_toml('seestar_initialization', 'dither_frequency', int(req.media['init_dither_frequency']))
         self.set_toml('seestar_initialization', 'activate_LP_filter', 'init_activate_LP_filter' in req.media)
         self.set_toml('seestar_initialization', 'dew_heater_power', int(req.media['init_dew_heater_power']))
-        self.set_toml('seestar_initialization', 'scope_aim_up_time_s', float(req.media['init_scope_aim_up_time_s']))
-        self.set_toml('seestar_initialization', 'scope_aim_clockwise_time_s', float(req.media['init_scope_aim_clockwise_time_s']))
+        self.set_toml('seestar_initialization', 'scope_aim_lat', float(req.media['scope_aim_lat']))
+        self.set_toml('seestar_initialization', 'scope_aim_lon', float(req.media['scope_aim_lon']))
 
     def load_toml(self, load_name = None):
         if load_name == None:
