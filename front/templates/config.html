@@ -65,6 +65,13 @@
 			{% else %}
 			<input id="experimental" name="experimental" type="checkbox"><br>
 			{% endif %}
+			<label for="confirm" class="form-label">Commands Confirmation Dialog</label>
+			{% if config.confirm == true %}
+			<input id="confirm" name="confirm" type="checkbox" checked><br>
+			{% else %}
+			<input id="confirm" name="confirm" type="checkbox"><br>
+			{% endif %}
+
 			<label for="clear_sky_img_src" class="form-label">ClearSky img source:</label>
 			<input id="clear_sky_img_src" name="clear_sky_img_src" type="text" size=80 value="{{ config.clear_sky_img_src }}"><br>
 			<label for="clear_sky_href" class="form-label">ClearSky href:</label>
