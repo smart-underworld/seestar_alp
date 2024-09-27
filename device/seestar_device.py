@@ -132,6 +132,9 @@ class Seestar:
 
     def get_socket_msg(self):
         try:
+            if self.s == None:
+                self.logger.warn("socket not initialized!")
+                return None
             data = self.s.recv(1024 * 60)  # comet data is >50kb
         except socket.timeout:
             self.logger.warn("Socket timeout")
@@ -145,7 +148,7 @@ class Seestar:
             if self.is_watch_events and self.reconnect():
                 return self.get_socket_msg()
             return None
-
+        
         data = data.decode("utf-8")
         if len(data) == 0:
             return None
@@ -426,9 +429,9 @@ class Seestar:
 
     # {"method":"scope_speed_move","params":{"speed":4000,"angle":270,"dur_sec":10}}
     def move_scope(self, in_angle, in_speed, in_dur=3):
-        self.logger.info("%s: moving slew angle: %s, speed: %s, dur: %s", self.device_name, in_angle, in_speed, in_dur)
+        self.logger.debug("%s: moving slew angle: %s, speed: %s, dur: %s", self.device_name, in_angle, in_speed, in_dur)
         if self.is_goto():
-            self.logger.info("Failed: mount is in goto routine.")
+            self.logger.warn("Failed: mount is in goto routine.")
             return False
         data = {}
         data['method'] = 'scope_speed_move'
@@ -509,7 +512,7 @@ class Seestar:
         if result == True:
             self.set_target_name(params["target_name"])
             # repeat plate solve and adjust position as needed
-            threading.Thread(target=lambda: self.auto_center_thread(target_ra, target_dec)).start()
+            threading.Thread(name=f"goto-dec-offset-thread.{self.device_name}", target=lambda: self.auto_center_thread(target_ra, target_dec)).start()
             return True
         else:
             self.logger.info("Failed to slew")
@@ -586,33 +589,50 @@ class Seestar:
         return {"url": "http://" + self.host + "/" + parent_folder + "/" + result_url,
                 "name": result_name}
 
-    # move from -90 to this latitude
-    # speed 1000 for 20 seconds is 90 degrees
-    # can move at most 10 secs each
-    def move_up_rotate_thread_fn(self, up_time, clockwise_time):
-        self.logger.info("moving scope up for %d seconds", up_time)
-        start_time = time.time()
-        while time.time() < start_time + up_time:
-            if self.move_scope(90, 2000, 10) == False:
-                return
-            time.sleep(0.2)
-        self.move_scope(90, 0, 0)
+    # move to a good starting point position specified by lat and lon
+    def move_up_rotate_thread_fn(self, lat, lon):
+        if lon < 0:
+            lon = 360+lon
 
-        self.logger.info("moving scope closewise for %d seconds", clockwise_time)
-        angle = -1
-        if clockwise_time > 0:
-            angle = 180
-        elif clockwise_time < 0:
-            angle = 0
-            clockwise_time = -clockwise_time
-        if angle >= 0:
-            start_time = time.time()
-            while time.time() < start_time + clockwise_time:
-                if self.move_scope(angle, 1000, 10) == False:
-                    return
-                time.sleep(0.2)
-            self.move_scope(0, 0, 0)
-        self.logger.info("finished moving scope to requested position.")
+        if lat > 80:
+            self.logger.warn(f"lat has max value of 80. You requested {lat}.")
+            lat = 80
+            
+        cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+
+        self.logger.info(f"moving scope from lat-lon {cur_latlon[0]}, {cur_latlon[1]} to {lat}, {lon}")
+
+        while True:
+            delta_lat = lat-cur_latlon[0]
+            if abs(delta_lat) < 5:
+                break
+            elif delta_lat > 0:
+                direction = 90
+            else:
+                direction = -90
+            if self.move_scope(direction, 1000, 10) == False:
+                break
+            time.sleep(0.1)
+            cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+        self.move_scope(0, 0, 0)
+
+        while True:
+            delta_lon = lon-cur_latlon[1]
+            if abs(delta_lon) < 5:
+                break
+            elif delta_lon > 0:
+                direction = 0
+            else:
+                direction = 180
+            if self.move_scope(direction, 1000, 10) == False:
+                break
+            time.sleep(0.1)
+            cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+        self.move_scope(0, 0, 0)
+
+        cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+        self.logger.info(f"final lat-lon after move:  {cur_latlon[0]}, {cur_latlon[1]}")
+
 
     def action_set_dew_heater(self, params):
         return self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
@@ -685,14 +705,14 @@ class Seestar:
             if device['device_num'] == self.device_num:
                 break
         
-        aim_up_time = Config.init_scope_aim_up_time_s
-        aim_clockwise_time = Config.init_scope_aim_clockwise_time_s
-        if 'scope_aim_up_time_s' in device:
-            aim_up_time = device['scope_aim_up_time_s']
-        if 'scope_aim_clockwise_time_s' in device:
-            aim_clockwise_time = device['scope_aim_clockwise_time_s']
+        scope_aim_lat = Config.scope_aim_lat
+        scope_aim_lon = Config.scope_aim_lon
+        if 'scope_aim_lat' in device:
+            scope_aim_lat = device['scope_aim_lat']
+        if 'scope_aim_lon' in device:
+            scope_aim_lon = device['scope_aim_lon']
 
-        move_up_dec_thread = threading.Thread(target=lambda: self.move_up_rotate_thread_fn(aim_up_time, aim_clockwise_time))
+        move_up_dec_thread = threading.Thread(name=f"start-up-thread.{self.device_name}", target=lambda: self.move_up_rotate_thread_fn(scope_aim_lat, scope_aim_lon))
         move_up_dec_thread.start()
         return "sequence started"
 
@@ -782,7 +802,7 @@ class Seestar:
             self.scheduler_state = "Stopped"
             return
         self.scheduler_item_state = "Running"
-        self.mosaic_thread = threading.Thread(target=lambda: self.spectra_thread_fn(params))
+        self.mosaic_thread = threading.Thread(name=f"spectra-thread.{self.device_name}", target=lambda: self.spectra_thread_fn(params))
         self.mosaic_thread.start()
         return "spectra mosiac started"
 
