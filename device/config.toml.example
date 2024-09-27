@@ -40,8 +40,8 @@ dither_length_pixel = 50
 dither_frequency = 10
 activate_LP_filter = false                   
 dew_heater_power = 0                # 0 - 100; 0 is off, 100 is max
-scope_aim_up_time_s = 19.4          # time to raise the lens arm in seconds
-scope_aim_clockwise_time_s = 10.8   # time to rotate base counter clockwise in seconds, use negative values to rotate clockwise
+scope_aim_lat = 60          # start up latitude in degrees -90 to 80
+scope_aim_lon = 20          # start up longitude in degrees 0 to 360
 
 [logging]
 log_level = 'INFO'   #'WARN' only if trouble    #'INFO' to output more logging      #'DEBUG' still more output
@@ -56,8 +56,8 @@ name = "Seestar Alpha"
 # ip_address should not have to be changed unless you have more than 1 seestar
 ip_address = "seestar.local"
 device_num = 1
-scope_aim_up_time_s = 19.4          # (override default) time to raise the lens arm in seconds
-scope_aim_clockwise_time_s = 10.8   # (override default) time to rotate base counter clockwise in seconds, use negative values to rotate clockwise
+scope_aim_lat = 60          # start up latitude in degrees -90 to 80 (override default)
+scope_aim_lon = 20          # start up longitude in degrees 0 to 360 (override default)
 
 #[[seestars]]
 #name = "Seestar Beta"
