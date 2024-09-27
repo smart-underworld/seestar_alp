@@ -142,6 +142,7 @@ def get_context(telescope_id, req):
     segments = req.relative_uri.lstrip("/").split("/", 1)
     partial_path = segments[1] if len(segments) > 1 else segments[0]
     experimental = Config.experimental
+    confirm = Config.confirm
     uitheme = Config.uitheme
     if telescope_id > 0:
         telescope = get_telescope(telescope_id)
@@ -153,7 +154,7 @@ def get_context(telescope_id, req):
         }
 
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
-            "online": online, "imager_root": imager_root, "experimental": experimental, "uitheme": uitheme}
+            "online": online, "imager_root": imager_root, "experimental": experimental, "confirm": confirm, "uitheme": uitheme}
 
 
 def get_flash_cookie(req, resp):
@@ -996,7 +997,7 @@ def export_schedule(telescope_id):
                 row[key] = entry['params'].get(key, '')
         else:
             # If 'params' key is missing, ensure all fixed params are empty
-            row['nokey'] = ''
+            row['nokey'] = entry['params']
         writer.writerow(row)
 
     output.seek(0)
@@ -1790,6 +1791,28 @@ class SimbadResource:
         resp.text = ra_dec_j2000
         return
 
+
+def decimal_RA_to_Sexagesimal(ra:float):
+    if ra < 0:
+        tmp1 = str(float(360 + ra) / 15).split(".")
+    else:
+        tmp1 = str(ra / 15).split(".")
+    ra_hour = tmp1[0]
+    tmp2 = str(float("0." + tmp1[1]) * 60).split(".")
+    ra_min = tmp2[0]
+    ra_sec = float("0." + tmp2[1]) * 60
+    return ra_hour + "h" + ra_min + "m" + str(round(ra_sec,2)) + "s"
+
+
+def decimal_DEC_to_Sexagesimal(dec:float):
+    tmp1 = str(dec).split(".")
+    dec_deg = tmp1[0]
+    tmp2 = str(float("0." + tmp1[1]) * 60).split(".")
+    dec_min = tmp2[0]
+    dec_sec = float("0." + tmp2[1]) * 60
+    return dec_deg + "d" + dec_min + "m" +  str(round(dec_sec,1)) + "s"
+
+
 class StellariumResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -1802,8 +1825,8 @@ class StellariumResource:
             resp.text = 'Requst had communications error.'
             return
         StelJSON = json.loads(html_content)
-        ra_j2000 = round(StelJSON['raJ2000'],3)
-        dec_J2000 = round(StelJSON['decJ2000'],3)
+        ra_j2000 = StelJSON['ra']
+        dec_J2000 = StelJSON['dec']
         if (StelJSON['localized-name'] != "" ):
             objName = StelJSON['localized-name']
         elif (StelJSON['name'] != "" and objName != ""):
@@ -1820,7 +1843,7 @@ class StellariumResource:
         
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
-        resp.text = str(ra_j2000) + "/" + str(dec_J2000) + "/" + lpFilter + "/" + objName
+        resp.text = decimal_RA_to_Sexagesimal(ra_j2000) + "/" + decimal_DEC_to_Sexagesimal(dec_J2000) + "/" + lpFilter + "/" + objName
 
 
 # class StellariumResource:

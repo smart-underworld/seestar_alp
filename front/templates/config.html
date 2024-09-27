@@ -65,6 +65,13 @@
 			{% else %}
 			<input id="experimental" name="experimental" type="checkbox"><br>
 			{% endif %}
+			<label for="confirm" class="form-label">Commands Confirmation Dialog</label>
+			{% if config.confirm == true %}
+			<input id="confirm" name="confirm" type="checkbox" checked><br>
+			{% else %}
+			<input id="confirm" name="confirm" type="checkbox"><br>
+			{% endif %}
+
 			<label for="clear_sky_img_src" class="form-label">ClearSky img source:</label>
 			<input id="clear_sky_img_src" name="clear_sky_img_src" type="text" size=80 value="{{ config.clear_sky_img_src }}"><br>
 			<label for="clear_sky_href" class="form-label">ClearSky href:</label>
@@ -174,7 +181,7 @@
 			{% endif %}
 			<label for="init_lat" class="form-label">Latitude:</label>
 			<input id="init_lat" name="init_lat" type="text" value="{{ config.init_lat }}"><br>
-			<label for="init_long" class="form-label">Latitude:</label>
+			<label for="init_long" class="form-label">Longitude:</label>
 			<input id="init_long" name="init_long" type="text" value="{{ config.init_long }}"><br>
 			<label for="init_gain" class="form-label">Gain:</label>
 			<input id="init_gain" name="init_gain" type="text" value="{{ config.init_gain }}"><br>

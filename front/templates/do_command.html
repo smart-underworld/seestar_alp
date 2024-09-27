@@ -1,8 +1,23 @@
-<div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+{% block extra_styles %}
+    <style>
+        .navbar {
+			position: relative;
+            z-index: 1060;
+        }
+
+        .modal {
+			position: fixed;
+            z-index: 1055;
+        }
+    </style>
+{% endblock %}
+
+<div class="modal fade {% if confirm %}show{% endif %}" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="{% if not confirm %}true{% else %}false{% endif %}">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="confirmationModalLabel">Confirmation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="modalBody">
                 You selected: <span id="selectedCommandText"></span>. Do you want to proceed?
@@ -15,21 +30,20 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
-
 <script>
 var currentForm;
 
 function showModal(event, form) {
-    event.preventDefault();
+    event.preventDefault(); // Prevent the default form submission
 
-    currentForm = form;
+    currentForm = form; // Store the current form reference
 
     var dropdown = form.querySelector('select[name="command"]');
     var commandInput = form.querySelector('input[name="command"]');
 
     var selectedText;
 
+    // Determine the selected command text
     if (dropdown) {
         selectedText = dropdown.options[dropdown.selectedIndex].text;
     } else if (commandInput && commandInput.value === "start_up_sequence") {
@@ -40,15 +54,23 @@ function showModal(event, form) {
 
     document.getElementById('selectedCommandText').textContent = selectedText;
 
-    var modal = new bootstrap.Modal(document.getElementById('confirmationModal'));
-    modal.show();
+    // Show the modal only if confirm is true
+    if ({{ confirm|tojson }}) {
+        var modal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+        modal.show();
 
-    document.getElementById('confirmButton').onclick = function() {
-        modal.hide();
+        // Handle confirmation button click
+        document.getElementById('confirmButton').onclick = function() {
+            modal.hide(); // Hide the modal
+            currentForm.submit(); // Submit the form
+        };
+    } else {
+        // If confirm is false, submit the form directly
         currentForm.submit();
-    };
+    }
 }
 </script>
+
 
  <div class="container">
 	<div class="row">
@@ -96,9 +118,9 @@ function showModal(event, form) {
 				<div class="col">
 					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
 						<div style="margin-bottom:5px;font-weight:bold">
-							<label for="dropdown">Startup / Shutdown</label>
+							<label for="dropdown1">Startup / Shutdown</label>
 						</div>
-						<select id="dropdown" name="command">
+						<select id="dropdown1" name="command">
 							<option value="scope_move_to_horizon">Scope Move to Horizon</option>
 							<option value="scope_park">Scope Park</option>
 							<option value="pi_reboot">Scope Reboot</option>
@@ -110,9 +132,9 @@ function showModal(event, form) {
 				<div class="col">
 					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
 						<div style="margin-bottom:5px;font-weight:bold">
-							<label for="dropdown">Polar Align</label>
+							<label for="dropdown2">Polar Align</label>
 						</div>
-						<select id="dropdown" name="command">
+						<select id="dropdown2" name="command">
 							<option value="start_polar_align">Start Polar Align</option>
 							<option value="stop_polar_align">Stop Polar Align</option>
 						</select>
@@ -122,9 +144,9 @@ function showModal(event, form) {
 				<div class="col">
 					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
 						<div style="margin-bottom:5px;font-weight:bold">
-							<label for="dropdown">AutoFocus</label>
+							<label for="dropdown3">AutoFocus</label>
 						</div>
-						<select id="dropdown" name="command">
+						<select id="dropdown3" name="command">
 							<option value="start_auto_focus">Start AutoFocus</option>
 							<option value="stop_auto_focus">Stop AutoFocus</option>
 							<option value="get_focuser_position">Get Current Focuser Position</option>
@@ -138,9 +160,9 @@ function showModal(event, form) {
 				<div class ="col">
 					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
 						<div style="margin-bottom:5px;font-weight:bold">
-							<label for="dropdown">Dark Frame Generation</label>
+							<label for="dropdown4">Dark Frame Generation</label>
 						</div>
-						<select id="dropdown" name="command">
+						<select id="dropdown4" name="command">
 							<option value="start_create_dark">Start Create Dark</option>
 							<option value="stop_create_dark">Stop Create Dark</option>
 						</select>
@@ -150,9 +172,9 @@ function showModal(event, form) {
 				<div class="col">
 					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
 						<div style="margin-bottom:5px;font-weight:bold">
-							<label for="dropdown">Filter</label>
+							<label for="dropdown5">Filter</label>
 						</div>
-						<select id="dropdown" name="command">
+						<select id="dropdown5" name="command">
 							<option value="set_wheel_position_LP">Use LP Filter</option>
 							<option value="set_wheel_position_IR_Cut">Use IR Cut Filter</option>
 							<option value="set_wheel_position_Dark">Use Dark Filter</option>
@@ -165,9 +187,9 @@ function showModal(event, form) {
 				<div class="col">
 					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
 						<div style="margin-bottom:5px;font-weight:bold">
-							<label for="dropdown">Plate Solve</label>
+							<label for="dropdown6">Plate Solve</label>
 						</div>
-						<select id="dropdown" name="command">
+						<select id="dropdown6" name="command">
 							<option value="start_solve">Start Plate Solve</option>
 							<option value="get_solve_result">Get Current Plate Solve Result</option>
 							<option value="get_last_solve_result">Get Last Plate Solve Result</option>
@@ -180,9 +202,9 @@ function showModal(event, form) {
 				<div class="col">
 					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
 						<div style="margin-bottom:5px;font-weight:bold">
-							<label for="dropdown">Get Infomation / Settings</label>
+							<label for="dropdown7">Get Infomation / Settings</label>
 						</div>
-						<select id="dropdown" name="command">
+						<select id="dropdown7" name="command">
 							<option value="pi_get_ap">Get AP (WiFi) Info</option>
 							<option value="get_app_setting">Get App Setting</option>
 							<option value="iscope_get_app_state">Get App State</option>
