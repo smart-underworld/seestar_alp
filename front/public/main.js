@@ -152,7 +152,7 @@ try {
         document.getElementById('useLpFilter').checked = false;
         if (elements[2] == 'on') 
             document.getElementById('useLpFilter').checked = true;
-        document.getElementById('useJ2000').checked = true;
+        document.getElementById('useJ2000').checked = false;
     })
     .catch(error => console.error('There was a problem with the fetch operation:', error));
 
