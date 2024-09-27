@@ -101,7 +101,7 @@ if __name__ == "__main__":
     event_handler = ConfigChangeHandler(Config.path_to_dat, main, front)
     observer = Observer()
     #print(f"XXX observing {Config.path_to_dat}")
-    observer.schedule(event_handler, path=Config.path_to_dat, recursive=True)
+    observer.schedule(event_handler, path=os.path.dirname(Config.path_to_dat), recursive=True)
     observer.start()
 
     time.sleep(1)
