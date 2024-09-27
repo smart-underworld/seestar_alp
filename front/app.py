@@ -1792,7 +1792,10 @@ class SimbadResource:
 
 
 def decimal_RA_to_Sexagesimal(ra:float):
-    tmp1 = str(ra / 15).split(".")
+    if ra < 0:
+        tmp1 = str(float(360 + ra) / 15).split(".")
+    else:
+        tmp1 = str(ra / 15).split(".")
     ra_hour = tmp1[0]
     tmp2 = str(float("0." + tmp1[1]) * 60).split(".")
     ra_min = tmp2[0]
