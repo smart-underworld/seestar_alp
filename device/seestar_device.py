@@ -300,11 +300,12 @@ class Seestar:
         if params != None and 'event_name' in params:
             event_name = params['event_name']
             if event_name in self.event_state:
-                return self.event_state[event_name]
+                result = self.event_state[event_name]
             else:
-                return {}
+                result = {}
         else:
-            return self.event_state
+            result = self.event_state
+        return self.json_result("get_event_state", 0, result)
 
         
     def set_setting(self, x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance):
