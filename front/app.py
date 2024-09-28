@@ -361,7 +361,7 @@ def method_sync(method, telescope_id=1, **kwargs):
 
     def err_extractor(obj):
         if obj and obj.get("error"):
-            logger.warn(f"method_sync: {method} - {obj["error"]}")
+            logger.warn(f"method_sync: {method} - {obj['error']}")
             result = { "command": method, "status": "error", "result": obj["error"] }
             return result
         elif obj:
