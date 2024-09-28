@@ -323,7 +323,8 @@ def do_action_device(action, dev_num, parameters, is_schedule=False):
     if check_api_state(dev_num):
         try:
             r = requests.put(url, json=payload, timeout=Config.timeout)
-            return r.json()
+            out = r.json()
+            return out
         except Exception as e:
             logger.error(f"do_action_device: Failed to send action to device {dev_num}: {e}: message={payload}")
 
@@ -360,9 +361,12 @@ def method_sync(method, telescope_id=1, **kwargs):
 
     def err_extractor(obj):
         if obj and obj.get("error"):
-            return obj["error"]
+            logger.warn(f"method_sync: {method} - {obj['error']}")
+            result = { "command": method, "status": "error", "result": obj["error"] }
+            return result
         elif obj:
-            return obj["result"]
+            result = { "command": method, "status": "success", "result": obj["result"] }
+            return result
 
     if out:
         value = out.get("Value")
@@ -374,8 +378,17 @@ def method_sync(method, telescope_id=1, **kwargs):
                 results[devnum] = err_extractor(dev_value)
                 if results[devnum] is None:
                     results[devnum] = "Offline"
+                else:
+                    if results[devnum]["status"] == "success" and results[devnum]["result"] != 0:
+                        results[devnum] = results[devnum]["result"]
         else:
             results = err_extractor(value) if value else "Offline"
+            if results["status"] == "error":
+                return results
+            if results["result"] == 0:
+                return results
+            else:
+                return results["result"]
         return results
     return None
 
@@ -724,6 +737,9 @@ def do_command(req, resp, telescope_id):
             else:
                 output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
             return output
+        case "get_event_state":
+            output = do_action_device("get_event_state", telescope_id, {})
+            return output
         case "scope_park":
             output = method_sync("scope_park", telescope_id)
             return output
@@ -792,6 +808,7 @@ def do_command(req, resp, telescope_id):
             return output
         case "get_app_setting":
             output = method_sync("get_app_setting", telescope_id)
+            print(f"{output}")
             return output
         case "iscope_get_app_state":
             output = method_sync("iscope_get_app_state", telescope_id)
@@ -837,6 +854,12 @@ def do_command(req, resp, telescope_id):
             return output
         case "scope_get_ra_dec":
             output = method_sync("scope_get_ra_dec", telescope_id)
+            return output
+        case "iscope_start_stack":
+            output = method_sync("iscope_start_stack", telescope_id)
+            return output
+        case "iscope_stop_view":
+            output = method_sync("iscope_stop_view", telescope_id)
             return output
         case _:
             logger.warn("No command found: %s", value)
@@ -1012,8 +1035,10 @@ def import_schedule(input, telescope_id):
     for line in input:
         fields = line.split(',')
         
+        fixed_params_length = len(FIXED_PARAMS_KEYS)
         # Check if the line has the expected number of fields
-        if len(fields) != 18:
+        if len(fields) != fixed_params_length:
+            logger.warn(f"Skipping bad line: Line has {len(fields)} fields, expected {fixed_params_length}")
             continue
             
         (action, local_time, timer_sec, try_count, target_name, is_j2000, ra, dec, is_use_lp_filter, session_time_sec, ra_num, dec_num, panel_overlap_percent, gain, is_use_autofocus, heater, nokey, selected_panels) = fields
@@ -1044,12 +1069,17 @@ def import_schedule(input, telescope_id):
             case "shutdown":
                 do_schedule_action_device("shutdown", "", telescope_id)
             case 'set_wheel_position':
-                int_nokey = int(nokey[1])
-                if int_nokey == 2:
-                    cmd_vals = [2]
-                else:
-                    cmd_vals = [1]
-                do_schedule_action_device("set_wheel_position", cmd_vals, telescope_id)
+                try:
+                    int_nokey = int(nokey[1])
+                    if int_nokey == 2:
+                        cmd_vals = [2]
+                    else:
+                        cmd_vals = [1]
+
+                    do_schedule_action_device("set_wheel_position", cmd_vals, telescope_id)
+
+                except (IndexError, ValueError) as e:
+                    logger.warn(f"Skipping bad Line in Schedule: {e}")
             case 'action_set_dew_heater':
                 do_schedule_action_device("action_set_dew_heater", {"heater": int(heater)}, telescope_id)
             case '_':

@@ -218,7 +218,7 @@ class Seestar_Federation:
         cur_schedule = self.get_schedule(cur_params)
         num_devices = len(cur_schedule["available_device_list"])
         if num_devices < 1:
-            raise "Failed: No available devices found to execute a schedule."
+            return {"error":"Failed: No available devices found to execute a schedule."}
 
         self.schedule = {}
         self.schedule['list'] = []
@@ -232,7 +232,7 @@ class Seestar_Federation:
 
     def start_scheduler(self, params):
         if len(self.schedule['list']) == 0:
-            raise "Failed: The schedule is empty."
+            return {"error": "Failed: The schedule is empty."}
         
         root_schedule = self.get_schedule(params)
         available_devices = root_schedule["available_device_list"]
@@ -242,7 +242,7 @@ class Seestar_Federation:
 
         num_devices = len(available_devices)
         if num_devices < 1:
-            raise "Failed: No available devices found to execute a schedule."
+            return{"error": "Failed: No available devices found to execute a schedule."}
 
         
         for key in available_devices:
