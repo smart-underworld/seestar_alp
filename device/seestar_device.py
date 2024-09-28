@@ -1099,10 +1099,10 @@ class Seestar:
         return {"jsonrpc": "2.0", "TimeStamp":time.time(), "command":command_name, "code":code, "result":result}
     
     def start_scheduler(self, params):
+        if "schedule_id" in params and params['schedule_id'] != self.schedule['schedule_id']:
+            return self.json_result("start_scheduler", 0, f"Schedule with id {params['schedule_id']} did not match this device's schedule. Returned with no action.")
         if self.scheduler_state != "Stopped":
             return self.json_result("start_scheduler", -1, "An existing scheduler is active. Returned with no action.")
-        if "schedule_id" not in params or params['schedule_id'] != self.schedule['schedule_id']:
-            return self.json_result("start_scheduler", -2, f"Schedule with id {params['schedule_id']} did not match this device's schedule. Returned with no action.")
         self.scheduler_thread = threading.Thread(target=lambda: self.scheduler_thread_fn(), daemon=True)
         self.scheduler_thread.name = f"SchedulerThread.{self.device_name}"
         self.scheduler_thread.start()
@@ -1172,9 +1172,8 @@ class Seestar:
             self.json_message("pi_shutdown")
 
     def stop_scheduler(self, params):
-        if 'schedule_id' in params:
-            if self.schedule['schedule_id'] != params['schedule_id']:
-                return self.json_result("stop_scheduler", -2, f"Schedule with id {params['schedule_id']} did not match this device's schedule. Returned with no action.")
+        if 'schedule_id' in params and self.schedule['schedule_id'] != params['schedule_id']:
+            return self.json_result("stop_scheduler", 0, f"Schedule with id {params['schedule_id']} did not match this device's schedule. Returned with no action.")
             
         if self.scheduler_state == "Running":
             self.scheduler_state = "Stopping"
