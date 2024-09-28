@@ -737,6 +737,9 @@ def do_command(req, resp, telescope_id):
             else:
                 output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
             return output
+        case "get_event_state":
+            output = do_action_device("get_event_state", telescope_id, {})
+            return output
         case "scope_park":
             output = method_sync("scope_park", telescope_id)
             return output
@@ -851,6 +854,12 @@ def do_command(req, resp, telescope_id):
             return output
         case "scope_get_ra_dec":
             output = method_sync("scope_get_ra_dec", telescope_id)
+            return output
+        case "iscope_start_stack":
+            output = method_sync("iscope_start_stack", telescope_id)
+            return output
+        case "iscope_stop_view":
+            output = method_sync("iscope_stop_view", telescope_id)
             return output
         case _:
             logger.warn("No command found: %s", value)
