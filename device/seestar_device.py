@@ -79,6 +79,9 @@ class Seestar:
 
     def send_message(self, data):
         try:
+            if self.s == None:
+                self.logger.warn("socket not initialized!")
+                return False
             # todo : don't send if not connected or socket is null?
             self.s.sendall(data.encode())  # TODO: would utf-8 or unicode_escaped help here
             return True
@@ -113,7 +116,7 @@ class Seestar:
             return True
 
         try:
-            self.logger.debug(f"RECONNECTING {self.device_name}")
+            self.logger.info(f"RECONNECTING {self.device_name}")
 
             self.disconnect()
 
@@ -282,7 +285,12 @@ class Seestar:
             if now - last_slow > 2:
                 elapsed = now - start
                 last_slow = now
-                self.logger.warn(f'SLOW message response.  {elapsed} seconds. {cur_cmdid=} {data=}')
+                if elapsed > 10:
+                    self.logger.error(f'Failed to wait for message response.  {elapsed} seconds. {cur_cmdid=} {data=}')
+                    data['result'] = "Error: Exceeded alloted wait time for result"
+                    return data
+                else:
+                    self.logger.warn(f'SLOW message response.  {elapsed} seconds. {cur_cmdid=} {data=}')
             time.sleep(0.5)
         self.logger.debug(f'{self.device_name} response is {self.response_dict[cur_cmdid]}')
         return self.response_dict[cur_cmdid]
@@ -590,131 +598,138 @@ class Seestar:
                 "name": result_name}
 
     # move to a good starting point position specified by lat and lon
-    def move_up_rotate_thread_fn(self, lat, lon):
-        if lon < 0:
-            lon = 360+lon
+    def start_up_thread_fn(self, params):
+        try:
+            self.logger.info("start up sequence begins ...")
+            self.scheduler_state = "Running"
+            tz_name = tzlocal.get_localzone_name()
+            tz = tzlocal.get_localzone()
+            now = datetime.now(tz)
+            date_json = {}
+            date_json["year"] = now.year
+            date_json["mon"] = now.month
+            date_json["day"] = now.day
+            date_json["hour"] = now.hour
+            date_json["min"] = now.minute
+            date_json["sec"] = now.second
+            date_json["time_zone"] = tz_name
+            date_data = {}
+            date_data['method'] = 'pi_set_time'
+            date_data['params'] = [date_json]
 
-        if lat > 80:
-            self.logger.warn(f"lat has max value of 80. You requested {lat}.")
-            lat = 80
-
-        cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
-
-        self.logger.info(f"moving scope from lat-lon {cur_latlon[0]}, {cur_latlon[1]} to {lat}, {lon}")
-
-        while True:
-            delta_lat = lat-cur_latlon[0]
-            if abs(delta_lat) < 5:
-                break
-            elif delta_lat > 0:
-                direction = 90
+            loc_data = {}
+            loc_param = {}
+            # special loc for south pole: (-90, 0)
+            if ('lat' not in params or 'lon' not in params) or (not isinstance(params['lat'], float) or not isinstance(params['lon'], float)) or (params['lat'] == 0 and params['lon'] == 0):  # special case of (0,0,) will use the ip address to estimate the location
+                if Config.init_lat == 0 and Config.init_long == 0:
+                    coordinates = Util.get_current_gps_coordinates()
+                    if coordinates is not None:
+                        latitude, longitude = coordinates
+                        self.logger.info(f"Your current GPS coordinates are:")
+                        self.logger.info(f"Latitude: {latitude}")
+                        self.logger.info(f"Longitude: {longitude}")
+                        Config.init_lat = latitude
+                        Config.init_long = longitude
+                loc_param['lat'] = Config.init_lat
+                loc_param['lon'] = Config.init_long
             else:
-                direction = -90
-            if self.move_scope(direction, 1000, 10) == False:
-                break
-            time.sleep(0.1)
-            cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
-        self.move_scope(0, 0, 0)
+                loc_param['lat'] = params['lat']   
+                loc_param['lon'] = params['lon']
+            self.logger.info(f"Setting location to {loc_param['lat']}, {loc_param['lon']}")
+            
+            loc_param['force'] = False
+            loc_data['method'] = 'set_user_location'
+            loc_data['params'] = loc_param
+            lang_data = {}
+            lang_data['method'] = 'set_setting'
+            lang_data['params'] = {'lang': 'en'}
 
-        while True:
-            delta_lon = lon-cur_latlon[1]
-            if abs(delta_lon) < 5:
-                break
-            elif delta_lon > 0:
-                direction = 0
-            else:
-                direction = 180
-            if self.move_scope(direction, 1000, 10) == False:
-                break
-            time.sleep(0.1)
-            cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
-        self.move_scope(0, 0, 0)
+            self.logger.info("verify datetime string: %s", date_data)
+            self.logger.info("verify location string: %s", loc_data)
 
-        cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
-        self.logger.info(f"final lat-lon after move:  {cur_latlon[0]}, {cur_latlon[1]}")
+            self.send_message_param_sync({"method": "pi_is_verified"})
+            self.send_message_param_sync(date_data)
+            self.send_message_param_sync(loc_data)
+            self.send_message_param_sync(lang_data)
+
+            self.set_setting(Config.init_expo_stack_ms, Config.init_expo_preview_ms, Config.init_dither_length_pixel, 
+                            Config.init_dither_frequency, Config.init_dither_enabled, Config.init_activate_LP_filter)
+
+            self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":Config.init_dew_heater_power> 0,"value":Config.init_dew_heater_power}}})
+
+            # save frames setting
+            self.send_message_param_sync({"method":"set_stack_setting", "params":{"save_discrete_ok_frame":Config.init_save_good_frames, "save_discrete_frame":Config.init_save_all_frames}})
+
+            # move the arm up using a thread runner
+            # move 10 degrees from polaris
+            # first check if a device specific setting is available
+
+            for device in Config.seestars:
+                if device['device_num'] == self.device_num:
+                    break
+            
+            lat = Config.scope_aim_lat
+            lon = Config.scope_aim_lon
+            if 'scope_aim_lat' in device:
+                lat = device['scope_aim_lat']
+            if 'scope_aim_lon' in device:
+                lon = device['scope_aim_lon']
+
+            if lon < 0:
+                lon = 360+lon
+
+            if lat > 80:
+                self.logger.warn(f"lat has max value of 80. You requested {lat}.")
+                lat = 80
+
+            cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+
+            self.logger.info(f"moving scope from lat-lon {cur_latlon[0]}, {cur_latlon[1]} to {lat}, {lon}")
+
+            while True:
+                delta_lat = lat-cur_latlon[0]
+                if abs(delta_lat) < 5:
+                    break
+                elif delta_lat > 0:
+                    direction = 90
+                else:
+                    direction = -90
+                if self.move_scope(direction, 1000, 10) == False:
+                    break
+                time.sleep(0.1)
+                cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+            self.move_scope(0, 0, 0)
+
+            while True:
+                delta_lon = lon-cur_latlon[1]
+                if abs(delta_lon) < 5:
+                    break
+                elif delta_lon > 0:
+                    direction = 0
+                else:
+                    direction = 180
+                if self.move_scope(direction, 1000, 10) == False:
+                    break
+                time.sleep(0.1)
+                cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+            self.move_scope(0, 0, 0)
+
+            cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+            self.logger.info(f"final lat-lon after move:  {cur_latlon[0]}, {cur_latlon[1]}")
+        finally:
+            self.scheduler_state = "Stopped"
 
 
     def action_set_dew_heater(self, params):
         return self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
         
     def action_start_up_sequence(self, params):
-        self.logger.info("start up sequence begins ...")
-        tz_name = tzlocal.get_localzone_name()
-        tz = tzlocal.get_localzone()
-        now = datetime.now(tz)
-        date_json = {}
-        date_json["year"] = now.year
-        date_json["mon"] = now.month
-        date_json["day"] = now.day
-        date_json["hour"] = now.hour
-        date_json["min"] = now.minute
-        date_json["sec"] = now.second
-        date_json["time_zone"] = tz_name
-        date_data = {}
-        date_data['method'] = 'pi_set_time'
-        date_data['params'] = [date_json]
+        if self.scheduler_state != "Stopped":
+            return self.json_result("start_up_sequence", -1, "Device is busy. Try later.")
 
-        loc_data = {}
-        loc_param = {}
-        # special loc for south pole: (-90, 0)
-        if ('lat' not in params or 'lon' not in params) or (not isinstance(params['lat'], float) or not isinstance(params['lon'], float)) or (params['lat'] == 0 and params['lon'] == 0):  # special case of (0,0,) will use the ip address to estimate the location
-            if Config.init_lat == 0 and Config.init_long == 0:
-                coordinates = Util.get_current_gps_coordinates()
-                if coordinates is not None:
-                    latitude, longitude = coordinates
-                    self.logger.info(f"Your current GPS coordinates are:")
-                    self.logger.info(f"Latitude: {latitude}")
-                    self.logger.info(f"Longitude: {longitude}")
-                    Config.init_lat = latitude
-                    Config.init_long = longitude
-            loc_param['lat'] = Config.init_lat
-            loc_param['lon'] = Config.init_long
-        else:
-            loc_param['lat'] = params['lat']   
-            loc_param['lon'] = params['lon']
-        self.logger.info(f"Setting location to {loc_param['lat']}, {loc_param['lon']}")
-        
-        loc_param['force'] = False
-        loc_data['method'] = 'set_user_location'
-        loc_data['params'] = loc_param
-        lang_data = {}
-        lang_data['method'] = 'set_setting'
-        lang_data['params'] = {'lang': 'en'}
-
-        self.logger.info("verify datetime string: %s", date_data)
-        self.logger.info("verify location string: %s", loc_data)
-
-        self.send_message_param_sync({"method": "pi_is_verified"})
-        self.send_message_param_sync(date_data)
-        self.send_message_param_sync(loc_data)
-        self.send_message_param_sync(lang_data)
-
-        self.set_setting(Config.init_expo_stack_ms, Config.init_expo_preview_ms, Config.init_dither_length_pixel, 
-                         Config.init_dither_frequency, Config.init_dither_enabled, Config.init_activate_LP_filter)
-
-        self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":Config.init_dew_heater_power> 0,"value":Config.init_dew_heater_power}}})
-
-        # save frames setting
-        self.send_message_param_sync({"method":"set_stack_setting", "params":{"save_discrete_ok_frame":Config.init_save_good_frames, "save_discrete_frame":Config.init_save_all_frames}})
-
-        # move the arm up using a thread runner
-        # move 10 degrees from polaris
-        # first check if a device specific setting is available
-
-        for device in Config.seestars:
-            if device['device_num'] == self.device_num:
-                break
-        
-        scope_aim_lat = Config.scope_aim_lat
-        scope_aim_lon = Config.scope_aim_lon
-        if 'scope_aim_lat' in device:
-            scope_aim_lat = device['scope_aim_lat']
-        if 'scope_aim_lon' in device:
-            scope_aim_lon = device['scope_aim_lon']
-
-        move_up_dec_thread = threading.Thread(name=f"start-up-thread.{self.device_name}", target=lambda: self.move_up_rotate_thread_fn(scope_aim_lat, scope_aim_lon))
+        move_up_dec_thread = threading.Thread(name=f"start-up-thread.{self.device_name}", target=lambda: self.start_up_thread_fn(params))
         move_up_dec_thread.start()
-        return "sequence started"
+        return self.json_result("start_up_sequence", 0, "Sequence started.")
 
     # {"method":"set_sequence_setting","params":[{"group_name":"Kai_goto_target_name"}]}
     def set_target_name(self, name):
@@ -1056,30 +1071,38 @@ class Seestar:
     # shortcut to start a new scheduler with only a mosaic request
     def start_mosaic(self, params):
         if self.scheduler_state != "Stopped":
-            return "An existing scheduler is active. Returned with no action."
+            return self.json_result("start_mosaic", -1, "An existing scheduler is active. Returned with no action.")
         self.create_schedule(params)
         schedule_item = {}
         schedule_item['action'] = "start_mosaic"
         schedule_item['params'] = params
         self.add_schedule_item(schedule_item)
-        self.start_scheduler(params)
-        return self.schedule
+        return self.start_scheduler(params)
 
     # shortcut to start a new scheduler with only a spectra request
     def start_spectra(self, params):
         if self.scheduler_state != "Stopped":
-            return "An existing scheduler is active. Returned with no action."
+            return self.json_result("start_spectra", -1, "An existing scheduler is active. Returned with no action.")
         self.create_schedule(params)
         schedule_item = {}
         schedule_item['action'] = "start_spectra"
         schedule_item['params'] = params
         self.add_schedule_item(schedule_item)
-        self.start_scheduler(params)
-        return "spectra acquistion started"
+        return self.start_scheduler(params)
 
+    def json_result(self, command_name, code, result):
+        if code != 0:
+            self.logger.warn(f"Returing not normal result for command {command_name}, code: {code}, result: {result}.")
+        else:
+            self.logger.info(f"Returing result for command {command_name}, code: {code}, result: {result}.")
+
+        return {"jsonrpc": "2.0", "TimeStamp":time.time(), "command":command_name, "code":code, "result":result}
+    
     def start_scheduler(self, params):
         if self.scheduler_state != "Stopped":
-            return "An existing scheduler is active. Returned with no action."
+            return self.json_result("start_scheduler", -1, "An existing scheduler is active. Returned with no action.")
+        if "schedule_id" not in params or params['schedule_id'] != self.schedule['schedule_id']:
+            return self.json_result("start_scheduler", -2, f"Schedule with id {params['schedule_id']} did not match this device's schedule. Returned with no action.")
         self.scheduler_thread = threading.Thread(target=lambda: self.scheduler_thread_fn(), daemon=True)
         self.scheduler_thread.name = f"SchedulerThread.{self.device_name}"
         self.scheduler_thread.start()
@@ -1151,19 +1174,19 @@ class Seestar:
     def stop_scheduler(self, params):
         if 'schedule_id' in params:
             if self.schedule['schedule_id'] != params['schedule_id']:
-                return "schedule id not matched. No action taken"
+                return self.json_result("stop_scheduler", -2, f"Schedule with id {params['schedule_id']} did not match this device's schedule. Returned with no action.")
             
         if self.scheduler_state == "Running":
             self.scheduler_state = "Stopping"
             self.stop_slew()
             self.stop_stack()
             self.play_sound(83)
-            return "scheduler stopped"
+            return self.json_result("stop_scheduler", 0, f"Scheduler stopped successfully.")
+
         elif self.scheduler_state == "Stopped":
-            self.logger.info("Scheduler is not running while trying to stop!")
-            return "Scheduler is not running while trying to stop!"
+            return self.json_result("stop_scheduler", -3, "Scheduler is not running while trying to stop!")
         else:
-            return "scheduler has already been requested to stop"
+            return self.json_result("stop_scheduler", -4, "scheduler has already been requested to stop")
 
     def wait_end_op(self, in_op_name):
         self.op_watch = in_op_name
