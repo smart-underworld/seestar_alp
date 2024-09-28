@@ -36,6 +36,11 @@ var currentForm;
 function showModal(event, form) {
     event.preventDefault(); // Prevent the default form submission
 
+    // Clear the output card content
+    var outputAlert = document.getElementById('outputAlert');
+	if (outputAlert) {
+		outputAlert.innerHTML = ''; // Clear the output content
+	}
     currentForm = form; // Store the current form reference
 
     var dropdown = form.querySelector('select[name="command"]');
@@ -102,11 +107,14 @@ function showModal(event, form) {
 				</div>
 			</form>
 		</div>
-			<div class="col-md-6 border border-primary">
-				<h5 class="card-title">Output</h5>
+		<div class="col-md-6 border border-primary">
+			<h5 class="card-title">Output</h5>
+			<div id="outputAlert" class="alert alert-primary" role="alert">
 				{% if output %}
-					<div class="alert alert-primary" role="alert">{{output}}</div>
-				{% endif %}
+					{{ output }}
+				{% else %}
+					<!-- Output will be placed here if any -->
+				{% endif %}			
 			</div>
 		</div>
 	</div>

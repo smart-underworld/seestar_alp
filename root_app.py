@@ -62,8 +62,8 @@ class AppRunner:
         self.thread.join()
 
     def reload(self):
-        logger.setLevel(Config.log_level)
-        for handler in logger.handlers:
+        self.logger.setLevel(Config.log_level)
+        for handler in self.logger.handlers:
             handler.setLevel(Config.log_level)
         self.app_main.reload()
 

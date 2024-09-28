@@ -11,6 +11,7 @@ import datetime
 import socket
 import threading
 import zipfile
+import PIL
 from io import BytesIO
 from struct import unpack, calcsize
 from time import sleep, time
