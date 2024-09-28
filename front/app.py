@@ -343,62 +343,41 @@ def do_schedule_action_device(action, parameters, dev_num):
         }, True)
 
 
-def process_response(response):
-    value = response.get('Value')
+def check_response(resp, response):
+    v = response["Value"]
+    if isinstance(v, str):
+        flash(resp, v)
+    elif response["ErrorMessage"] != '':
+        flash(resp, response["ErrorMessage"])
+        # flash("Schedule item added successfully", "success")
+    else:
+        flash(resp, "Item scheduled successfully")
 
-    digit_keys = [key for key in value.keys() if key.isdigit()]
-
-    if digit_keys:
-        results = {}
-
-        for digit_key in digit_keys:
-            inner_value = value[digit_key]
-            method = inner_value.get('method')
-            code = inner_value.get('code')
-            timestamp = inner_value.get('Timestamp')
-
-
-            if 'error' in inner_value:
-                error_message = inner_value.get('error')
-                results[digit_key] = {
-                    'command': method,
-                    'error': error_message,
-                }
-            else:
-                result_value = inner_value.get('result')
-                results[digit_key] = {
-                    'command': method,
-                    'result': result_value,
-                }
-
-        return results
-
-    elif value:
-        method = value.get('method')
-        code = value.get('code')
-        timestamp = value.get('Timestamp')
-
-        if 'error' in value:
-            error_message = value.get('error')
-            return {
-                'command': method,
-                'error': error_message,
-            }
-        else:
-            result_value = value.get('result')
-            return {
-                'command': method,
-                'result': result_value,
-            }
-
-    return None
 
 def method_sync(method, telescope_id=1, **kwargs):
     out = do_action_device("method_sync", telescope_id, {"method": method, **kwargs})
     # print(f"method_sync {out=}")
 
-    results = process_response(out)
-    return results
+    def err_extractor(obj):
+        if obj and obj.get("error"):
+            return obj["error"]
+        elif obj:
+            return obj["result"]
+
+    if out:
+        value = out.get("Value")
+        if telescope_id == 0:
+            results = {}
+            for tel in get_telescopes():
+                devnum = str(tel.get("device_num"))
+                dev_value = value.get(devnum) if value else None
+                results[devnum] = err_extractor(dev_value)
+                if results[devnum] is None:
+                    results[devnum] = "Offline"
+        else:
+            results = err_extractor(value) if value else "Offline"
+        return results
+    return None
 
 def get_device_state(telescope_id):
     if check_api_state(telescope_id):
@@ -1065,18 +1044,12 @@ def import_schedule(input, telescope_id):
             case "shutdown":
                 do_schedule_action_device("shutdown", "", telescope_id)
             case 'set_wheel_position':
-                try:
-                    int_nokey = int(nokey[1])
-                    if int_nokey == 2:
-                        cmd_vals = [2]
-                    else:
-                        cmd_vals = [1]
-
-                    do_schedule_action_device("set_wheel_position", cmd_vals, telescope_id)
-
-                except (IndexError, ValueError) as e:
-                    logger.warn(f"Bad Line in Schedule: {e}")
-
+                int_nokey = int(nokey[1])
+                if int_nokey == 2:
+                    cmd_vals = [2]
+                else:
+                    cmd_vals = [1]
+                do_schedule_action_device("set_wheel_position", cmd_vals, telescope_id)
             case 'action_set_dew_heater':
                 do_schedule_action_device("action_set_dew_heater", {"heater": int(heater)}, telescope_id)
             case '_':
