@@ -226,6 +226,25 @@ function showModal(event, form) {
 						<button type="submit" class="btn btn-primary">Execute</button>
 					</form>
 				</div>
+				<div class="col">
+					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
+						<div style="margin-bottom:5px;font-weight:bold">
+							<label for="dropdown8">Imaging</label>
+						</div>
+						<select id="dropdown8" name="command">
+							<option value="iscope_start_stack">Start Imaging</option>
+							<option value="iscope_stop_view">Stop Imaging</option>
+							<option value="get_view_state">Get View State</option>
+							<option value="get_stack_info">Get Stack Info</option>
+							<option value="get_img_name_field">Get Image Name Field</option>
+							<option value="get_image_save_path">Get Image Save Path</option>
+							<option value="get_camera_state">Get Camera State</option>
+							<option value="get_camera_exp_and_bin">Get Camera Exposure & Bin</option>
+						</select>
+						<button type="submit" class="btn btn-primary">Execute</button>
+					</form>
+				</div>
+        <div class="col"></div>
 			</div>
 		</div>
 	</div>
