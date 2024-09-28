@@ -49,6 +49,13 @@ from device.stretch import stretch, StretchParameters
 # Star:
 #   {  "id" : 23,  "method" : "get_stacked_img"}
 
+
+def table(rows):
+    """Simple HTML table on a single row"""
+    return "".join(
+        ['<div class="row">' + "".join([f'<div class="col">{col}</div>' for col in row]) + "</div>" for row in rows])
+
+
 class SeestarImaging:
     def __new__(cls, *args, **kwargs):
         return super().__new__(cls)
@@ -390,6 +397,17 @@ class SeestarImaging:
         stringData = imgencode.tobytes()
         return (b'--frame\r\n' b'Content-Type: image/png\r\n\r\n' + stringData + b'\r\n')
 
+    # render the template?
+    # print("get_live_status:",  self.device.ra, self.device.dec)
+    # status = f"RA: {self.device.ra} Dec: {self.device.dec}".encode('utf-8')
+    def get_live_status(self):
+        while True:
+            with self.lock:
+                self.last_live_view_time = int(time())
+            status = table([["RA", "%.3f" % self.device.ra], ["Dec", "%.3f" % self.device.dec]]).encode('utf-8')
+            frame = (b'data: ' + status + b'\n\n')
+            yield frame
+            sleep(0.25)
 
     def get_video_status(self):
         while True:
