@@ -1,8 +1,8 @@
 #
 # Start frontend and pass in ALP for it to manage
 #
+import falcon
 from flask import Flask, Response
-from flask_cors import CORS, cross_origin
 import threading
 import time
 import sys
@@ -109,26 +109,11 @@ if __name__ == "__main__":
     if Config.experimental:
         logger.info("Setting up imaging web server")
         app = Flask(__name__)
-        CORS(app, supports_credentials=True)
 
 
-        @cross_origin()
         @app.route("/<dev_num>/vid/status")
         def vid_status(dev_num):
             return Response(telescope.get_seestar_imager(int(dev_num)).get_video_status(),
-                            mimetype='text/event-stream')
-
-        @cross_origin()
-        @app.route("/<dev_num>/live/status")
-        def live_status(dev_num):
-            return Response(telescope.get_seestar_imager(int(dev_num)).get_live_status(),
-                            mimetype='text/event-stream')
-
-
-        @cross_origin()
-        @app.route("/<dev_num>/events")
-        def live_events(dev_num):
-            return Response(telescope.get_seestar_device(int(dev_num)).get_events(),
                             mimetype='text/event-stream')
 
 
@@ -138,10 +123,7 @@ if __name__ == "__main__":
                             mimetype='multipart/x-mixed-replace; boundary=frame')
 
         print("Startup Complete")
-
-        # telescope.telescopes()
-
-        waitress.serve(app, host=Config.ip_address, port=Config.imgport, threads=10, channel_timeout=30)
+        waitress.serve(app, host=Config.ip_address, port=Config.imgport)
     else:
         print("Startup Complete")
         front.join()
