@@ -194,7 +194,7 @@ class SeestarImaging:
                         continue
 
                     self.received_frame += 1
-                    self.logger.info(f"read image size={len(self.raw_img)}")
+                    self.logger.debug(f"read image size={len(self.raw_img)}")
             else:
                 # If we aren't connected, just wait...
                 sleep(1)

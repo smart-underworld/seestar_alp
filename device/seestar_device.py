@@ -130,7 +130,11 @@ class Seestar:
         except socket.error as e:
             # Let's just delay a fraction of a second to avoid reconnecting too quickly
             self.is_connected = False
-            sleep(0.1)
+            sleep(1)
+            return False
+        except Exception as ex:
+            self.is_connected = False
+            sleep(1)
             return False
 
     def get_socket_msg(self):
