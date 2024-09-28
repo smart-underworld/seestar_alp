@@ -31,44 +31,44 @@
 </div>
 
 <script>
-var currentForm;
+    var currentForm;
 
-function showModal(event, form) {
-    event.preventDefault(); // Prevent the default form submission
+    function showModal(event, form) {
+        event.preventDefault(); // Prevent the default form submission
 
-    currentForm = form; // Store the current form reference
+        currentForm = form; // Store the current form reference
 
-    var dropdown = form.querySelector('select[name="command"]');
-    var commandInput = form.querySelector('input[name="command"]');
+        var dropdown = form.querySelector('select[name="command"]');
+        var commandInput = form.querySelector('input[name="command"]');
 
-    var selectedText;
+        var selectedText;
 
-    // Determine the selected command text
-    if (dropdown) {
-        selectedText = dropdown.options[dropdown.selectedIndex].text;
-    } else if (commandInput && commandInput.value === "start_up_sequence") {
-        selectedText = "Start-Up Sequence";
-    } else {
-        selectedText = "Command Execution";
+        // Determine the selected command text
+        if (dropdown) {
+            selectedText = dropdown.options[dropdown.selectedIndex].text;
+        } else if (commandInput && commandInput.value === "start_up_sequence") {
+            selectedText = "Start-Up Sequence";
+        } else {
+            selectedText = "Command Execution";
+        }
+
+        document.getElementById('selectedCommandText').textContent = selectedText;
+
+        // Show the modal only if confirm is true
+        if ({{ confirm|tojson }}) {
+            var modal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+            modal.show();
+
+            // Handle confirmation button click
+            document.getElementById('confirmButton').onclick = function() {
+                modal.hide(); // Hide the modal
+                currentForm.submit(); // Submit the form
+            };
+        } else {
+            // If confirm is false, submit the form directly
+            currentForm.submit();
+        }
     }
-
-    document.getElementById('selectedCommandText').textContent = selectedText;
-
-    // Show the modal only if confirm is true
-    if ({{ confirm|tojson }}) {
-        var modal = new bootstrap.Modal(document.getElementById('confirmationModal'));
-        modal.show();
-
-        // Handle confirmation button click
-        document.getElementById('confirmButton').onclick = function() {
-            modal.hide(); // Hide the modal
-            currentForm.submit(); // Submit the form
-        };
-    } else {
-        // If confirm is false, submit the form directly
-        currentForm.submit();
-    }
-}
 </script>
 
 
