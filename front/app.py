@@ -985,7 +985,7 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
                     **context)
 
 
-FIXED_PARAMS_KEYS = ["local_time", "timer_sec", "try_count", "target_name", "is_j2000", "ra", "dec", "is_use_lp_filter",
+FIXED_PARAMS_KEYS = ["action", "local_time", "timer_sec", "try_count", "target_name", "is_j2000", "ra", "dec", "is_use_lp_filter",
                      "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus", "heater", "nokey", "selected_panels"]
 
 
