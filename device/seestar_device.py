@@ -69,6 +69,8 @@ class Seestar:
         self.below_horizon_dec_offset = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
         self.view_state = {}
         self.event_state = {}
+        # self.event_queue = queue.Queue()
+        self.event_queue = collections.deque(maxlen=20)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
@@ -223,6 +225,10 @@ class Seestar:
                             (k := next(iter(d)), d.pop(k))
 
                     elif 'Event' in parsed_data:
+                        # add parsed_data
+                        self.event_queue.append(parsed_data)
+
+                        # xxx: make this a common method....
                         if Config.log_events_in_info:
                             self.logger.info(f'{self.device_name} received : {data}')
                         else:
@@ -898,6 +904,8 @@ class Seestar:
                             return
 
                         for i in range(sleep_time_per_panel):
+                            threading.current_thread().last_run = datetime.now()
+
                             if self.scheduler_state != "Running":
                                 self.logger.info("Scheduler was requested to stop. Stopping current mosaic.")
                                 self.stop_stack()
@@ -1273,6 +1281,25 @@ class Seestar:
             self.s.close()
             self.is_connected = False
 
+    def get_events(self):
+        while True:
+            try:
+                if len(self.event_queue) == 0:
+                    time.sleep(2)
+                    continue
+                event = self.event_queue.popleft()
+                # print(f"Fetched event {self.device_name}")
+                ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-5]
+                frame = (b'data: <pre>' +
+                        ts.encode('utf-8') +
+                        b': ' +
+                        json.dumps(event).encode('utf-8') +
+                        b'</pre>\n\n')
+                yield frame
+            except GeneratorExit:
+                break
+            except:
+                time.sleep(2)
 
 if __name__ == '__main__':
     try:
