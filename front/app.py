@@ -489,7 +489,7 @@ def get_device_settings(telescope_id):
         "light_duration_min": stack_settings_result["light_duration_min"],
         "auto_3ppa_calib": settings_result["auto_3ppa_calib"],
         "frame_calib": settings_result["frame_calib"],
-        "stack_masic": settings_result["stack_masic"],
+        #"stack_masic": settings_result["stack_masic"],
         # "rec_stablzn": settings_result["rec_stablzn"], # Unavailable for firmware 3.11
         "manual_exp": settings_result["manual_exp"],
         # "isp_exp_ms": settings_result["isp_exp_ms"],
@@ -985,7 +985,7 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
                     **context)
 
 
-FIXED_PARAMS_KEYS = ["local_time", "timer_sec", "try_count", "target_name", "is_j2000", "ra", "dec", "is_use_lp_filter",
+FIXED_PARAMS_KEYS = ["action", "local_time", "timer_sec", "try_count", "target_name", "is_j2000", "ra", "dec", "is_use_lp_filter",
                      "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus", "heater", "nokey", "selected_panels"]
 
 
@@ -1593,7 +1593,7 @@ class SettingsResource:
             "auto_power_off": str2bool(PostedSettings["auto_power_off"]),
             "auto_3ppa_calib": str2bool(PostedSettings["auto_3ppa_calib"]),
             "frame_calib": str2bool(PostedSettings["frame_calib"]),
-            "stack_masic": str2bool(PostedSettings["stack_masic"]),
+            #"stack_masic": str2bool(PostedSettings["stack_masic"]),
             # "rec_stablzn": str2bool(PostedSettings["rec_stablzn"]),
             "manual_exp": str2bool(PostedSettings["manual_exp"])
         }
