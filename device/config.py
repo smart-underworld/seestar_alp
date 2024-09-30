@@ -75,6 +75,15 @@ class _Config:
             return default
 
     def load(self, toml_path):
+        """
+        Load a config.toml file into a Config object.
+
+        NOTE to developers modifying this with new config
+            Modification of this method to add, or remove config items should
+            also include modifications to:
+              - front/templates/config.html to add/remove html form representation
+              - def load_from_form (below) to update this object when the form is submitted
+        """
         self._dict = tomlkit.loads(open(toml_path).read())
 
         """Device configuration in ``config.toml``"""
