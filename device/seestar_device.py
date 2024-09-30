@@ -723,6 +723,8 @@ class Seestar:
             date_data['method'] = 'pi_set_time'
             date_data['params'] = [date_json]
 
+            do_dark_frames = params.get("dark_frames", True)
+
             loc_data = {}
             loc_param = {}
             # special loc for south pole: (-90, 0)
@@ -790,6 +792,26 @@ class Seestar:
 
             cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
 
+            # check if we need to park home first
+            if cur_latlon[0] > -89.5 or abs(cur_latlon[1]) > 0.2:
+                self.logger.info("Need to park scope first for a good reference start point")
+                response = self.send_message_param_sync({"method":"scope_park"})
+                while True:
+                    time.sleep(1)
+                    if "ScopeHome" not in self.event_state:
+                        continue
+                    event_state = self.event_state["ScopeHome"]
+                    if "state" in event_state:
+                        if event_state["state"] == "fail":
+                            self.logger.info(f"scope_park failed: {event_state}.")
+                            result = False
+                            break
+                        if event_state["state"] == "complete":
+                            self.logger.info(f"scope_park completed: {event_state}.")
+                            result = True
+                            break
+                cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+
             self.logger.info(f"moving scope from lat-lon {cur_latlon[0]}, {cur_latlon[1]} to {lat}, {lon}")
 
             while True:
@@ -833,10 +855,11 @@ class Seestar:
                 self.logger.warn("Start-up sequence stopped and was unsuccessful.")
                 return
 
-            result = self.try_dark_frame()
-            if result == False:
-                self.logger.warn("Start-up sequence stopped and was unsuccessful.")
-                return
+            if do_dark_frames:
+                result = self.try_dark_frame()
+                if result == False:
+                    self.logger.warn("Start-up sequence stopped and was unsuccessful.")
+                    return
             
             self.logger.info(f"Start-up sequence result: {result}")
 
