@@ -56,11 +56,11 @@
         document.addEventListener("DOMContentLoaded", function () {
             // Get all nav-link elements
             const navLinks = document.querySelectorAll('.nav-link');
-                
+                    
             // Get the current URL path
             const currentPath = window.location.pathname;
             console.log("Current Path: " + currentPath);
-            
+                
             // Split the pathnames
             const pathSegments = currentPath.split('/');
 
@@ -87,4 +87,7 @@
             <p>You are currently in offline mode</p>
         </div>
     {% endif %}
+    <footer class="bg-body-tertiary text-center mt-3">
+        Version: {{ version }}
+    </footer>
 {% endblock %}
