@@ -169,8 +169,6 @@ class _Config:
         self.set_toml('webui_settings', 'twilighttimes', 'twilighttimes' in req.media)
         self.set_toml('webui_settings', 'experimental', 'experimental' in req.media)
         self.set_toml('webui_settings', 'confirm', 'confirm' in req.media)
-        self.set_toml('webui_settings', 'clear_sky_img_src', req.media['clear_sky_img_src'])
-        self.set_toml('webui_settings', 'clear_sky_href', req.media['clear_sky_href'])
 
         # server
         self.set_toml('server', 'location', req.media['location'])
