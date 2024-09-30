@@ -1,0 +1,23 @@
+{% block html_header %}
+    <script src="https://astrosphericcloudstorage.blob.core.windows.net/embed/astrosphericembed.js"></script>
+{% endblock %}
+<!-- This puts it's self in an iframe with a hard coded max width of 924px. https://www.astrospheric.com/embed/ -->
+<div id="AstrosphericEmbedContainer" style="width: 100%;"></div>
+<script type="text/javascript">
+        // Initialize the control
+        m_AstrosphericEmbed.Create("AstrosphericEmbedContainer", {{ config_lat }}, {{ config_long }});
+        
+        function update_astrospheric_iframe()
+        {
+            var iframe = document.querySelector('iframe');
+            iframe.style.maxWidth = 'none';
+        }
+        window.addEventListener("resize", update_astrospheric_iframe);
+        
+        // This doesn't work because the ifrom doesn't exist in DOM yet.
+        //var iframe = document.querySelector('iframe');
+        //iframe.addEventListener('load', function() {
+        //    console.log('Astrospheric iframe has finished loading...');
+        //    update_astrospheric_iframe();
+        //});
+ </script>

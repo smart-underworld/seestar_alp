@@ -1,0 +1,86 @@
+{% block html_header %}
+    <link href="https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.css" rel="stylesheet">
+    <script type="text/javascript" src="https://code.jquery.com/jquery-1.12.1.min.js" charset="utf-8"></script>
+    <!-- script type="text/javascript" src="https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.js" charset="utf-8"></script -->
+    <script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script type="text/javascript" src="/public/AstroMosaicEngine.js"></script>
+{% endblock %}
+<div>
+    <fieldset class="border rounded-3 mb-3 pb-3">
+        <legend class="float-none w-auto">
+           Controls
+        </legend>
+        <span class="ms-3">
+            <label for="astro_mosaic_search_text" class="form-label">Search</label>
+            <input type="text" id="astro_mosaic_search_text" name="astro_moasic_search_text">
+            <button type="button" id="astro_mosaic_search_button" class="btn btn-primary" title="Search for object." onclick="astro_mosaic_serach()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
+                    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
+                </svg>
+            </button>
+            <!---
+            <label for="astro_mosaic_grid_x" class="form-label">Grid Size</label>
+            <input type="text" id="astro_mosaic_grid_x" name="astro_mosaic_grid_x" size="2" value="1">
+            <input type="text" id="astro_mosaic_grid_y" name="astro_mosaic_grid_y" size="2" value="1">
+            <button type="button" id="grid_size" class="btn btn-primary" title="Change grid size.">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-grid-3x2" viewBox="0 0 16 16">
+                    <path d="M0 3.5A1.5 1.5 0 0 1 1.5 2h13A1.5 1.5 0 0 1 16 3.5v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 0 11.5zM1.5 3a.5.5 0 0 0-.5.5V7h4V3zM5 8H1v3.5a.5.5 0 0 0 .5.5H5zm1 0v4h4V8zm4-1V3H6v4zm1 1v4h3.5a.5.5 0 0 0 .5-.5V8zm0-1h4V3.5a.5.5 0 0 0-.5-.5H11z"/>
+                </svg>
+            </button>
+            <label for="send_to_schedule" class="form-label">Send to Schedule</label>
+            <button type="button" id="send_to_schedule" class="btn btn-primary" title="Send to Schedule">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-journal-arrow-up" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M8 11a.5.5 0 0 0 .5-.5V6.707l1.146 1.147a.5.5 0 0 0 .708-.708l-2-2a.5.5 0 0 0-.708 0l-2 2a.5.5 0 1 0 .708.708L7.5 6.707V10.5a.5.5 0 0 0 .5.5"/>
+                    <path d="M3 0h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2v-1h1v1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v1H1V2a2 2 0 0 1 2-2"/>
+                    <path d="M1 5v-.5a.5.5 0 0 1 1 0V5h.5a.5.5 0 0 1 0 1h-2a.5.5 0 0 1 0-1zm0 3v-.5a.5.5 0 0 1 1 0V8h.5a.5.5 0 0 1 0 1h-2a.5.5 0 0 1 0-1zm0 3v-.5a.5.5 0 0 1 1 0v.5h.5a.5.5 0 0 1 0 1h-2a.5.5 0 0 1 0-1z"/>
+                </svg>
+            </button>
+            -->
+        </span>
+    </fieldset>
+</div>
+<div id="target-div" style="height:350px; width: 100%;"></div>
+<div id="day-div" style="height:300px; width: 100%; max-width: 100% !important;"></div>
+<div id="year-div" style="height:300px; width: 100%; max-width: 100% !important;"></div>
+<script>
+    var viewer_params = {
+        fov_x : 0.73*60,            // x fov in degrees
+        fov_y : 1.29*60,            // y fov in degrees
+        grid_type: "fov",           // fov, mosaic
+        grid_size_x: 2,
+        grid_size_y: 2,
+        location_lat : {{ config_lat }},    // location latitude (here Teide)
+        location_lng : {{ config_long }},   // location longitude (here Teide)
+        horizonSoft : null,         // soft horizon limit or null
+        horizonHard : [30],         // hard horizon limit or null
+        meridian_transit : null,    // meridian transit or null
+        UTCdate_ms : null,          // UTC date in milliseconds at the start of the day, null for current date
+        timezoneOffset: null,       // difference between UTC time and local time, in hours, null for UTC, should match with lat/lng
+        isCustomMode : true,        // use custom colors
+        chartTextColor : "white",   // custom chart text color
+        gridlinesColor : "gray",    // custom chart grid lines color
+        backgroundColor : "black"   // custom chart background color
+    };
+    
+    // we could use local time zone but it should match with lat/lng
+    // var d = new Date();
+    // viewer_params.timezoneOffset = d.getTimezoneOffset() / 60;
+    
+    var search_text = document.getElementById("astro_mosaic_search_text");
+    search_text.value = "M82" // Set the default
+    AstroMosaicEngine("M82", viewer_params, "target-div", "day-div", "year-div");
+    
+    function astro_mosaic_serach() {
+        var search_text = document.getElementById("astro_mosaic_search_text");
+        console.log("Searching for: " + search_text.value);
+        AstroMosaicEngine(search_text.value, viewer_params, "target-div", "day-div", "year-div");
+    }
+
+    function resize_astro_mosaic() {
+        var search_text = document.getElementById("astro_mosaic_search_text");
+        AstroMosaicEngine(search_text.value, viewer_params, "target-div", "day-div", "year-div");
+    }
+
+    window.addEventListener("resize", resize_astro_mosaic);
+</script>

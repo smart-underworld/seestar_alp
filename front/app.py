@@ -27,6 +27,7 @@ import subprocess
 import platform
 import shutil
 import signal
+import math
 
 from skyfield.api import load
 
@@ -392,6 +393,7 @@ def method_sync(method, telescope_id=1, **kwargs):
         return results
     return None
 
+
 def get_device_state(telescope_id):
     if check_api_state(telescope_id):
         # print("Device is online", telescope_id)
@@ -560,6 +562,7 @@ def check_dec_value(decString):
     ]
     return any(re.search(pattern, decString) for pattern in valid)
 
+
 def hms_to_sec(timeString):
     hms_search = re.search(r"^(?!\s*$)\s*(?:(\d+)\s*h\s*)?(?:(\d+)\s*m\s*)?(?:(\d+)\s*s)?\s*$", timeString.lower())
 
@@ -580,7 +583,95 @@ def hms_to_sec(timeString):
         return seconds
     else:
         return timeString
-    
+
+
+def lat_lng_distance_in_km(lat1, lng1, lat2, lng2):
+    """
+    Based off of https://github.com/BGCastro89/nearest_csc
+    """
+    """Calculate distance between two latitude-longitide points on sphere in kilometres.
+
+    args: Float lat/lng for two points on Earth
+    returns: Float representing distance in kilometres
+    """
+    R = 6371 # Earth Radius in kilometres (assume perfect sphere)
+
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    d_phi = math.radians(lat2-lat1)
+    d_lambda = math.radians(lng2-lng1)
+
+    a = math.sin(d_phi/2) * math.sin(d_phi/2) + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda/2) * math.sin(d_lambda/2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    d = R * c
+
+    return round(d,1) # Assume Accurate within ~0.1km due to Idealized Sphere Earth
+
+
+def get_nearest_csc():
+    """
+    Based off of https://github.com/BGCastro89/nearest_csc
+    """
+    """Nearest Clear Sky Chart from A. Danko's site: https://www.cleardarksky.com/
+
+    All 5000+ sities are binned by 1x1 degree lat/lng. Only check the
+    distance to sites within current bin +/- 1 degree, searching 9 bins total.
+
+    args: request object w/ args for lat/lng
+    returns: String, either with json representation of nearest site information or an error message
+    """
+
+    lat = Config.init_lat
+    lng = Config.init_long
+
+    if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+        csc_file = os.path.abspath(os.path.join(sys._MEIPASS, "csc_sites.json"))
+    else:
+        csc_file = os.path.join(os.path.dirname(__file__), "./csc_sites.json")
+
+    closest_site = {}
+
+    # Get list of all csc site locations
+    with open(csc_file, 'r') as f:
+        data = json.load(f)
+        nearby_csc = []
+
+        # Get list of all sites within same or adjacent 1 degree lat/lng bin
+        try:
+            for x in range(-1,2):
+                for y in range(-1,2):
+                    lat_str = str(int(lat)+x)
+                    lng_str = str(int(lng)+y)
+                    if lat_str in data:
+                        if lng_str in data[lat_str]:
+                            sites_in_bin = data[lat_str][lng_str]
+                            for site in sites_in_bin:
+                                nearby_csc.append(site)
+        except:
+            # API returns error
+            closest_site = {'status_msg': "ERROR parsing coordinates or reading from list of CSC sites"}
+
+        curr_closest_km = 1000
+
+        # Find the closest site in Clear Dark Sky database within bins
+        for site in nearby_csc:
+            dist = lat_lng_distance_in_km(lat, lng, site["lat"], site["lng"])
+
+            if dist < curr_closest_km:
+                curr_closest_km = dist
+                closest_site = site
+
+        # Grab site url and return site data if within 100 km
+        if curr_closest_km < 1000:
+            closest_site['status_msg'] = "SUCCESS"
+            closest_site['dist_km'] = curr_closest_km
+            closest_site['full_img'] = "https://www.cleardarksky.com/c/"+closest_site['id']+"csk.gif"
+            closest_site['mini_img'] = "https://www.cleardarksky.com/c/"+closest_site['id']+"cs0.gif"
+            closest_site['href'] = "https://www.cleardarksky.com/c/"+closest_site['id']+"key.html"
+        else: 
+            closest_site = {'status_msg': "No sites within 100 km. CSC sites are only available in the Continental US, Canada, and Northern Mexico"}
+
+        return closest_site
 
 
 def do_create_mosaic(req, resp, schedule, telescope_id):
@@ -689,6 +780,7 @@ def do_create_image(req, resp, schedule, telescope_id):
         logger.info("POST immediate request %s %s", values, response)
 
     return values, errors
+
 
 def do_goto_target(req, resp, schedule, telescope_id):
     form = req.media
@@ -865,6 +957,7 @@ def do_command(req, resp, telescope_id):
             logger.warn("No command found: %s", value)
     # print ("Output: ", output)
 
+
 def do_support_bundle(req, telescope_id = 1):
     zip_buffer = io.BytesIO()
     desc = req.media["desc"]
@@ -978,10 +1071,12 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
         twilight_times = get_twilight_times()
     else:
         twilight_times = {}
+    
+    nearest_csc = get_nearest_csc()
 
     context = get_context(telescope_id, req)
     render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values,
-                    twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes, clear_sky_href=Config.clear_sky_href, clear_sky_img_src=Config.clear_sky_img_src,
+                    twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes, cleardarksky_enabled=Config.cleardarksky, clear_sky_href=nearest_csc["href"], clear_sky_img_src=nearest_csc["full_img"],
                     **context)
 
 
@@ -1132,6 +1227,7 @@ class ImageResource:
         # remove values=values to stop remembering values
         render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors,
                         action=f"/{telescope_id}/image", **context)
+
 
 class GotoResource:  
     def on_get(self, req, resp, telescope_id=0):
@@ -1700,6 +1796,20 @@ class SettingsResource:
                         settings_helper_text=settings_helper_text, output=output, **context)
 
 
+class PlanningResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        context = get_context(telescope_id, req)
+        if (Config.twilighttimes):
+            twilight_times = get_twilight_times()
+        else:
+            twilight_times = {}
+        nearest_csc = get_nearest_csc()
+        config_lat = round(Config.init_lat, 2) # Some of the 3rd party api's/embeds want rounded down.
+        config_long = round(Config.init_long, 2) # Some of the 3rd party api's/embeds want rounded down.
+        render_template(req, resp, 'planning.html', twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes, config_lat=config_lat, config_long=config_long, clear_sky_href=nearest_csc["href"], clear_sky_img_src=nearest_csc["full_img"], **context)
+
+
 class StatsResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -1712,11 +1822,13 @@ class StatsResource:
 
         render_template(req, resp, 'stats.html', stats=stats, now=now, **context)
 
+
 class SupportResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
         context = get_context(telescope_id, req)
         render_template(req, resp, 'support.html', **context)
+
 
 class ReloadResource:
     @staticmethod
@@ -1988,6 +2100,7 @@ class UpdateTwilightTimesResource:
         update_twilight_times(PostedLat, PostedLon)
         redirect(f"{referer}")
 
+
 class GetBalanceSensorResource:
     @staticmethod
     def on_get(req, resp):
@@ -2004,6 +2117,7 @@ class GetBalanceSensorResource:
             resp.content_type = 'application/json'
             resp.text = json.dumps(balance_sensor)
 
+
 class GenSupportBundleResource:
     @staticmethod
     def on_post(req, resp, telescope_id=1):
@@ -2012,6 +2126,7 @@ class GenSupportBundleResource:
         resp.status = falcon.HTTP_200
         resp.text = zip_io.getvalue()
         zip_io.close()
+
 
 class ConfigResource:
     @staticmethod
@@ -2030,6 +2145,7 @@ class ConfigResource:
         Config.save_toml()
 
         render_template(req, resp, 'config.html', now = now, config = Config, **context) # pylint: disable=repeated-keyword
+
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
@@ -2060,6 +2176,7 @@ class GetPlanetCoordinates():
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
         resp.text = (f"{ra}, {dec}")
+
 
 class FrontMain:
     def __init__(self):
@@ -2106,6 +2223,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/live/exposure_mode', LiveExposureModeResource())
         # app.add_route('/{telescope_id:int}/live/state', LiveStateResource())
         app.add_route('/{telescope_id:int}/mosaic', MosaicResource())
+        app.add_route('/{telescope_id:int}/planning', PlanningResource())
         app.add_route('/{telescope_id:int}/position', TelescopePositionResource())
         app.add_route('/{telescope_id:int}/search', SearchObjectResource())
         app.add_route('/{telescope_id:int}/settings', SettingsResource())
@@ -2137,8 +2255,8 @@ class FrontMain:
         app.add_route('/updatetwilighttimes', UpdateTwilightTimesResource())
         app.add_route('/getbalancesensor', GetBalanceSensorResource())
         app.add_route('/gensupportbundle', GenSupportBundleResource())
-        app.add_route('/getplanetcoordinates', GetPlanetCoordinates() )
-        app.add_route('/config', ConfigResource() )
+        app.add_route('/getplanetcoordinates', GetPlanetCoordinates())
+        app.add_route('/config', ConfigResource())
 
         try:
             self.httpd = make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler)
@@ -2171,6 +2289,7 @@ class FrontMain:
         global logger
         logger = get_logger()
         logger.debug("FrontMain got reload")
+
 
 class style():
     YELLOW = '\033[33m'

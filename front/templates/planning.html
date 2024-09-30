@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block header %}
+    <meta http-equiv="Cache-Control" content="no-cache">
+    <div class="container mt-3">
+        <h1>{% block title %}Planning{% endblock %}</h1>
+    </div>
+{% endblock %}
+
+{% block content %}
+    {% if online %}
+    <div class="container-fluid">
+        <div class="card mb-3">
+            <div class="card-header">
+                Astro Mosaic
+            </div>
+            <div class="card-body">
+                <span>{% include 'partials/astro_mosaic.html' %}</span>
+            </div>
+        </div>
+        <div class="card mb-3">
+            <div class="card-header">
+                Twilight Times
+            </div>
+            <div class="card-body">
+                <span>{% include 'partials/twilight_times.html' %}</span>
+            </div>
+        </div>
+        <div class="card mb-3">
+            <div class="card-header">
+                Astrospheric
+            </div>
+            <div class="card-body">
+                <span>{% include 'partials/astrospheric.html' %}</span>
+            </div>
+        </div>
+        <div class="card mb-3">
+            <div class="card-header">
+                Clear Dark Sky
+            </div>
+            <div class="card-body">
+                <span>{% include 'partials/clear_dark_sky.html' %}</span>
+            </div>
+        </div>
+        <div class="card mb-3">
+            <div class="card-header">
+                Clear Outside
+            </div>
+            <div class="card-body">
+                <span>{% include 'partials/clear_outside.html' %}</span>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Always show panels on Planning page.
+        document.addEventListener("DOMContentLoaded", function () {
+            // Get all nav-link elements
+            const navLinks = document.querySelectorAll('.nav-link');
+                
+            // Get the current URL path
+            const currentPath = window.location.pathname;
+            console.log("Current Path: " + currentPath);
+            
+            // Split the pathnames
+            const pathSegments = currentPath.split('/');
+
+            // Get the last path
+            const lastPath = pathSegments.filter(segment => segment).pop();
+            console.log("Last Path: " + lastPath);
+
+            // Make all panels visable by default for the Planning page.
+            if(lastPath == "planning"){
+                var twilight_times_div = document.getElementById("twilightcollapse");
+                var clear_dark_sky_div = document.getElementById("cleardarksky");
+                var twilight_times_collapse_button = document.getElementById("twilight_times_collapse_button");
+                var clear_dark_sky_collapse_button = document.getElementById("clear_dark_sky_collapse_button");
+
+                twilight_times_div.classList.add("show");
+                clear_dark_sky_div.classList.add("show");
+                twilight_times_collapse_button.style.display = 'none';
+                clear_dark_sky_collapse_button.style.display = 'none';
+            }
+        });
+    </script>  
+    {% else %}
+        <div class="container mt-3" >
+            <p>You are currently in offline mode</p>
+        </div>
+    {% endif %}
+{% endblock %}
