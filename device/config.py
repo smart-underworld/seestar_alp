@@ -95,10 +95,9 @@ class _Config:
         self.uiport: int = self.get_toml('webui_settings', 'uiport', 5432)
         self.uitheme: str = self.get_toml('webui_settings', 'uitheme', 'dark')
         self.twilighttimes: bool = self.get_toml('webui_settings', 'twilighttimes', False)
+        self.cleardarksky: bool = self.get_toml('webui_settings', 'cleardarksky', False)
         self.experimental: bool = self.get_toml('webui_settings', 'experimental', False)
         self.confirm: bool = self.get_toml('webui_settings', 'confirm', True)
-        self.clear_sky_img_src: str = self.get_toml('webui_settings', 'clear_sky_img_src', 'https://www.cleardarksky.com/c/LvrmrCAcsk.gif?c=1969222')
-        self.clear_sky_href: str = self.get_toml('webui_settings', 'clear_sky_href', 'https://www.cleardarksky.com/c/LvrmrCAkey.html')
 
         # --------------
         # Server Section
