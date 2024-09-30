@@ -278,7 +278,7 @@ class alignmentmode:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -295,7 +295,7 @@ class altitude:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -312,7 +312,7 @@ class aperturearea:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -329,7 +329,7 @@ class aperturediameter:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -346,7 +346,7 @@ class athome:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -363,7 +363,7 @@ class atpark:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -380,7 +380,7 @@ class azimuth:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -397,7 +397,7 @@ class canfindhome:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -414,7 +414,7 @@ class canpark:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -431,7 +431,7 @@ class canpulseguide:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -448,7 +448,7 @@ class cansetdeclinationrate:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -465,7 +465,7 @@ class cansetguiderates:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -482,7 +482,7 @@ class cansetpark:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -499,7 +499,7 @@ class cansetpierside:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -516,7 +516,7 @@ class cansetrightascensionrate:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -533,7 +533,7 @@ class cansettracking:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -550,7 +550,7 @@ class canslew:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -567,7 +567,7 @@ class canslewaltaz:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -584,7 +584,7 @@ class canslewaltazasync:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -601,7 +601,7 @@ class canslewasync:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -618,7 +618,7 @@ class cansync:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -635,7 +635,7 @@ class cansyncaltaz:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -652,7 +652,7 @@ class canunpark:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -669,7 +669,7 @@ class declination:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -686,7 +686,7 @@ class declinationrate:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -700,7 +700,7 @@ class declinationrate:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         declinationratestr = get_request_field('DeclinationRate', req)      # Raises 400 bad request if missing
         try:
@@ -725,7 +725,7 @@ class doesrefraction:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -739,7 +739,7 @@ class doesrefraction:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         doesrefractionstr = get_request_field('DoesRefraction', req)      # Raises 400 bad request if missing
         doesrefraction = to_bool(doesrefractionstr)                       # Same here
@@ -759,7 +759,7 @@ class equatorialsystem:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -776,7 +776,7 @@ class focallength:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -793,7 +793,7 @@ class guideratedeclination:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -807,7 +807,7 @@ class guideratedeclination:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         guideratedeclinationstr = get_request_field('GuideRateDeclination', req)      # Raises 400 bad request if missing
         try:
@@ -832,7 +832,7 @@ class guideraterightascension:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -846,7 +846,7 @@ class guideraterightascension:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         guideraterightascensionstr = get_request_field('GuideRateRightAscension', req)      # Raises 400 bad request if missing
         try:
@@ -871,7 +871,7 @@ class ispulseguiding:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -888,7 +888,7 @@ class rightascension:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not connected.")).json
             return
         try:
             # ----------------------
@@ -905,7 +905,7 @@ class rightascensionrate:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not connected.")).json
             return
         try:
             # ----------------------
@@ -919,7 +919,7 @@ class rightascensionrate:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         rightascensionratestr = get_request_field('RightAscensionRate', req)      # Raises 400 bad request if missing
         try:
@@ -944,7 +944,7 @@ class sideofpier:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -958,7 +958,7 @@ class sideofpier:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         sideofpierstr = get_request_field('SideOfPier', req)      # Raises 400 bad request if missing
         try:
@@ -983,7 +983,7 @@ class siderealtime:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -1000,7 +1000,7 @@ class siteelevation:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -1014,7 +1014,7 @@ class siteelevation:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         siteelevationstr = get_request_field('SiteElevation', req)      # Raises 400 bad request if missing
         try:
@@ -1037,7 +1037,7 @@ class sitelatitude:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             ### RWR Added
@@ -1060,7 +1060,7 @@ class sitelatitude:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         sitelatitudestr = get_request_field('SiteLatitude', req)      # Raises 400 bad request if missing
         try:
@@ -1085,7 +1085,7 @@ class sitelongitude:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             ### RWR added
@@ -1108,7 +1108,7 @@ class sitelongitude:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         sitelongitudestr = get_request_field('SiteLongitude', req)      # Raises 400 bad request if missing
         try:
@@ -1133,7 +1133,7 @@ class slewing:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -1150,7 +1150,7 @@ class slewsettletime:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -1164,7 +1164,7 @@ class slewsettletime:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         slewsettletimestr = get_request_field('SlewSettleTime', req)      # Raises 400 bad request if missing
         try:
@@ -1189,7 +1189,7 @@ class targetdeclination:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -1203,7 +1203,7 @@ class targetdeclination:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         targetdeclinationstr = get_request_field('TargetDeclination', req)      # Raises 400 bad request if missing
         try:
@@ -1228,7 +1228,7 @@ class targetrightascension:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -1242,7 +1242,7 @@ class targetrightascension:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         targetrightascensionstr = get_request_field('TargetRightAscension', req)      # Raises 400 bad request if missing
         try:
@@ -1267,7 +1267,7 @@ class tracking:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -1281,7 +1281,7 @@ class tracking:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         trackingstr = get_request_field('Tracking', req)      # Raises 400 bad request if missing
         tracking = to_bool(trackingstr)                       # Same here
@@ -1301,7 +1301,7 @@ class trackingrate:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -1315,7 +1315,7 @@ class trackingrate:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         trackingratestr = get_request_field('TrackingRate', req)      # Raises 400 bad request if missing
         try:
@@ -1340,7 +1340,7 @@ class trackingrates:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -1358,7 +1358,7 @@ class utcdate:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -1372,7 +1372,7 @@ class utcdate:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         utcdatestr = get_request_field('UTCDate', req)      # Raises 400 bad request if missing
         try:
@@ -1397,7 +1397,7 @@ class abortslew:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # -----------------------------
@@ -1414,7 +1414,7 @@ class axisrates:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -1431,7 +1431,7 @@ class canmoveaxis:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -1448,7 +1448,7 @@ class destinationsideofpier:
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # ----------------------
@@ -1465,7 +1465,7 @@ class findhome:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # -----------------------------
@@ -1482,7 +1482,7 @@ class moveaxis:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         axisstr = get_request_field('Axis', req)      # Raises 400 bad request if missing
         try:
@@ -1515,7 +1515,7 @@ class park:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # -----------------------------
@@ -1532,7 +1532,7 @@ class pulseguide:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         directionstr = get_request_field('Direction', req)      # Raises 400 bad request if missing
         try:
@@ -1565,7 +1565,7 @@ class setpark:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # -----------------------------
@@ -1582,7 +1582,7 @@ class slewtoaltaz:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         azimuthstr = get_request_field('Azimuth', req)      # Raises 400 bad request if missing
         try:
@@ -1615,7 +1615,7 @@ class slewtoaltazasync:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         azimuthstr = get_request_field('Azimuth', req)      # Raises 400 bad request if missing
         try:
@@ -1648,7 +1648,7 @@ class slewtocoordinates:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         rightascensionstr = get_request_field('RightAscension', req)      # Raises 400 bad request if missing
         try:
@@ -1681,7 +1681,7 @@ class slewtocoordinatesasync:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         rightascensionstr = get_request_field('RightAscension', req)      # Raises 400 bad request if missing
         try:
@@ -1714,7 +1714,7 @@ class slewtotarget:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # -----------------------------
@@ -1731,7 +1731,7 @@ class slewtotargetasync:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # -----------------------------
@@ -1748,7 +1748,7 @@ class synctoaltaz:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         azimuthstr = get_request_field('Azimuth', req)      # Raises 400 bad request if missing
         try:
@@ -1781,7 +1781,7 @@ class synctocoordinates:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         rightascensionstr = get_request_field('RightAscension', req)      # Raises 400 bad request if missing
         try:
@@ -1814,7 +1814,7 @@ class synctotarget:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # -----------------------------
@@ -1831,7 +1831,7 @@ class unpark:
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+                            NotConnectedException("Not Connected.")).json
             return
         try:
             # -----------------------------

@@ -83,6 +83,7 @@ class Seestar:
         try:
             if self.s == None:
                 self.logger.warn("socket not initialized!")
+                time.sleep(3)
                 return False
             # todo : don't send if not connected or socket is null?
             self.s.sendall(data.encode())  # TODO: would utf-8 or unicode_escaped help here
@@ -230,9 +231,9 @@ class Seestar:
 
                         # xxx: make this a common method....
                         if Config.log_events_in_info:
-                            self.logger.info(f'{self.device_name} received : {data}')
+                            self.logger.info(f'{self.device_name} received : {parsed_data}')
                         else:
-                            self.logger.debug(f'{self.device_name} received : {data}')
+                            self.logger.debug(f'{self.device_name} received : {parsed_data}')
                         event_name = parsed_data['Event']
                         self.event_state[event_name] = parsed_data
                         if event_name == self.op_watch:  # "AutoGoto" or "AutoFocus"
@@ -473,23 +474,117 @@ class Seestar:
     def try_auto_focus(self, try_count):
         focus_count = 0
         result = False
-        while focus_count < try_count and result == False:
+        while focus_count < try_count:
             focus_count += 1
             self.logger.info("%s: focusing try %s of %s...", self.device_name, str(focus_count), str(try_count))
+            if focus_count > 1:
+                time.sleep(5)
             if self.start_auto_focus():
-                result = self.wait_end_op("AutoFocus")
-                if result != True and focus_count < try_count:
-                    time.sleep(5)
-
-        if result == True:
-            self.logger.info("%s: Auto focus completed!", self.device_name)
-
-        else:
-            self.logger.error("%s: Auto focus failed!", self.device_name)
-
-        time.sleep(3)
+                while True:
+                    if "AutoFocus" in self.event_state:
+                        event_state = self.event_state["AutoFocus"]
+                        if "state" in event_state:
+                            if event_state["state"] == "fail":
+                                self.logger.warn("Failed to autofous.")
+                                break
+                            elif event_state["state"] == "complete":
+                                self.logger.info("Autofous completed.")
+                                result = True
+                                break
+                    time.sleep(2)
+                if result == True:
+                    break
+        # give extra time to settle focuser
+        time.sleep(2)
         return result
 
+    def start_3PPA(self):
+        self.logger.info("start 3 point polar alignment...")
+        result = self.send_message_param_sync({"method": "start_polar_align"})
+        if 'error' in result:
+            self.logger.error("Faild to start polar alignment: %s", result)
+            return False
+        return True
+    
+    def try_3PPA(self, try_count):
+        cur_count = 0
+        result = False
+        while cur_count < try_count:
+            cur_count += 1
+            self.logger.info("%s: 3PPA try %s of %s...", self.device_name, str(cur_count), str(try_count))
+            if cur_count > 1:
+                time.sleep(5)
+
+            #todo need to check if there was a previous failed 3PPA. If so, need to stack current spot instead!
+#            response = self.send_message_param_sync({"method":"iscope_get_app_state"})
+#            response = response["result"]
+#            if "3PPA" not in response or ("3PPA" in response and response["3PPA"]["state"] == "fail"):
+            response = self.send_message_param_sync({"method":"get_device_state"})
+            self.logger.info(f"get 3PPA state to determine ow to proceede: {response}")
+
+            response = response["result"]["setting"]
+            is_3PPA = True
+            if "offset_deg_3ppa" not in response:
+                result = self.start_stack({"restart":True, "gain": Config.init_gain})
+                is_3PPA = False
+            else:
+                result = self.start_3PPA()
+            if result == True:
+                time.sleep(1)
+                result = False
+                while True:
+                    if "3PPA" in self.event_state:
+                        event_state = self.event_state["3PPA"]
+                        if "state" in event_state and event_state["state"] == "fail":
+                            self.logger.info(f"3PPA failed: {event_state}.")
+                            if not is_3PPA:
+                                response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"AutoGoto"}})
+                                self.logger.info(response)
+                            result = False
+                            break
+                        elif "percent" in event_state:
+                            if event_state["percent"] > 99.9:
+                                self.logger.info("3PPA reached 100%. Will stop return to origin now.")
+                                if is_3PPA:
+                                    response = self.send_message_param_sync({"method":"stop_polar_align"})
+                                else:
+                                    response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"AutoGoto"}})
+                                self.logger.info(response)
+                                result = True
+                                break
+                    time.sleep(1)
+                if result == True:
+                    break
+        # give extra time to settle focuser
+        time.sleep(2)
+        return result
+
+    def try_dark_frame(self):
+        self.logger.info("start dark frame measurement...")
+        result = self.send_message_param_sync({"method": "start_create_dark"})
+        if 'error' in result:
+            self.logger.error("Faild to start create darks: %s", result)
+            return False
+        response = self.send_message_param_sync({"method": "set_control_value", "params": ["gain", Config.init_gain]})
+        self.logger.info(f"dark frame measurement setting gain response: {response}")
+        while True:
+            event_state = self.event_state["DarkLibrary"]
+            if "state" in event_state:
+                if event_state["state"] == "fail":
+                    self.logger.info(f"dark library failed: {event_state}.")
+                    result = False
+                    break
+                if event_state["state"] == "complete":
+                    self.logger.info(f"dark library created: {event_state}.")
+                    result = True
+                    break
+            time.sleep(1)
+
+        if result == True:
+            response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"Stack"}})
+            self.logger.info(f"Response from stop stack after dark frame measurement: {response}")
+        return result
+    
     def stop_stack(self):
         self.logger.info("%s: stop stacking...", self.device_name)
         data = {}
@@ -579,10 +674,9 @@ class Seestar:
         self.op_state = "fail"
         return
 
-    def start_stack(self, params={"gain": 80, "restart": True}):
+    def start_stack(self, params={"gain": Config.init_gain, "restart": True}):
         stack_gain = params["gain"]
-        result = self.send_message_param_sync(
-            {"method": "iscope_start_stack", "params": {"restart": params["restart"]}})
+        result = self.send_message_param_sync({"method": "iscope_start_stack", "params": {"restart": params["restart"]}})
         self.logger.info(result)
         result = self.send_message_param_sync({"method": "set_control_value", "params": ["gain", stack_gain]})
         self.logger.info(result)
@@ -611,8 +705,9 @@ class Seestar:
     # move to a good starting point position specified by lat and lon
     def start_up_thread_fn(self, params):
         try:
-            self.logger.info("start up sequence begins ...")
             self.scheduler_state = "Running"
+            self.logger.info("start up sequence begins ...")
+            self.play_sound(80)
             tz_name = tzlocal.get_localzone_name()
             tz = tzlocal.get_localzone()
             now = datetime.now(tz)
@@ -715,7 +810,7 @@ class Seestar:
                 delta_lon = lon-cur_latlon[1]
                 if abs(delta_lon) < 5:
                     break
-                elif delta_lon > 0:
+                elif delta_lon > 0 or delta_lon < -180:
                     direction = 0
                 else:
                     direction = 180
@@ -727,9 +822,27 @@ class Seestar:
 
             cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
             self.logger.info(f"final lat-lon after move:  {cur_latlon[0]}, {cur_latlon[1]}")
+
+            result = self.try_auto_focus(2)
+            if result == False:
+                self.logger.warn("Start-up sequence stopped and was unsuccessful.")
+                return
+            
+            result = self.try_3PPA(1)
+            if result == False:
+                self.logger.warn("Start-up sequence stopped and was unsuccessful.")
+                return
+
+            result = self.try_dark_frame()
+            if result == False:
+                self.logger.warn("Start-up sequence stopped and was unsuccessful.")
+                return
+            
+            self.logger.info(f"Start-up sequence result: {result}")
+
         finally:
             self.scheduler_state = "Stopped"
-
+            self.play_sound(82)
 
     def action_set_dew_heater(self, params):
         return self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
