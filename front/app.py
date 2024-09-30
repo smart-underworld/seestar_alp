@@ -1073,6 +1073,9 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
         twilight_times = {}
     
     nearest_csc = get_nearest_csc()
+    if nearest_csc["status_msg"] != "SUCCESS":
+        nearest_csc["href"] = ""
+        nearest_csc["full_img"] = ""
 
     context = get_context(telescope_id, req)
     render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values,
@@ -1805,6 +1808,10 @@ class PlanningResource:
         else:
             twilight_times = {}
         nearest_csc = get_nearest_csc()
+        if nearest_csc["status_msg"] != "SUCCESS":
+            nearest_csc["href"] = ""
+            nearest_csc["full_img"] = ""
+
         config_lat = round(Config.init_lat, 2) # Some of the 3rd party api's/embeds want rounded down.
         config_long = round(Config.init_long, 2) # Some of the 3rd party api's/embeds want rounded down.
         render_template(req, resp, 'planning.html', twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes, config_lat=config_lat, config_long=config_long, clear_sky_href=nearest_csc["href"], clear_sky_img_src=nearest_csc["full_img"], **context)
