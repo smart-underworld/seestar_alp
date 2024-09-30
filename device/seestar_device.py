@@ -723,7 +723,9 @@ class Seestar:
             date_data['method'] = 'pi_set_time'
             date_data['params'] = [date_json]
 
-            do_dark_frames = params.get("dark_frames", True)
+            do_AF = params.get("auto_focus", False)
+            do_3PPA = params.get("3ppa", False)
+            do_dark_frames = params.get("dark_frames", False)
 
             loc_data = {}
             loc_param = {}
@@ -845,15 +847,19 @@ class Seestar:
             cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
             self.logger.info(f"final lat-lon after move:  {cur_latlon[0]}, {cur_latlon[1]}")
 
-            result = self.try_auto_focus(2)
-            if result == False:
-                self.logger.warn("Start-up sequence stopped and was unsuccessful.")
-                return
+            result = True
             
-            result = self.try_3PPA(1)
-            if result == False:
-                self.logger.warn("Start-up sequence stopped and was unsuccessful.")
-                return
+            if do_AF:
+                result = self.try_auto_focus(2)
+                if result == False:
+                    self.logger.warn("Start-up sequence stopped and was unsuccessful.")
+                    return
+            
+            if do_3PPA:
+                result = self.try_3PPA(1)
+                if result == False:
+                    self.logger.warn("Start-up sequence stopped and was unsuccessful.")
+                    return
 
             if do_dark_frames:
                 result = self.try_dark_frame()
