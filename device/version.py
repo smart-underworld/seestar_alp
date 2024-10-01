@@ -1,6 +1,7 @@
 import sys
 import os
 import subprocess
+import logging
 
 if getattr(sys, "frozen",  False):
     search_path = sys._MEIPASS
@@ -25,6 +26,11 @@ class Version:
             env['LC_ALL'] = 'C'
             out = subprocess.Popen(cmd, stdout = subprocess.PIPE, env=env).communicate()[0]
             return out
+
+        try:
+            _minimal_ext_cmd(['git', 'fetch', '--tags'])
+        except OSError:
+            logging.log.warn("unable to get git tags")
 
         try:
             out = _minimal_ext_cmd(['git', 'describe', '--tags'])
