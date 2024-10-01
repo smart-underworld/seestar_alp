@@ -8,14 +8,13 @@
 {% endblock %}
 
 {% block content %}
-    {% if online %}
     <div class="container-fluid">
         <div class="card mb-3">
             <div class="card-header">
                 Astro Mosaic
             </div>
             <div class="card-body">
-                <span>{% include 'partials/astro_mosaic.html' %}</span>
+                {% include 'partials/astro_mosaic.html' %}
             </div>
         </div>
         <div class="card mb-3">
@@ -23,7 +22,7 @@
                 Twilight Times
             </div>
             <div class="card-body">
-                <span>{% include 'partials/twilight_times.html' %}</span>
+                {% include 'partials/twilight_times.html' %}
             </div>
         </div>
         <div class="card mb-3">
@@ -31,7 +30,7 @@
                 Astrospheric
             </div>
             <div class="card-body">
-                <span>{% include 'partials/astrospheric.html' %}</span>
+                {% include 'partials/astrospheric.html' %}
             </div>
         </div>
         <div class="card mb-3">
@@ -39,7 +38,7 @@
                 Clear Dark Sky
             </div>
             <div class="card-body">
-                <span>{% include 'partials/clear_dark_sky.html' %}</span>
+                {% include 'partials/clear_dark_sky.html' %}
             </div>
         </div>
         <div class="card mb-3">
@@ -47,7 +46,7 @@
                 Clear Outside
             </div>
             <div class="card-body">
-                <span>{% include 'partials/clear_outside.html' %}</span>
+                {% include 'partials/clear_outside.html' %}
             </div>
         </div>
     </div>
@@ -81,12 +80,7 @@
                 clear_dark_sky_collapse_button.style.display = 'none';
             }
         });
-    </script>  
-    {% else %}
-        <div class="container mt-3" >
-            <p>You are currently in offline mode</p>
-        </div>
-    {% endif %}
+    </script>
     <footer class="bg-body-tertiary text-center mt-3">
         Version: {{ version }}
     </footer>
