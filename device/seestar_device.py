@@ -273,7 +273,7 @@ class Seestar:
 
     def send_message_param_sync(self, data):
         cur_cmdid = self.send_message_param(data)
-        if data['method'] == 'pi_shutodwn' or data['method'] == 'pi_reboot':
+        if data['method'] == 'pi_shutdown' or data['method'] == 'pi_reboot':
             return
         start = time.time()
         last_slow = start
