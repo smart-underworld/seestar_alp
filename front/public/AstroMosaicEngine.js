@@ -33,6 +33,10 @@
  *          {
  *              fov_x            : x fov in degrees,
  *              fov_y            : y fov in degrees,
+ *              grid_type        : grid type, "fov" or "mosaic", if not set, "fov" is used,
+ *              grid_size_x      : number of grid panels in x direction, if not set, 1 is used
+ *              grid_size_y      : number of grid panels y direction, if not set, 1 is used
+ *              grid_overlap     : grid overlap in percentage, if not set, 20 is used
  *              location_lat     : location latitude,
  *              location_lng     : location longitude,
  *              horizonSoft      : soft horizon limit or null,
@@ -58,6 +62,9 @@
  *      year_div
  *            Div section name for showing the year visibility view, or null.
  *
+ *      radec_div
+ *            Div section name for showing target coordinates, or mosaic panel coordinates.
+ * 
  * Requirements:
  *
  *      Aladin Lite needs the following CSS to be loaded::
@@ -74,7 +81,7 @@
  * 
  *  AstroMosaicEngine("horsehead nebula", params, "target-div", "day-div", "year-div");
  */
-function AstroMosaicEngine(target, params, target_div, day_div, year_div)
+function AstroMosaicEngine(target, params, target_div, day_div, year_div, radec_div)
 {
     console.log('AstroMosaicEngine');
 
@@ -90,9 +97,9 @@ function AstroMosaicEngine(target, params, target_div, day_div, year_div)
         meridian_transit : params.meridian_transit,
         UTCdate_ms : params.UTCdate_ms,
         timezoneOffset : params.timezoneOffset,
-        grid_type : "fov",
-        grid_size_x : 1,
-        grid_size_y : 1,
+        grid_type : params.grid_type ? params.grid_type : "fov",
+        grid_size_x : params.grid_size_x ? params.grid_size_x : 1,
+        grid_size_y : params.grid_size_y ? params.grid_size_y : 1,
         isCustomMode : params.isCustomMode,
         chartTextColor : params.chartTextColor,
         gridlinesColor : params.gridlinesColor,
@@ -100,12 +107,13 @@ function AstroMosaicEngine(target, params, target_div, day_div, year_div)
         isRepositionModeFunc : null,
         repositionTargetFunc : null,
         showAz: false,
-        planet_id: null
+        planet_id: null,
+        current_telescope_service: null
     };
 
     var engine_panels = {
         aladin_panel : target_div,
-        aladin_panel_text : null,
+        aladin_panel_text : radec_div ? radec_div : null,
         dayvisibility_panel : day_div,
         dayvisibility_panel_text : null,
         yearvisibility_panel : year_div,
@@ -141,7 +149,13 @@ function AstroMosaicEngine(target, params, target_div, day_div, year_div)
     engine_params.UTCdate_now_ms = Date.UTC(curdate.getUTCFullYear(), curdate.getUTCMonth(), curdate.getUTCDate(), 
                                             curdate.getUTCHours(), curdate.getUTCMinutes());
 
-    return StartAstroMosaicViewerEngine("", target, engine_params, engine_panels, null, 20, null);
+    return StartAstroMosaicViewerEngine(
+                "embedded", 
+                target, 
+                engine_params, 
+                engine_panels, 
+                null, 
+                params.grid_overlap ? params.grid_overlap : 20);
 }
 
 /* 
@@ -930,7 +944,7 @@ function StartAstroMosaicViewerEngine(
         console.log("drawDayVisibilityandGrid, image_target_list.length", image_target_list.length);
 
         if (engine_view_type == "all"
-            || (engine_view_type == "" && engine_panels.aladin_panel != null)) 
+            || ((engine_view_type == "" || engine_view_type == "embedded") && engine_panels.aladin_panel != null)) 
         {
             if (image_target_list.length > 1) {
                 EngineViewGridFromList(image_target_list);
@@ -1173,7 +1187,7 @@ function StartAstroMosaicViewerEngine(
                 "Moon distance from target: " + Math.floor(moon_angle) + " degrees";
         } else if (engine_panels.dayvisibility_panel_text) {
             document.getElementById(engine_panels.dayvisibility_panel_text).style.marginTop = "1px";
-            document.getElementById(engine_panels.dayvisibility_panel_text).innerHTML = astro_mosaic_link;
+            document.getElementById(engine_panels.dayvisibility_panel_text).innerHTML = engine_params.astro_mosaic_link;
         }
     }
 
@@ -1308,7 +1322,7 @@ function StartAstroMosaicViewerEngine(
 
         if (engine_view_type != "all" && engine_panels.yearvisibility_panel_text) {
             document.getElementById(engine_panels.yearvisibility_panel_text).style.marginTop = "1px";
-            document.getElementById(engine_panels.yearvisibility_panel_text).innerHTML = astro_mosaic_link;
+            document.getElementById(engine_panels.yearvisibility_panel_text).innerHTML = engine_params.astro_mosaic_link;
         }
     }
 
@@ -1834,13 +1848,13 @@ function StartAstroMosaicViewerEngine(
                 google.charts.load('current', {'packages':['corechart']});
                 if (engine_view_type == "all" 
                     || engine_view_type == "day"
-                    || (engine_view_type == "" && engine_panels.dayvisibility_panel != null)) 
+                    || ((engine_view_type == "" || engine_view_type == "embedded") && engine_panels.dayvisibility_panel != null)) 
                 {
                     google.charts.setOnLoadCallback(drawDayVisibilityandGrid);
                 }
                 if (engine_view_type == "all" 
                     || engine_view_type == "year"
-                    || (engine_view_type == "" && engine_panels.yearvisibility_panel != null)) 
+                    || ((engine_view_type == "" || engine_view_type == "embedded") && engine_panels.yearvisibility_panel != null)) 
                 {
                     google.charts.setOnLoadCallback(drawYearVisibility);
                 }
@@ -2143,7 +2157,9 @@ function StartAstroMosaicViewerEngine(
                 var col_ra_hours = col_ra * degToHours;
 
                 if (grid_type == "mosaic" || grid_type == "visual") {
-                    if (engine_params.current_telescope_service.radec_format == 0) {
+                    if (engine_params.current_telescope_service == null ||
+                        engine_params.current_telescope_service.radec_format == 0) 
+                    {
                         panel_radec[x][y] = col_ra_hours.toFixed(5) + 
                                             " " + row_dec.toFixed(5);
                     } else {
@@ -2193,11 +2209,11 @@ function StartAstroMosaicViewerEngine(
                 document.getElementById(engine_panels.aladin_panel_text).appendChild(tab);
             }
         } else {
-            if (engine_view_type == "all") {
+            if (engine_view_type == "all" || engine_view_type == "embedded") {
                 document.getElementById(engine_panels.aladin_panel_text).innerHTML = panel_radec[1][1];
             } else if (engine_panels.aladin_panel_text) {
                 document.getElementById(engine_panels.aladin_panel_text).style.marginTop = "1px";
-                document.getElementById(engine_panels.aladin_panel_text).innerHTML = astro_mosaic_link;
+                document.getElementById(engine_panels.aladin_panel_text).innerHTML = engine_params.astro_mosaic_link;
             }
         }
         if (engine_view_type == "all") {
