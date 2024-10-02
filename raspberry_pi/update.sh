@@ -1,6 +1,6 @@
 #!/bin/bash -e
 src_home=$(cd $(dirname $0)/.. && pwd)
-source ${src_home}/raspberry_pi/common_functions.sh
+source ${src_home}/raspberry_pi/lib/common_functions.bash
 
 validate_access
 
