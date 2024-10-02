@@ -69,6 +69,9 @@ class _Config:
         self.load_toml(self.path_to_dat)
 
     def get_toml(self, sect: str, item: str, default : typing.Any):
+        """
+        Helper method for getting a toml value out of the dict representation
+        """
         if not self._dict is {} and sect in self._dict and item in self._dict[sect]:
             return self._dict[sect][item]
         else:
@@ -163,6 +166,9 @@ class _Config:
         self.scope_aim_lon: float = self.get_toml(section, 'scope_aim_lon', 20.0)
 
     def load_from_form(self, req):
+        """
+        Save the config html form into a toml file
+        """
         # network
         self.set_toml('network', 'ip_address', req.media['ip_address'])
         self.set_toml('network', 'port', int(req.media['port']))
@@ -213,24 +219,42 @@ class _Config:
         self.set_toml('seestar_initialization', 'scope_aim_lon', float(req.media['scope_aim_lon']))
 
     def load_toml(self, load_name = None):
+        """
+        Load a specific path to a toml file into this Config object
+        """
         if load_name == None:
             load_name = self.path_to_dat
         self.load(load_name)
 
     def set_toml(self, section, key, value):
+        """
+        Set a value in-memory for the toml dict
+        """
         self._dict[section][key] = value
 
     def save_toml(self, save_name = None):
+        """
+        Save the in-memory toml dict out to disk in toml format
+        """
         if save_name == None:
             save_name = self.path_to_dat
         print(f"save_toml: writing toml to {save_name}")
         with open(save_name, "w") as toml_file:
             toml_file.write(tomlkit.dumps(self._dict))
 
+    #
+    # HTML config rendering
+    #
     def render_text(self, name, label, value):
+        """
+        Render config html form text input
+        """
         return f'<label for="{name}" class="form-label">{label}</label> <input id="{name}" name="{name}" type="text" value="{value}"><br>\n'
 
     def render_checkbox(self, name, label, checked):
+        """
+        Render config html form boolean checkbox
+        """
         ret = f'<label for="{name}" class="form-label">{label}</label> '
         if checked:
             c=" checked"
@@ -240,6 +264,9 @@ class _Config:
         return ret
 
     def render_select(self, name, label, options, default):
+        """
+        Render config html select dropdown
+        """
         ret = f'<label for="{name}" class="form-label">{label}</label><select id="{name}" name="{name}"> '
         for opt in options:
             if opt == default:
@@ -251,25 +278,19 @@ class _Config:
         return ret
 
     def render_config_section(self, title, content):
+        """
+        Render config html config section div
+        """
         return '<div class="card-body border">' + \
 			   f'<h5 class="card-title">{title}</h5>' + \
                content + \
                '</div>\n'
 
-    def log_level_str(self):
-        match self.log_level:
-            case 10:
-                return "DEBUG"
-            case 20:
-                return "INFO"
-            case 30:
-                return "WARN"
-            case 40:
-                return "ERROR"
-            case _:
-                return "INFO"
-
     def render_config_html(self):
+        """
+        Render config html
+        """
+        log_levels = [ logging.getLevelName(x) for x in sorted(list(set(logging.getLevelNamesMapping().values()))) if x != 0 ]
         return \
             self.render_config_section(
                 'Networking',
@@ -302,7 +323,7 @@ class _Config:
             ) + \
             self.render_config_section(
                 'Logging',
-                self.render_select('log_level', 'Log level:', [ "DEBUG", "INFO", "WARN", "ERROR" ], self.log_level_str()) + \
+                self.render_select('log_level', 'Log level:', log_levels, logging.getLevelName(self.log_level)) + \
                 self.render_text('log_prefix', 'Log prefix:', self.log_prefix) + \
                 self.render_checkbox('log_to_stdout', 'Log to stdout:', self.log_to_stdout) + \
                 self.render_text('max_size_mb', 'Max log size in MB:', self.max_size_mb) + \
