@@ -412,17 +412,19 @@ def get_device_state(telescope_id):
         target = ""
         stacked = ""
         failed = ""
-        if status is not None and status.get("View"):
-            view_state = status["View"]["state"]
-            mode = status["View"]["mode"]
-            if view_state == "working":
-                stage = status["View"]["stage"]           
-                if stage == "Stack":
-                    if status["View"]["Stack"]["state"] == "working":
-                        target = status.get("View", {}).get("target_name", "")
-                        stacked = status.get("View", {}).get("stacked_frame", "")
-                        failed = status.get("View", {}).get("dropped_frame", "")
-                 
+        if status is not None:
+            view_info = status.get("View", {})
+            view_state = view_info.get("state", "Idle")
+            mode = view_info.get("mode", "")
+    
+            target = view_info.get("target_name", "")
+            stage = view_info.get("stage", "")
+            stack_info = view_info.get("Stack", {})
+    
+            if stack_info.get("state") == "working":
+                stacked = stack_info.get("stacked_frame", "")
+                failed = stack_info.get("dropped_frame", "")
+                
         # Check for bad data
         if status is not None and result is not None:
             schedule = do_action_device("get_schedule", telescope_id, {})
@@ -442,18 +444,18 @@ def get_device_state(telescope_id):
                 else:
                     wifi_signal = f"Unavailable in AP mode."
             stats = {
-                "Firmware Version": device["firmware_ver_string"],
-                "Focal Position": focuser["step"],
-                "Auto Power Off": settings["auto_power_off"],
-                "Heater?": settings["heater_enable"],
+                "Firmware Version": device.get("firmware_ver_string",""),
+                "Focal Position": focuser.get("step",""),
+                "Auto Power Off": settings.get("auto_power_off",""),
+                "Heater?": settings.get("heater_enable",""),
                 "Free Storage": free_storage,
-                "Balance Sensor (angle)": result["balance_sensor"]["data"]["angle"],
-                "Compass Sensor (direction)": result["compass_sensor"]["data"]["direction"],
-                "Temperature Sensor": pi_status["temp"],
-                "Charge Status": pi_status["charger_status"],
-                "Battery %": pi_status["battery_capacity"],
-                "Battery Temp": pi_status["battery_temp"],
-                "Scheduler Status": schedule["Value"]["state"],
+                "Balance Sensor (angle)": result.get("balance_sensor",{}).get("data",{}).get("angle"),
+                "Compass Sensor (direction)": result.get("compass_sensor",{}).get("data",{}).get("direction"),
+                "Temperature Sensor": pi_status.get("temp",""),
+                "Charge Status": pi_status.get("charger_status",""),
+                "Battery %": pi_status.get("battery_capacity",""),
+                "Battery Temp": pi_status.get("battery_temp",""),
+                "Scheduler Status": schedule.get("Value",{}).get("state"),
                 "View State": view_state,
                 "View Mode": mode,
                 "View Stage": stage,
