@@ -71,6 +71,7 @@ function systemd_service_setup {
   -e "s|^User=.*|User=${user}|g" \
   -e "s|^ExecStart=.*|ExecStart=$HOME/.pyenv/versions/ssc-3.12.5/bin/python3 $src_home/root_app.py|" > /tmp/seestar.service
   sudo chown root:root /tmp/seestar*.service
+  sudo mv /tmp/seestar.service /etc/systemd/system
 
   sudo systemctl daemon-reload
 

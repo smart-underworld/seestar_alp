@@ -53,5 +53,5 @@ function update() {
 #
 (return 0 2>/dev/null) && sourced=1 || sourced=0
 if [ ${sourced} = 0 ]; then
-    update
+    update $@
 fi
