@@ -90,7 +90,6 @@ function print_banner {
 $(printf "| %-36s|" "Seestar_alp ${operation} complete")
 |                                     |
 | You can access SSC via:             |
-| http://$(hostname).local:5432       |
 $(printf "| %-36s|" "http://${host}.local:5432")
 |                                     |
 | Device logs can be found in         |
