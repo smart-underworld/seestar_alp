@@ -18,7 +18,7 @@ function validate_access {
 
 function install_apt_packages {
   sudo apt-get update --yes
-  sudo apt-get install --yes libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev libgdbm-dev lzma lzma-dev tcl-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev wget curl make build-essential openssl libgl1
+  sudo apt-get install --yes git libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev libgdbm-dev lzma lzma-dev tcl-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev wget curl make build-essential openssl libgl1
 }
 
 function config_toml_setup {
@@ -119,6 +119,7 @@ function setup() {
     exit 255
   fi
 
+  install_apt_packages
   git clone https://github.com/smart-underworld/seestar_alp.git
   cd  seestar_alp
 
@@ -126,7 +127,6 @@ function setup() {
   mkdir -p logs
 
   config_toml_setup
-  install_apt_packages
   python_virtualenv_setup
   systemd_service_setup
   print_banner "setup"
