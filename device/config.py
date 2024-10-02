@@ -290,7 +290,7 @@ class _Config:
         """
         Render config html
         """
-        log_levels = [ logging.getLevelName(x) for x in sorted(list(set(logging.getLevelNamesMapping().values()))) if x != 0 ]
+        log_levels = [ logging.getLevelName(x) for x in sorted(list(set(logging._levelToName.keys()))) if x != 0 ]
         return \
             self.render_config_section(
                 'Networking',
