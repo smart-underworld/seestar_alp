@@ -18,7 +18,8 @@ jobs:
         uses: actions/setup-python@v3
         with:
           python-version: 3.12
-          
+          fetch-tags: true
+
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
@@ -28,7 +29,6 @@ jobs:
       - name: run pyinstaller for seestar_alp
         id: create_seestar_alp
         run: |
-          git fetch --tags
           git describe HEAD --tags > ./version.txt
           pyinstaller --name="seestar_alp" `
           --add-data="device/config.toml.example;." --add-data="./version.txt;." --add-data="front/citation;astroquery" --add-data="front/templates;front/templates" --add-data="front/public;front/public" `
@@ -62,7 +62,8 @@ jobs:
         uses: actions/setup-python@v3
         with:
           python-version: 3.12
-          
+          fetch-tags: true
+
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
@@ -72,7 +73,6 @@ jobs:
       - name: run pyinstaller for device
         id: create_device
         run: |
-          git fetch --tags
           git describe HEAD --tags > ./version.txt
           pyinstaller --name="seestar_alp" \
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
