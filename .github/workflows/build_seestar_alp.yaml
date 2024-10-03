@@ -15,13 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-tags: true
           fetch-depth: 0
       - name: Set up Python 3.12
         uses: actions/setup-python@v3
         with:
           python-version: 3.12
-          fetch-tags: true
 
       - name: Install dependencies
         run: |
@@ -62,7 +60,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-tags: true
           fetch-depth: 0
       - name: Set up Python 3.12
         uses: actions/setup-python@v3
