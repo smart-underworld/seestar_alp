@@ -9,6 +9,9 @@ import uuid
 from time import sleep
 import collections
 from blinker import signal
+import geomag
+
+import numpy as np
 
 import tzlocal
 import queue
@@ -608,6 +611,63 @@ class Seestar:
         result = self.send_message_param_sync(req)
         time.sleep(1)
         return result
+
+    def apply_rotation(self, matrix, degrees):
+        # Convert degrees to radians
+        radians = math.radians(degrees)
+        
+        # Define the rotation matrix
+        rotation_matrix = np.array([[math.cos(radians), -math.sin(radians)],
+                                    [math.sin(radians), math.cos(radians)]])
+        
+        # Multiply the original matrix by the rotation matrix
+        rotated_matrix = np.dot(rotation_matrix, matrix)
+        
+        return rotated_matrix
+
+
+    def adjust_mag_declination(self, params):
+        adjust_mag_dec = params.get("adjust_mag_dec", False)
+        fudge_angle = params.get("fudge_angle", 0.0)
+        self.logger.info(f"adjusting device's compass bearing to account for the magnetic declination at device's position. Adjust:{adjust_mag_dec}, Fudge Angle: {fudge_angle}")
+        response = self.send_message_param_sync({ "method": "get_device_state",  "params": {"keys":["location_lon_lat"]}})
+        result = response["result"]
+        loc = result["location_lon_lat"]
+
+        response = self.send_message_param_sync({"method":"get_sensor_calibration"})
+        compass_data = response["result"]["compassSensor"]
+        x11 = compass_data["x11"]
+        y11 = compass_data["y11"]
+        x12 = compass_data["x12"]
+        y12 = compass_data["y12"]
+
+        total_angle = fudge_angle
+        if adjust_mag_dec:
+            mag_dec = geomag.declination(loc[1], loc[0])
+            self.logger.info(f"mag declination for {loc[1]}, {loc[0]} is {mag_dec} degrees")
+            total_angle += mag_dec
+        
+        # Convert the 2x2 matrix into a set of points (pairs of coordinates)
+        # We treat each column of the matrix as a point (x, y)
+        in_matrix = np.array([[x11, x12],  # First column: (x1, y1)
+                        [y11, y12]]) # Second column: (x2, y2)
+
+        out_matrix = self.apply_rotation(in_matrix, total_angle)
+        
+        # Convert the rotated points back into matrix form
+        x11 = out_matrix[0, 0]
+        y11 = out_matrix[1, 0]
+        x12 = out_matrix[0, 1]
+        y12 = out_matrix[1, 1]
+
+        params = {"compassSensor": {"x": compass_data["x"], "y": compass_data["y"], "z": compass_data["z"], "x11": x11, "x12": x12, "y11": y11, "y12": y12}}
+        self.logger.info(f"sending adjusted compass sensor data:", params)
+        response = self.send_message_param_sync({"method":"set_sensor_calibration", "params": params})
+        result_text = f"Adjusted compass calibration to offset by total of {total_angle} degrees."
+        self.logger.info(result_text)
+        response["result"] = result_text
+        return response
+
 
     # {"target_name":"test_target","ra":1.234, "dec":-12.34}
     # take into account self.below_horizon_dec_offset for platesolving, using low level move and custom plate solving logic
