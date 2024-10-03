@@ -1813,10 +1813,17 @@ class PlanningResource:
         if nearest_csc["status_msg"] != "SUCCESS":
             nearest_csc["href"] = ""
             nearest_csc["full_img"] = ""
+        
+        local_timezone = get_localzone()
+        current_time = datetime.now(local_timezone)
+        utc_offset = current_time.utcoffset()
+        utc_offset = int(utc_offset.total_seconds() / 3600) # Convert the offset to hours, used for astromosaic
 
         config_lat = round(Config.init_lat, 2) # Some of the 3rd party api's/embeds want rounded down.
         config_long = round(Config.init_long, 2) # Some of the 3rd party api's/embeds want rounded down.
-        render_template(req, resp, 'planning.html', twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes, config_lat=config_lat, config_long=config_long, clear_sky_href=nearest_csc["href"], clear_sky_img_src=nearest_csc["full_img"], **context)
+        render_template(req, resp, 'planning.html', twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes,
+                        config_lat=config_lat, config_long=config_long, clear_sky_href=nearest_csc["href"], clear_sky_img_src=nearest_csc["full_img"],
+                        utc_offset = utc_offset, **context)
 
 
 class StatsResource:

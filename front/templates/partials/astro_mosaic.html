@@ -5,11 +5,44 @@
     <script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <script type="text/javascript" src="/public/AstroMosaicEngine.js"></script>
+    <style>
+        /* Bring the aladin control buttons to the top layer */
+        .aladin-simbadPointer-control button {
+            position: relative;
+            z-index: 9;
+        }
+
+        .aladin-projection-control button {
+            position: relative;
+            z-index: 9; 
+        }
+
+        .aladin-stack-control button {
+            position: relative;
+            z-index: 9;
+            display: block;
+        }
+
+        .aladin-stack-box {
+            position: relative;
+            z-index: 9;
+        }
+
+        .aladin-context-menu {
+            position: relative;
+            z-index: 9;
+        }
+
+        .aladin-fullScreen-control button {
+            position: relative;
+            z-index: 9; 
+        }
+    </style>
 {% endblock %}
 <div>
     <fieldset class="border rounded-3 mb-3 pb-3">
         <legend class="float-none w-auto">
-           Controls
+           <h5>Controls</h5>
         </legend>
         <span class="ms-3">
             <label for="astro_mosaic_search_text" class="form-label">Search</label>
@@ -20,10 +53,10 @@
                 </svg>
             </button>
             <label for="astro_mosaic_grid_x" class="form-label">Grid Size</label>
-            <input type="number" id="astro_mosaic_grid_x" min="1" max="100" value="1" size="2" onchange="update_astro_mosaic()">
-            <input type="number" id="astro_mosaic_grid_y" min="1" max="100" value="1" size="2" onchange="update_astro_mosaic()">
+            <input type="number" id="astro_mosaic_grid_x" min="1" max="100" value="1" size="1" onchange="update_astro_mosaic()">
+            <input type="number" id="astro_mosaic_grid_y" min="1" max="100" value="1" size="1" onchange="update_astro_mosaic()">
             <label for="astro_mosaic_overlap" class="form-label">Overlap</label>
-            <input type="number" id="astro_mosaic_overlap" min="1" max="100" value="20" size="3" onchange="update_astro_mosaic()">
+            <input type="number" id="astro_mosaic_overlap" min="1" max="100" value="20" size="2" onchange="update_astro_mosaic()">
             <!-- <label for="send_to_schedule" class="form-label">Send to Schedule</label>
              <button type="button" id="send_to_schedule" class="btn btn-primary" title="Send to Schedule">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-journal-arrow-up" viewBox="0 0 16 16">
@@ -54,7 +87,7 @@
         horizonHard : [30],         // hard horizon limit or null
         meridian_transit : null,    // meridian transit or null
         UTCdate_ms : null,          // UTC date in milliseconds at the start of the day, null for current date
-        timezoneOffset: null,       // difference between UTC time and local time, in hours, null for UTC, should match with lat/lng
+        timezoneOffset: {{ utc_offset }},       // difference between UTC time and local time, in hours, null for UTC, should match with lat/lng
         isCustomMode : true,        // use custom colors
         chartTextColor : "white",   // custom chart text color
         gridlinesColor : "gray",    // custom chart grid lines color
