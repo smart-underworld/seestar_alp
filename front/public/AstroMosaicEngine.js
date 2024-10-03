@@ -1451,6 +1451,7 @@ function StartAstroMosaicViewerEngine(
             console.log("findCatalogName " + retname + " from " + catalog_name + ", exact_match " + is_exact_match);
         } else {
             console.log("findCatalogName " + retname + " from all catalogs, exact_match " + is_exact_match);
+            alert("Unable to find " + retname);
         }
         return { name: retname, catalog_name: catalog_name, target_is_catalog_name: target_is_catalog_name, is_exact_match: is_exact_match};
     }
