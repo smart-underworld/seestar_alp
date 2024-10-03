@@ -14,11 +14,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set up Python 3.12
         uses: actions/setup-python@v3
         with:
           python-version: 3.12
-          
+
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
@@ -57,11 +59,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set up Python 3.12
         uses: actions/setup-python@v3
         with:
           python-version: 3.12
-          
+
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
