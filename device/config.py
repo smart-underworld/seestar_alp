@@ -345,7 +345,7 @@ class _Config:
                 self.render_checkbox('init_activate_LP_filter', 'Activate LP filter:', self.init_activate_LP_filter) + \
                 self.render_text('init_dew_heater_power', 'Dew heater power:', self.init_dew_heater_power) + \
                 self.render_text('scope_aim_lat', 'Scope aim latitude:', self.scope_aim_lat) + \
-                self.render_text('scope_aim_lon', 'Scope aim latitude:', self.scope_aim_lon)
+                self.render_text('scope_aim_lon', 'Scope aim longitude:', self.scope_aim_lon)
             )
 
 Config = _Config()
