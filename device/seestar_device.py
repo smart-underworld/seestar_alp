@@ -69,7 +69,6 @@ class Seestar:
         self.cur_solve_Dec = -9999.0
         self.cur_mosaic_nRA = -1
         self.cur_mosaic_nDec = -1
-        self.goto_state = "complete"
         self.connect_count = 0
         self.below_horizon_dec_offset = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
         self.view_state = {}
@@ -150,6 +149,7 @@ class Seestar:
         try:
             if self.s == None:
                 self.logger.warn("socket not initialized!")
+                time.sleep(3)
                 return None
             data = self.s.recv(1024 * 60)  # comet data is >50kb
         except socket.timeout:
@@ -252,8 +252,6 @@ class Seestar:
                         # {'Event': 'PlateSolve', 'Timestamp': '15221.315064872', 'page': 'preview', 'tag': 'Exposure-AutoGoto', 'ac_count': 1, 'state': 'complete', 'result': {'ra_dec': [3.252308, 41.867462], 'fov': [0.712052, 1.265553], 'focal_len': 252.081757, 'angle': -175.841003, 'image_id': 1161, 'star_number': 884, 'duration_ms': 13185}}
                         # {'Event': 'PlateSolve', 'Timestamp': '21778.539366227', 'state': 'fail', 'error': 'solve failed', 'code': 251, 'lapse_ms': 30985, 'route': []}
 
-                        elif event_name == 'ScopeGoto':
-                            self.goto_state = parsed_data['state']
                         elif event_name == 'PlateSolve':
                             if 'result' in parsed_data and 'ra_dec' in parsed_data['result']:
                                 self.logger.info("Plate Solve Succeeded")
@@ -339,32 +337,32 @@ class Seestar:
         return result
 
     def stop_goto_target(self):
-        if self.goto_state == "working":
+        if self.is_goto():
             if self.below_horizon_dec_offset == 0:
                 return self.stop_slew()
             self.op_state = "fail"
-        return "no action taken"
+        return "Did not stop goto: no action taken"
 
     def is_goto(self):
-        result = self.send_message_param_sync({"method": "iscope_get_app_state"})
         try:
-            return result["result"]["View"]["stage"] == "AutoGoto"
+            return self.event_state["ScopeGoto"]["state"] == "working"
         except:
             return False
 
     def goto_target(self, params):
+        if self.is_goto():
+            self.logger.info("Failed: mount is in goto routine.")
+            return "Failed: mount is in goto routine."
+
         is_j2000 = params['is_j2000']
         in_ra = params['ra']
         in_dec = params['dec']
         parsed_coord = Util.parse_coordinate(is_j2000, in_ra, in_dec)
         in_ra = parsed_coord.ra.hour
         in_dec = parsed_coord.dec.deg
-        target_name = params['target_name']
+        target_name = params.get("target_name", "unknown")
         self.logger.info("%s: going to target... %s %s %s, with dec offset %s", self.device_name, target_name, in_ra,
                          in_dec, self.below_horizon_dec_offset)
-        if self.is_goto():
-            self.logger.info("Failed: mount is in goto routine.")
-            return "Failed: mount is in goto routine."
 
         self.op_watch = 'AutoGoto'
         if self.below_horizon_dec_offset == 0:
@@ -377,11 +375,10 @@ class Seestar:
             params['target_name'] = target_name
             params['lp_filter'] = False
             data['params'] = params
-            self.actual_dec = in_dec
             return self.send_message_param_sync(data)
         else:
             # do the same, but when trying to center on target, need to implement ourselves to platesolve correctly to compensate for the dec offset
-            return self.goto_target_with_dec_offset_async(params)
+            return self.goto_target_with_dec_offset_async(target_name, in_ra, in_dec)
 
     # {"method":"scope_goto","params":[1.2345,75.0]}
     def slew_to_ra_dec(self, params):
@@ -396,37 +393,71 @@ class Seestar:
         data['method'] = 'scope_goto'
         params = [in_ra, in_dec + self.below_horizon_dec_offset]
         data['params'] = params
-        self.goto_state = "Waiting"
         result = self.send_message_param_sync(data)
         if 'error' in result:
             self.logger.info("Error: %s", result)
             return False
         # wait till movement is finished
-        while self.goto_state != "complete":
+        time.sleep(2)
+        while self.is_goto():
             if self.scheduler_state == "Stopping":
                 return False
             time.sleep(2)
         return True
 
     def set_below_horizon_dec_offset(self, offset):
+        if offset <= 0:
+            msg = "Failed: offset must be greater or equal to 0."
+            self.logger.info(msg)
+            return msg  
+        if self.is_goto():
+            msg = "Failed to set offset. Mount is moving. No action taken."
+            self.logger.info(msg)
+            return msg  
+        if self.below_horizon_dec_offset != 0:
+            msg = "Failed to set below horizon offset because the device already has an offset. Need to reset it first."
+            self.logger.info(msg)
+            return msg
+          
+        old_dec = self.dec
+        self.below_horizon_dec_offset = offset
+        result = self.sync_target([self.ra, self.dec])
+        if 'error' in result:
+            self.below_horizon_dec_offset = 0
+            self.sync_target([self.ra, old_dec])
+            self.logger.info(result)
+            self.logger.info("Failed to set dec offset. Move the mount up first?")
+        return result
+
+    def reset_below_horizon_dec_offset(self):
+        if self.below_horizon_dec_offset == 0:
+            msg = "No offset was active. No action taken."
+            self.logger.info(msg)
+            return msg  
         if self.is_goto():
             self.logger.info("Failed: mount is in goto routine.")
-            return "Failed: mount is in goto routine."
-        # offset between 0 to 90
-        dec_diff = offset - self.below_horizon_dec_offset
-        if dec_diff == 0:
-            return "No offset changed"
-        else:
-            old_offset = self.below_horizon_dec_offset
-            old_dec = self.dec
-            self.below_horizon_dec_offset = offset
-            result = self.sync_target([self.ra, self.dec])
-            if 'error' in result:
-                self.below_horizon_dec_offset = old_offset
-                self.sync_target([self.ra, old_dec])
-                self.logger.info(result)
-                self.logger.info("Failed to set dec offset. Move the mount up first?")
-            return result
+            return "Failed to reset: mount is in goto routine."
+        
+        old_ra = self.ra
+        old_dec = self.dec
+        old_offset = self.below_horizon_dec_offset
+        self.below_horizon_dec_offset = 0
+        for index in range(3):
+            undo_count = index+1
+            self.logger.info(f"slew to {old_ra}, {old_dec+old_offset*(undo_count+1)}")
+            result = self.slew_to_ra_dec([old_ra, old_dec+old_offset*(undo_count+1)]) # dec was already offset
+            if result == True:
+                time.sleep(10)
+                self.logger.info(f"syncing to {old_ra}, {old_dec+old_offset*undo_count}")
+                response = self.sync_target([old_ra, old_dec+old_offset*undo_count])
+                return response
+            else:
+                self.logger.info(f"Failed: failed to move back from the offset, try #{index+1}")
+
+        self.below_horizon_dec_offset = old_offset
+        self.logger.error("Failed to reset the below-horizon dec offset!")
+        return "Failed: failed to move back from the offset."
+
 
     def sync_target(self, params):
         in_ra = params[0]
@@ -671,24 +702,20 @@ class Seestar:
 
     # {"target_name":"test_target","ra":1.234, "dec":-12.34}
     # take into account self.below_horizon_dec_offset for platesolving, using low level move and custom plate solving logic
-    def goto_target_with_dec_offset_async(self, params):
+    def goto_target_with_dec_offset_async(self, target_name, in_ra, in_dec):
         # first, go to position (ra, cur_dec)
-        if params["ra"] < 0:
-            if self.last_sync_RA >= 0:
-                target_ra = self.ra
-                target_dec = self.dec
-            else:
-                target_ra = self.ra
-                target_dec = self.dec
+        if in_ra < 0:
+            target_ra = self.ra
+            target_dec = self.dec
         else:
-            target_ra = params["ra"]
-            target_dec = params["dec"]
+            target_ra = in_ra
+            target_dec = in_dec
         self.logger.info("trying to go with explicit dec offset logic: %s %s %s", target_ra, target_dec,
                          self.below_horizon_dec_offset)
 
         result = self.slew_to_ra_dec([target_ra, target_dec])
         if result == True:
-            self.set_target_name(params["target_name"])
+            self.set_target_name(target_name)
             # repeat plate solve and adjust position as needed
             threading.Thread(name=f"goto-dec-offset-thread.{self.device_name}", target=lambda: self.auto_center_thread(target_ra, target_dec)).start()
             return True
@@ -978,13 +1005,8 @@ class Seestar:
         # 60s for the star
         exposure_time_per_segment = round((session_length - 60.0) / num_segments)
         if center_RA < 0:
-            if self.last_sync_RA >= 0:
-                center_RA = self.ra
-                center_Dec = self.dec
-                self.slew_to_ra_dec([center_RA, center_Dec])
-            else:
-                center_RA = self.ra
-                center_Dec = self.dec
+            center_RA = self.ra
+            center_Dec = self.dec
         else:
             # move to target
             self.slew_to_ra_dec([center_RA, center_Dec])
