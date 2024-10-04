@@ -8,8 +8,10 @@ import math
 import uuid
 from time import sleep
 import collections
+from blinker import signal
 
 import tzlocal
+import queue
 
 from device.config import Config
 from device.seestar_util import Util
@@ -71,6 +73,7 @@ class Seestar:
         self.event_state = {}
         # self.event_queue = queue.Queue()
         self.event_queue = collections.deque(maxlen=20)
+        self.eventbus = signal(f'{self.device_name}.eventbus')
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
@@ -228,6 +231,7 @@ class Seestar:
                     elif 'Event' in parsed_data:
                         # add parsed_data
                         self.event_queue.append(parsed_data)
+                        self.eventbus.send(parsed_data)
 
                         # xxx: make this a common method....
                         if Config.log_events_in_info:
@@ -470,7 +474,7 @@ class Seestar:
             self.logger.error("Faild to start auto focus: %s", result)
             return False
         return True
-    
+
     def try_auto_focus(self, try_count):
         focus_count = 0
         result = False
@@ -875,7 +879,7 @@ class Seestar:
 
     def action_set_dew_heater(self, params):
         return self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
-        
+
     def action_start_up_sequence(self, params):
         if self.scheduler_state != "Stopped":
             return self.json_result("start_up_sequence", -1, "Device is busy. Try later.")
@@ -996,12 +1000,12 @@ class Seestar:
 
         cur_dec = center_Dec - int(nDec / 2) * delta_Dec
         for index_dec in range(nDec):
-            self.cur_mosaic_nDec = index_dec+1
+            self.cur_mosaic_nDec = index_dec + 1
             spacing_result = Util.mosaic_next_center_spacing(center_RA, cur_dec, overlap_percent)
             delta_RA = spacing_result[0]
             cur_ra = center_RA - int(nRA / 2) * spacing_result[0]
             for index_ra in range(nRA):
-                self.cur_mosaic_nRA = index_ra+1
+                self.cur_mosaic_nRA = index_ra + 1
                 if self.scheduler_state != "Running":
                     self.logger.info("Mosaic mode was requested to stop. Stopping")
                     self.scheduler_state = "Stopped"
@@ -1009,7 +1013,7 @@ class Seestar:
                     self.cur_mosaic_nDec = -1
                     self.cur_mosaic_nRA = -1
                     return
-                
+
                 # check if we are doing a subset of the panels
                 panel_string = str(index_ra + 1) + str(index_dec + 1)
                 if is_use_selected_panels and panel_string not in panel_set:
@@ -1057,7 +1061,7 @@ class Seestar:
                             time.sleep(1)
 
                         self.stop_stack()
-                        self.logger.info("Stacking operation finished" + save_target_name)
+                        self.logger.info("Stacking operation finished " + save_target_name)
                 else:
                     self.logger.info("Goto failed.")
 
@@ -1296,7 +1300,7 @@ class Seestar:
             elif action == 'shutdown':
                 self.scheduler_state = "Stopped"
                 issue_shutdown = True
-                break                
+                break
             elif action == 'wait_for':
                 sleep_time = item['params']['timer_sec']
                 sleep_count = 0
@@ -1315,7 +1319,7 @@ class Seestar:
                         break
                     time.sleep(2)
             else:
-                request = {'method':action, 'params':item['params']}
+                request = {'method': action, 'params': item['params']}
                 self.send_message_param_sync(request)
             index += 1
 
@@ -1430,6 +1434,10 @@ class Seestar:
                     time.sleep(2)
                     continue
                 event = self.event_queue.popleft()
+                try:
+                    del event["Timestamp"] # Safety first...
+                except:
+                    pass
                 # print(f"Fetched event {self.device_name}")
                 ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-5]
                 frame = (b'data: <pre>' +

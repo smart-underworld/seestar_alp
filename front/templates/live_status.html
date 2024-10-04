@@ -1,34 +1,76 @@
 <div class="container mt-3">
-    {% if target_name %}
-    <div class="row border-bottom py-1 text-start">
-        <div class="col fw-bold">Target Name</div>
-        <div class="col">{{ target_name }}</div>
-    </div>
+    {% if state.target_name %}
+        <div class="row border-bottom py-1 text-start">
+            <div class="col fw-bold">Target Name</div>
+            <div class="col">{{ state.target_name }}</div>
+        </div>
     {% endif %}
     <div class="row border-bottom py-1 text-start">
         <div class="col fw-bold">State</div>
-        <div class="col">{{ state }}</div>
+        <div class="col">{{ state.state }}</div>
     </div>
     <div class="row border-bottom py-1 text-start">
         <div class="col fw-bold">Mode</div>
-        <div class="col">{{ mode }}</div>
+        <div class="col">{{ state.mode }}</div>
     </div>
     <div class="row border-bottom py-1 text-start">
         <div class="col fw-bold">Stage</div>
-        <div class="col">{{ stage }}</div>
+        <div class="col">{{ state.stage }}</div>
     </div>
-    {% if stats %}
+    {#    {% if state.stage != "Stack" %}#}
+    {% if state.substage %}
+        <div class="row border-bottom py-1 text-start">
+            <div class="col fw-bold">Substage</div>
+            <div class="col">{{ state.substage }}</div>
+        </div>
+    {% endif %}
+    {% if state.substage_count %}
+        <div class="row border-bottom py-1 text-start">
+            <div class="col fw-bold">Substage Count</div>
+            <div class="col">{{ state.substage_count }}</div>
+        </div>
+    {% endif %}
+    {% if state.substage_position %}
+        <div class="row border-bottom py-1 text-start">
+            <div class="col fw-bold">Position</div>
+            <div class="col">{{ state.substage_position }}</div>
+        </div>
+    {% endif %}
+    {% if state.substage_percent %}
+        <div class="row border-bottom py-1 text-start">
+            <div class="col fw-bold">Percent</div>
+            <div class="col">{{ state.substage_percent }}</div>
+        </div>
+    {% endif %}
+    {#    <div class="row border-bottom py-1 text-start">#}
+    {#        <div class="col fw-bold">Substage Elapsed</div>#}
+    {#        <div class="col">{{ state.substage_elapsed }}</div>#}
+    {#    </div>#}
+    <div class="row border-bottom py-1 text-start">
+        <div class="col fw-bold">Elapsed Time</div>
+        <div class="col">{{ state.lapse_ms }}</div>
+    </div>
+    {#    {% endif %}#}
+    <div class="row border-bottom py-1 text-start">
+        <div class="col fw-bold">RA</div>
+        <div class="col">{{ state.ra }}</div>
+    </div>
+    <div class="row border-bottom py-1 text-start">
+        <div class="col fw-bold">Dec</div>
+        <div class="col">{{ state.dec }}</div>
+    </div>
+    {% if state.stats %}
         <div class="row border-bottom py-1 text-start">
             <div class="col fw-bold">Stacked Frames</div>
-            <div class="col">{{ stats["stacked_frame"] }}</div>
+            <div class="col">{{ state.stats["stacked_frame"] }}</div>
         </div>
         <div class="row border-bottom py-1 text-start">
             <div class="col fw-bold">Dropped Frames</div>
-            <div class="col">{{ stats["dropped_frame"] }}</div>
+            <div class="col">{{ state.stats["dropped_frame"] }}</div>
         </div>
         <div class="row border-bottom py-1 text-start">
             <div class="col fw-bold">Total Elapsed Time</div>
-            <div class="col">{{ stats["elapsed"] }}</div>
+            <div class="col">{{ state.stats["elapsed"] }}</div>
         </div>
     {% endif %}
 </div>

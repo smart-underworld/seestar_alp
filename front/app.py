@@ -31,16 +31,13 @@ import math
 
 from skyfield.api import load
 
-
-# if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
-#    sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
-
 from device.seestar_logs import SeestarLogging
 from device.config import Config  # type: ignore
 from device.log import init_logging, get_logger  # type: ignore
 from device.version import Version # type: ignore
 from device import telescope
 import threading
+import pydash
 
 logger = init_logging()
 
@@ -460,7 +457,7 @@ def get_device_state(telescope_id):
                 "View Mode": mode,
                 "View Stage": stage,
                 "Target Name": target,
-                "Succesful Frames": stacked,
+                "Successful Frames": stacked,
                 "Failed Frames": failed,
                 "Wi-Fi Signal": wifi_signal,
             }
@@ -1185,6 +1182,115 @@ def import_schedule(input, telescope_id):
             case '_':
                 pass
 
+def get_live_status(telescope_id: int):
+    dev = telescope.get_seestar_device(telescope_id)
+    imager = telescope.get_seestar_imager(telescope_id)
+    template = fetch_template("live_status.html")
+
+    previous_state = pydash.get(dev.view_state, "state")
+    previous_stage = pydash.get(dev.view_state, "stage")
+    previous_mode = pydash.get(dev.view_state, "mode")
+
+    def human_ts(elapsed):
+        if elapsed is None:
+            return ""
+        return str(timedelta(milliseconds=elapsed))[:-3]
+
+    while True:
+        imager.update_live_status()
+        method_sync('get_view_state', telescope_id, id=42)
+        # print("event_state", dev.event_state)
+        # print("view_state", dev.view_state)
+        substage = None
+        substage_count = None
+        substage_elapsed = None
+        substage_position = None
+        substage_percent = None
+        stats = None
+        state = pydash.get(dev.view_state, "state")
+        stage = pydash.get(dev.view_state, "stage")
+        mode = pydash.get(dev.view_state, "mode")
+        stack = pydash.get(dev.view_state, "Stack")
+
+        changed = previous_stage != stage or previous_mode != mode or previous_state != state
+        previous_stage = stage
+        previous_mode = mode
+        previous_state = state
+
+        if stage:
+            substage = pydash.get(dev.view_state, f"{stage}.stage")
+            substage_count = pydash.get(dev.view_state, f"{stage}.count")
+            substage_elapsed = human_ts(pydash.get(dev.view_state, f"{stage}.lapse_ms"))
+            substage_position = pydash.get(dev.view_state, f"{stage}.position")
+            substage_percent = pydash.get(dev.view_state, f"{stage}.percent")
+            # print("stage", stage, substage, dev.view_state.get(stage))
+
+        if stack:
+            stats = {
+                "gain": stack.get("gain"),
+                "stacked_frame": stack.get("stacked_frame"),
+                "dropped_frame": stack.get("dropped_frame"),
+                "elapsed": human_ts(stack["lapse_ms"]),
+            }
+
+        response = {
+            "target_name": pydash.get(dev.view_state, "target_name"),
+            "state": state,
+            "stage": stage,
+            "substage": substage,
+            "substage_count": substage_count,
+            "substage_elapsed": substage_elapsed,
+            "substage_position": substage_position,
+            "substage_percent": substage_percent,
+            "stats": stats,
+            "mode": mode,
+            "lapse_ms": human_ts(pydash.get(dev.view_state, "lapse_ms")),
+            "ra": dev.ra,
+            "dec": dev.dec,
+        }
+
+        status_update_frame = "event: statusUpdate\ndata: " + json.dumps({"mode": mode, "stage": stage}) + "\n\n"
+
+        mode_change_frame = ""
+        if changed:
+            mode_change_frame = "event: liveViewModeChange\ndata: " + json.dumps({"mode": mode}) + "\n\n"
+
+        status = template.render(state=response).replace('\n', '')
+        status_frame = ('data: ' + status + '\n\n')
+
+        yield status_update_frame.encode('utf-8') + mode_change_frame.encode('utf-8') + status_frame.encode('utf-8')
+        time.sleep(0.5)
+
+        # changed = self.stage != stage or self.mode != mode or self.state != state
+
+        # If status changes, trigger reload
+        # resp.status = falcon.HTTP_200
+        # resp.content_type = 'text/html'
+        #
+        # trigger = {"statusUpdate": {"mode": mode, "stage": stage}}
+        # if changed:
+        #     trigger = trigger | {"liveViewModeChange": mode}
+        #
+        # resp.set_header('HX-Trigger', json.dumps(trigger))
+        # if star:
+        # .  target_name, gain, stacked_frame, dropped_frame
+        # .  Exposure: { lapse_ms, exp_ms }
+        # template = fetch_template('live_status.html')
+        # stats = None
+
+        # if state == 'working' and mode == 'star' and stage == 'Stack' and view.get("Stack"):
+        #     stack = view.get("Stack")
+        #     target_name = target_name or stack.get("target_name")
+        #     stats = {
+        #         "gain": stack.get("gain"),
+        #         "stacked_frame": stack.get("stacked_frame"),
+        #         "dropped_frame": stack.get("dropped_frame"),
+        #         "elapsed": str(timedelta(milliseconds=stack["lapse_ms"]))[:-3],
+        #     }
+        # resp.text = template.render(tm=tm, state=state, mode=mode, stage=stage, stats=stats, target_name=target_name)
+        # 'Annotate': {'state': 'complete', 'lapse_ms': 3370, 'result': {'image_size': [1080, 1920], 'annotations': [
+        #    {'type': 'ngc', 'names': ['NGC 6992', 'C 33'], 'pixelx': 394.698, 'pixely': 611.487, 'radius': 757.869}],
+
 
 class HomeResource:
     @staticmethod
@@ -1282,6 +1388,16 @@ class CommandResource:
         render_template(req, resp, 'command.html', state=state, schedule=schedule, action=f"/{telescope_id}/command",
                         output=output, **context)
 
+class ConsoleResource:
+    def on_get(self, req, resp, telescope_id=1):
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'console.html', **context)
+
+    def on_post(self, req, resp, telescope_id=1):
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'application/json'
+        print(type(req.media), req.media)
+        resp.text = json.dumps(do_action_device("method_sync", telescope_id, req.media))
 
 class MosaicResource:
     def on_get(self, req, resp, telescope_id=0):
@@ -1540,12 +1656,28 @@ class ScheduleImportResource:
 
 class LivePage:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=1, mode=None):
         status = method_sync('get_view_state', telescope_id)
         logger.info(status)
         context = get_context(telescope_id, req)
         now = datetime.now()
-        render_template(req, resp, 'live.html', now=now, **context)
+        match mode:
+            case 'scenery':
+                render_template(req, resp, 'live_scenery.html', now=now, **context)
+
+            case 'moon':
+                render_template(req, resp, 'live_mode.html', now=now, **context)
+
+            case 'star':
+                render_template(req, resp, 'live_star.html', now=now, **context)
+
+            case _:
+                # If status has a view mode, redirect first
+                current_mode = status.get('View', {}).get('mode', {})
+                if current_mode in ["moon", "star", "scenery"]:
+                    redirect(f"/{telescope_id}/live/{current_mode}")
+                else:
+                    render_template(req, resp, 'live.html', now=now, **context)
 
 
 class LiveModeResource:
@@ -1562,6 +1694,15 @@ class LiveModeResource:
         # xxx: If mode is none, need to cancel things
         response = do_action_device("method_async", telescope_id,
                                     {"method": "iscope_start_view", "params": {"mode": mode}})
+        # match mode:
+        #     case 'moon':
+        #         response = do_action_device("method_async", telescope_id, {
+        #             "method": "start_scan_planet",
+        #         })
+        #         print("Moon response:", response)
+
+        # {  "id" : 111, "method" : "start_scan_planet"}
+
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
         resp.text = mode
@@ -1583,7 +1724,24 @@ class LiveExposureModeResource:
         resp.text = mode
 
 
+class LiveExposureRecordResource:
+    def on_post(self, req, resp, telescope_id=1):
+        logger.info("Starting to record")
+        response = do_action_device("method_async", telescope_id, {
+            "method": "iscope_start_stack",
+            "params": {
+                "restart": True
+            }
+        })
+        print(f"LiveExposureRecordResource: {response=}")
+
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'application/text'
+        resp.text = "Ok"
+
+
 class LiveStatusResource:
+    # deprecate?
     def __init__(self):
         self.stage = None
         self.mode = None
@@ -1899,7 +2057,7 @@ class SimbadResource:
     def on_get(req, resp, telescope_id=1):
         objName = req.get_param('name')  # get the name to lookup from the request
         try:
-            r = requests.get(simbad_url + objName)
+            r = requests.get(simbad_url + objName, timeout=10)
         except:
             resp.status = falcon.HTTP_500
             resp.content_type = 'application/text'
@@ -2067,13 +2225,16 @@ class TelescopePositionResource:
             do_action_device('method_sync', telescope_id,
                              {'method': 'scope_speed_move',
                               'params': {"speed": speed, "angle": int(angle), "dur_sec": 3}})
+            method_sync('scope_get_equ_coord', telescope_id, id=420)
             # do_action_device('scope_speed_move', telescope_id, {
             #     "speed": int(distance * 5), "angle": angle, "dur_sec": 1
             # })
+        # xxx: Get current Alt-Az position?
+        dev = telescope.get_seestar_device(telescope_id)
 
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
-        resp.text = "Ok"
+        resp.text = f'<div class="row"><div class="col">RA</div><div class="col">{dev.ra}</div></div> <div class="row"><div class="col">Dec</div><div class="col">{dev.dec}</div></div>'
 
 
 class ToggleUIThemeResource:
@@ -2207,6 +2368,7 @@ class FrontMain:
         app.add_route('/goto', GotoResource())
         app.add_route('/image', ImageResource())
         app.add_route('/live', LivePage())
+        app.add_route('/live/{mode}', LivePage())
         app.add_route('/mosaic', MosaicResource())
         app.add_route('/position', TelescopePositionResource())
         app.add_route('/search', SearchObjectResource())
@@ -2232,12 +2394,15 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/', HomeTelescopeResource())
         app.add_route('/{telescope_id:int}/goto', GotoResource())
         app.add_route('/{telescope_id:int}/command', CommandResource())
+        app.add_route('/{telescope_id:int}/console', ConsoleResource())
         app.add_route('/{telescope_id:int}/image', ImageResource())
         app.add_route('/{telescope_id:int}/live', LivePage())
         app.add_route('/{telescope_id:int}/live/status', LiveStatusResource())
         app.add_route('/{telescope_id:int}/live/mode', LiveModeResource())
         app.add_route('/{telescope_id:int}/live/exposure_mode', LiveExposureModeResource())
+        app.add_route('/{telescope_id:int}/live/record', LiveExposureRecordResource())
         # app.add_route('/{telescope_id:int}/live/state', LiveStateResource())
+        app.add_route('/{telescope_id:int}/live/{mode}', LivePage())
         app.add_route('/{telescope_id:int}/mosaic', MosaicResource())
         app.add_route('/{telescope_id:int}/planning', PlanningResource())
         app.add_route('/{telescope_id:int}/position', TelescopePositionResource())

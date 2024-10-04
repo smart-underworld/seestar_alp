@@ -11,7 +11,7 @@ import waitress
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from front.app import FrontMain
+from front.app import FrontMain, get_live_status
 
 # sys.path.append(os.path.join(os.path.dirname(__file__), "device"))
 
@@ -121,8 +121,7 @@ if __name__ == "__main__":
         @cross_origin()
         @app.route("/<dev_num>/live/status")
         def live_status(dev_num):
-            return Response(telescope.get_seestar_imager(int(dev_num)).get_live_status(),
-                            mimetype='text/event-stream')
+            return Response(get_live_status(int(dev_num)), mimetype='text/event-stream')
 
 
         @cross_origin()

@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    {% if online %}
+        <script>
+            document.body.addEventListener('htmx:sseBeforeMessage', function(evt) {
+                //console.log('sse event:', evt.detail.type, evt.detail);
+                switch (evt.detail.type) {
+                    case 'statusUpdate': {
+                        const payload = JSON.parse(evt.detail.data)
+                        const mode = payload.mode;
+                        const stage = payload.stage;
+                        updateModeButtons(mode);
+                        updateMovementControls(stage);
+                    }
+                    break;
+
+                    case 'liveViewModeChange': {
+                        const payload = JSON.parse(evt.detail.data);
+                        const mode = payload.mode;
+                        // console.log(`liveViewModeChange was triggered! mode=${mode}`);
+                        const img = document.getElementById('liveViewImg');
+                        let currentSrc = "{{ imager_root }}/vid";
+                        // Add a cache-busting parameter
+                        if (currentSrc.indexOf('?') > -1) {
+                            currentSrc = currentSrc.substring(0, currentSrc.indexOf('?'));
+                        }
+                        const newSrc = currentSrc + "?timestamp=" + new Date().getTime();
+
+                        img.src = newSrc;
+
+                        updateModeButtons(mode);
+                    }
+                    break;
+
+                }
+            });
+
+            document.body.addEventListener("statusUpdate", function (evt) { // deprecated...
+                const mode = evt.detail.mode;
+                const stage = evt.detail.stage;
+                // console.log("status update")
+                updateModeButtons(mode);
+                updateMovementControls(stage);
+            })
+
+            document.body.addEventListener("liveViewModeChange", function (evt) {
+                // evt.detail.value is mode
+                const mode = evt.detail.value;
+                // console.log(`liveViewModeChange was triggered! mode=${mode}`);
+                const img = document.getElementById('liveViewImg');
+                let currentSrc = "{{ imager_root }}/vid";
+                // Add a cache-busting parameter
+                if (currentSrc.indexOf('?') > -1) {
+                    currentSrc = currentSrc.substring(0, currentSrc.indexOf('?'));
+                }
+                const newSrc = currentSrc + "?timestamp=" + new Date().getTime();
+
+                img.src = newSrc;
+
+                updateModeButtons(mode);
+            })
+        </script>
+
+        {% block live_content %}{% endblock %}
+
+        <footer class="bg-body-tertiary text-center mt-3">
+            Version: {{ version }} | Last updated: {{ now }}
+        </footer>
+
+        <script>
+            new LiveViewJoystick('{{ root }}', 'zone').register();
+        </script>
+
+    {% else %}
+        <div class="container mt-3">
+            <p>You are currently in offline mode</p>
+        </div>
+    {% endif %}
+{% endblock %}

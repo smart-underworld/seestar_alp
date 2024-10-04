@@ -23,3 +23,5 @@ requests~=2.32.3
 scipy~=1.14.0
 PyYAML~=6.0.1
 flask-cors==5.0.0
+pydash==8.0.3
+blinker==1.8.2
