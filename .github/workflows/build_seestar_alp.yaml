@@ -42,16 +42,22 @@ jobs:
       - name: Display Result
         run: echo "The script result is ${{ env.device_script_result }}"
         shell: pwsh
-        
-      - name: Upload Result as Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ env.device_script_result }}
-          asset_name: ${{ env.device_script_result }}
-          asset_content_type: application/zip
+          files: ${{ env.device_script_result }}
+        
+#      - name: Upload Result as Asset
+#        uses: actions/upload-release-asset@v1
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        with:
+#          upload_url: ${{ github.event.release.upload_url }}
+#          asset_path: ${{ env.device_script_result }}
+#          asset_name: ${{ env.device_script_result }}
+#          asset_content_type: application/zip
 
 
   build-linux:
