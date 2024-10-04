@@ -43,21 +43,12 @@ jobs:
         run: echo "The script result is ${{ env.device_script_result }}"
         shell: pwsh
 
-      - name: Release
+      - name: Upload Result as Asset
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: ${{ env.device_script_result }}
         
-#      - name: Upload Result as Asset
-#        uses: actions/upload-release-asset@v1
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#        with:
-#          upload_url: ${{ github.event.release.upload_url }}
-#          asset_path: ${{ env.device_script_result }}
-#          asset_name: ${{ env.device_script_result }}
-#          asset_content_type: application/zip
 
 
   build-linux:
@@ -95,21 +86,11 @@ jobs:
         run: echo "The script result is ${{ env.device_script_result }}"
         shell: bash
         
-      - name: Release
+      - name: Upload Result as Asset
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: ${{ env.device_script_result }}
-
-#      - name: Upload Result as Asset
-#        uses: actions/upload-release-asset@v1
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-#        with:
-#          upload_url: ${{ github.event.release.upload_url }}
-#          asset_path: ${{ env.device_script_result }}
-#          asset_name: ${{ env.device_script_result }}
-#          asset_content_type: application/zip
 
 #  build-MacOS:
 #    runs-on: "MacOS-latest"
