@@ -16,10 +16,12 @@ function updateModeButtons(mode) {
 function updateMovementControls(stage) {
     // console.log('updateMovementControls', stage);
     const el = document.getElementById('movement-controls')
-    if (stage === 'Stack') {
-        el.classList.add('visually-hidden')
-    } else {
-        el.classList.remove('visually-hidden')
+    if (el) {
+        if (stage === 'Stack') {
+            el.classList.add('visually-hidden')
+        } else {
+            el.classList.remove('visually-hidden')
+        }
     }
 }
 

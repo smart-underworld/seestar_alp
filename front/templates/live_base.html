@@ -3,15 +3,40 @@
 {% block content %}
     {% if online %}
         <script>
+            let navigating = false;
             document.body.addEventListener('htmx:sseBeforeMessage', function(evt) {
+                if (navigating) return;
                 //console.log('sse event:', evt.detail.type, evt.detail);
                 switch (evt.detail.type) {
                     case 'statusUpdate': {
                         const payload = JSON.parse(evt.detail.data)
                         const mode = payload.mode;
                         const stage = payload.stage;
-                        updateModeButtons(mode);
-                        updateMovementControls(stage);
+                        const arr = document.URL.split('/');
+                        let lastSegment = arr[arr.length - 1];
+
+                        //console.log('status update:', lastSegment, mode, stage)
+
+                        if (lastSegment === 'live') {
+                            lastSegment = 'none';
+                        }
+
+                        if (lastSegment !== mode) {
+                            //console.log(`Change mode from ${lastSegment} to ${mode}`)
+                            if (mode === 'none') {
+                                window.location = arr.slice(0, -1).join('/')
+                            } else {
+                                if (document.URL.endsWith('live')) {
+                                    window.location = document.URL + '/' + mode;
+                                } else {
+                                    window.location = arr.slice(0, -1).join('/') + '/' + mode;
+                                }
+                            }
+                            navigating = true;
+                        } else {
+                            updateModeButtons(mode);
+                            updateMovementControls(stage);
+                        }
                     }
                     break;
 
@@ -35,31 +60,6 @@
 
                 }
             });
-
-            document.body.addEventListener("statusUpdate", function (evt) { // deprecated...
-                const mode = evt.detail.mode;
-                const stage = evt.detail.stage;
-                // console.log("status update")
-                updateModeButtons(mode);
-                updateMovementControls(stage);
-            })
-
-            document.body.addEventListener("liveViewModeChange", function (evt) {
-                // evt.detail.value is mode
-                const mode = evt.detail.value;
-                // console.log(`liveViewModeChange was triggered! mode=${mode}`);
-                const img = document.getElementById('liveViewImg');
-                let currentSrc = "{{ imager_root }}/vid";
-                // Add a cache-busting parameter
-                if (currentSrc.indexOf('?') > -1) {
-                    currentSrc = currentSrc.substring(0, currentSrc.indexOf('?'));
-                }
-                const newSrc = currentSrc + "?timestamp=" + new Date().getTime();
-
-                img.src = newSrc;
-
-                updateModeButtons(mode);
-            })
         </script>
 
         {% block live_content %}{% endblock %}
