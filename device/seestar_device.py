@@ -422,7 +422,7 @@ class Seestar:
         data['params'] = params
         result = self.send_message_param_sync(data)
         if 'error' in result:
-            self.logger.info("Error: %s", result)
+            self.logger.warn("Error while trying to move: %s", result)
             return False
         # wait till movement is finished
         time.sleep(2)
@@ -469,22 +469,20 @@ class Seestar:
         old_ra = self.ra
         old_dec = self.dec
         old_offset = self.below_horizon_dec_offset
-        self.below_horizon_dec_offset = 0
-        for index in range(3):
-            undo_count = index+1
-            self.logger.info(f"slew to {old_ra}, {old_dec+old_offset*(undo_count+1)}")
-            result = self._slew_to_ra_dec([old_ra, old_dec+old_offset*(undo_count+1)]) # dec was already offset
-            if result == True:
-                time.sleep(10)
-                self.logger.info(f"syncing to {old_ra}, {old_dec+old_offset*undo_count}")
-                response = self.sync_target([old_ra, old_dec+old_offset*undo_count])
-                return response
-            else:
-                self.logger.info(f"Failed: failed to move back from the offset, try #{index+1}")
 
-        self.below_horizon_dec_offset = old_offset
-        self.logger.error("Failed to reset the below-horizon dec offset!")
-        return "Failed: failed to move back from the offset."
+        self.logger.info(f"starting to reset dec offset from [{old_ra}, {old_dec}]")
+        new_dec = 5.0       # 5 degree above celestrial horizon
+        self.logger.info(f"slew to {old_ra}, {new_dec}")
+        result = self._slew_to_ra_dec([old_ra, new_dec]) # dec was already offset
+        if result == True:
+            time.sleep(10)
+            self.below_horizon_dec_offset = 0
+            self.logger.info(f"syncing to {old_ra}, {5.0}")
+            response = self.sync_target([old_ra, 5.0])
+            return response
+        else:
+            self.logger.error("Failed to move back from the offset!")
+            return "Failed to move back from the offset!"
 
 
     def sync_target(self, params):
@@ -846,7 +844,7 @@ class Seestar:
             loc_param['lon'] = Config.init_long
             self.logger.info(f"Setting location to {loc_param['lat']}, {loc_param['lon']}")
             
-            loc_param['force'] = False
+            loc_param['force'] = True
             loc_data['method'] = 'set_user_location'
             loc_data['params'] = loc_param
             lang_data = {}
@@ -857,8 +855,28 @@ class Seestar:
             self.logger.info("verify location string: %s", loc_data)
 
             self.send_message_param_sync({"method": "pi_is_verified"})
+
+            self.logger.info("Need to park scope first for a good reference start point")
+            response = self.send_message_param_sync({"method":"scope_park"})
+            self.logger.info(f"scope park response: {response}")
+            if "error" in response:
+                msg = "Failed to park scope. Need to restart Seestar and try again."
+                self.logger.error(msg)
+                return msg
+            
+            result = self.wait_end_op("ScopeHome")
+
+            if result == True:
+                self.logger.info(f"scope_park completed.")
+            else:
+                self.logger.info(f"scope_park failed.")
+            
             self.logger.info(self.send_message_param_sync(date_data))
-            self.logger.info(self.send_message_param_sync(loc_data))
+            response = self.send_message_param_sync(loc_data)
+            if "error" in response:
+                self.logger.error(f"Failed to set location: {response}")
+            else:
+                self.logger.info(f"response from set location: {response}")
             self.send_message_param_sync(lang_data)
 
             self.set_setting(Config.init_expo_stack_ms, Config.init_expo_preview_ms, Config.init_dither_length_pixel, 
@@ -884,6 +902,7 @@ class Seestar:
             lat = device.get('scope_aim_lat', lat)   
             lon = device.get('scope_aim_lon', lon)
             self.is_EQ_mode = device.get('is_EQ_mode', self.is_EQ_mode)
+            self.below_horizon_dec_offset = 0
 
             if lon < 0:
                 lon = 360+lon
@@ -893,18 +912,6 @@ class Seestar:
                 lat = 80
 
             cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
-
-            # check if we need to park home first
-            if cur_latlon[0] > -89.5 or abs(cur_latlon[1]) > 0.2:
-                self.logger.info("Need to park scope first for a good reference start point")
-                response = self.send_message_param_sync({"method":"scope_park"})
-                result = self.wait_end_op("ScopeHome")
-
-                if result == True:
-                    self.logger.info(f"scope_park completed.")
-                else:
-                    self.logger.info(f"scope_park failed.")
-                cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
 
             self.logger.info(f"moving scope from lat-lon {cur_latlon[0]}, {cur_latlon[1]} to {lat}, {lon}")
 
