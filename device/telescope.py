@@ -165,8 +165,14 @@ class action:
             elif action_name == "goto_target":
                 result = cur_dev.goto_target(params)
                 resp.text = MethodResponse(req, value = result).json
-            elif action_name == "scope_stop_goto_auto_center":
+            elif action_name == "stop_goto_target":
                 result = cur_dev.stop_goto_target()
+                resp.text = MethodResponse(req, value = result).json
+            elif action_name == "is_goto":
+                result = cur_dev.is_goto()
+                resp.text = MethodResponse(req, value = result).json
+            elif action_name == "is_goto_completed_ok":
+                result = cur_dev.is_goto_completed_ok()
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "set_below_horizon_dec_offset":
                 result = cur_dev.set_below_horizon_dec_offset(params['offset'])

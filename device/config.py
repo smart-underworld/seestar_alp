@@ -166,6 +166,7 @@ class _Config:
         self.init_dew_heater_power: int = self.get_toml(section, 'dew_heater_power', 0)
         self.scope_aim_lat: float = self.get_toml(section, 'scope_aim_lat', 60.0)
         self.scope_aim_lon: float = self.get_toml(section, 'scope_aim_lon', 20.0)
+        self.is_EQ_mode: bool = self.get_toml(section, 'is_EQ_mode', False)
 
     def load_from_form(self, req):
         """

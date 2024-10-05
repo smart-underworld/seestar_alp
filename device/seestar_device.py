@@ -38,8 +38,6 @@ class Seestar:
         self.ra = 0.0
         self.dec = 0.0
         self.is_watch_events = False  # Tracks if device has been started even if it never connected
-        self.op_watch = ""
-        self.op_state = ""
         self.s = None
         self.get_msg_thread = None
         self.heartbeat_msg_thread = None
@@ -71,11 +69,13 @@ class Seestar:
         self.cur_mosaic_nDec = -1
         self.connect_count = 0
         self.below_horizon_dec_offset = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
+        self.custom_goto_state = "stopped" # for custom goto logic used by below_horizon 
         self.view_state = {}
         self.event_state = {}
         # self.event_queue = queue.Queue()
         self.event_queue = collections.deque(maxlen=20)
         self.eventbus = signal(f'{self.device_name}.eventbus')
+        self.is_EQ_mode = False
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
@@ -243,16 +243,11 @@ class Seestar:
                             self.logger.debug(f'{self.device_name} received : {parsed_data}')
                         event_name = parsed_data['Event']
                         self.event_state[event_name] = parsed_data
-                        if event_name == self.op_watch:  # "AutoGoto" or "AutoFocus"
-                            state = parsed_data['state']
-                            self.logger.info(f'{self.device_name} state {self.op_watch} : {state}')
-                            if state == "complete" or state == "fail":
-                                self.logger.info("Goto Final State: %s", parsed_data)
-                                self.op_state = state
+
                         # {'Event': 'PlateSolve', 'Timestamp': '15221.315064872', 'page': 'preview', 'tag': 'Exposure-AutoGoto', 'ac_count': 1, 'state': 'complete', 'result': {'ra_dec': [3.252308, 41.867462], 'fov': [0.712052, 1.265553], 'focal_len': 252.081757, 'angle': -175.841003, 'image_id': 1161, 'star_number': 884, 'duration_ms': 13185}}
                         # {'Event': 'PlateSolve', 'Timestamp': '21778.539366227', 'state': 'fail', 'error': 'solve failed', 'code': 251, 'lapse_ms': 30985, 'route': []}
 
-                        elif event_name == 'PlateSolve':
+                        if event_name == 'PlateSolve':
                             if 'result' in parsed_data and 'ra_dec' in parsed_data['result']:
                                 self.logger.info("Plate Solve Succeeded")
                                 self.cur_solve_RA = parsed_data['result']['ra_dec'][0]
@@ -291,9 +286,14 @@ class Seestar:
         return cur_cmdid
 
     def send_message_param_sync(self, data):
-        cur_cmdid = self.send_message_param(data)
+        is_shutdown = False
         if data['method'] == 'pi_shutdown' or data['method'] == 'pi_reboot':
+            self.reset_below_horizon_dec_offset()
+            is_shutdown = True
+        cur_cmdid = self.send_message_param(data)
+        if is_shutdown:
             return
+        
         start = time.time()
         last_slow = start
         while cur_cmdid not in self.response_dict:
@@ -340,15 +340,30 @@ class Seestar:
         if self.is_goto():
             if self.below_horizon_dec_offset == 0:
                 return self.stop_slew()
-            self.op_state = "fail"
-        return "Did not stop goto: no action taken"
+            else:
+                # need to stop the custom goto routine for below horizon
+                self.custom_goto_state = "stopping"
+                return "Stop requested."
+        return "goto stopped already: no action taken"
 
     def is_goto(self):
         try:
-            return self.event_state["ScopeGoto"]["state"] == "working"
+            if self.below_horizon_dec_offset == 0:
+                return self.event_state["AutoGoto"]["state"] == "working"
+            else:
+                return self.event_state["ScopeGoto"]["state"] == "working"
         except:
             return False
 
+    def is_goto_completed_ok(self):
+        try:
+            if self.below_horizon_dec_offset == 0:
+                return self.event_state["AutoGoto"]["state"] == "complete"
+            else:
+                return self.event_state["ScopeGoto"]["state"] == "complete"
+        except:
+            return False
+                
     def goto_target(self, params):
         if self.is_goto():
             self.logger.info("Failed: mount is in goto routine.")
@@ -363,8 +378,20 @@ class Seestar:
         target_name = params.get("target_name", "unknown")
         self.logger.info("%s: going to target... %s %s %s, with dec offset %s", self.device_name, target_name, in_ra,
                          in_dec, self.below_horizon_dec_offset)
+        
+        if self.is_EQ_mode:
+            if in_dec < -Config.init_lat:
+                msg = f"Failed. You tried to geto to a target [ {in_ra}, {in_dec} ] that seems to be too low for your location at lat={Config.init_lat}"
+                self.logger.warn(msg)
+                return msg
+            dec_offset_safety_angle_degree = 5.0
+            safe_dec_offset = -in_dec+dec_offset_safety_angle_degree
+            if safe_dec_offset > self.below_horizon_dec_offset:
+                self.set_below_horizon_dec_offset(safe_dec_offset)
 
-        self.op_watch = 'AutoGoto'
+            elif self.below_horizon_dec_offset > 0 and in_dec > dec_offset_safety_angle_degree:
+                self.reset_below_horizon_dec_offset()
+
         if self.below_horizon_dec_offset == 0:
             data = {}
             data['method'] = 'iscope_start_view'
@@ -381,7 +408,7 @@ class Seestar:
             return self.goto_target_with_dec_offset_async(target_name, in_ra, in_dec)
 
     # {"method":"scope_goto","params":[1.2345,75.0]}
-    def slew_to_ra_dec(self, params):
+    def _slew_to_ra_dec(self, params):
         in_ra = params[0]
         in_dec = params[1]
         self.logger.info("%s: slew to ra, dec ... %s %s, with dec_offset of %s", self.device_name, in_ra, in_dec,
@@ -414,14 +441,15 @@ class Seestar:
             msg = "Failed to set offset. Mount is moving. No action taken."
             self.logger.info(msg)
             return msg  
-        if self.below_horizon_dec_offset != 0:
-            msg = "Failed to set below horizon offset because the device already has an offset. Need to reset it first."
-            self.logger.info(msg)
-            return msg
+        
+#        if self.below_horizon_dec_offset != 0:
+#            msg = "Failed to set below horizon offset because the device already has an offset. Need to reset it first."
+#            self.logger.info(msg)
+#            return msg
           
         old_dec = self.dec
         self.below_horizon_dec_offset = offset
-        result = self.sync_target([self.ra, self.dec])
+        result = self.sync_target([self.ra, old_dec])
         if 'error' in result:
             self.below_horizon_dec_offset = 0
             self.sync_target([self.ra, old_dec])
@@ -445,7 +473,7 @@ class Seestar:
         for index in range(3):
             undo_count = index+1
             self.logger.info(f"slew to {old_ra}, {old_dec+old_offset*(undo_count+1)}")
-            result = self.slew_to_ra_dec([old_ra, old_dec+old_offset*(undo_count+1)]) # dec was already offset
+            result = self._slew_to_ra_dec([old_ra, old_dec+old_offset*(undo_count+1)]) # dec was already offset
             if result == True:
                 time.sleep(10)
                 self.logger.info(f"syncing to {old_ra}, {old_dec+old_offset*undo_count}")
@@ -518,18 +546,7 @@ class Seestar:
             if focus_count > 1:
                 time.sleep(5)
             if self.start_auto_focus():
-                while True:
-                    if "AutoFocus" in self.event_state:
-                        event_state = self.event_state["AutoFocus"]
-                        if "state" in event_state:
-                            if event_state["state"] == "fail":
-                                self.logger.warn("Failed to autofous.")
-                                break
-                            elif event_state["state"] == "complete":
-                                self.logger.info("Autofous completed.")
-                                result = True
-                                break
-                    time.sleep(2)
+                result = self.wait_end_op("AutoFocus")
                 if result == True:
                     break
         # give extra time to settle focuser
@@ -605,22 +622,13 @@ class Seestar:
             return False
         response = self.send_message_param_sync({"method": "set_control_value", "params": ["gain", Config.init_gain]})
         self.logger.info(f"dark frame measurement setting gain response: {response}")
-        while True:
-            event_state = self.event_state["DarkLibrary"]
-            if "state" in event_state:
-                if event_state["state"] == "fail":
-                    self.logger.info(f"dark library failed: {event_state}.")
-                    result = False
-                    break
-                if event_state["state"] == "complete":
-                    self.logger.info(f"dark library created: {event_state}.")
-                    result = True
-                    break
-            time.sleep(1)
+        result = self.wait_end_op("DarkLibrary")
 
         if result == True:
             response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"Stack"}})
             self.logger.info(f"Response from stop stack after dark frame measurement: {response}")
+        else:
+            self.logger.warn("Create dark frame data failed.")
         return result
     
     def stop_stack(self):
@@ -713,7 +721,7 @@ class Seestar:
         self.logger.info("trying to go with explicit dec offset logic: %s %s %s", target_ra, target_dec,
                          self.below_horizon_dec_offset)
 
-        result = self.slew_to_ra_dec([target_ra, target_dec])
+        result = self._slew_to_ra_dec([target_ra, target_dec])
         if result == True:
             self.set_target_name(target_name)
             # repeat plate solve and adjust position as needed
@@ -728,9 +736,8 @@ class Seestar:
         self.logger.info("In auto center logic...")
         self.cur_solve_RA = -9999.0
         self.cur_solve_Dec = -9999.0
-        self.op_watch = "AutoGoto"
-        self.op_state = "working"
-        while self.scheduler_state != "Stopping" and self.op_state == "working":
+        self.custom_goto_state = "working"
+        while self.scheduler_state != "Stopping" and self.custom_goto_state == "working":
             # wait a bit to ensure we have preview image data
             time.sleep(1)
             self.send_message_param({"method": "start_solve"})
@@ -739,14 +746,14 @@ class Seestar:
             self.cur_solve_Dec = -9999.0
             # if we have not platesolve yet, then repeat
             while self.cur_solve_RA < -1000:
-                if self.scheduler_state == "Stopping" or self.op_state != "working":
+                if self.scheduler_state == "Stopping" or self.custom_goto_state != "working":
                     self.logger.info("auto center thread stopped because the scheduler was requested to stop")
                     return
                 time.sleep(1)
                 continue
             # if we failed platesolve:
             if self.cur_solve_RA < 0:
-                self.op_state = "fail"
+                self.custom_goto_state = "fail"
                 self.logger.info("auto center failed")
                 return
 
@@ -755,14 +762,14 @@ class Seestar:
 
             distance_square = delta_ra * delta_ra + delta_dec * delta_dec
             if (distance_square < 1.0e-3):
-                self.op_state = "complete"
+                self.custom_goto_state = "complete"
                 self.logger.info("auto center completed")
                 return
             else:
                 self.sync_target([self.cur_solve_RA, self.cur_solve_Dec])
-                self.slew_to_ra_dec([target_ra, target_dec])
+                self._slew_to_ra_dec([target_ra, target_dec])
         self.logger.info("auto center thread stopped because the scheduler was requested to stop")
-        self.op_state = "fail"
+        self.custom_goto_state = "stopped"
         return
 
     def start_stack(self, params={"gain": Config.init_gain, "restart": True}):
@@ -821,8 +828,8 @@ class Seestar:
             loc_data = {}
             loc_param = {}
             # special loc for south pole: (-90, 0)
-            if ('lat' not in params or 'lon' not in params) or (not isinstance(params['lat'], float) or not isinstance(params['lon'], float)) or (params['lat'] == 0 and params['lon'] == 0):  # special case of (0,0,) will use the ip address to estimate the location
-                if Config.init_lat == 0 and Config.init_long == 0:
+            if ('lat' not in params or 'lon' not in params) or (params['lat'] <= 0 and params['lon'] <= 0):  # special case of (0,0,) will use the ip address to estimate the location
+                if Config.init_lat <= 0 and Config.init_long <= 0:
                     coordinates = Util.get_current_gps_coordinates()
                     if coordinates is not None:
                         latitude, longitude = coordinates
@@ -831,11 +838,12 @@ class Seestar:
                         self.logger.info(f"Longitude: {longitude}")
                         Config.init_lat = latitude
                         Config.init_long = longitude
-                loc_param['lat'] = Config.init_lat
-                loc_param['lon'] = Config.init_long
             else:
-                loc_param['lat'] = params['lat']   
-                loc_param['lon'] = params['lon']
+                Config.init_lat = params['lat']
+                Config.init_long = params['lon']    
+
+            loc_param['lat'] = Config.init_lat   
+            loc_param['lon'] = Config.init_long
             self.logger.info(f"Setting location to {loc_param['lat']}, {loc_param['lon']}")
             
             loc_param['force'] = False
@@ -849,8 +857,8 @@ class Seestar:
             self.logger.info("verify location string: %s", loc_data)
 
             self.send_message_param_sync({"method": "pi_is_verified"})
-            self.send_message_param_sync(date_data)
-            self.send_message_param_sync(loc_data)
+            self.logger.info(self.send_message_param_sync(date_data))
+            self.logger.info(self.send_message_param_sync(loc_data))
             self.send_message_param_sync(lang_data)
 
             self.set_setting(Config.init_expo_stack_ms, Config.init_expo_preview_ms, Config.init_dither_length_pixel, 
@@ -871,10 +879,11 @@ class Seestar:
             
             lat = Config.scope_aim_lat
             lon = Config.scope_aim_lon
-            if 'scope_aim_lat' in device:
-                lat = device['scope_aim_lat']
-            if 'scope_aim_lon' in device:
-                lon = device['scope_aim_lon']
+            self.is_EQ_mode = Config.is_EQ_mode
+
+            lat = device.get('scope_aim_lat', lat)   
+            lon = device.get('scope_aim_lon', lon)
+            self.is_EQ_mode = device.get('is_EQ_mode', self.is_EQ_mode)
 
             if lon < 0:
                 lon = 360+lon
@@ -889,20 +898,12 @@ class Seestar:
             if cur_latlon[0] > -89.5 or abs(cur_latlon[1]) > 0.2:
                 self.logger.info("Need to park scope first for a good reference start point")
                 response = self.send_message_param_sync({"method":"scope_park"})
-                while True:
-                    time.sleep(1)
-                    if "ScopeHome" not in self.event_state:
-                        continue
-                    event_state = self.event_state["ScopeHome"]
-                    if "state" in event_state:
-                        if event_state["state"] == "fail":
-                            self.logger.info(f"scope_park failed: {event_state}.")
-                            result = False
-                            break
-                        if event_state["state"] == "complete":
-                            self.logger.info(f"scope_park completed: {event_state}.")
-                            result = True
-                            break
+                result = self.wait_end_op("ScopeHome")
+
+                if result == True:
+                    self.logger.info(f"scope_park completed.")
+                else:
+                    self.logger.info(f"scope_park failed.")
                 cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
 
             self.logger.info(f"moving scope from lat-lon {cur_latlon[0]}, {cur_latlon[1]} to {lat}, {lon}")
@@ -1009,7 +1010,7 @@ class Seestar:
             center_Dec = self.dec
         else:
             # move to target
-            self.slew_to_ra_dec([center_RA, center_Dec])
+            self._slew_to_ra_dec([center_RA, center_Dec])
 
         # take one minute exposure for the star
         if self.scheduler_state != "Running":
@@ -1031,7 +1032,7 @@ class Seestar:
                 return
             cur_dec = center_Dec + spacing[index]
             self.send_message_param_sync({"method": "set_setting", "params": {"stack_lenhance": is_LP[index]}})
-            self.slew_to_ra_dec([center_RA, cur_dec])
+            self._slew_to_ra_dec([center_RA, cur_dec])
             self.set_target_name(target_name + "_spec_" + str(index + 1))
             if not self.start_stack(stack_params):
                 return
@@ -1112,8 +1113,8 @@ class Seestar:
                 # TODO: Need to set correct parameters
                 self.send_message_param_sync({"method": "set_setting", "params": {"stack_lenhance": False}})
                 self.goto_target({'ra': cur_ra, 'dec': cur_dec, 'is_j2000': False, 'target_name': save_target_name})
-                result = self.wait_end_op("AutoGoto")
-                self.logger.info("Goto operation finished")
+                result = self.wait_end_op("goto_target")
+                self.logger.info(f"Goto operation finished with result code: {result}")
 
                 time.sleep(3)
 
@@ -1405,6 +1406,8 @@ class Seestar:
                 self.send_message_param_sync(request)
             index += 1
 
+        self.reset_below_horizon_dec_offset()
+
         self.scheduler_state = "Stopped"
         self.schedule['current_item_id'] = ""
         self.logger.info("Scheduler Stopped.")
@@ -1427,14 +1430,18 @@ class Seestar:
             return self.json_result("stop_scheduler", -3, "Scheduler is not running while trying to stop!")
         else:
             return self.json_result("stop_scheduler", -4, "scheduler has already been requested to stop")
-
+        
     def wait_end_op(self, in_op_name):
-        self.op_watch = in_op_name
-        self.op_state = "working"
-
-        while self.op_state == "working":
-            time.sleep(1)
-        return self.op_state == "complete"
+        time.sleep(1)
+        if in_op_name == "goto_target":
+            while self.is_goto() == True:
+                time.sleep(1)
+            return self.is_goto_completed_ok()
+            
+        else:
+            while in_op_name not in self.event_state or self.event_state[in_op_name]["state"] == "working":
+                time.sleep(1)
+            return self.event_state[in_op_name]["state"] == "complete"
 
     # def sleep_with_heartbeat(self, in_sleep_time):
     #     stacking_timer = 0
@@ -1486,7 +1493,6 @@ class Seestar:
 
             try:
                 # Start up heartbeat and receive threads
-                self.op_watch = ""
 
                 self.get_msg_thread = threading.Thread(target=self.receive_message_thread_fn, daemon=True)
                 self.get_msg_thread.name = f"ALPReceiveMessageThread.{self.device_name}"

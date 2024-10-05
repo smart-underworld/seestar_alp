@@ -39,6 +39,13 @@ class Seestar_Federation:
                 result[key] = self.seestar_devices[key].send_message_param_sync(data)
         return result
                 
+    def goto_target(self, params):
+        result = {}
+        for key in self.seestar_devices:
+            if self.seestar_devices[key].is_connected:
+                result[key] = self.seestar_devices[key].goto_target(params)
+        return result
+    
     def stop_goto_target(self):
         result = {}
         for key in self.seestar_devices:
@@ -46,19 +53,18 @@ class Seestar_Federation:
                 result[key] = result[key] = self.seestar_devices[key].stop_goto_target()
         return result
     
-    def goto_target(self, params):
+    def is_goto(self):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                result[key] = self.seestar_devices[key].goto_target(params)
+                result[key] = result[key] = self.seestar_devices[key].is_goto()
         return result
-
-    # {"method":"scope_goto","params":[1.2345,75.0]}
-    def slew_to_ra_dec(self, params):
+    
+    def is_goto_completed_ok(self):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                result[key] = self.seestar_devices[key].slew_to_ra_dec[params]
+                result[key] = result[key] = self.seestar_devices[key].is_goto_completed_ok()
         return result
     
     def set_below_horizon_dec_offset(self, offset):
