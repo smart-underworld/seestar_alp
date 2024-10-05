@@ -10,7 +10,7 @@
                 switch (evt.detail.type) {
                     case 'statusUpdate': {
                         const payload = JSON.parse(evt.detail.data)
-                        const mode = payload.mode;
+                        let mode = payload.mode;
                         const stage = payload.stage;
                         const arr = document.URL.split('/');
                         let lastSegment = arr[arr.length - 1];
@@ -19,6 +19,9 @@
 
                         if (lastSegment === 'live') {
                             lastSegment = 'none';
+                        }
+                        if (!mode) {
+                            mode = 'none';
                         }
 
                         if (lastSegment !== mode) {
