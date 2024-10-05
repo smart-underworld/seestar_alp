@@ -663,12 +663,10 @@ class SeestarImaging:
             image, _ = self.get_image(self.exposure_mode)
             frame = self.build_frame_bytes(image)
             yield frame
-            if self.is_gazing:
-                yield frame
+            yield frame
         else:
             yield self.blank_frame()
-            if self.is_gazing:
-                yield self.blank_frame()
+            yield self.blank_frame()
 
         # view_state = self.device.view_state
         # self.logger.info(f"mode: {self.mode} {type(self.mode)} view_state: {view_state}")
