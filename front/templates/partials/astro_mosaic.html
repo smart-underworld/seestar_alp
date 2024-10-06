@@ -57,21 +57,177 @@
             <input type="number" id="astro_mosaic_grid_y" min="1" max="100" value="1" size="1" onchange="update_astro_mosaic()">
             <label for="astro_mosaic_overlap" class="form-label">Overlap</label>
             <input type="number" id="astro_mosaic_overlap" min="1" max="100" value="20" size="2" onchange="update_astro_mosaic()">
-            <!-- <label for="send_to_schedule" class="form-label">Send to Schedule</label>
-             <button type="button" id="send_to_schedule" class="btn btn-primary" title="Send to Schedule">
+            <label for="send_to_schedule" class="form-label">Send to Schedule</label>
+             <button type="button" id="open_send_to_schedule_modal_btn" class="btn btn-primary" title="Send to Schedule">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-journal-arrow-up" viewBox="0 0 16 16">
                     <path fill-rule="evenodd" d="M8 11a.5.5 0 0 0 .5-.5V6.707l1.146 1.147a.5.5 0 0 0 .708-.708l-2-2a.5.5 0 0 0-.708 0l-2 2a.5.5 0 1 0 .708.708L7.5 6.707V10.5a.5.5 0 0 0 .5.5"/>
                     <path d="M3 0h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2v-1h1v1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v1H1V2a2 2 0 0 1 2-2"/>
                     <path d="M1 5v-.5a.5.5 0 0 1 1 0V5h.5a.5.5 0 0 1 0 1h-2a.5.5 0 0 1 0-1zm0 3v-.5a.5.5 0 0 1 1 0V8h.5a.5.5 0 0 1 0 1h-2a.5.5 0 0 1 0-1zm0 3v-.5a.5.5 0 0 1 1 0v.5h.5a.5.5 0 0 1 0 1h-2a.5.5 0 0 1 0-1z"/>
                 </svg>
-            </button> -->
+            </button>
         </span>
     </fieldset>
 </div>
-<div id="aladin-div" style="height:350px; width: 100%;"></div>
+<div id="aladin-div" style="height:500px; width: 100%;"></div>
 <div id="radec-div" style="width:300px;"></div>
 <div id="day-div" style="height:300px; width: 100%; max-width: 100% !important;"></div>
 <div id="year-div" style="height:300px; width: 100%; max-width: 100% !important;"></div>
+<dialog id="send_to_schedule_modal">
+    <form method="post" action="/{{ telescope["device_num"] }}/schedule/mosaic">
+        <div class="card border-primary mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Target</h5>
+    
+                <div class="mb-3 row">
+                    <div class="col">
+                        <label for="targetName" class="form-label">Target Name</label>
+                        <input type="text" class="form-control" id="targetName" name="targetName"
+                               aria-describedby="targetNameHelp" required>
+                        <div id="targetNameHelp" class="form-text">Enter a descriptive name for the target. (e.g. ...)</div>
+                    </div>
+                    <div class="col">
+                        <div class="d-flex align-items-center"> <!-- Wrap the radio buttons and button in a flex container -->
+                            <input class="form-check-input me-2" type="radio" name="searchFor" id="DS" checked>
+                            <label class="form-check-label" for="DS">Deepsky</label>
+                            <input class="form-check-input mx-2" type="radio" name="searchFor" id="PL">
+                            <label class="form-check-label" for="PL">Planet</label>
+                            <button type="button" id="getSimbad" class="btn btn-primary ms-2" title="Retrieve RA/Dec from Simbad" onclick="fetchCoordinates()">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
+                                    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="form-text">Enter target name, select type, and press the button to retrieve RA/Dec from Simbad / Planet Server.</div>
+                    </div>
+                </div>
+    
+                <div class="mb-3 row">
+                    <div class="col">
+                        <label for="ra" class="form-label">Right Ascension</label>
+                        <input type="text" class="form-control" id="ra" name="ra" aria-describedby="raHelp" required>
+                        <div id="raHelp" class="form-text">Mosaic center in decimal hours or hours/minutes/seconds (e.g. -1.2 or
+                            6h32m32.5s)						
+                        </div>
+                    </div>
+                    <div class="col">
+                        <label for="getClipboard" class="form-label">&nbsp;</label><br>
+                        <button type="button" id="getStallarium" class="btn btn-primary" title="Parse RA/Dec from clipboard" onclick="fetchClipboard()">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard-fill" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M10 1.5a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5zm-5 0A1.5 1.5 0 0 1 6.5 0h3A1.5 1.5 0 0 1 11 1.5v1A1.5 1.5 0 0 1 9.5 4h-3A1.5 1.5 0 0 1 5 2.5zm-2 0h1v1A2.5 2.5 0 0 0 6.5 5h3A2.5 2.5 0 0 0 12 2.5v-1h1a2 2 0 0 1 2 2V14a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V3.5a2 2 0 0 1 2-2"/>
+                              </svg>
+                        </button>                    
+                        <div id="targetNameHelp" class="form-text">Paste RA/Dec from Clipboard</div>
+                    </div>
+    
+                    <div class="col">
+                        <label for="raPanels" class="form-label">&nbsp;</label>
+                        <input type="text" class="form-control" id="raPanels" name="raPanels"
+                               aria-describedby="raPanelsHelp" required>
+                        <div id="raPanelsHelp" class="form-text">Number of RA panels</div>
+                    </div>
+                    <div class="col">
+                        <label for="getStallarium" class="form-label">&nbsp;</label><br>
+                        <button type="button" id="getStallarium" class="btn btn-primary" title="Copy RA/Dec from Stellarium" onclick="fetchStellarium()">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-star-fill" viewBox="0 0 16 16">
+                                <path d="M3.612 15.443c-.386.198-.824-.149-.746-.592l.83-4.73L.173 6.765c-.329-.314-.158-.888.283-.95l4.898-.696L7.538.792c.197-.39.73-.39.927 0l2.184 4.327 4.898.696c.441.062.612.636.282.95l-3.522 3.356.83 4.73c.078.443-.36.79-.746.592L8 13.187l-4.389 2.256z"/>
+                              </svg>
+                        </button>                    
+                        <div id="targetNameHelp" class="form-text">Retreive RA/Dec from Stellarium</div>
+                    </div>
+                </div>
+    
+                <div class="mb-3 row">
+                    <div class="col">
+                        <label for="dec" class="form-label">Declination</label>
+                        <input type="text" class="form-control" id="dec" name="dec" aria-describedby="decHelp" required>
+                        <div id="decHelp" class="form-text">Mosaic center in decimal degrees or degrees/minutes/seconds (e.g. -1.2 or
+                            +6d32m32.5s)						
+                        </div>
+                    </div>
+    
+                    <div class="col">
+                        <label for="decPanels" class="form-label">&nbsp;</label>
+                        <input type="text" class="form-control" id="decPanels" name="decPanels"
+                               aria-describedby="decPanelsHelp" required>
+                        <div id="decPanelsHelp" class="form-text">Number of Dec panels</div>
+                    </div>
+                </div>
+    
+                <div class="mb-3 row">
+                    <div class="mb-3 col">
+                        <label for="panelOverlap" class="form-label">Panel Overlap (%)</label>
+                        <input type="text" class="form-control" id="panelOverlap" name="panelOverlap"
+                           aria-describedby="panelOverlapHelp" required>
+                        <div id="panelOverlapHelp" class="form-text">Overlap of panels in percentage</div>
+                    </div>
+                    <div class="mb-3 col">
+                        <label for="panelSelect" class="form-label">Selected Panels (optional)</label>
+                        <input type="text" class="form-control" id="panelSelect" name="panelSelect"
+                            aria-describedby="panelSelectHelp">
+                        <div id="panelSelectHelp" class="form-text">Semicolon delimited list of panels you want to image</div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="useJ2000" name="useJ2000" checked>
+                        <label class="form-check-label" for="useJ2000">
+                            Use J2000?
+                        </label>
+                    </div>
+                </div>
+                {% if telescope["device_num"] == 0 %}
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="array_mode" name="array_mode" value="split">
+                            <label class="form-check-label" for="array_mode">
+                                Split Mosaic Across Multiple Seestar?
+                            </label>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    
+        <div class="card border-primary mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Exposure</h5>
+    
+                <div class="mb-3">
+                    <label for="sessionTime" class="form-label">Total Session Time</label>
+                    <input type="text" class="form-control" id="sessionTime" name="sessionTime"
+                           aria-describedby="sessionTimeHelp" required>
+                    <div id="sessionTimeHelp" class="form-text">Total elapsed session time (ex: 1h 30m or 5400). Rejected frames
+                        count.
+                    </div>
+                </div>
+    
+                <div class="mb-3">
+                        <input type="text" class="form-control" id="gain" name="gain" aria-describedby="gainHelp" value="80" required>
+                    <div id="gainHelp" class="form-text">Gain. (ex: 80)</div>
+                </div>
+    
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="useLpFilter" name="useLpFilter">
+                        <label class="form-check-label" for="useLpFilter">
+                            Use Light Pollution Filter?
+                        </label>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="useAutoFocus" name="useAutoFocus">
+                        <label class="form-check-label" for="useAutoFocus">
+                            Use Auto Focus on every panel?
+                        </label>
+                    </div>
+                </div>
+    
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Submit</button><button type="reset" class="btn btn-primary float-end" id="close_send_to_schedule_modal_btn">Close</button>
+    </form>        
+</dialog>
 <script>
     // Default settings.
     var viewer_params = {
@@ -118,4 +274,44 @@
     }
 
     window.addEventListener("resize", update_astro_mosaic);
+
+    const send_to_schedule_modal = document.getElementById("send_to_schedule_modal");
+    const open_send_to_schedule_modal_btn = document.getElementById("open_send_to_schedule_modal_btn");
+    const close_send_to_schedule_modal_btn  = document.getElementById("close_send_to_schedule_modal_btn");
+
+    function show_send_to_schedule_modal() {
+        astro_mosaic_grid_x = document.getElementById('astro_mosaic_grid_x').value;
+        astro_mosaic_grid_y = document.getElementById('astro_mosaic_grid_y').value;
+        document.getElementById('targetName').value = document.getElementById('astro_mosaic_search_text').value;
+        document.getElementById('raPanels').value = astro_mosaic_grid_x;
+        document.getElementById('decPanels').value = astro_mosaic_grid_y;
+        if(astro_mosaic_grid_x == 1 && astro_mosaic_grid_y ==1){
+            document.getElementById('panelOverlap').value = 100
+        }else{
+            document.getElementById('panelOverlap').value = document.getElementById('astro_mosaic_overlap').value;
+        }
+        // console.log("##### RADEC " + document.querySelector(".search").value);
+        aladin_radec = document.querySelector(".search").value;
+        const aladin_radec_array = aladin_radec.split(" ");
+        aladin_ra = aladin_radec_array[0] + "h" + aladin_radec_array[1] + "m" + aladin_radec_array[2] + "s";
+        aladin_dec = aladin_radec_array[3] + "d" + aladin_radec_array[4] + "m" + aladin_radec_array[5] + "s";
+        document.getElementById('ra').value = aladin_ra;
+        document.getElementById('dec').value = aladin_dec;
+        send_to_schedule_modal.showModal();
+    }
+
+    function close_send_to_schedule_modal() {
+        send_to_schedule_modal.close();
+    }
+    
+    document.addEventListener('click', (event) => {
+        if (event.target === send_to_schedule_modal) {
+            // Click occurred outside the dialog
+            send_to_schedule_modal.close();
+        }
+    });
+
+    // open modal event
+    open_send_to_schedule_modal_btn.addEventListener("click", show_send_to_schedule_modal);
+    close_send_to_schedule_modal_btn.addEventListener("click", close_send_to_schedule_modal);
 </script>
