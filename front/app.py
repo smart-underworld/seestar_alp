@@ -2323,7 +2323,6 @@ class TogglePlanningCardResource:
     def on_post(req, resp):
         PostedForm = req.media
         card_name = str(PostedForm["card_name"])
-        print(f"#######  {card_name}")
         # Get current card state
         current_card_state = get_planning_card_state(card_name)
         if current_card_state["planning_page_enable"]:
