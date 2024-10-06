@@ -28,6 +28,7 @@ import platform
 import shutil
 import signal
 import math
+import numpy as np
 
 from skyfield.api import load
 
@@ -66,7 +67,6 @@ def get_listening_ip():
 
 
 base_url = "http://" + get_listening_ip() + ":" + str(Config.port)
-stellarium_url = 'http://' + str(Config.sthost) + ':' + str(Config.stport) + '/api/objects/info'
 simbad_url = 'https://simbad.cds.unistra.fr/simbad/sim-id?output.format=ASCII&obj.bibsel=off&Ident='
 messages = []
 online = None
@@ -2158,31 +2158,51 @@ class SimbadResource:
         resp.text = ra_dec_j2000
         return
 
+# convert decimal RA into HMS format
+def decimal_RA_to_Sexagesimal(deg):
+    # Normalize the degree value
+    total_hours = deg / 15.0  # Convert degrees to total hours
+    total_hours = total_hours % 24  # Wrap around to stay within 0-24 hours
+    
+    hours = int(total_hours)
+    minutes = int((total_hours - hours) * 60)
+    seconds = (total_hours - hours - minutes / 60) * 3600
+    
+    # Ensure minutes and seconds are positive
+    if minutes < 0:
+        minutes += 60
+        hours -= 1
+    if seconds < 0:
+        seconds += 60
+        minutes -= 1
+    
+    return f'{hours}h{minutes:02}m{abs(seconds):.2f}s'
 
-def decimal_RA_to_Sexagesimal(ra:float):
-    if ra < 0:
-        tmp1 = str(float(360 + ra) / 15).split(".")
-    else:
-        tmp1 = str(ra / 15).split(".")
-    ra_hour = tmp1[0]
-    tmp2 = str(float("0." + tmp1[1]) * 60).split(".")
-    ra_min = tmp2[0]
-    ra_sec = float("0." + tmp2[1]) * 60
-    return ra_hour + "h" + ra_min + "m" + str(round(ra_sec,2)) + "s"
+# Convert decimal DEC into DMS format
+def decimal_DEC_to_Sexagesimal(deg):
+    sign = "+" if deg >= 0 else "-"
+    abs_deg = abs(deg)
+    degrees = int(abs_deg)
+    minutes = int((abs_deg - degrees) * 60)
+    seconds = (abs_deg - degrees - minutes / 60) * 3600
+    return f'{sign}{degrees}d{minutes:02}m{seconds:.2f}s'
 
+def vector_to_ra_dec(vector):
+    x, y, z = vector
 
-def decimal_DEC_to_Sexagesimal(dec:float):
-    tmp1 = str(dec).split(".")
-    dec_deg = tmp1[0]
-    tmp2 = str(float("0." + tmp1[1]) * 60).split(".")
-    dec_min = tmp2[0]
-    dec_sec = float("0." + tmp2[1]) * 60
-    return dec_deg + "d" + dec_min + "m" +  str(round(dec_sec,1)) + "s"
-
+    # Calculate declination (δ)
+    dec = np.arcsin(z)
+    dec_deg = np.degrees(dec)
+    
+    # Calculate right ascension (α)
+    ra = np.arctan2(y, x)
+    ra_deg = np.degrees(ra) % 360
+    return ra_deg, dec_deg
 
 class StellariumResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
+        stellarium_url = 'http://' + str(Config.sthost) + ':' + str(Config.stport) + '/api/objects/info'
         try:
             r = requests.get(stellarium_url + '?format=json')
             html_content = r.text
@@ -2191,26 +2211,51 @@ class StellariumResource:
             resp.content_type = 'application/text'
             resp.text = 'Requst had communications error.'
             return
-        StelJSON = json.loads(html_content)
-        ra_j2000 = StelJSON['ra']
-        dec_J2000 = StelJSON['dec']
-        if (StelJSON['localized-name'] != "" ):
-            objName = StelJSON['localized-name']
-        elif (StelJSON['name'] != "" and objName != ""):
-            objname = StelJSON['localized-name']
-        else:
-            tmpObj = StelJSON['designations']
-            objName = tmpObj.split(" - ")[0]
         
-        lpFilter = "off"
-        objType = StelJSON['type']
-        filterTypes = ["HII region", "emission nebula", "supernova remnant", "planetary nebula"]
-        if objType in filterTypes:
-            lpFilter = "on"
+        # Check if object is selected
+        if html_content == "no current selection, and no name parameter given":
+            
+            stellarium_url = 'http://' + str(Config.sthost) + ':' + str(Config.stport) + '/api/main/view?coord=j2000'
+            try:
+                r = requests.get(stellarium_url)
+                html_content = r.text
+            except:
+                resp.status = falcon.HTTP_404
+                resp.content_type = 'application/text'
+                resp.text = 'Requst had communications error.'
+                return
+            # {"jNow":"[-0.924712, -0.0336335, -0.428692]"}
+            StelJSON = json.loads(html_content)
+            ra_j2000, dec_J2000 = vector_to_ra_dec(json.loads(StelJSON["j2000"]))
+            objName = "Unknown"
+            lpFilter = False
+
+        else:
+            StelJSON = json.loads(html_content)
+            ra_j2000 = StelJSON['raJ2000']
+            dec_J2000 = StelJSON['decJ2000']
+            if (StelJSON['localized-name'] != "" ):
+                objName = StelJSON['localized-name']
+            elif (StelJSON['name'] != ""):
+
+                objname = StelJSON['localized-name']
+            elif (StelJSON['designations'] != ""):
+                tmpObj = StelJSON['designations']
+                objName = tmpObj.split(" - ")[0]
+            else:
+                # Should never get here but whatever
+                objName = "Unknown"
+            
+            lpFilter = False
+            objType = StelJSON['type']
+            filterTypes = ["HII region", "emission nebula", "supernova remnant", "planetary nebula"]
+            if objType in filterTypes:
+                lpFilter = True
         
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
-        resp.text = decimal_RA_to_Sexagesimal(ra_j2000) + "/" + decimal_DEC_to_Sexagesimal(dec_J2000) + "/" + lpFilter + "/" + objName
+        tmpText = json.dumps({"ra":decimal_RA_to_Sexagesimal(ra_j2000), "dec": decimal_DEC_to_Sexagesimal(dec_J2000), "lp": lpFilter, "name": objName})
+        resp.text = tmpText
 
 
 # class StellariumResource:
