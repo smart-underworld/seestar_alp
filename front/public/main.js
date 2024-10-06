@@ -145,14 +145,12 @@ try {
     })
     .then(data => {
         console.log(data);
-        const elements = data.trim().split("/");
-        document.getElementById('targetName').value = elements[3];
-        document.getElementById('ra').value = elements[0];
-        document.getElementById('dec').value = elements[1];
-        document.getElementById('useLpFilter').checked = false;
-        if (elements[2] == 'on') 
-            document.getElementById('useLpFilter').checked = true;
-        document.getElementById('useJ2000').checked = false;
+        elements = JSON.parse(data);
+        document.getElementById('targetName').value = elements.name;
+        document.getElementById('ra').value = elements.ra;
+        document.getElementById('dec').value = elements.dec;
+        document.getElementById('useLpFilter').checked = elements.lp;
+        document.getElementById('useJ2000').checked = true;
     })
     .catch(error => console.error('There was a problem with the fetch operation:', error));
 
