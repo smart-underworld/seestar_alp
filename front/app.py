@@ -267,6 +267,55 @@ def get_twilight_times():
     return twilight_times
 
 
+def get_planning_cards():
+    if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+        card_state_file_location = os.path.abspath(os.path.join(sys._MEIPASS, "planning.json"))
+    else:
+        card_state_file_location = os.path.join(os.path.dirname(__file__), "planning.json")
+
+    with open(card_state_file_location, 'r') as card_state_file:
+        state_data = json.load(card_state_file)
+        return state_data
+
+
+def get_planning_card_state(card_name):
+    # Get's the state of a card via planning.json
+    if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+        planning_state_file_location = os.path.abspath(os.path.join(sys._MEIPASS, "planning.json"))
+    else:
+        planning_state_file_location = os.path.join(os.path.dirname(__file__), "planning.json")
+
+    with open(planning_state_file_location, 'r') as planning_state_file:
+        state_data = json.load(planning_state_file)
+
+    for card in state_data:
+        #print (card['card_name'])
+        if card['card_name'] == card_name:
+            return card
+
+
+def update_planning_card_state(card_name, var, value):
+    # Update planning.json with current card state
+    if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+        planning_state_file_location = os.path.abspath(os.path.join(sys._MEIPASS, "planning.json"))
+    else:
+        planning_state_file_location = os.path.join(os.path.dirname(__file__), "planning.json")
+
+    with open(planning_state_file_location, 'r') as planning_state_file:
+        state_data = json.load(planning_state_file)
+
+    for card in state_data:
+        if card['card_name'] == card_name:
+            if var in card:
+                card[var] = value
+                break
+            else:
+                logger.info(f"Planning Card: Variable '{var}' not found in card {card}.")
+
+    with open(planning_state_file_location, 'w') as planning_state_file:
+        json.dump(state_data, planning_state_file, indent=4)
+
+
 def check_api_state(telescope_id):
     if telescope_id == 0:
         return True
@@ -1967,11 +2016,13 @@ class PlanningResource:
             twilight_times = get_twilight_times()
         else:
             twilight_times = {}
+        
         nearest_csc = get_nearest_csc()
         if nearest_csc["status_msg"] != "SUCCESS":
             nearest_csc["href"] = ""
             nearest_csc["full_img"] = ""
         
+        planning_cards = get_planning_cards()
         local_timezone = get_localzone()
         current_time = datetime.now(local_timezone)
         utc_offset = current_time.utcoffset()
@@ -1981,7 +2032,7 @@ class PlanningResource:
         config_long = round(Config.init_long, 2) # Some of the 3rd party api's/embeds want rounded down.
         render_template(req, resp, 'planning.html', twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes,
                         config_lat=config_lat, config_long=config_long, clear_sky_href=nearest_csc["href"], clear_sky_img_src=nearest_csc["full_img"],
-                        utc_offset = utc_offset, **context)
+                        planning_cards = planning_cards, utc_offset = utc_offset, **context)
 
 
 class StatsResource:
@@ -2267,6 +2318,20 @@ class ToggleUIThemeResource:
             f.write(uitheme)
 
 
+class TogglePlanningCardResource:
+    @staticmethod
+    def on_post(req, resp):
+        PostedForm = req.media
+        card_name = str(PostedForm["card_name"])
+        print(f"#######  {card_name}")
+        # Get current card state
+        current_card_state = get_planning_card_state(card_name)
+        if current_card_state["planning_page_enable"]:
+            update_planning_card_state(card_name, "planning_page_enable", False)
+        else:
+            update_planning_card_state(card_name, "planning_page_enable", True)
+
+
 class UpdateTwilightTimesResource:
     @staticmethod
     def on_post(req, resp):
@@ -2433,6 +2498,7 @@ class FrontMain:
         app.add_route('/simbad', SimbadResource())
         app.add_route('/stellarium', StellariumResource())
         app.add_route('/toggleuitheme', ToggleUIThemeResource())
+        app.add_route('/toggleplanningcard', TogglePlanningCardResource())
         app.add_route('/updatetwilighttimes', UpdateTwilightTimesResource())
         app.add_route('/getbalancesensor', GetBalanceSensorResource())
         app.add_route('/gensupportbundle', GenSupportBundleResource())
