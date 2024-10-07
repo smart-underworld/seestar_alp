@@ -59,6 +59,12 @@
         <div class="col fw-bold">Dec</div>
         <div class="col">{{ state.dec }}</div>
     </div>
+    {% if state.snr %}
+    <div class="row border-bottom py-1 text-start">
+        <div class="col fw-bold">SNR</div>
+        <div class="col">{{ state.snr }}</div>
+    </div>
+    {% endif %}
     {% if state.stats %}
         <div class="row border-bottom py-1 text-start">
             <div class="col fw-bold">Stacked Frames</div>

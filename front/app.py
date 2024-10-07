@@ -1293,6 +1293,7 @@ def get_live_status(telescope_id: int):
             "substage_percent": substage_percent,
             "stats": stats,
             "mode": mode,
+            "snr": imager.snr,
             "lapse_ms": human_ts(pydash.get(dev.view_state, "lapse_ms")),
             "ra": dev.ra,
             "dec": dev.dec,
@@ -1711,19 +1712,25 @@ class LivePage:
         context = get_context(telescope_id, req)
         now = datetime.now()
         match mode:
+            case 'moon':
+                render_template(req, resp, 'live_moon.html', now=now, **context)
+
+            case 'planet':
+                render_template(req, resp, 'live_planet.html', now=now, **context)
+
             case 'scenery':
                 render_template(req, resp, 'live_scenery.html', now=now, **context)
-
-            case 'moon':
-                render_template(req, resp, 'live_mode.html', now=now, **context)
 
             case 'star':
                 render_template(req, resp, 'live_star.html', now=now, **context)
 
+            case 'sun':
+                render_template(req, resp, 'live_sun.html', now=now, **context)
+
             case _:
                 # If status has a view mode, redirect first
                 current_mode = status.get('View', {}).get('mode', {})
-                if current_mode in ["moon", "star", "scenery"]:
+                if current_mode in ["moon", "planet", "scenery", "star", "sun"]:
                     redirect(f"/{telescope_id}/live/{current_mode}")
                 else:
                     render_template(req, resp, 'live.html', now=now, **context)
