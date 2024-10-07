@@ -56,8 +56,9 @@ name = "Seestar Alpha"
 # ip_address should not have to be changed unless you have more than 1 seestar
 ip_address = "seestar.local"
 device_num = 1
-scope_aim_lat = 60          # start up latitude in degrees -90 to 80 (override default)
-scope_aim_lon = 20          # start up longitude in degrees 0 to 360 (override default)
+# You can specify the following settings to override those found in the seestar_initialization section on a per-device level
+#scope_aim_lat = 60          # start up latitude in degrees -90 to 80 (override default)
+#scope_aim_lon = 20          # start up longitude in degrees 0 to 360 (override default)
 
 #[[seestars]]
 #name = "Seestar Beta"
