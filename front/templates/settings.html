@@ -25,7 +25,7 @@
                             </th>
                             {% if value == true or value == false %}
                                 <td>
-                                    {% if value == true%}
+                                    {% if value == true %}
                                         <input type="radio" id="{{ key }}_enable" name="{{ key }}" value="{{ value }}" checked>
                                         <label for="{{ key }}_enable">Enable</label>
                                         <input type="radio" id="{{ key }}_disable" name="{{ key }}" value="false">
@@ -43,10 +43,17 @@
                                     <div id="cfHelp" class="form-text">C/F</div>
                                 </td>
                             {% elif value is number %}
-                                <td>
-                                    <input type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" required aria-describedby="numberHelp">
-                                    <div id="numberHelp" class="form-text">Numbers Only</div>
-                                </td>
+                                {% if key == "exp_ms_stack_l" %}
+                                    <td>
+                                        <input type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" min="10" max="65000" required aria-describedby="numberHelp">
+                                        <div id="numberHelp" class="form-text">Numbers Only (10ms-65000ms)</div>
+                                    </td>
+                                {% else %}
+                                    <td>
+                                        <input type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" required aria-describedby="numberHelp">
+                                        <div id="numberHelp" class="form-text">Numbers Only</div>
+                                    </td>
+                                {% endif %}
                             {% else %}
                                 <td><input type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}" required></td>
                             {% endif %}
