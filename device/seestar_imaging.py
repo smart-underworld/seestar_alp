@@ -11,17 +11,13 @@ import datetime
 import socket
 import threading
 import zipfile
-import PIL
 from io import BytesIO
 from struct import unpack, calcsize
 from time import sleep, time
-import sys
-import os
 from astropy.io import fits
-from skimage import exposure, img_as_float32, io
-from skimage.util import img_as_uint
-from PIL import Image, ImageEnhance
-from flask import Flask, render_template, Response
+from skimage import exposure, img_as_float32
+from PIL import ImageEnhance
+from flask import Flask, Response
 import numpy as np
 import cv2
 from blinker import signal
@@ -30,7 +26,8 @@ import sys
 
 from device import log
 from device.rtspclient import RtspClient
-from device.stretch import stretch, StretchParameters
+from imaging.snr import calculate_snr_auto
+from imaging.stretch import stretch, StretchParameters
 from device.config import Config
 
 
@@ -91,6 +88,9 @@ class SeestarImaging:
         self.eventbus = signal(f"{device_name}.eventbus")
         self.eventbus.connect(self.event_handler)
         self.BOUNDARY = b'\r\n--frame\r\n'
+
+        # Star imaging metrics
+        self.snr = None
 
         # Metrics
         self.last_stat_time = None
@@ -203,7 +203,10 @@ class SeestarImaging:
 
             now = int(time())
             with self.lock:
-                if self.last_live_view_time is not None:
+                # Check to see if it is time to shut down imaging system.  If we are
+                #   saving frames, we do _not_ want to shut down imaging.
+                # xxx double check that we're in preview mode too...
+                if self.last_live_view_time is not None and not Config.save_frames:
                     # xxx perhaps also check stats?
                     elapsed = now - self.last_live_view_time
                     # print(f"Elapsed time since last frame send: {elapsed}")
@@ -595,6 +598,7 @@ class SeestarImaging:
 
     def get_image(self, exposure_mode):
         image = None
+        snr_value = None
         match exposure_mode:
             case "stream":
                 # print starting RTSP stream...
@@ -610,6 +614,7 @@ class SeestarImaging:
                 if self.raw_img is not None:
                     try:
                         image = self.get_star_preview()
+                        snr_value = calculate_snr_auto(image)
                         image = self.image_stretch_graxpert(image)
                         # image = np.uint8(np.clip(image, 0, 255))
                         # image = cv2.fastNlMeansDenoisingColored(image,None,10,10,7,21)
@@ -622,7 +627,7 @@ class SeestarImaging:
                         image = None
                 delay = 0.5
 
-        return image, delay
+        return image, delay, snr_value
 
     def build_frame_bytes(self, image):
         font = cv2.FONT_HERSHEY_COMPLEX
@@ -660,7 +665,7 @@ class SeestarImaging:
         # - https://issues.chromium.org/issues/40277613 "multipart/x-mixed-replace no longer working reliably" from 2012!
         yield b'\r\n--frame\r\n'
         if self.raw_img is not None and self.exposure_mode is not None:
-            image, _ = self.get_image(self.exposure_mode)
+            image, _, _ = self.get_image(self.exposure_mode)
             frame = self.build_frame_bytes(image)
             yield frame
             yield frame
@@ -673,7 +678,7 @@ class SeestarImaging:
 
         while not self.is_idle():
             exposure_mode = self.compare_set_exposure_mode()
-            image, delay = self.get_image(exposure_mode)
+            image, delay, snr = self.get_image(exposure_mode)
 
             if image is not None:
                 try:
@@ -696,6 +701,7 @@ class SeestarImaging:
                             self.last_stat_frames = self.sent_frame
 
                         self.last_frame = self.received_frame
+                        self.snr = snr
 
                         yield frame
                         if not self.is_gazing:
