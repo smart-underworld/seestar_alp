@@ -233,7 +233,8 @@ class DeviceMain:
         telescope.start_seestar_federation(logger)
 
         for dev in Config.seestars:
-            controller = telescope.start_seestar_device(logger, dev['name'], dev['ip_address'], 4700, dev['device_num'])
+            is_EQ_mode = dev.get('is_EQ_mode', Config.is_EQ_mode)
+            controller = telescope.start_seestar_device(logger, dev['name'], dev['ip_address'], 4700, dev['device_num'], is_EQ_mode)
             telescope.start_seestar_imaging(logger, dev['name'], dev['ip_address'], 4800, dev['device_num'], controller)
             telescope.start_seestar_logcollector(logger, dev['name'], dev['ip_address'], 4801, dev['device_num'], controller)
 

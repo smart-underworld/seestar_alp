@@ -221,7 +221,8 @@ class PropertyResponse():
             self.Value = value
             logger.debug(f'{req.remote_addr} <- {str(value)}')
         self.ErrorNumber = err.number
-        self.ErrorMessage = err.message
+        if "message" in err.__dict__:
+            self.ErrorMessage = err.message
 
     @property
     def json(self) -> str:

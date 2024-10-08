@@ -26,15 +26,18 @@ class Seestar:
         return super().__new__(cls)
 
     # <ip_address> <port> <device name> <device num>
-    def __init__(self, logger, host, port, device_name, device_num, is_debug=False):
+    def __init__(self, logger, host, port, device_name, device_num, is_EQ_mode, is_debug=False):
         logger.info(
-            f"Initialize the new instance of Seestar: {host}:{port}, name:{device_name}, num:{device_num}, is_debug:{is_debug}")
+            f"Initialize the new instance of Seestar: {host}:{port}, name:{device_name}, num:{device_num}, is_EQ_mode:{is_EQ_mode}, is_debug:{is_debug}")
 
         self.host = host
         self.port = port
         self.device_name = device_name
         self.device_num = device_num
         self.cmdid = 10000
+        self.site_latitude = Config.init_lat
+        self.site_longitude = Config.init_long
+        self.site_elevation = 0
         self.ra = 0.0
         self.dec = 0.0
         self.is_watch_events = False  # Tracks if device has been started even if it never connected
@@ -45,9 +48,6 @@ class Seestar:
         self.response_dict = {}
         self.logger = logger
         self.is_connected = False
-        self.site_elevation = 0
-        self.site_latitude = 0
-        self.site_longitude = 0
         self.is_slewing = False
         self.target_dec = 0
         self.target_ra = 0
@@ -69,13 +69,14 @@ class Seestar:
         self.cur_mosaic_nDec = -1
         self.connect_count = 0
         self.below_horizon_dec_offset = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
+        self.safe_dec_for_offset = 10.0     # declination angle in degrees as the lower limit for dec values before below_horizon logic kicks in
         self.custom_goto_state = "stopped" # for custom goto logic used by below_horizon 
         self.view_state = {}
         self.event_state = {}
         # self.event_queue = queue.Queue()
         self.event_queue = collections.deque(maxlen=20)
         self.eventbus = signal(f'{self.device_name}.eventbus')
-        self.is_EQ_mode = False
+        self.is_EQ_mode = is_EQ_mode
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
@@ -288,8 +289,14 @@ class Seestar:
     def send_message_param_sync(self, data):
         is_shutdown = False
         if data['method'] == 'pi_shutdown' or data['method'] == 'pi_reboot':
-            self.reset_below_horizon_dec_offset()
+            result = self.reset_below_horizon_dec_offset()
             is_shutdown = True
+            response = self.send_message_param_sync({"method":"scope_park"})
+            self.logger.info(f"Parking before shutdown...{response}")
+            self.event_state["ScopeHome"] = {"state":"working"}
+            result = self.wait_end_op("ScopeHome")
+            self.logger.info(f"Parking result...{result}")            
+            self.logger.info(f"About to send shutdown or reboot command to Seestar...{response}")
         cur_cmdid = self.send_message_param(data)
         if is_shutdown:
             return
@@ -346,6 +353,12 @@ class Seestar:
                 return "Stop requested."
         return "goto stopped already: no action taken"
 
+    def reset_goto_status(self):
+        if self.below_horizon_dec_offset == 0:
+            self.event_state["AutoGoto"] = {"state":"working"}
+        else:
+            self.event_state["ScopeGoto"] = {"state":"working"}
+
     def is_goto(self):
         try:
             if self.below_horizon_dec_offset == 0:
@@ -378,20 +391,22 @@ class Seestar:
         target_name = params.get("target_name", "unknown")
         self.logger.info("%s: going to target... %s %s %s, with dec offset %s", self.device_name, target_name, in_ra,
                          in_dec, self.below_horizon_dec_offset)
-        
+        result = True
         if self.is_EQ_mode:
             if in_dec < -Config.init_lat:
                 msg = f"Failed. You tried to geto to a target [ {in_ra}, {in_dec} ] that seems to be too low for your location at lat={Config.init_lat}"
                 self.logger.warn(msg)
                 return msg
-            dec_offset_safety_angle_degree = 5.0
-            safe_dec_offset = -in_dec+dec_offset_safety_angle_degree
+
+            safe_dec_offset = -in_dec+self.safe_dec_for_offset
             if safe_dec_offset > self.below_horizon_dec_offset:
-                self.set_below_horizon_dec_offset(safe_dec_offset)
+                result = self.set_below_horizon_dec_offset(safe_dec_offset, in_dec)
 
-            elif self.below_horizon_dec_offset > 0 and in_dec > dec_offset_safety_angle_degree:
-                self.reset_below_horizon_dec_offset()
-
+            elif self.below_horizon_dec_offset > 0 and in_dec > self.safe_dec_for_offset:
+                result = self.reset_below_horizon_dec_offset()
+        if result != True:
+            return "Failed to goto target!"
+        
         if self.below_horizon_dec_offset == 0:
             data = {}
             data['method'] = 'iscope_start_view'
@@ -411,8 +426,7 @@ class Seestar:
     def _slew_to_ra_dec(self, params):
         in_ra = params[0]
         in_dec = params[1]
-        self.logger.info("%s: slew to ra, dec ... %s %s, with dec_offset of %s", self.device_name, in_ra, in_dec,
-                         self.below_horizon_dec_offset)
+        self.logger.info(f"{self.device_name}: slew to {in_ra}, {in_dec} with dec_offset of {self.below_horizon_dec_offset}"                         )
         if self.is_goto():
             self.logger.info("Failed: mount is in goto routine.")
             return "Failed: mount is in goto routine."
@@ -424,65 +438,87 @@ class Seestar:
         if 'error' in result:
             self.logger.warn("Error while trying to move: %s", result)
             return False
+        
+        self.reset_goto_status()
+
         # wait till movement is finished
         time.sleep(2)
+        self.logger.info(f"current event state: {self.event_state}")
         while self.is_goto():
             if self.scheduler_state == "Stopping":
                 return False
             time.sleep(2)
         return True
 
-    def set_below_horizon_dec_offset(self, offset):
+    def set_below_horizon_dec_offset(self, offset, target_dec):
         if offset <= 0:
-            msg = "Failed: offset must be greater or equal to 0."
-            self.logger.info(msg)
-            return msg  
+            msg = f"Failed: offset must be greater or equal to 0: {offset}"
+            self.logger.warn(msg)
+            return False  
         if self.is_goto():
-            msg = "Failed to set offset. Mount is moving. No action taken."
-            self.logger.info(msg)
-            return msg  
+            msg = f"Failed to set offset {offset}. Mount is moving. No action taken."
+            self.logger.warn(msg)
+            return False  
         
-#        if self.below_horizon_dec_offset != 0:
-#            msg = "Failed to set below horizon offset because the device already has an offset. Need to reset it first."
-#            self.logger.info(msg)
-#            return msg
-          
+        if self.below_horizon_dec_offset == 0 and offset > 90-self.site_latitude:
+            msg = f"Cannot set dec offset too high: {offset}. It should be less than 90 - <your lattitude>."
+            self.logger.warn(msg)
+            return False         
+             
+        # we cannot fake the position too high, so we may need to move the scope down first
+        if self.dec + offset > 70.0:
+            # a hack to just use force below_horizon_dec_offset flow if it is not already
+            if self.below_horizon_dec_offset == 0:
+                self.below_horizon_dec_offset = 0.01
+
+            if not self.reset_below_horizon_dec_offset():
+                self.logger.warn(f"Failed to reset dec offset before applying a large offset  of {self.dec + offset}")
+                return False
+            offset = -target_dec + self.safe_dec_for_offset
+            #time.sleep(5)
+
         old_dec = self.dec
         self.below_horizon_dec_offset = offset
         result = self.sync_target([self.ra, old_dec])
         if 'error' in result:
             self.below_horizon_dec_offset = 0
             self.sync_target([self.ra, old_dec])
-            self.logger.info(result)
-            self.logger.info("Failed to set dec offset. Move the mount up first?")
-        return result
+            self.logger.warn(result)
+            self.logger.warn("Failed to set dec offset. Move the mount up first?")
+            return False
+        return True
 
     def reset_below_horizon_dec_offset(self):
         if self.below_horizon_dec_offset == 0:
             msg = "No offset was active. No action taken."
             self.logger.info(msg)
-            return msg  
+            return True  
         if self.is_goto():
-            self.logger.info("Failed: mount is in goto routine.")
-            return "Failed to reset: mount is in goto routine."
+            self.logger.warn("Failed: mount is in goto routine.")
+            return False
         
         old_ra = self.ra
         old_dec = self.dec
         old_offset = self.below_horizon_dec_offset
 
-        self.logger.info(f"starting to reset dec offset from [{old_ra}, {old_dec}]")
-        new_dec = 5.0       # 5 degree above celestrial horizon
+        self.logger.info(f"starting to reset dec offset from [{old_ra}, {old_dec}], with below_horizon_dec_offset of {self.below_horizon_dec_offset}")
+        new_dec = self.safe_dec_for_offset       # 5 degree above celestrial horizon
         self.logger.info(f"slew to {old_ra}, {new_dec}")
         result = self._slew_to_ra_dec([old_ra, new_dec]) # dec was already offset
         if result == True:
-            time.sleep(10)
+            #time.sleep(10)
             self.below_horizon_dec_offset = 0
-            self.logger.info(f"syncing to {old_ra}, {5.0}")
-            response = self.sync_target([old_ra, 5.0])
-            return response
+            self.logger.info(f"syncing to {old_ra}, {new_dec}")
+            response = self.sync_target([old_ra, new_dec])
+            self.logger.info(f"response from synC: {response}")
+            if "error" in response:
+                return False
+            else:
+                time.sleep(2)
+                return True
         else:
             self.logger.error("Failed to move back from the offset!")
-            return "Failed to move back from the offset!"
+            return False
 
 
     def sync_target(self, params):
@@ -498,7 +534,9 @@ class Seestar:
         data['params'] = [in_ra, in_dec + self.below_horizon_dec_offset]
         result = self.send_message_param_sync(data)
         if 'error' in result:
-            self.logger.info("Failed to sync: %s", result)
+            self.logger.info(f"Failed to sync: {result}")
+        else:
+            sleep(2)
         return result
 
     def stop_slew(self):
@@ -897,11 +935,9 @@ class Seestar:
             
             lat = Config.scope_aim_lat
             lon = Config.scope_aim_lon
-            self.is_EQ_mode = Config.is_EQ_mode
 
             lat = device.get('scope_aim_lat', lat)   
             lon = device.get('scope_aim_lon', lon)
-            self.is_EQ_mode = device.get('is_EQ_mode', self.is_EQ_mode)
             self.below_horizon_dec_offset = 0
 
             if lon < 0:
@@ -1420,7 +1456,7 @@ class Seestar:
         self.logger.info("Scheduler Stopped.")
         self.play_sound(82)
         if issue_shutdown:
-            self.json_message("pi_shutdown")
+            self.send_message_param_sync({"method":"pi_shutdown"})
 
     def stop_scheduler(self, params):
         if 'schedule_id' in params and self.schedule['schedule_id'] != params['schedule_id']:
