@@ -4,7 +4,6 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}{% endblock %} - SSC</title>
-    <link href="/public/bootstrap.min.css" rel="stylesheet">
     {#    <link href="/public/xterm.css" rel="stylesheet">#}
     <script src="/public/htmx.min.js"></script>
     <script src="/public/sse.js"></script>
@@ -12,6 +11,7 @@
     {#    <script src="/public/liveview.js"></script>#}
     {#    <script src="/public/xterm.js"></script>#}
     <link rel="icon" type="image/x-icon" href="/public/favicon.ico">
+    <link href="/public/bootstrap.min.css" rel="stylesheet">
     {% block html_header %}{% endblock %}
 </head>
 <body>
@@ -31,7 +31,12 @@
         {% block content %}{% endblock %}
     </section>
 </main>
+
 <script src="/public/bootstrap.bundle.min.js"></script>
 <script src="/public/main.js"></script>
+
+{% block scripts %}
+{% endblock %}
+
 </body>
 </html>

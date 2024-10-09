@@ -30,53 +30,6 @@
     </div>
 </div>
 
-<script>
-var currentForm;
-
-function showModal(event, form) {
-    event.preventDefault(); // Prevent the default form submission
-
-    // Clear the output card content
-    var outputAlert = document.getElementById('outputAlert');
-	if (outputAlert) {
-		outputAlert.innerHTML = ''; // Clear the output content
-	}
-    currentForm = form; // Store the current form reference
-
-    var dropdown = form.querySelector('select[name="command"]');
-    var commandInput = form.querySelector('input[name="command"]');
-
-    var selectedText;
-
-    // Determine the selected command text
-    if (dropdown) {
-        selectedText = dropdown.options[dropdown.selectedIndex].text;
-    } else if (commandInput && commandInput.value === "start_up_sequence") {
-        selectedText = "Start-Up Sequence";
-    } else {
-        selectedText = "Command Execution";
-    }
-
-    document.getElementById('selectedCommandText').textContent = selectedText;
-
-    // Show the modal only if confirm is true
-    if ({{ confirm|tojson }}) {
-        var modal = new bootstrap.Modal(document.getElementById('confirmationModal'));
-        modal.show();
-
-        // Handle confirmation button click
-        document.getElementById('confirmButton').onclick = function() {
-            modal.hide(); // Hide the modal
-            currentForm.submit(); // Submit the form
-        };
-    } else {
-        // If confirm is false, submit the form directly
-        currentForm.submit();
-    }
-}
-</script>
-
-
  <div class="container">
 	<div class="row">
 		<div class="col-md-6 border border-primary">
