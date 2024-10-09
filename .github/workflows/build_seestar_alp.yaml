@@ -30,7 +30,7 @@ jobs:
       - name: run pyinstaller for seestar_alp
         id: create_seestar_alp
         run: |
-          git describe HEAD --tags > ./version.txt
+          git describe --tags --always --dirty > ./version.txt
           pyinstaller --name="seestar_alp" `
           --add-data="device/config.toml.example;." --add-data="./version.txt;." --add-data="front/citation;astroquery" --add-data="front/templates;front/templates" --add-data="front/public;front/public" `
           --add-data="front/csc_sites.json;." `
@@ -38,6 +38,7 @@ jobs:
           root_app.py
           Compress-Archive -Path ./dist/seestar_alp/* -DestinationPath win_seestar_alp.zip
           echo "device_script_result=win_seestar_alp.zip" >> $env:GITHUB_ENV
+          echo "device_script_version=$(git describe --tags --always --dirty)" >> $env:GITHUB_ENV
         shell: pwsh  
   
       - name: Display Result
@@ -45,10 +46,10 @@ jobs:
         shell: pwsh
 
       - name: Upload Result as Asset
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
         with:
-          files: ${{ env.device_script_result }}
+          name: SeeStarAlp-windows-${{ env.device_script_version }}
+          path: ${{ env.device_script_result }}
         
 
 
@@ -73,7 +74,7 @@ jobs:
       - name: run pyinstaller for device
         id: create_device
         run: |
-          git describe HEAD --tags > ./version.txt
+          git describe --tags --always --dirty > ./version.txt
           pyinstaller --name="seestar_alp" \
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
           --add-data="front/csc_sites.json:." \
@@ -82,17 +83,18 @@ jobs:
           cd dist
           zip -r ../linux_seestar_alp.zip  ./seestar_alp/*
           echo "device_script_result=linux_seestar_alp.zip" >> $GITHUB_ENV
+          echo "device_script_version=$(git describe --tags --always --dirty)" >> $GITHUB_ENV
         shell: bash
   
       - name: Display Result
-        run: echo "The script result is ${{ env.device_script_result }}"
+        run: echo "The script result is ${{ env.create_device.device_script_result }}"
         shell: bash
         
       - name: Upload Result as Asset
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
         with:
-          files: ${{ env.device_script_result }}
+          name: SeeStarAlp-linux-${{ env.device_script_version }}
+          path: ${{ env.device_script_result }}
 
 #  build-MacOS:
 #    runs-on: "MacOS-latest"
