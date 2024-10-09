@@ -87,7 +87,7 @@ jobs:
         shell: bash
   
       - name: Display Result
-        run: echo "The script result is ${{ env.create_device.device_script_result }}"
+        run: echo "The script result is ${{ env.device_script_result }}"
         shell: bash
         
       - name: Upload Result as Asset
