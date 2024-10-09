@@ -255,8 +255,8 @@ class Seestar:
                                 self.cur_solve_Dec = parsed_data['result']['ra_dec'][1]
                             elif parsed_data['state'] == 'fail':
                                 self.logger.info("Plate Solve Failed")
-                                self.cur_solve_RA = -1.0
-                                self.cur_solve_Dec = -1.0
+                                self.cur_solve_RA = 0
+                                self.cur_solve_Dec = 0
                         #else:
                         #    self.logger.debug(f"Received event {event_name} : {data}")
 
@@ -286,21 +286,23 @@ class Seestar:
         self.send_message(json_data + "\r\n")
         return cur_cmdid
 
-    def send_message_param_sync(self, data):
-        is_shutdown = False
-        if data['method'] == 'pi_shutdown' or data['method'] == 'pi_reboot':
-            result = self.reset_below_horizon_dec_offset()
-            is_shutdown = True
-            response = self.send_message_param_sync({"method":"scope_park"})
-            self.logger.info(f"Parking before shutdown...{response}")
-            self.event_state["ScopeHome"] = {"state":"working"}
-            result = self.wait_end_op("ScopeHome")
-            self.logger.info(f"Parking result...{result}")            
-            self.logger.info(f"About to send shutdown or reboot command to Seestar...{response}")
+    def shut_down_thread(self, data):
+        result = self.reset_below_horizon_dec_offset()
+        response = self.send_message_param_sync({"method":"scope_park"})
+        self.logger.info(f"Parking before shutdown...{response}")
+        self.event_state["ScopeHome"] = {"state":"working"}
+        result = self.wait_end_op("ScopeHome")
+        self.logger.info(f"Parking result...{result}")            
+        self.logger.info(f"About to send shutdown or reboot command to Seestar...{response}")
         cur_cmdid = self.send_message_param(data)
-        if is_shutdown:
-            return
-        
+
+    def send_message_param_sync(self, data):
+        if data['method'] == 'pi_shutdown' or data['method'] == 'pi_reboot':
+            threading.Thread(name=f"shutdown-thread.{self.device_name}", target=lambda: self.shut_down_thread(data)).start()
+            return {'method': data['method'], 'result': "Sent command async for these types of commands." }
+        else:
+            cur_cmdid = self.send_message_param(data)
+
         start = time.time()
         last_slow = start
         while cur_cmdid not in self.response_dict:
@@ -574,8 +576,10 @@ class Seestar:
         return True
 
     def try_auto_focus(self, try_count):
+        self.logger.info("trying auto_focus...")
         focus_count = 0
         result = False
+        self.event_state["AutoFocus"] = {"state":"working"}
         while focus_count < try_count:
             focus_count += 1
             self.logger.info("%s: focusing try %s of %s...", self.device_name, str(focus_count), str(try_count))
@@ -587,6 +591,7 @@ class Seestar:
                     break
         # give extra time to settle focuser
         time.sleep(2)
+        self.logger.info("auto_focus completed")
         return result
 
     def start_3PPA(self):
@@ -598,8 +603,10 @@ class Seestar:
         return True
     
     def try_3PPA(self, try_count):
+        self.logger.info("trying 3PPA...")
         cur_count = 0
         result = False
+        self.event_state["3PPA"] = {"state":"working"}
         while cur_count < try_count:
             cur_count += 1
             self.logger.info("%s: 3PPA try %s of %s...", self.device_name, str(cur_count), str(try_count))
@@ -648,10 +655,12 @@ class Seestar:
                     break
         # give extra time to settle focuser
         time.sleep(2)
+        self.logger.info("3PPA completed")
         return result
 
     def try_dark_frame(self):
         self.logger.info("start dark frame measurement...")
+        self.event_state["DarkLibrary"] = {"state":"working"}
         result = self.send_message_param_sync({"method": "start_create_dark"})
         if 'error' in result:
             self.logger.error("Faild to start create darks: %s", result)
@@ -773,6 +782,7 @@ class Seestar:
         self.cur_solve_RA = -9999.0
         self.cur_solve_Dec = -9999.0
         self.custom_goto_state = "working"
+        search_count = 0
         while self.scheduler_state != "Stopping" and self.custom_goto_state == "working":
             # wait a bit to ensure we have preview image data
             time.sleep(1)
@@ -784,14 +794,20 @@ class Seestar:
             while self.cur_solve_RA < -1000:
                 if self.scheduler_state == "Stopping" or self.custom_goto_state != "working":
                     self.logger.info("auto center thread stopped because the scheduler was requested to stop")
+                    self.custom_goto_state = "stopped"
                     return
                 time.sleep(1)
-                continue
+
             # if we failed platesolve:
-            if self.cur_solve_RA < 0:
-                self.custom_goto_state = "fail"
-                self.logger.info("auto center failed")
-                return
+            if self.cur_solve_RA == 0 and self.cur_solve_Dec == 0:
+                if search_count > 5:
+                    self.custom_goto_state = "fail"
+                    self.logger.warn(f"auto center failed after {search_count+1} tries.")
+                    return
+                else:
+                    search_count += 1
+                    self.logger.warn(f"Failed to plate solve current position, try # {search_count}. Will try again.")
+                    continue
 
             delta_ra = self.cur_solve_RA - target_ra
             delta_dec = self.cur_solve_Dec - target_dec
@@ -801,9 +817,16 @@ class Seestar:
                 self.custom_goto_state = "complete"
                 self.logger.info("auto center completed")
                 return
-            else:
+            elif search_count <= 7:
                 self.sync_target([self.cur_solve_RA, self.cur_solve_Dec])
                 self._slew_to_ra_dec([target_ra, target_dec])
+                search_count += 1
+                self.logger.warn(f"Failed to get close enough to target, try # {search_count}. Will try again.")
+            else:
+                self.custom_goto_state = "fail"
+                self.logger.warn("auto center failed after {search_count+1} tries.")
+                return
+            
         self.logger.info("auto center thread stopped because the scheduler was requested to stop")
         self.custom_goto_state = "stopped"
         return
@@ -1482,7 +1505,7 @@ class Seestar:
             return self.is_goto_completed_ok()
             
         else:
-            while in_op_name not in self.event_state or self.event_state[in_op_name]["state"] == "working":
+            while in_op_name not in self.event_state or (self.event_state[in_op_name]["state"] != "complete" and self.event_state[in_op_name]["state"] != "fail"):
                 time.sleep(1)
             return self.event_state[in_op_name]["state"] == "complete"
 
