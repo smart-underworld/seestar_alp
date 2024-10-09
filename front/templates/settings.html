@@ -23,9 +23,9 @@
                                 {{ settings_friendly_names[key] }}
                                 <div class="form-text">{{ settings_helper_text[key] }}</div>
                             </th>
-                            {% if value == true or value == false %}
+                            {% if value is true or value is false %}
                                 <td>
-                                    {% if value == true %}
+                                    {% if value is true %}
                                         <input type="radio" id="{{ key }}_enable" name="{{ key }}" value="{{ value }}" checked>
                                         <label for="{{ key }}_enable">Enable</label>
                                         <input type="radio" id="{{ key }}_disable" name="{{ key }}" value="false">
@@ -46,7 +46,7 @@
                                 {% if key == "exp_ms_stack_l" %}
                                     <td>
                                         <input type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" min="5" max="90000" required aria-describedby="numberHelp">
-                                        <div id="numberHelp" class="form-text">Numbers Only (10ms-65000ms)</div>
+                                        <div id="numberHelp" class="form-text">Numbers Only (5ms-90000ms)</div>
                                     </td>
                                 {% else %}
                                     <td>
