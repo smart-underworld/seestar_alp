@@ -112,6 +112,8 @@ Eg:
 
 This is very much still a system under development. Things go wrong.
 
-Most of the developers are responsive on the `#seestar_alp` channel of the `Smart Telescope Underworld` discord server. 
+Most of the developers are responsive on the `#seestar_alp-ask-developers` channel of the `Smart Telescope Underworld` discord server. 
+
+Additional RPi specifics may be foun din the `#seestar_alp-raspberry-pi` channel.
 
 See the [How to get Support](../README.md#how-to-get-support) section of the top-level README.md file for details.

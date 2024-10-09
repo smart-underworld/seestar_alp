@@ -27,12 +27,10 @@ import subprocess
 import platform
 import shutil
 import signal
+import math
+import numpy as np
 
 from skyfield.api import load
-
-
-# if not getattr(sys, "frozen", False):  # if we are not running from a bundled app
-#    sys.path.append(os.path.join(os.path.dirname(__file__), "../device"))
 
 from device.seestar_logs import SeestarLogging
 from device.config import Config  # type: ignore
@@ -40,6 +38,7 @@ from device.log import init_logging, get_logger  # type: ignore
 from device.version import Version # type: ignore
 from device import telescope
 import threading
+import pydash
 
 logger = init_logging()
 
@@ -68,7 +67,6 @@ def get_listening_ip():
 
 
 base_url = "http://" + get_listening_ip() + ":" + str(Config.port)
-stellarium_url = 'http://' + str(Config.sthost) + ':' + str(Config.stport) + '/api/objects/info'
 simbad_url = 'https://simbad.cds.unistra.fr/simbad/sim-id?output.format=ASCII&obj.bibsel=off&Ident='
 messages = []
 online = None
@@ -269,6 +267,55 @@ def get_twilight_times():
     return twilight_times
 
 
+def get_planning_cards():
+    if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+        card_state_file_location = os.path.abspath(os.path.join(sys._MEIPASS, "planning.json"))
+    else:
+        card_state_file_location = os.path.join(os.path.dirname(__file__), "planning.json")
+
+    with open(card_state_file_location, 'r') as card_state_file:
+        state_data = json.load(card_state_file)
+        return state_data
+
+
+def get_planning_card_state(card_name):
+    # Get's the state of a card via planning.json
+    if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+        planning_state_file_location = os.path.abspath(os.path.join(sys._MEIPASS, "planning.json"))
+    else:
+        planning_state_file_location = os.path.join(os.path.dirname(__file__), "planning.json")
+
+    with open(planning_state_file_location, 'r') as planning_state_file:
+        state_data = json.load(planning_state_file)
+
+    for card in state_data:
+        #print (card['card_name'])
+        if card['card_name'] == card_name:
+            return card
+
+
+def update_planning_card_state(card_name, var, value):
+    # Update planning.json with current card state
+    if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+        planning_state_file_location = os.path.abspath(os.path.join(sys._MEIPASS, "planning.json"))
+    else:
+        planning_state_file_location = os.path.join(os.path.dirname(__file__), "planning.json")
+
+    with open(planning_state_file_location, 'r') as planning_state_file:
+        state_data = json.load(planning_state_file)
+
+    for card in state_data:
+        if card['card_name'] == card_name:
+            if var in card:
+                card[var] = value
+                break
+            else:
+                logger.info(f"Planning Card: Variable '{var}' not found in card {card}.")
+
+    with open(planning_state_file_location, 'w') as planning_state_file:
+        json.dump(state_data, planning_state_file, indent=4)
+
+
 def check_api_state(telescope_id):
     if telescope_id == 0:
         return True
@@ -392,6 +439,7 @@ def method_sync(method, telescope_id=1, **kwargs):
         return results
     return None
 
+
 def get_device_state(telescope_id):
     if check_api_state(telescope_id):
         # print("Device is online", telescope_id)
@@ -410,17 +458,19 @@ def get_device_state(telescope_id):
         target = ""
         stacked = ""
         failed = ""
-        if status is not None and status.get("View"):
-            view_state = status["View"]["state"]
-            mode = status["View"]["mode"]
-            if view_state == "working":
-                stage = status["View"]["stage"]           
-                if stage == "Stack":
-                    if status["View"]["Stack"]["state"] == "working":
-                        target = status.get("View", {}).get("target_name", "")
-                        stacked = status.get("View", {}).get("stacked_frame", "")
-                        failed = status.get("View", {}).get("dropped_frame", "")
-                 
+        if status is not None:
+            view_info = status.get("View", {})
+            view_state = view_info.get("state", "Idle")
+            mode = view_info.get("mode", "")
+    
+            target = view_info.get("target_name", "")
+            stage = view_info.get("stage", "")
+            stack_info = view_info.get("Stack", {})
+    
+            if stack_info.get("state") == "working":
+                stacked = stack_info.get("stacked_frame", "")
+                failed = stack_info.get("dropped_frame", "")
+                
         # Check for bad data
         if status is not None and result is not None:
             schedule = do_action_device("get_schedule", telescope_id, {})
@@ -440,23 +490,23 @@ def get_device_state(telescope_id):
                 else:
                     wifi_signal = f"Unavailable in AP mode."
             stats = {
-                "Firmware Version": device["firmware_ver_string"],
-                "Focal Position": focuser["step"],
-                "Auto Power Off": settings["auto_power_off"],
-                "Heater?": settings["heater_enable"],
+                "Firmware Version": device.get("firmware_ver_string",""),
+                "Focal Position": focuser.get("step",""),
+                "Auto Power Off": settings.get("auto_power_off",""),
+                "Heater?": settings.get("heater_enable",""),
                 "Free Storage": free_storage,
-                "Balance Sensor (angle)": result["balance_sensor"]["data"]["angle"],
-                "Compass Sensor (direction)": result["compass_sensor"]["data"]["direction"],
-                "Temperature Sensor": pi_status["temp"],
-                "Charge Status": pi_status["charger_status"],
-                "Battery %": pi_status["battery_capacity"],
-                "Battery Temp": pi_status["battery_temp"],
-                "Scheduler Status": schedule["Value"]["state"],
+                "Balance Sensor (angle)": result.get("balance_sensor",{}).get("data",{}).get("angle"),
+                "Compass Sensor (direction)": result.get("compass_sensor",{}).get("data",{}).get("direction"),
+                "Temperature Sensor": pi_status.get("temp",""),
+                "Charge Status": pi_status.get("charger_status",""),
+                "Battery %": pi_status.get("battery_capacity",""),
+                "Battery Temp": pi_status.get("battery_temp",""),
+                "Scheduler Status": schedule.get("Value",{}).get("state"),
                 "View State": view_state,
                 "View Mode": mode,
                 "View Stage": stage,
                 "Target Name": target,
-                "Succesful Frames": stacked,
+                "Successful Frames": stacked,
                 "Failed Frames": failed,
                 "Wi-Fi Signal": wifi_signal,
             }
@@ -560,6 +610,7 @@ def check_dec_value(decString):
     ]
     return any(re.search(pattern, decString) for pattern in valid)
 
+
 def hms_to_sec(timeString):
     hms_search = re.search(r"^(?!\s*$)\s*(?:(\d+)\s*h\s*)?(?:(\d+)\s*m\s*)?(?:(\d+)\s*s)?\s*$", timeString.lower())
 
@@ -580,7 +631,95 @@ def hms_to_sec(timeString):
         return seconds
     else:
         return timeString
-    
+
+
+def lat_lng_distance_in_km(lat1, lng1, lat2, lng2):
+    """
+    Based off of https://github.com/BGCastro89/nearest_csc
+    """
+    """Calculate distance between two latitude-longitide points on sphere in kilometres.
+
+    args: Float lat/lng for two points on Earth
+    returns: Float representing distance in kilometres
+    """
+    R = 6371 # Earth Radius in kilometres (assume perfect sphere)
+
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    d_phi = math.radians(lat2-lat1)
+    d_lambda = math.radians(lng2-lng1)
+
+    a = math.sin(d_phi/2) * math.sin(d_phi/2) + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda/2) * math.sin(d_lambda/2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    d = R * c
+
+    return round(d,1) # Assume Accurate within ~0.1km due to Idealized Sphere Earth
+
+
+def get_nearest_csc():
+    """
+    Based off of https://github.com/BGCastro89/nearest_csc
+    """
+    """Nearest Clear Sky Chart from A. Danko's site: https://www.cleardarksky.com/
+
+    All 5000+ sities are binned by 1x1 degree lat/lng. Only check the
+    distance to sites within current bin +/- 1 degree, searching 9 bins total.
+
+    args: request object w/ args for lat/lng
+    returns: String, either with json representation of nearest site information or an error message
+    """
+
+    lat = Config.init_lat
+    lng = Config.init_long
+
+    if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+        csc_file = os.path.abspath(os.path.join(sys._MEIPASS, "csc_sites.json"))
+    else:
+        csc_file = os.path.join(os.path.dirname(__file__), "./csc_sites.json")
+
+    closest_site = {}
+
+    # Get list of all csc site locations
+    with open(csc_file, 'r') as f:
+        data = json.load(f)
+        nearby_csc = []
+
+        # Get list of all sites within same or adjacent 1 degree lat/lng bin
+        try:
+            for x in range(-1,2):
+                for y in range(-1,2):
+                    lat_str = str(int(lat)+x)
+                    lng_str = str(int(lng)+y)
+                    if lat_str in data:
+                        if lng_str in data[lat_str]:
+                            sites_in_bin = data[lat_str][lng_str]
+                            for site in sites_in_bin:
+                                nearby_csc.append(site)
+        except:
+            # API returns error
+            closest_site = {'status_msg': "ERROR parsing coordinates or reading from list of CSC sites"}
+
+        curr_closest_km = 1000
+
+        # Find the closest site in Clear Dark Sky database within bins
+        for site in nearby_csc:
+            dist = lat_lng_distance_in_km(lat, lng, site["lat"], site["lng"])
+
+            if dist < curr_closest_km:
+                curr_closest_km = dist
+                closest_site = site
+
+        # Grab site url and return site data if within 100 km
+        if curr_closest_km < 1000:
+            closest_site['status_msg'] = "SUCCESS"
+            closest_site['dist_km'] = curr_closest_km
+            closest_site['full_img'] = "https://www.cleardarksky.com/c/"+closest_site['id']+"csk.gif"
+            closest_site['mini_img'] = "https://www.cleardarksky.com/c/"+closest_site['id']+"cs0.gif"
+            closest_site['href'] = "https://www.cleardarksky.com/c/"+closest_site['id']+"key.html"
+        else: 
+            closest_site = {'status_msg': "No sites within 100 km. CSC sites are only available in the Continental US, Canada, and Northern Mexico"}
+
+        return closest_site
 
 
 def do_create_mosaic(req, resp, schedule, telescope_id):
@@ -689,6 +828,7 @@ def do_create_image(req, resp, schedule, telescope_id):
         logger.info("POST immediate request %s %s", values, response)
 
     return values, errors
+
 
 def do_goto_target(req, resp, schedule, telescope_id):
     form = req.media
@@ -865,6 +1005,7 @@ def do_command(req, resp, telescope_id):
             logger.warn("No command found: %s", value)
     # print ("Output: ", output)
 
+
 def do_support_bundle(req, telescope_id = 1):
     zip_buffer = io.BytesIO()
     desc = req.media["desc"]
@@ -978,14 +1119,19 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
         twilight_times = get_twilight_times()
     else:
         twilight_times = {}
+    
+    nearest_csc = get_nearest_csc()
+    if nearest_csc["status_msg"] != "SUCCESS":
+        nearest_csc["href"] = ""
+        nearest_csc["full_img"] = ""
 
     context = get_context(telescope_id, req)
     render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values,
-                    twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes, clear_sky_href=Config.clear_sky_href, clear_sky_img_src=Config.clear_sky_img_src,
+                    twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes, cleardarksky_enabled=Config.cleardarksky, clear_sky_href=nearest_csc["href"], clear_sky_img_src=nearest_csc["full_img"],
                     **context)
 
 
-FIXED_PARAMS_KEYS = ["action", "local_time", "timer_sec", "try_count", "target_name", "is_j2000", "ra", "dec", "is_use_lp_filter",
+FIXED_PARAMS_KEYS = ["local_time", "timer_sec", "try_count", "target_name", "is_j2000", "ra", "dec", "is_use_lp_filter",
                      "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus", "heater", "nokey", "selected_panels"]
 
 
@@ -1020,7 +1166,7 @@ def export_schedule(telescope_id):
                 row[key] = entry['params'].get(key, '')
         else:
             # If 'params' key is missing, ensure all fixed params are empty
-            row['nokey'] = entry['params']
+            row['nokey'] = entry.get('params', '')
         writer.writerow(row)
 
     output.seek(0)
@@ -1035,7 +1181,7 @@ def import_schedule(input, telescope_id):
     for line in input:
         fields = line.split(',')
         
-        fixed_params_length = len(FIXED_PARAMS_KEYS)
+        fixed_params_length = len(FIXED_PARAMS_KEYS) + 1
         # Check if the line has the expected number of fields
         if len(fields) != fixed_params_length:
             logger.warn(f"Skipping bad line: Line has {len(fields)} fields, expected {fixed_params_length}")
@@ -1085,6 +1231,116 @@ def import_schedule(input, telescope_id):
             case '_':
                 pass
 
+def get_live_status(telescope_id: int):
+    dev = telescope.get_seestar_device(telescope_id)
+    imager = telescope.get_seestar_imager(telescope_id)
+    template = fetch_template("live_status.html")
+
+    previous_state = pydash.get(dev.view_state, "state")
+    previous_stage = pydash.get(dev.view_state, "stage")
+    previous_mode = pydash.get(dev.view_state, "mode")
+
+    def human_ts(elapsed):
+        if elapsed is None:
+            return ""
+        return str(timedelta(milliseconds=elapsed))[:-3]
+
+    while True:
+        imager.update_live_status()
+        method_sync('get_view_state', telescope_id, id=42)
+        # print("event_state", dev.event_state)
+        # print("view_state", dev.view_state)
+        substage = None
+        substage_count = None
+        substage_elapsed = None
+        substage_position = None
+        substage_percent = None
+        stats = None
+        state = pydash.get(dev.view_state, "state")
+        stage = pydash.get(dev.view_state, "stage")
+        mode = pydash.get(dev.view_state, "mode")
+        stack = pydash.get(dev.view_state, "Stack")
+
+        changed = previous_stage != stage or previous_mode != mode or previous_state != state
+        previous_stage = stage
+        previous_mode = mode
+        previous_state = state
+
+        if stage:
+            substage = pydash.get(dev.view_state, f"{stage}.stage")
+            substage_count = pydash.get(dev.view_state, f"{stage}.count")
+            substage_elapsed = human_ts(pydash.get(dev.view_state, f"{stage}.lapse_ms"))
+            substage_position = pydash.get(dev.view_state, f"{stage}.position")
+            substage_percent = pydash.get(dev.view_state, f"{stage}.percent")
+            # print("stage", stage, substage, dev.view_state.get(stage))
+
+        if stack:
+            stats = {
+                "gain": stack.get("gain"),
+                "stacked_frame": stack.get("stacked_frame"),
+                "dropped_frame": stack.get("dropped_frame"),
+                "elapsed": human_ts(stack["lapse_ms"]),
+            }
+
+        response = {
+            "target_name": pydash.get(dev.view_state, "target_name"),
+            "state": state,
+            "stage": stage,
+            "substage": substage,
+            "substage_count": substage_count,
+            "substage_elapsed": substage_elapsed,
+            "substage_position": substage_position,
+            "substage_percent": substage_percent,
+            "stats": stats,
+            "mode": mode,
+            "snr": imager.snr,
+            "lapse_ms": human_ts(pydash.get(dev.view_state, "lapse_ms")),
+            "ra": dev.ra,
+            "dec": dev.dec,
+        }
+
+        status_update_frame = "event: statusUpdate\ndata: " + json.dumps({"mode": mode, "stage": stage}) + "\n\n"
+
+        mode_change_frame = ""
+        if changed:
+            mode_change_frame = "event: liveViewModeChange\ndata: " + json.dumps({"mode": mode}) + "\n\n"
+
+        status = template.render(state=response).replace('\n', '')
+        status_frame = ('data: ' + status + '\n\n')
+
+        yield status_update_frame.encode('utf-8') + mode_change_frame.encode('utf-8') + status_frame.encode('utf-8')
+        time.sleep(0.5)
+
+        # changed = self.stage != stage or self.mode != mode or self.state != state
+
+        # If status changes, trigger reload
+        # resp.status = falcon.HTTP_200
+        # resp.content_type = 'text/html'
+        #
+        # trigger = {"statusUpdate": {"mode": mode, "stage": stage}}
+        # if changed:
+        #     trigger = trigger | {"liveViewModeChange": mode}
+        #
+        # resp.set_header('HX-Trigger', json.dumps(trigger))
+        # if star:
+        # .  target_name, gain, stacked_frame, dropped_frame
+        # .  Exposure: { lapse_ms, exp_ms }
+        # template = fetch_template('live_status.html')
+        # stats = None
+
+        # if state == 'working' and mode == 'star' and stage == 'Stack' and view.get("Stack"):
+        #     stack = view.get("Stack")
+        #     target_name = target_name or stack.get("target_name")
+        #     stats = {
+        #         "gain": stack.get("gain"),
+        #         "stacked_frame": stack.get("stacked_frame"),
+        #         "dropped_frame": stack.get("dropped_frame"),
+        #         "elapsed": str(timedelta(milliseconds=stack["lapse_ms"]))[:-3],
+        #     }
+        # resp.text = template.render(tm=tm, state=state, mode=mode, stage=stage, stats=stats, target_name=target_name)
+        # 'Annotate': {'state': 'complete', 'lapse_ms': 3370, 'result': {'image_size': [1080, 1920], 'annotations': [
+        #    {'type': 'ngc', 'names': ['NGC 6992', 'C 33'], 'pixelx': 394.698, 'pixely': 611.487, 'radius': 757.869}],
+
 
 class HomeResource:
     @staticmethod
@@ -1132,6 +1388,7 @@ class ImageResource:
         # remove values=values to stop remembering values
         render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors,
                         action=f"/{telescope_id}/image", **context)
+
 
 class GotoResource:  
     def on_get(self, req, resp, telescope_id=0):
@@ -1181,6 +1438,16 @@ class CommandResource:
         render_template(req, resp, 'command.html', state=state, schedule=schedule, action=f"/{telescope_id}/command",
                         output=output, **context)
 
+class ConsoleResource:
+    def on_get(self, req, resp, telescope_id=1):
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'console.html', **context)
+
+    def on_post(self, req, resp, telescope_id=1):
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'application/json'
+        print(type(req.media), req.media)
+        resp.text = json.dumps(do_action_device("method_sync", telescope_id, req.media))
 
 class MosaicResource:
     def on_get(self, req, resp, telescope_id=0):
@@ -1469,12 +1736,34 @@ class EventStatus:
         
 class LivePage:
     @staticmethod
-    def on_get(req, resp, telescope_id=1):
+    def on_get(req, resp, telescope_id=1, mode=None):
         status = method_sync('get_view_state', telescope_id)
         logger.info(status)
         context = get_context(telescope_id, req)
         now = datetime.now()
-        render_template(req, resp, 'live.html', now=now, **context)
+        match mode:
+            case 'moon':
+                render_template(req, resp, 'live_moon.html', now=now, **context)
+
+            case 'planet':
+                render_template(req, resp, 'live_planet.html', now=now, **context)
+
+            case 'scenery':
+                render_template(req, resp, 'live_scenery.html', now=now, **context)
+
+            case 'star':
+                render_template(req, resp, 'live_star.html', now=now, **context)
+
+            case 'sun':
+                render_template(req, resp, 'live_sun.html', now=now, **context)
+
+            case _:
+                # If status has a view mode, redirect first
+                current_mode = status.get('View', {}).get('mode', {})
+                if current_mode in ["moon", "planet", "scenery", "star", "sun"]:
+                    redirect(f"/{telescope_id}/live/{current_mode}")
+                else:
+                    render_template(req, resp, 'live.html', now=now, **context)
 
 
 class LiveModeResource:
@@ -1491,6 +1780,15 @@ class LiveModeResource:
         # xxx: If mode is none, need to cancel things
         response = do_action_device("method_async", telescope_id,
                                     {"method": "iscope_start_view", "params": {"mode": mode}})
+        # match mode:
+        #     case 'moon':
+        #         response = do_action_device("method_async", telescope_id, {
+        #             "method": "start_scan_planet",
+        #         })
+        #         print("Moon response:", response)
+
+        # {  "id" : 111, "method" : "start_scan_planet"}
+
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
         resp.text = mode
@@ -1512,7 +1810,24 @@ class LiveExposureModeResource:
         resp.text = mode
 
 
+class LiveExposureRecordResource:
+    def on_post(self, req, resp, telescope_id=1):
+        logger.info("Starting to record")
+        response = do_action_device("method_async", telescope_id, {
+            "method": "iscope_start_stack",
+            "params": {
+                "restart": True
+            }
+        })
+        print(f"LiveExposureRecordResource: {response=}")
+
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'application/text'
+        resp.text = "Ok"
+
+
 class LiveStatusResource:
+    # deprecate?
     def __init__(self):
         self.stage = None
         self.mode = None
@@ -1730,6 +2045,33 @@ class SettingsResource:
                         settings_helper_text=settings_helper_text, output=output, **context)
 
 
+class PlanningResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        context = get_context(telescope_id, req)
+        if (Config.twilighttimes):
+            twilight_times = get_twilight_times()
+        else:
+            twilight_times = {}
+        
+        nearest_csc = get_nearest_csc()
+        if nearest_csc["status_msg"] != "SUCCESS":
+            nearest_csc["href"] = ""
+            nearest_csc["full_img"] = ""
+        
+        planning_cards = get_planning_cards()
+        local_timezone = get_localzone()
+        current_time = datetime.now(local_timezone)
+        utc_offset = current_time.utcoffset()
+        utc_offset = int(utc_offset.total_seconds() / 3600) # Convert the offset to hours, used for astromosaic
+
+        config_lat = round(Config.init_lat, 2) # Some of the 3rd party api's/embeds want rounded down.
+        config_long = round(Config.init_long, 2) # Some of the 3rd party api's/embeds want rounded down.
+        render_template(req, resp, 'planning.html', twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes,
+                        config_lat=config_lat, config_long=config_long, clear_sky_href=nearest_csc["href"], clear_sky_img_src=nearest_csc["full_img"],
+                        planning_cards = planning_cards, utc_offset = utc_offset, **context)
+
+
 class StatsResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -1742,11 +2084,13 @@ class StatsResource:
 
         render_template(req, resp, 'stats.html', stats=stats, now=now, **context)
 
+
 class SupportResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
         context = get_context(telescope_id, req)
         render_template(req, resp, 'support.html', **context)
+
 
 class ReloadResource:
     @staticmethod
@@ -1801,7 +2145,7 @@ class SimbadResource:
     def on_get(req, resp, telescope_id=1):
         objName = req.get_param('name')  # get the name to lookup from the request
         try:
-            r = requests.get(simbad_url + objName)
+            r = requests.get(simbad_url + objName, timeout=10)
         except:
             resp.status = falcon.HTTP_500
             resp.content_type = 'application/text'
@@ -1851,31 +2195,51 @@ class SimbadResource:
         resp.text = ra_dec_j2000
         return
 
+# convert decimal RA into HMS format
+def decimal_RA_to_Sexagesimal(deg):
+    # Normalize the degree value
+    total_hours = deg / 15.0  # Convert degrees to total hours
+    total_hours = total_hours % 24  # Wrap around to stay within 0-24 hours
+    
+    hours = int(total_hours)
+    minutes = int((total_hours - hours) * 60)
+    seconds = (total_hours - hours - minutes / 60) * 3600
+    
+    # Ensure minutes and seconds are positive
+    if minutes < 0:
+        minutes += 60
+        hours -= 1
+    if seconds < 0:
+        seconds += 60
+        minutes -= 1
+    
+    return f'{hours}h{minutes:02}m{abs(seconds):.2f}s'
 
-def decimal_RA_to_Sexagesimal(ra:float):
-    if ra < 0:
-        tmp1 = str(float(360 + ra) / 15).split(".")
-    else:
-        tmp1 = str(ra / 15).split(".")
-    ra_hour = tmp1[0]
-    tmp2 = str(float("0." + tmp1[1]) * 60).split(".")
-    ra_min = tmp2[0]
-    ra_sec = float("0." + tmp2[1]) * 60
-    return ra_hour + "h" + ra_min + "m" + str(round(ra_sec,2)) + "s"
+# Convert decimal DEC into DMS format
+def decimal_DEC_to_Sexagesimal(deg):
+    sign = "+" if deg >= 0 else "-"
+    abs_deg = abs(deg)
+    degrees = int(abs_deg)
+    minutes = int((abs_deg - degrees) * 60)
+    seconds = (abs_deg - degrees - minutes / 60) * 3600
+    return f'{sign}{degrees}d{minutes:02}m{seconds:.2f}s'
 
+def vector_to_ra_dec(vector):
+    x, y, z = vector
 
-def decimal_DEC_to_Sexagesimal(dec:float):
-    tmp1 = str(dec).split(".")
-    dec_deg = tmp1[0]
-    tmp2 = str(float("0." + tmp1[1]) * 60).split(".")
-    dec_min = tmp2[0]
-    dec_sec = float("0." + tmp2[1]) * 60
-    return dec_deg + "d" + dec_min + "m" +  str(round(dec_sec,1)) + "s"
-
+    # Calculate declination (δ)
+    dec = np.arcsin(z)
+    dec_deg = np.degrees(dec)
+    
+    # Calculate right ascension (α)
+    ra = np.arctan2(y, x)
+    ra_deg = np.degrees(ra) % 360
+    return ra_deg, dec_deg
 
 class StellariumResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
+        stellarium_url = 'http://' + str(Config.sthost) + ':' + str(Config.stport) + '/api/objects/info'
         try:
             r = requests.get(stellarium_url + '?format=json')
             html_content = r.text
@@ -1884,26 +2248,51 @@ class StellariumResource:
             resp.content_type = 'application/text'
             resp.text = 'Requst had communications error.'
             return
-        StelJSON = json.loads(html_content)
-        ra_j2000 = StelJSON['ra']
-        dec_J2000 = StelJSON['dec']
-        if (StelJSON['localized-name'] != "" ):
-            objName = StelJSON['localized-name']
-        elif (StelJSON['name'] != "" and objName != ""):
-            objname = StelJSON['localized-name']
-        else:
-            tmpObj = StelJSON['designations']
-            objName = tmpObj.split(" - ")[0]
         
-        lpFilter = "off"
-        objType = StelJSON['type']
-        filterTypes = ["HII region", "emission nebula", "supernova remnant", "planetary nebula"]
-        if objType in filterTypes:
-            lpFilter = "on"
+        # Check if object is selected
+        if html_content == "no current selection, and no name parameter given":
+            
+            stellarium_url = 'http://' + str(Config.sthost) + ':' + str(Config.stport) + '/api/main/view?coord=j2000'
+            try:
+                r = requests.get(stellarium_url)
+                html_content = r.text
+            except:
+                resp.status = falcon.HTTP_404
+                resp.content_type = 'application/text'
+                resp.text = 'Requst had communications error.'
+                return
+            # {"jNow":"[-0.924712, -0.0336335, -0.428692]"}
+            StelJSON = json.loads(html_content)
+            ra_j2000, dec_J2000 = vector_to_ra_dec(json.loads(StelJSON["j2000"]))
+            objName = "Unknown"
+            lpFilter = False
+
+        else:
+            StelJSON = json.loads(html_content)
+            ra_j2000 = StelJSON['raJ2000']
+            dec_J2000 = StelJSON['decJ2000']
+            if (StelJSON['localized-name'] != "" ):
+                objName = StelJSON['localized-name']
+            elif (StelJSON['name'] != ""):
+
+                objname = StelJSON['localized-name']
+            elif (StelJSON['designations'] != ""):
+                tmpObj = StelJSON['designations']
+                objName = tmpObj.split(" - ")[0]
+            else:
+                # Should never get here but whatever
+                objName = "Unknown"
+            
+            lpFilter = False
+            objType = StelJSON['type']
+            filterTypes = ["HII region", "emission nebula", "supernova remnant", "planetary nebula"]
+            if objType in filterTypes:
+                lpFilter = True
         
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
-        resp.text = decimal_RA_to_Sexagesimal(ra_j2000) + "/" + decimal_DEC_to_Sexagesimal(dec_J2000) + "/" + lpFilter + "/" + objName
+        tmpText = json.dumps({"ra":decimal_RA_to_Sexagesimal(ra_j2000), "dec": decimal_DEC_to_Sexagesimal(dec_J2000), "lp": lpFilter, "name": objName})
+        resp.text = tmpText
 
 
 # class StellariumResource:
@@ -1969,13 +2358,16 @@ class TelescopePositionResource:
             do_action_device('method_sync', telescope_id,
                              {'method': 'scope_speed_move',
                               'params': {"speed": speed, "angle": int(angle), "dur_sec": 3}})
+            method_sync('scope_get_equ_coord', telescope_id, id=420)
             # do_action_device('scope_speed_move', telescope_id, {
             #     "speed": int(distance * 5), "angle": angle, "dur_sec": 1
             # })
+        # xxx: Get current Alt-Az position?
+        dev = telescope.get_seestar_device(telescope_id)
 
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
-        resp.text = "Ok"
+        resp.text = f'<div class="row"><div class="col">RA</div><div class="col">{dev.ra}</div></div> <div class="row"><div class="col">Dec</div><div class="col">{dev.dec}</div></div>'
 
 
 class ToggleUIThemeResource:
@@ -2008,6 +2400,19 @@ class ToggleUIThemeResource:
             f.write(uitheme)
 
 
+class TogglePlanningCardResource:
+    @staticmethod
+    def on_post(req, resp):
+        PostedForm = req.media
+        card_name = str(PostedForm["card_name"])
+        # Get current card state
+        current_card_state = get_planning_card_state(card_name)
+        if current_card_state["planning_page_enable"]:
+            update_planning_card_state(card_name, "planning_page_enable", False)
+        else:
+            update_planning_card_state(card_name, "planning_page_enable", True)
+
+
 class UpdateTwilightTimesResource:
     @staticmethod
     def on_post(req, resp):
@@ -2017,6 +2422,7 @@ class UpdateTwilightTimesResource:
         PostedLon = PostedForm["Longitude"]  # TODO: This should have some type of input check
         update_twilight_times(PostedLat, PostedLon)
         redirect(f"{referer}")
+
 
 class GetBalanceSensorResource:
     @staticmethod
@@ -2034,6 +2440,7 @@ class GetBalanceSensorResource:
             resp.content_type = 'application/json'
             resp.text = json.dumps(balance_sensor)
 
+
 class GenSupportBundleResource:
     @staticmethod
     def on_post(req, resp, telescope_id=1):
@@ -2042,6 +2449,7 @@ class GenSupportBundleResource:
         resp.status = falcon.HTTP_200
         resp.text = zip_io.getvalue()
         zip_io.close()
+
 
 class ConfigResource:
     @staticmethod
@@ -2060,6 +2468,7 @@ class ConfigResource:
         Config.save_toml()
 
         render_template(req, resp, 'config.html', now = now, config = Config, **context) # pylint: disable=repeated-keyword
+
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
@@ -2091,6 +2500,7 @@ class GetPlanetCoordinates():
         resp.content_type = 'application/text'
         resp.text = (f"{ra}, {dec}")
 
+
 class FrontMain:
     def __init__(self):
         self.httpd = None
@@ -2104,6 +2514,7 @@ class FrontMain:
         app.add_route('/goto', GotoResource())
         app.add_route('/image', ImageResource())
         app.add_route('/live', LivePage())
+        app.add_route('/live/{mode}', LivePage())
         app.add_route('/mosaic', MosaicResource())
         app.add_route('/position', TelescopePositionResource())
         app.add_route('/search', SearchObjectResource())
@@ -2130,13 +2541,17 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/', HomeTelescopeResource())
         app.add_route('/{telescope_id:int}/goto', GotoResource())
         app.add_route('/{telescope_id:int}/command', CommandResource())
+        app.add_route('/{telescope_id:int}/console', ConsoleResource())
         app.add_route('/{telescope_id:int}/image', ImageResource())
         app.add_route('/{telescope_id:int}/live', LivePage())
         app.add_route('/{telescope_id:int}/live/status', LiveStatusResource())
         app.add_route('/{telescope_id:int}/live/mode', LiveModeResource())
         app.add_route('/{telescope_id:int}/live/exposure_mode', LiveExposureModeResource())
+        app.add_route('/{telescope_id:int}/live/record', LiveExposureRecordResource())
         # app.add_route('/{telescope_id:int}/live/state', LiveStateResource())
+        app.add_route('/{telescope_id:int}/live/{mode}', LivePage())
         app.add_route('/{telescope_id:int}/mosaic', MosaicResource())
+        app.add_route('/{telescope_id:int}/planning', PlanningResource())
         app.add_route('/{telescope_id:int}/position', TelescopePositionResource())
         app.add_route('/{telescope_id:int}/search', SearchObjectResource())
         app.add_route('/{telescope_id:int}/settings', SettingsResource())
@@ -2166,11 +2581,12 @@ class FrontMain:
         app.add_route('/simbad', SimbadResource())
         app.add_route('/stellarium', StellariumResource())
         app.add_route('/toggleuitheme', ToggleUIThemeResource())
+        app.add_route('/toggleplanningcard', TogglePlanningCardResource())
         app.add_route('/updatetwilighttimes', UpdateTwilightTimesResource())
         app.add_route('/getbalancesensor', GetBalanceSensorResource())
         app.add_route('/gensupportbundle', GenSupportBundleResource())
-        app.add_route('/getplanetcoordinates', GetPlanetCoordinates() )
-        app.add_route('/config', ConfigResource() )
+        app.add_route('/getplanetcoordinates', GetPlanetCoordinates())
+        app.add_route('/config', ConfigResource())
 
         try:
             self.httpd = make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler)
@@ -2203,6 +2619,7 @@ class FrontMain:
         global logger
         logger = get_logger()
         logger.debug("FrontMain got reload")
+
 
 class style():
     YELLOW = '\033[33m'

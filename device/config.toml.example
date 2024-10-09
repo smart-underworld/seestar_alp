@@ -14,10 +14,9 @@ uiport = 5432
 # light/dark theme
 uitheme = "dark" #all lower case
 twilighttimes = false #true/false
+cleardarksky = false #true/false
 #experimental = true
 confirm = true	# Enable/Disable the Commands page confirmation dialog
-clear_sky_img_src = 'https://www.cleardarksky.com/c/LvrmrCAcsk.gif?c=1969222'
-clear_sky_href = 'https://www.cleardarksky.com/c/LvrmrCAkey.html'
 
 [server]
 location = 'Anywhere on Earth'  # Anything you want here
@@ -57,18 +56,17 @@ name = "Seestar Alpha"
 # ip_address should not have to be changed unless you have more than 1 seestar
 ip_address = "seestar.local"
 device_num = 1
-scope_aim_lat = 60          # start up latitude in degrees -90 to 80 (override default)
-scope_aim_lon = 20          # start up longitude in degrees 0 to 360 (override default)
+# You can specify the following settings to override those found in the seestar_initialization section on a per-device level
+#scope_aim_lat = 60          # start up latitude in degrees -90 to 80 (override default)
+#scope_aim_lon = 20          # start up longitude in degrees 0 to 360 (override default)
 
 #[[seestars]]
 #name = "Seestar Beta"
 #ip_address = "192.168.110.36"
-#ip_address = "192.168.8.150"
 #device_num = 2
 
 
 #[[seestars]]
 #name = "Seestar Gamma"
 #ip_address = "192.168.110.238"
-#ip_address = "192.168.8.117"
 #device_num = 3

@@ -1,269 +1,33 @@
-{% extends 'base.html' %}
+{% extends 'live_base.html' %}
 
 {% block header %}
-    <h1>{% block title %}Live View{% endblock %}</h1>
+    <h1 class="text-center mb-3">{% block title %}Live View{% endblock %}</h1>
 {% endblock %}
 
-{% block content %}
-    {% if online %}
-        <script>
-            function updateModeButtons(mode) {
-                console.log('updateModeButtons')
-                const buttons = document.getElementsByClassName("mode-button");
-                for (const el of buttons) {
-                    // console.log('looking at id', el.id)
-                    if (el.id === mode) {
-                        el.classList.add('btn-primary');
-                        el.classList.remove('btn-secondary');
-                    } else {
-                        el.classList.remove('btn-primary');
-                        el.classList.add('btn-secondary');
-                    }
-                }
-            }
+{% block live_content %}
+    <div class="container">
+        <div class="row justify-content-md-center g-3">
+            <div class="col-md-4 order-md-last">
 
-            function updateMovementControls(stage) {
-                console.log('updateMovementControls', stage);
-                const el = document.getElementById('movement-controls')
-                if (stage === 'Stack') {
-                    el.classList.add('visually-hidden')
-                } else {
-                    el.classList.remove('visually-hidden')
-                }
-            }
+                {% include 'partials/live_card_status.html' with context %}
 
-            document.body.addEventListener("statusUpdate", function (evt) {
-                const mode = evt.detail.mode;
-                const stage = evt.detail.stage;
-                console.log("status update")
-                updateModeButtons(mode);
-                updateMovementControls(stage);
-            })
-
-            document.body.addEventListener("liveViewModeChange", function (evt) {
-                // evt.detail.value is mode
-                const mode = evt.detail.value;
-                console.log(`liveViewModeChange was triggered! mode=${mode}`);
-                const img = document.getElementById('liveViewImg');
-                let currentSrc = "{{ imager_root }}/vid";
-                // Add a cache-busting parameter
-                if (currentSrc.indexOf('?') > -1) {
-                    currentSrc = currentSrc.substring(0, currentSrc.indexOf('?'));
-                }
-                const newSrc = currentSrc + "?timestamp=" + new Date().getTime();
-
-                img.src = newSrc;
-
-                updateModeButtons(mode);
-            })
-        </script>
-
-        <div class="container">
-            <div class="row">
-                <div class="col-md-4 order-md-last">
-                    <div id="movement-controls" class="mb-3 d-flex flex-column">
-                        <div class="bg-dark-subtle position-relative rounded mb-3" style="width: 250px; height: 250px;">
-                            <div id="zone" class="position-absolute"
-                                 style="display: block; left: 0; width: 100%; height: 100%; "></div>
-                        </div>
-                        <div id="position"></div>
+                <div class="mb-3 card card-body p-3" style="min-width: 320px;">
+                    <div class="row">
+                        {% include 'partials/live_controls_mode_none.html' with context %}
+                        {% include 'partials/live_controls_mode_star.html' with context %}
+                        {% include 'partials/live_controls_mode_sun.html' with context %}
                     </div>
-
-{#                    <div class="card card-body p-3 mb-3">#}
-{#                        <div class="d-flex">#}
-{#                            <div class="me-3">#}
-{#                                <button class="btn btn-outline-secondary p-3">#}
-{#                                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor"#}
-{#                                         class="bi bi-record-circle" viewBox="0 0 16 16">#}
-{#                                        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>#}
-{#                                        <path d="M11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/>#}
-{#                                    </svg>#}
-{#                                    Record#}
-{#                                </button>#}
-{##}
-{#                            </div>#}
-{##}
-{#                            <div class="me-3">#}
-{#                                <button id="focus-options" class="btn btn-outline-primary p-3" data-bs-toggle="collapse"#}
-{#                                        data-bs-target="#focusOptions">#}
-{#                                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor"#}
-{#                                         class="bi bi-bullseye" viewBox="0 0 16 16">#}
-{#                                        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>#}
-{#                                        <path d="M8 13A5 5 0 1 1 8 3a5 5 0 0 1 0 10m0 1A6 6 0 1 0 8 2a6 6 0 0 0 0 12"/>#}
-{#                                        <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6m0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8"/>#}
-{#                                        <path d="M9.5 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/>#}
-{#                                    </svg>#}
-{#                                    Focus#}
-{#                                </button>#}
-{#                            </div>#}
-{##}
-{#                            <div class="">#}
-{#                                <button id="exposure-options" class="btn btn-outline-primary p-3" data-bs-toggle="collapse"#}
-{#                                        data-bs-target="#exposureOptions">#}
-{#                                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor"#}
-{#                                         class="bi bi-bullseye" viewBox="0 0 16 16">#}
-{#                                        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>#}
-{#                                        <path d="M8 13A5 5 0 1 1 8 3a5 5 0 0 1 0 10m0 1A6 6 0 1 0 8 2a6 6 0 0 0 0 12"/>#}
-{#                                        <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6m0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8"/>#}
-{#                                        <path d="M9.5 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/>#}
-{#                                    </svg>#}
-{#                                    Exposure#}
-{#                                </button>#}
-{#                            </div>#}
-{#                        </div>#}
-{##}
-{#                        <div class="collapse" id="focusOptions">#}
-{#                            <div class="card card-body mt-3">#}
-{#                                <div class="d-flex">#}
-{#                                    <button class="btn btn-outline-primary me-3">#}
-{#                                        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30"#}
-{#                                             fill="currentColor" class="bi bi-crosshair" viewBox="0 0 16 16">#}
-{#                                            <path d="M8.5.5a.5.5 0 0 0-1 0v.518A7 7 0 0 0 1.018 7.5H.5a.5.5 0 0 0 0 1h.518A7 7 0 0 0 7.5 14.982v.518a.5.5 0 0 0 1 0v-.518A7 7 0 0 0 14.982 8.5h.518a.5.5 0 0 0 0-1h-.518A7 7 0 0 0 8.5 1.018zm-6.48 7A6 6 0 0 1 7.5 2.02v.48a.5.5 0 0 0 1 0v-.48a6 6 0 0 1 5.48 5.48h-.48a.5.5 0 0 0 0 1h.48a6 6 0 0 1-5.48 5.48v-.48a.5.5 0 0 0-1 0v.48A6 6 0 0 1 2.02 8.5h.48a.5.5 0 0 0 0-1zM8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4"/>#}
-{#                                        </svg>#}
-{#                                        Auto#}
-{#                                    </button>#}
-{#                                    <div>#}
-{#                                        <label for="customRange1" class="form-label">Focus</label>#}
-{#                                        <input type="range" class="form-range" id="customRange1">#}
-{#                                    </div>#}
-{#                                </div>#}
-                                {#                                Some placeholder content for the collapse component. This panel is hidden by default but#}
-                                {#                                revealed when the user activates the relevant trigger.#}
-{#                            </div>#}
-{#                        </div>#}
-{#                    </div>#}
-
-                    <div class="mb-3 card card-body p-3" hx-get="{{ root }}/live/status" hx-trigger="load, every 5s">
-                        Loading live status...
+                    <div class="row">
+                        {% include 'partials/live_controls_mode_moon.html' with context %}
+                        {% include 'partials/live_controls_mode_planet.html' with context %}
+                        {% include 'partials/live_controls_mode_scenery.html' with context %}
                     </div>
-
-                    <div class="mb-3 card card-body p-3">
-                        <div class="row">
-                            <button id="none" class="col mode-button btn btn-secondary m-1"
-                                    hx-delete="{{ root }}/live/mode">
-                                none
-                            </button>
-
-                            <button id="star" class="col mode-button btn btn-secondary m-1"
-                                    hx-post="{{ root }}/live/mode"
-                                    hx-swap="none"
-                                    hx-vals='{"mode": "star"}'>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
-                                     class="bi bi-stars" viewBox="0 0 16 16">
-                                    <path d="M7.657 6.247c.11-.33.576-.33.686 0l.645 1.937a2.89 2.89 0 0 0 1.829 1.828l1.936.645c.33.11.33.576 0 .686l-1.937.645a2.89 2.89 0 0 0-1.828 1.829l-.645 1.936a.361.361 0 0 1-.686 0l-.645-1.937a2.89 2.89 0 0 0-1.828-1.828l-1.937-.645a.361.361 0 0 1 0-.686l1.937-.645a2.89 2.89 0 0 0 1.828-1.828zM3.794 1.148a.217.217 0 0 1 .412 0l.387 1.162c.173.518.579.924 1.097 1.097l1.162.387a.217.217 0 0 1 0 .412l-1.162.387A1.73 1.73 0 0 0 4.593 5.69l-.387 1.162a.217.217 0 0 1-.412 0L3.407 5.69A1.73 1.73 0 0 0 2.31 4.593l-1.162-.387a.217.217 0 0 1 0-.412l1.162-.387A1.73 1.73 0 0 0 3.407 2.31zM10.863.099a.145.145 0 0 1 .274 0l.258.774c.115.346.386.617.732.732l.774.258a.145.145 0 0 1 0 .274l-.774.258a1.16 1.16 0 0 0-.732.732l-.258.774a.145.145 0 0 1-.274 0l-.258-.774a1.16 1.16 0 0 0-.732-.732L9.1 2.137a.145.145 0 0 1 0-.274l.774-.258c.346-.115.617-.386.732-.732z"/>
-                                </svg>
-                                star
-                            </button>
-                            <button id="sun" class="col mode-button btn btn-secondary m-1"
-                                    hx-post="{{ root }}/live/mode"
-                                    hx-swap="none"
-                                    hx-vals='{"mode": "sun"}'>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
-                                     class="bi bi-sun-fill" viewBox="0 0 16 16">
-                                    <path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0m0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13m8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5M3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8m10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0m-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0m9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707M4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708"/>
-                                </svg>
-                                sun
-                            </button>
-                        </div>
-                        <div class="row">
-                            <button id="moon" class="col mode-button btn btn-secondary m-1"
-                                    hx-post="{{ root }}/live/mode"
-                                    hx-swap="none"
-                                    hx-vals='{"mode": "moon"}'>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
-                                     class="bi bi-moon-fill" viewBox="0 0 16 16">
-                                    <path d="M6 .278a.77.77 0 0 1 .08.858 7.2 7.2 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277q.792-.001 1.533-.16a.79.79 0 0 1 .81.316.73.73 0 0 1-.031.893A8.35 8.35 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.75.75 0 0 1 6 .278"/>
-                                </svg>
-                                moon
-                            </button>
-                            <button id="planet" class="col mode-button btn btn-secondary m-1"
-                                    hx-post="{{ root }}/live/mode"
-                                    hx-swap="none"
-                                    hx-vals='{"mode": "planet"}'>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="20" fill="currentColor"
-                                     class="bi bi-circle-fill" viewBox="0 0 16 16">
-                                    <circle cx="8" cy="8" r="8"/>
-                                </svg>
-                                planet
-                            </button>
-                            <button id="scenery" class="col mode-button btn btn-secondary m-1"
-                                    hx-post="{{ root }}/live/mode"
-                                    hx-swap="none"
-                                    hx-vals='{"mode": "scenery"}'>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
-                                     class="bi bi-binoculars-fill" viewBox="0 0 16 16">
-                                    <path d="M4.5 1A1.5 1.5 0 0 0 3 2.5V3h4v-.5A1.5 1.5 0 0 0 5.5 1zM7 4v1h2V4h4v.882a.5.5 0 0 0 .276.447l.895.447A1.5 1.5 0 0 1 15 7.118V13H9v-1.5a.5.5 0 0 1 .146-.354l.854-.853V9.5a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5v.793l.854.853A.5.5 0 0 1 7 11.5V13H1V7.118a1.5 1.5 0 0 1 .83-1.342l.894-.447A.5.5 0 0 0 3 4.882V4zM1 14v.5A1.5 1.5 0 0 0 2.5 16h3A1.5 1.5 0 0 0 7 14.5V14zm8 0v.5a1.5 1.5 0 0 0 1.5 1.5h3a1.5 1.5 0 0 0 1.5-1.5V14zm4-11H9v-.5A1.5 1.5 0 0 1 10.5 1h1A1.5 1.5 0 0 1 13 2.5z"/>
-                                </svg>
-                                scenery
-                            </button>
-{#                            <span id="scenery-indicator" class="htmx-indicator spinner-border spinner-border-sm" aria-hidden="true"></span>#}
-                        </div>
-                    </div>
-
                 </div>
 
-                <div class="col-md-8 order-md-first">
-                    <img id="liveViewImg" src="{{ imager_root }}/vid" style="width: 100%;" alt="Live view image"/>
-                </div>
             </div>
         </div>
-        {#    <img id="liveViewImg" src="{{ imager_root }}/vid" width="540" height="960" alt="Live view image"/>#}
-        {#    <img src="{{ imager_root }}/vid" width="1080" height="1920"/>#}
-
-        <footer class="bg-body-tertiary text-center mt-3">
-            Version: {{ version }} | Last updated: {{ now }}
-        </footer>
-
-        <script>
-            const options = {
-                zone: document.getElementById('zone'),
-                color: 'red',
-                position: {left: '50%', top: '50%'},
-                mode: 'static'
-            }
-            const joystick = nipplejs.create(options);
-            const zero_vector = {angle: 0, distance: 0, force: 0};
-            const positionEl = document.getElementById('position');
-            let timer = -1;
-            let vector = zero_vector;
-
-            function sendMove() {
-                fetch('{{ root }}/position', {
-                    method: 'POST',
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(vector)
-                })
-                    .then(response => response.text())
-                    .then(body => {
-                        // positionEl.innerText = body;
-                    });
-            }
-
-            joystick.on('move', function (evt, data) {
-                vector = {
-                    angle: data.angle.degree,
-                    distance: data.distance,
-                    force: data.force,
-                }
-                if (timer === -1) {
-                    sendMove()
-                    timer = setInterval(() => sendMove(), 1000)
-                }
-            });
-
-            joystick.on('end', function (evt, data) {
-                if (timer !== -1) clearInterval(timer);
-
-                timer = -1;
-                vector = zero_vector;
-                sendMove();
-            });
-        </script>
-    {% else %}
-        <div class="container mt-3">
-            <p>You are currently in offline mode</p>
+        <div class="row mt-3">
+            {% include 'partials/events.html' with context %}
         </div>
-    {% endif %}
+    </div>
 {% endblock %}

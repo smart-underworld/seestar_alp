@@ -18,62 +18,12 @@
             </div>
         </div>
 
-        <p class="d-inline-flex gap-1">
-            <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#clearsky"
-                aria-expanded="false" aria-controls="clearsky">
-                Hide/Show Clear Sky
-            </button>
-        </p>
-
-        <div class="collapse" id="clearsky">
-            <a href={{clear_sky_href}}>
-            <img src="{{clear_sky_img_src}}"></a>
-        </div>  
-
+        {% if cleardarksky_enabled %}
+            {% include 'partials/clear_dark_sky.html' %}
+        {% endif %}
 
         {% if twilight_times_enabled %}
-            <p></p>
-            <p class="d-inline-flex gap-1">
-                <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#twilightcollapse"
-                        aria-expanded="false" aria-controls="twilightcollapse">
-                    Hide/Show Twilight Times
-                </button>
-            </p>
-            <div class="collapse" id="twilightcollapse">
-                <div class="card card-body">
-                    <form method="post" action="/updatetwilighttimes">
-                        <table class="table table-striped">
-                            <tbody>
-                                {% for key, value in twilight_times.items() %}
-                                <tr>
-                                    {% if key == "Latitude" or key == "Longitude" %}
-                                        <th class="col">
-                                            <label for="{{ key }}">{{ key }}</label>
-                                            <input type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}">
-                                        </th>
-                                        <td>
-                                            <button type="submit" class="btn btn-primary me-2">Save</button>
-                                            <button type="button" id="get-twilight-times" class="btn btn-primary" title="Request Location" onclick="get_location_from_IP()">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
-                                                    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
-                                                </svg>
-                                            </button>
-                                        </td>
-                                    {% else %}
-                                        <th class="col">
-                                            {{ key }}
-                                        </th>
-                                        <td>
-                                            {{ value }}
-                                        </td>
-                                    {% endif %}
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </form>
-                </div>
-            </div>
+            {% include 'partials/twilight_times.html' %}
         {% endif %}
 
         <p class="mt-3">Schedule page. Pick an item to schedule, and Submit to add to the schedule.</p>

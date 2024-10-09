@@ -181,6 +181,9 @@ Github
 
 
 
+## Version 2.0, October 2024
+added Simple Seestar (web) Client
+added Federation support to control multiple Seestars as one
 
 ## Version 1.1.0b1, June 29, 2024 (experimental)
 

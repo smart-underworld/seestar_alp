@@ -1,0 +1,14 @@
+<div class="row">
+    <button id="preview" class="col mode-button btn btn-secondary m-1"
+            hx-post="{{ root }}/live/exposure_mode"
+            hx-swap="none"
+            hx-vals='{"exposure_mode": "preview"}'>
+        Preview
+    </button>
+    <button id="star" class="col mode-button btn btn-secondary m-1"
+            hx-post="{{ root }}/live/exposure_mode"
+            hx-swap="none"
+            hx-vals='{"exposure_mode": "stack"}'>
+        Stack
+    </button>
+</div>

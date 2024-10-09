@@ -1,0 +1,23 @@
+{% block html_header %}
+    <script src="https://astrosphericcloudstorage.blob.core.windows.net/embed/astrosphericembed.js"></script>
+{% endblock %}
+<!-- This puts it's self in an iframe with a hard coded max width of 924px. https://www.astrospheric.com/embed/ -->
+<div id="AstrosphericEmbedContainer" style="width: 100%;"></div>
+<script type="text/javascript">
+    // Initialize the control
+    m_AstrosphericEmbed.Create("AstrosphericEmbedContainer", {{ config_lat }}, {{ config_long }});
+
+    // Let's watch for the Astrospheric iframe to be created
+    // ## Based on https://stackoverflow.com/a/53269990 ##
+    const isElementLoaded = async selector => {
+        while ( document.querySelector(selector) === null) {
+            await new Promise( resolve =>  requestAnimationFrame(resolve) )
+        }
+        return document.querySelector(selector);
+    };
+
+    isElementLoaded('iframe').then((selector) => {
+        console.log("######## Astrospheric iframe loaded #############");
+        selector.style.maxWidth = 'none'; // Remove the 924px maxWidth.
+    });
+</script>

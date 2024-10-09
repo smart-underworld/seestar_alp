@@ -1,17 +1,20 @@
 import sys
 import os
 import subprocess
+import logging
 
 if getattr(sys, "frozen",  False):
     search_path = sys._MEIPASS
 else:
     search_path = os.path.join(os.path.dirname(__file__))
 
+_version = None
 class Version:
     # https://stackoverflow.com/questions/14989858/get-the-current-git-hash-in-a-python-script
     # Return the git revision as a string
     @staticmethod
     def git_version():
+        global _version
         def _minimal_ext_cmd(cmd):
             # construct minimal environment
             env = {}
@@ -26,13 +29,22 @@ class Version:
             out = subprocess.Popen(cmd, stdout = subprocess.PIPE, env=env).communicate()[0]
             return out
 
-        try:
-            out = _minimal_ext_cmd(['git', 'describe', '--tags'])
-            GIT_REVISION = out.strip().decode('ascii')
-        except OSError:
-            GIT_REVISION = "Unknown"
+        if _version:
+            return _version
+        else:
+            try:
+                _minimal_ext_cmd(['git', 'fetch', '--tags'])
+            except OSError:
+                logging.log.warn("unable to get git tags")
 
-        return GIT_REVISION
+            try:
+                out = _minimal_ext_cmd(['git', 'describe', '--tags'])
+                GIT_REVISION = out.strip().decode('ascii')
+            except OSError:
+                GIT_REVISION = "Unknown"
+
+            _version = GIT_REVISION
+            return GIT_REVISION
 
     @staticmethod
     def app_version():

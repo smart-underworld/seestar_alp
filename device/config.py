@@ -69,12 +69,24 @@ class _Config:
         self.load_toml(self.path_to_dat)
 
     def get_toml(self, sect: str, item: str, default : typing.Any):
+        """
+        Helper method for getting a toml value out of the dict representation
+        """
         if not self._dict is {} and sect in self._dict and item in self._dict[sect]:
             return self._dict[sect][item]
         else:
             return default
 
     def load(self, toml_path):
+        """
+        Load a config.toml file into a Config object.
+
+        NOTE to developers modifying this with new config
+            Modification of this method to add, or remove config items should
+            also include modifications to:
+              - def render_config_html to add/remove html form representation
+              - def load_from_form (below) to update this object when the form is submitted
+        """
         self._dict = tomlkit.loads(open(toml_path).read())
 
         """Device configuration in ``config.toml``"""
@@ -95,10 +107,11 @@ class _Config:
         self.uiport: int = self.get_toml('webui_settings', 'uiport', 5432)
         self.uitheme: str = self.get_toml('webui_settings', 'uitheme', 'dark')
         self.twilighttimes: bool = self.get_toml('webui_settings', 'twilighttimes', False)
+        self.cleardarksky: bool = self.get_toml('webui_settings', 'cleardarksky', False)
         self.experimental: bool = self.get_toml('webui_settings', 'experimental', False)
         self.confirm: bool = self.get_toml('webui_settings', 'confirm', True)
-        self.clear_sky_img_src: str = self.get_toml('webui_settings', 'clear_sky_img_src', 'https://www.cleardarksky.com/c/LvrmrCAcsk.gif?c=1969222')
-        self.clear_sky_href: str = self.get_toml('webui_settings', 'clear_sky_href', 'https://www.cleardarksky.com/c/LvrmrCAkey.html')
+        self.save_frames: bool = self.get_toml('webui_settings', 'save_frames', False)
+        self.save_frames_dir: str = self.get_toml('webui_settings', 'save_frames_dir', '.')
 
         # --------------
         # Server Section
@@ -155,6 +168,9 @@ class _Config:
         self.scope_aim_lon: float = self.get_toml(section, 'scope_aim_lon', 20.0)
 
     def load_from_form(self, req):
+        """
+        Save the config html form into a toml file
+        """
         # network
         self.set_toml('network', 'ip_address', req.media['ip_address'])
         self.set_toml('network', 'port', int(req.media['port']))
@@ -170,8 +186,7 @@ class _Config:
         self.set_toml('webui_settings', 'twilighttimes', 'twilighttimes' in req.media)
         self.set_toml('webui_settings', 'experimental', 'experimental' in req.media)
         self.set_toml('webui_settings', 'confirm', 'confirm' in req.media)
-        self.set_toml('webui_settings', 'clear_sky_img_src', req.media['clear_sky_img_src'])
-        self.set_toml('webui_settings', 'clear_sky_href', req.media['clear_sky_href'])
+        # self.set_toml('webui_settings', 'save_frames', 'save_frames' in req.media)
 
         # server
         self.set_toml('server', 'location', req.media['location'])
@@ -207,18 +222,133 @@ class _Config:
         self.set_toml('seestar_initialization', 'scope_aim_lon', float(req.media['scope_aim_lon']))
 
     def load_toml(self, load_name = None):
+        """
+        Load a specific path to a toml file into this Config object
+        """
         if load_name == None:
             load_name = self.path_to_dat
         self.load(load_name)
 
     def set_toml(self, section, key, value):
+        """
+        Set a value in-memory for the toml dict
+        """
         self._dict[section][key] = value
 
     def save_toml(self, save_name = None):
+        """
+        Save the in-memory toml dict out to disk in toml format
+        """
         if save_name == None:
             save_name = self.path_to_dat
         print(f"save_toml: writing toml to {save_name}")
         with open(save_name, "w") as toml_file:
             toml_file.write(tomlkit.dumps(self._dict))
+
+    #
+    # HTML config rendering
+    #
+    def render_text(self, name, label, value):
+        """
+        Render config html form text input
+        """
+        return f'<label for="{name}" class="form-label">{label}</label> <input id="{name}" name="{name}" type="text" value="{value}"><br>\n'
+
+    def render_checkbox(self, name, label, checked):
+        """
+        Render config html form boolean checkbox
+        """
+        ret = f'<label for="{name}" class="form-label">{label}</label> '
+        if checked:
+            c=" checked"
+        else:
+            c=""
+        ret += f'<input id="{name}" name="{name}" type="checkbox"{c}><br>\n'
+        return ret
+
+    def render_select(self, name, label, options, default):
+        """
+        Render config html select dropdown
+        """
+        ret = f'<label for="{name}" class="form-label">{label}</label><select id="{name}" name="{name}"> '
+        for opt in options:
+            if opt == default:
+                s=" selected"
+            else:
+                s=""
+            ret += f'<option value="{opt}"{s}>{opt}</option>'
+        ret += '</select><br>\n'
+        return ret
+
+    def render_config_section(self, title, content):
+        """
+        Render config html config section div
+        """
+        return '<div class="card-body border">' + \
+			   f'<h5 class="card-title">{title}</h5>' + \
+               content + \
+               '</div>\n'
+
+    def render_config_html(self):
+        """
+        Render config html
+        """
+        log_levels = [ logging.getLevelName(x) for x in sorted(list(set(logging._levelToName.keys()))) if x != 0 ]
+        return \
+            self.render_config_section(
+                'Networking',
+                self.render_text('ip_address', 'IP address:', self.ip_address) + \
+                self.render_text('port', 'Port:', self.port) + \
+                self.render_text('imgport', 'IMG Port:', self.imgport) + \
+                self.render_text('stport', 'ST port:', self.stport) + \
+                self.render_text('sthost', 'ST host:', self.sthost) + \
+                self.render_text('timeout', 'Timeout:', self.timeout) + \
+                self.render_checkbox('rtsp_udp', 'RTSP UDP:', self.rtsp_udp)
+            ) + \
+            self.render_config_section(
+                'Web UI',
+                self.render_text('uiport', 'UI port:', self.uiport) + \
+                self.render_select('uitheme', 'UI theme:', [ "dark", "light"], self.uitheme) + \
+                self.render_checkbox('twilighttimes', 'Twilight times:', self.twilighttimes) + \
+                self.render_checkbox('experimental', 'Experimental:', self.experimental) + \
+                self.render_checkbox('confirm', 'Commands Confirmation Dialog:', self.confirm)
+            ) + \
+            self.render_config_section(
+                'Server',
+                self.render_text('location', 'Location:', self.location) + \
+                self.render_checkbox('verbose_driver_exceptions', 'Verbose driver exceptions:', self.verbose_driver_exceptions)
+            ) + \
+            self.render_config_section(
+                'Device',
+                self.render_checkbox('can_reverse', 'Can reverse:', self.can_reverse) + \
+                self.render_text('step_size', 'Step size:', self.step_size) + \
+                self.render_text('steps_per_sec', 'Steps per second:', self.steps_per_sec)
+            ) + \
+            self.render_config_section(
+                'Logging',
+                self.render_select('log_level', 'Log level:', log_levels, logging.getLevelName(self.log_level)) + \
+                self.render_text('log_prefix', 'Log prefix:', self.log_prefix) + \
+                self.render_checkbox('log_to_stdout', 'Log to stdout:', self.log_to_stdout) + \
+                self.render_text('max_size_mb', 'Max log size in MB:', self.max_size_mb) + \
+                self.render_text('num_keep_logs', 'Number of logs to keep:', self.num_keep_logs) + \
+                self.render_checkbox('log_events_in_info', 'Log events in INFO:', self.log_events_in_info)
+            ) + \
+            self.render_config_section(
+                'Seestar Initialization',
+                self.render_checkbox('init_save_good_frames', 'Save good frames:', self.init_save_good_frames) + \
+                self.render_checkbox('init_save_all_frames', 'Save all frames:', self.init_save_all_frames) + \
+                self.render_text('init_lat', 'Latitude:', self.init_lat) + \
+                self.render_text('init_long', 'Longitude:', self.init_long) + \
+                self.render_text('init_gain', 'Gain:', self.init_gain) + \
+                self.render_text('init_expo_preview_ms', 'Exposure preview ms:', self.init_expo_preview_ms) + \
+                self.render_text('init_expo_stack_ms', 'Exposure stack ms:', self.init_expo_stack_ms) + \
+                self.render_checkbox('init_dither_enabled', 'Dither enabled:', self.init_dither_enabled) + \
+                self.render_text('init_dither_length_pixel', 'Dither length pixels:', self.init_dither_length_pixel) + \
+                self.render_text('init_dither_frequency', 'Dither frequency:', self.init_dither_frequency) + \
+                self.render_checkbox('init_activate_LP_filter', 'Activate LP filter:', self.init_activate_LP_filter) + \
+                self.render_text('init_dew_heater_power', 'Dew heater power:', self.init_dew_heater_power) + \
+                self.render_text('scope_aim_lat', 'Scope aim latitude:', self.scope_aim_lat) + \
+                self.render_text('scope_aim_lon', 'Scope aim longitude:', self.scope_aim_lon)
+            )
 
 Config = _Config()

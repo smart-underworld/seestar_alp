@@ -14,11 +14,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set up Python 3.12
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
-          
+
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
@@ -31,6 +33,7 @@ jobs:
           git describe HEAD --tags > ./version.txt
           pyinstaller --name="seestar_alp" `
           --add-data="device/config.toml.example;." --add-data="./version.txt;." --add-data="front/citation;astroquery" --add-data="front/templates;front/templates" --add-data="front/public;front/public" `
+          --add-data="front/csc_sites.json;." `
           --paths=./front --paths=./device `
           root_app.py
           Compress-Archive -Path ./dist/seestar_alp/* -DestinationPath win_seestar_alp.zip
@@ -40,16 +43,13 @@ jobs:
       - name: Display Result
         run: echo "The script result is ${{ env.device_script_result }}"
         shell: pwsh
-        
+
       - name: Upload Result as Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ env.device_script_result }}
-          asset_name: ${{ env.device_script_result }}
-          asset_content_type: application/zip
+          files: ${{ env.device_script_result }}
+        
 
 
   build-linux:
@@ -57,11 +57,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set up Python 3.12
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
-          
+
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
@@ -74,6 +76,7 @@ jobs:
           git describe HEAD --tags > ./version.txt
           pyinstaller --name="seestar_alp" \
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
+          --add-data="front/csc_sites.json:." \
           --paths=./front --paths=./device \
           root_app.py
           cd dist
@@ -86,14 +89,10 @@ jobs:
         shell: bash
         
       - name: Upload Result as Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ env.device_script_result }}
-          asset_name: ${{ env.device_script_result }}
-          asset_content_type: application/zip
+          files: ${{ env.device_script_result }}
 
 #  build-MacOS:
 #    runs-on: "MacOS-latest"
