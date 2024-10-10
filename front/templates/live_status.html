@@ -46,10 +46,11 @@
     {#        <div class="col fw-bold">Substage Elapsed</div>#}
     {#        <div class="col">{{ state.substage_elapsed }}</div>#}
     {#    </div>#}
-    <div class="row border-bottom py-1 text-start">
-        <div class="col fw-bold">Elapsed Time</div>
-        <div class="col">{{ state.lapse_ms }}</div>
-    </div>
+    {#  Make the below conditional.... #}
+{#    <div class="row border-bottom py-1 text-start">#}
+{#        <div class="col fw-bold">Elapsed Time</div>#}
+{#        <div class="col">{{ state.lapse_ms }}</div>#}
+{#    </div>#}
     {#    {% endif %}#}
     <div class="row border-bottom py-1 text-start">
         <div class="col fw-bold">RA</div>
@@ -67,6 +68,10 @@
     {% endif %}
     {% if state.stats %}
         <div class="row border-bottom py-1 text-start">
+            <div class="col fw-bold">Integration Time</div>
+            <div class="col">{{ state.stats["integration_time"] }}</div>
+        </div>
+        <div class="row border-bottom py-1 text-start">
             <div class="col fw-bold">Stacked Frames</div>
             <div class="col">{{ state.stats["stacked_frame"] }}</div>
         </div>
@@ -75,7 +80,7 @@
             <div class="col">{{ state.stats["dropped_frame"] }}</div>
         </div>
         <div class="row border-bottom py-1 text-start">
-            <div class="col fw-bold">Total Elapsed Time</div>
+            <div class="col fw-bold">Time On Target</div>
             <div class="col">{{ state.stats["elapsed"] }}</div>
         </div>
     {% endif %}
