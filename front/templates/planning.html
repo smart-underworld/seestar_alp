@@ -14,6 +14,14 @@
             });
             window.location.reload();
         }
+
+        // ## Based on https://stackoverflow.com/a/53269990 ##
+        const isElementLoaded = async selector => {
+            while ( document.querySelector(selector) === null) {
+                await new Promise( resolve =>  requestAnimationFrame(resolve) )
+            }
+            return document.querySelector(selector);
+        };
     </script>
     <div class="container mt-3">
         <span class="fs-1">{% block title %}Planning{% endblock %}</span>
@@ -77,15 +85,22 @@
 
             // Make all panels visable by default for the Planning page.
             if(lastPath == "planning"){
-                var twilight_times_div = document.getElementById("twilightcollapse");
-                var clear_dark_sky_div = document.getElementById("cleardarksky");
-                var twilight_times_collapse_button = document.getElementById("twilight_times_collapse_button");
-                var clear_dark_sky_collapse_button = document.getElementById("clear_dark_sky_collapse_button");
 
-                twilight_times_div.classList.add("show");
-                clear_dark_sky_div.classList.add("show");
-                twilight_times_collapse_button.style.display = 'none';
-                clear_dark_sky_collapse_button.style.display = 'none';
+                // Only trigger if the twilight card is enabled/loaded
+                isElementLoaded('#twilightcollapse').then((selector) => {
+                    var twilight_times_div = document.getElementById("twilightcollapse");
+                    var twilight_times_collapse_button = document.getElementById("twilight_times_collapse_button");
+                    twilight_times_div.classList.add("show");
+                    twilight_times_collapse_button.style.display = 'none';
+                });
+
+                // Only trigger if the cleardarksky card is enabled/loaded
+                isElementLoaded('#cleardarksky').then((selector) => {
+                    var clear_dark_sky_div = document.getElementById("cleardarksky");
+                    var clear_dark_sky_collapse_button = document.getElementById("clear_dark_sky_collapse_button");
+                    clear_dark_sky_div.classList.add("show");
+                    clear_dark_sky_collapse_button.style.display = 'none';
+                });
             }
         });
     </script>
