@@ -19,6 +19,19 @@ import queue
 from device.config import Config
 from device.seestar_util import Util
 
+from collections import OrderedDict
+
+class FixedSizeOrderedDict(OrderedDict):
+    def __init__(self, *args, maxsize=None, **kwargs):
+        self.maxsize = maxsize
+        super().__init__(*args, **kwargs)
+
+    def __setitem__(self, key, value):
+        if self.maxsize is not None and len(self) >= self.maxsize:
+            self.popitem(last=False)  # Remove the oldest item
+        super().__setitem__(key, value)
+
+
 
 class Seestar:
     def __new__(cls, *args, **kwargs):
@@ -45,24 +58,26 @@ class Seestar:
         self.get_msg_thread = None
         self.heartbeat_msg_thread = None
         self.is_debug = is_debug
-        self.response_dict = {}
+        self.response_dict = FixedSizeOrderedDict(max=100)
         self.logger = logger
         self.is_connected = False
         self.is_slewing = False
         self.target_dec = 0
         self.target_ra = 0
         self.utcdate = time.time()
-        self.scheduler_state = "Stopped"
-        self.scheduler_item_state = "Stopped"
-        self.scheduler_item = "" # Text description of specific scheduler item that's running
+
         self.mosaic_thread = None
         self.scheduler_thread = None
         self.schedule = {}
         self.schedule['schedule_id'] = str(uuid.uuid4())
         self.schedule['list'] = collections.deque()
-        self.schedule['state'] = self.scheduler_state
+        self.schedule['state'] = "stopped"
         self.schedule['current_item_id'] = ""
-        # self.schedule['current_item_detail']    # Text description for mosaic?
+        self.is_cur_scheduler_item_working = False
+
+        self.event_state = {}
+        self.update_scheduler_state_obj({}, result=0)
+
         self.cur_solve_RA = -9999.0  #
         self.cur_solve_Dec = -9999.0
         self.cur_mosaic_nRA = -1
@@ -72,15 +87,28 @@ class Seestar:
         self.safe_dec_for_offset = 10.0     # declination angle in degrees as the lower limit for dec values before below_horizon logic kicks in
         self.custom_goto_state = "stopped" # for custom goto logic used by below_horizon 
         self.view_state = {}
-        self.event_state = {}
+
         # self.event_queue = queue.Queue()
         self.event_queue = collections.deque(maxlen=20)
         self.eventbus = signal(f'{self.device_name}.eventbus')
         self.is_EQ_mode = is_EQ_mode
 
+    # scheduler state example: {"state":"working", "schedule_id":"abcdefg", 
+    #       "result":0, "error":"dummy error",
+    #       "cur_schedule_item":{   "type":"mosaic", "schedule_item_GUID":"abcde", "state":"working",
+    #                               "stack_status":{"target_name":"test_target", "stack_count": 23, "rejected_count": 2},
+    #                               "item_elapsed_time_s":123, "item_remaining_time":-1}
+    #       }
+
+
+
+
     def __repr__(self) -> str:
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
 
+    def update_scheduler_state_obj(self, item_state, result = 0):
+        self.event_state["scheduler"]  = {"schedule_id": self.schedule['schedule_id'], "state":self.schedule['state'], "cur_scheduler_item": item_state , "result":result}
+    
     def heartbeat(self):  # I noticed a lot of pairs of test_connection followed by a get if nothing was going on
         #    json_message("test_connection")
         self.json_message("scope_get_equ_coord", id=420)
@@ -228,9 +256,6 @@ class Seestar:
                             self.update_view_state(parsed_data)
                         # keep a running queue of last 100 responses for sync call results
                         self.response_dict[parsed_data["id"]] = parsed_data
-                        while len(parsed_data) > 100:
-                            d= self.response_dict
-                            (k := next(iter(d)), d.pop(k))
 
                     elif 'Event' in parsed_data:
                         # add parsed_data
@@ -287,6 +312,7 @@ class Seestar:
         return cur_cmdid
 
     def shut_down_thread(self, data):
+        self.play_sound(13)
         result = self.reset_below_horizon_dec_offset()
         response = self.send_message_param_sync({"method":"scope_park"})
         self.logger.info(f"Parking before shutdown...{response}")
@@ -321,7 +347,7 @@ class Seestar:
         return self.response_dict[cur_cmdid]
 
     def get_event_state(self, params=None):
-        self.event_state['Scheduler'] = self.scheduler_state
+        self.event_state["scheduler"]["state"] = self.schedule["state"]
         if params != None and 'event_name' in params:
             event_name = params['event_name']
             if event_name in self.event_state:
@@ -447,7 +473,7 @@ class Seestar:
         time.sleep(2)
         self.logger.info(f"current event state: {self.event_state}")
         while self.is_goto():
-            if self.scheduler_state == "Stopping":
+            if self.schedule['state'] == "stopping":
                 return False
             time.sleep(2)
         return True
@@ -783,7 +809,7 @@ class Seestar:
         self.cur_solve_Dec = -9999.0
         self.custom_goto_state = "working"
         search_count = 0
-        while self.scheduler_state != "Stopping" and self.custom_goto_state == "working":
+        while self.schedule['state'] != "stopping" and self.custom_goto_state == "working":
             # wait a bit to ensure we have preview image data
             time.sleep(1)
             self.send_message_param({"method": "start_solve"})
@@ -792,7 +818,7 @@ class Seestar:
             self.cur_solve_Dec = -9999.0
             # if we have not platesolve yet, then repeat
             while self.cur_solve_RA < -1000:
-                if self.scheduler_state == "Stopping" or self.custom_goto_state != "working":
+                if self.schedule['state'] == "stopping" or self.custom_goto_state != "working":
                     self.logger.info("auto center thread stopped because the scheduler was requested to stop")
                     self.custom_goto_state = "stopped"
                     return
@@ -860,11 +886,20 @@ class Seestar:
                 "name": result_name}
 
     # move to a good starting point position specified by lat and lon
+    # scheduler state example: {"state":"working", "schedule_id":"abcdefg", 
+    #       "result":0, "error":"dummy error",
+    #       "cur_schedule_item":{   "type":"mosaic", "schedule_item_GUID":"abcde", "state":"working",
+    #                               "stack_status":{"target_name":"test_target", "stack_count": 23, "rejected_count": 2},
+    #                               "item_elapsed_time_s":123, "item_remaining_time":-1}
+    #       }
+
     def start_up_thread_fn(self, params):
         try:
-            self.scheduler_state = "Running"
+            self.schedule['state'] = "working"
             self.logger.info("start up sequence begins ...")
             self.play_sound(80)
+            item_state = {"type": "start_up_sequence", "schedule_item_id": "Not Applicable", "action": "set configurations"}
+            self.update_scheduler_state_obj(item_state)
             tz_name = tzlocal.get_localzone_name()
             tz = tzlocal.get_localzone()
             now = datetime.now(tz)
@@ -903,8 +938,6 @@ class Seestar:
 
             loc_param['lat'] = Config.init_lat   
             loc_param['lon'] = Config.init_long
-            self.logger.info(f"Setting location to {loc_param['lat']}, {loc_param['lon']}")
-            
             loc_param['force'] = True
             loc_data['method'] = 'set_user_location'
             loc_data['params'] = loc_param
@@ -917,7 +950,9 @@ class Seestar:
 
             self.send_message_param_sync({"method": "pi_is_verified"})
 
-            self.logger.info("Need to park scope first for a good reference start point")
+            msg = "Need to park scope first for a good reference start point"
+            self.logger.info(msg)
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
             response = self.send_message_param_sync({"method":"scope_park"})
             self.logger.info(f"scope park response: {response}")
             if "error" in response:
@@ -932,6 +967,10 @@ class Seestar:
             else:
                 self.logger.info(f"scope_park failed.")
             
+            msg = f"Setting location to {Config.init_lat}, {Config.init_long}"
+            self.logger.info(msg)
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+
             self.logger.info(self.send_message_param_sync(date_data))
             response = self.send_message_param_sync(loc_data)
             if "error" in response:
@@ -972,7 +1011,9 @@ class Seestar:
 
             cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
 
-            self.logger.info(f"moving scope from lat-lon {cur_latlon[0]}, {cur_latlon[1]} to {lat}, {lon}")
+            msg = f"moving scope's aim toward a clear patch of sky for HC, from lat-lon {cur_latlon[0]}, {cur_latlon[1]} to {lat}, {lon}"
+            self.logger.info(msg)
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
 
             while True:
                 delta_lat = lat-cur_latlon[0]
@@ -1008,34 +1049,43 @@ class Seestar:
             result = True
             
             if do_AF:
+                msg = f"auto focus"
+                self.logger.info(msg)
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
                 result = self.try_auto_focus(2)
                 if result == False:
                     self.logger.warn("Start-up sequence stopped and was unsuccessful.")
                     return
             
             if do_3PPA:
+                msg = f"3 point polar alignment"
+                self.logger.info(msg)
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
                 result = self.try_3PPA(1)
                 if result == False:
                     self.logger.warn("Start-up sequence stopped and was unsuccessful.")
                     return
 
             if do_dark_frames:
+                msg = f"dark frame measurement"
+                self.logger.info(msg)
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
                 result = self.try_dark_frame()
                 if result == False:
                     self.logger.warn("Start-up sequence stopped and was unsuccessful.")
                     return
             
             self.logger.info(f"Start-up sequence result: {result}")
-
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
         finally:
-            self.scheduler_state = "Stopped"
+            self.schedule['state'] = "complete"
             self.play_sound(82)
 
     def action_set_dew_heater(self, params):
         return self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
 
     def action_start_up_sequence(self, params):
-        if self.scheduler_state != "Stopped":
+        if self.schedule['state'] != "stopped":
             return self.json_result("start_up_sequence", -1, "Device is busy. Try later.")
 
         move_up_dec_thread = threading.Thread(name=f"start-up-thread.{self.device_name}", target=lambda: self.start_up_thread_fn(params))
@@ -1051,182 +1101,212 @@ class Seestar:
         req['params'] = [params]
         return self.send_message_param_sync(req)
 
+    # scheduler state example: {"state":"working", "schedule_id":"abcdefg", 
+    #       "result":0, "error":"dummy error",
+    #       "cur_schedule_item":{   "type":"mosaic", "schedule_item_GUID":"abcde",
+    #                               "stack_status":{"target_name":"test_target", "action":"blah blah", "stack_count": 23, "rejected_count": 2},
+    #                               "item_elapsed_time_s":123, "item_remaining_time_s":-1}
+    #       }
+
     def spectra_thread_fn(self, params):
+        try:
+            # unlike Mosaic, we can't depend on platesolve to find star, so all movement is by simple motor movement
+            center_RA = params["ra"]
+            center_Dec = params["dec"]
+            is_j2000 = params['is_j2000']
+            target_name = params["target_name"]
+            session_length = params["session_time_sec"]
+            stack_params = {"gain": params["gain"], "restart": True}
+            spacing = [5.3, 6.2, 6.5, 7.1, 8.0, 8.9, 9.2, 9.8]
+            is_LP = [False, False, True, False, False, False, True, False]
+            num_segments = len(spacing)
 
-        # unlike Mosaic, we can't depend on platesolve to find star, so all movement is by simple motor movement
+            item_state = {"type": "spectra", "schedule_item_id": self.schedule['current_item_id'], "target_name":target_name, "action": "slew to target", "acquire_total_time_s":session_length, "acquire_remaining_time_s":session_length}
+            self.update_scheduler_state_obj(item_state)
+            parsed_coord = Util.parse_coordinate(is_j2000, center_RA, center_Dec)
+            center_RA = parsed_coord.ra.hour
+            center_Dec = parsed_coord.dec.deg
 
-        center_RA = params["ra"]
-        center_Dec = params["dec"]
-        is_j2000 = params['is_j2000']
-        target_name = params["target_name"]
-        session_length = params["session_time_sec"]
-        stack_params = {"gain": params["gain"], "restart": True}
-        spacing = [5.3, 6.2, 6.5, 7.1, 8.0, 8.9, 9.2, 9.8]
-        is_LP = [False, False, True, False, False, False, True, False]
-        num_segments = len(spacing)
+            # 60s for the star
+            exposure_time_per_segment = round((session_length - 60.0) / num_segments)
+            time_remaining = session_length
 
-        parsed_coord = Util.parse_coordinate(is_j2000, center_RA, center_Dec)
-        center_RA = parsed_coord.ra.hour
-        center_Dec = parsed_coord.dec.deg
+            if center_RA < 0:
+                center_RA = self.ra
+                center_Dec = self.dec
+            else:
+                # move to target
+                self._slew_to_ra_dec([center_RA, center_Dec])
 
-        # 60s for the star
-        exposure_time_per_segment = round((session_length - 60.0) / num_segments)
-        if center_RA < 0:
-            center_RA = self.ra
-            center_Dec = self.dec
-        else:
-            # move to target
-            self._slew_to_ra_dec([center_RA, center_Dec])
-
-        # take one minute exposure for the star
-        if self.scheduler_state != "Running":
-            self.scheduler_state = "Stopped"
-            self.scheduler_item_state = "Stopped"
-            return
-        self.set_target_name(target_name + "_star")
-        if not self.start_stack(stack_params):
-            return
-        time.sleep(60)
-        self.stop_stack()
-
-        # capture spectra
-        cur_dec = center_Dec
-        for index in range(len(spacing)):
-            if self.scheduler_state != "Running":
-                self.scheduler_state = "Stopped"
-                self.scheduler_item_state = "Stopped"
+            # take one minute exposure for the star
+            if self.schedule['state'] != "working":
+                self.schedule['state'] = "stopped"
                 return
-            cur_dec = center_Dec + spacing[index]
-            self.send_message_param_sync({"method": "set_setting", "params": {"stack_lenhance": is_LP[index]}})
-            self._slew_to_ra_dec([center_RA, cur_dec])
-            self.set_target_name(target_name + "_spec_" + str(index + 1))
+            self.set_target_name(target_name + "_star")
             if not self.start_stack(stack_params):
                 return
-            count_down = exposure_time_per_segment
-            while count_down > 0:
-                if self.scheduler_state != "Running":
-                    self.stop_stack()
-                    self.scheduler_state = "Stopped"
-                    self.scheduler_item_state = "Stopped"
-                    return
-                time.sleep(10)
-                count_down -= 10
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "stack for reference star for 60 seconds"
+            time.sleep(60)
             self.stop_stack()
+            time_remaining -= 60
+            self.event_state["scheduler"]["cur_scheduler_item"]["acquire_remaining_time_s"] = time_remaining
 
-        self.logger.info("Finished spectra mosaic.")
-        self.scheduler_item_state = "Stopped"
+            # capture spectra
+            cur_dec = center_Dec
+            for index in range(len(spacing)):
+                if self.schedule['state'] != "working":
+                    self.schedule['state'] = "stopped"
+                    return
+                cur_dec = center_Dec + spacing[index]
+                self.send_message_param_sync({"method": "set_setting", "params": {"stack_lenhance": is_LP[index]}})
+                self._slew_to_ra_dec([center_RA, cur_dec])
+                self.set_target_name(target_name + "_spec_" + str(index + 1))
+                if not self.start_stack(stack_params):
+                    return
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = f"stack for spectra at spacing index {index}"                
+                count_down = exposure_time_per_segment
+                while count_down > 0:
+                    if self.schedule['state'] != "working":
+                        self.stop_stack()
+                        self.schedule['state'] = "stopped"
+                        return
+                    time_remaining = session_length - 60 - index*exposure_time_per_segment + count_down
+                    time.sleep(10)
+                    count_down -= 10
+                    time_remaining -= 10
+                    self.event_state["scheduler"]["cur_scheduler_item"]["acquire_remaining_time_s"] = time_remaining
+                self.stop_stack()
+
+            self.logger.info("Finished spectra mosaic.")
+            self.event_state["scheduler"]["cur_scheduler_item"]["acquire_remaining_time_s"] = 0
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "complete"
+        finally:
+            self.is_cur_scheduler_item_working = False
+
 
     # {"target_name":"kai_Vega", "ra":-1.0, "dec":-1.0, "is_use_lp_filter_too":true, "session_time_sec":600, "grating_lines":300}
     def start_spectra_item(self, params):
-        if self.scheduler_state != "Running":
+        if self.schedule['state'] != "working":
             self.logger.info("Run Scheduler is stopping")
-            self.scheduler_state = "Stopped"
+            self.schedule['state'] = "stopped"
             return
-        self.scheduler_item_state = "Running"
+        self.is_cur_scheduler_item_working = True
         self.mosaic_thread = threading.Thread(name=f"spectra-thread.{self.device_name}", target=lambda: self.spectra_thread_fn(params))
         self.mosaic_thread.start()
         return "spectra mosiac started"
 
     def mosaic_thread_fn(self, target_name, center_RA, center_Dec, is_use_LP_filter, session_time, nRA, nDec,
                          overlap_percent, gain, is_use_autofocus, selected_panels):
-        spacing_result = Util.mosaic_next_center_spacing(center_RA, center_Dec, overlap_percent)
-        delta_RA = spacing_result[0]
-        delta_Dec = spacing_result[1]
-
-        is_use_selected_panels = not selected_panels == ""
-        if is_use_selected_panels:
-            panel_set = selected_panels.split(';')
-        else:
-            panel_set = []
-
-        # adjust mosaic center if num panels is even
-        if nRA % 2 == 0:
-            center_RA += delta_RA / 2
-        if nDec % 2 == 0:
-            center_Dec += delta_Dec / 2
-
-        sleep_time_per_panel = round(session_time / nRA / nDec)
-
-        cur_dec = center_Dec - int(nDec / 2) * delta_Dec
-        for index_dec in range(nDec):
-            self.cur_mosaic_nDec = index_dec + 1
-            spacing_result = Util.mosaic_next_center_spacing(center_RA, cur_dec, overlap_percent)
+        try:
+            spacing_result = Util.mosaic_next_center_spacing(center_RA, center_Dec, overlap_percent)
             delta_RA = spacing_result[0]
-            cur_ra = center_RA - int(nRA / 2) * spacing_result[0]
-            for index_ra in range(nRA):
-                self.cur_mosaic_nRA = index_ra + 1
-                if self.scheduler_state != "Running":
-                    self.logger.info("Mosaic mode was requested to stop. Stopping")
-                    self.scheduler_state = "Stopped"
-                    self.scheduler_item_state = "Stopped"
-                    self.cur_mosaic_nDec = -1
-                    self.cur_mosaic_nRA = -1
-                    return
+            delta_Dec = spacing_result[1]
 
-                # check if we are doing a subset of the panels
-                panel_string = str(index_ra + 1) + str(index_dec + 1)
-                if is_use_selected_panels and panel_string not in panel_set:
-                    cur_ra += delta_RA
-                    continue
+            num_panels = nRA*nDec
+            is_use_selected_panels = not selected_panels == ""
+            if is_use_selected_panels:
+                panel_set = selected_panels.split(';')
+                num_panels = len(panel_set)
+            else:
+                panel_set = []
 
-                if nRA == 1 and nDec == 1:
-                    save_target_name = target_name
-                else:
-                    save_target_name = target_name + "_" + panel_string
-                self.logger.info("mosaic goto for panel %s, to location %s", panel_string, (cur_ra, cur_dec))
+            # adjust mosaic center if num panels is even
+            if nRA % 2 == 0:
+                center_RA += delta_RA / 2
+            if nDec % 2 == 0:
+                center_Dec += delta_Dec / 2
 
-                # set_settings(x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, heater_enable):
-                # TODO: Need to set correct parameters
-                self.send_message_param_sync({"method": "set_setting", "params": {"stack_lenhance": False}})
-                self.goto_target({'ra': cur_ra, 'dec': cur_dec, 'is_j2000': False, 'target_name': save_target_name})
-                result = self.wait_end_op("goto_target")
-                self.logger.info(f"Goto operation finished with result code: {result}")
+            sleep_time_per_panel = round(session_time / nRA / nDec)
 
-                time.sleep(3)
+            item_session_time = sleep_time_per_panel * num_panels
+            item_remaining_time = item_session_time
+            item_state = {"type": "mosaic", "schedule_item_id": self.schedule['current_item_id'], "target_name":target_name, "action": "starting", "acquire_total_time_s":item_session_time, "acquire_remaining_time_s":item_session_time}
+            self.update_scheduler_state_obj(item_state)
 
-                if result == True:
-                    self.send_message_param_sync(
-                        {"method": "set_setting", "params": {"stack_lenhance": is_use_LP_filter}})
+            cur_dec = center_Dec - int(nDec / 2) * delta_Dec
+            for index_dec in range(nDec):
+                self.cur_mosaic_nDec = index_dec + 1
+                spacing_result = Util.mosaic_next_center_spacing(center_RA, cur_dec, overlap_percent)
+                delta_RA = spacing_result[0]
+                cur_ra = center_RA - int(nRA / 2) * spacing_result[0]
+                for index_ra in range(nRA):
+                    self.cur_mosaic_nRA = index_ra + 1
+                    if self.schedule['state'] != "working":
+                        self.logger.info("Mosaic mode was requested to stop. Stopping")
+                        self.schedule['state'] = "stopped"
+                        self.cur_mosaic_nDec = -1
+                        self.cur_mosaic_nRA = -1
+                        return
 
-                    if is_use_autofocus == True:
-                        result = self.try_auto_focus(2)
-                    if result == False:
-                        self.logger.info("Failed to auto focus, but will continue to next panel anyway.")
-                        result = True
+                    # check if we are doing a subset of the panels
+                    panel_string = str(index_ra + 1) + str(index_dec + 1)
+                    if is_use_selected_panels and panel_string not in panel_set:
+                        cur_ra += delta_RA
+                        continue
+
+                    if nRA == 1 and nDec == 1:
+                        save_target_name = target_name
+                    else:
+                        save_target_name = target_name + "_" + panel_string
+                    self.logger.info("mosaic goto for panel %s, to location %s", panel_string, (cur_ra, cur_dec))
+
+                    # set_settings(x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, heater_enable):
+                    # TODO: Need to set correct parameters
+                    self.send_message_param_sync({"method": "set_setting", "params": {"stack_lenhance": False}})
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = f"slewing to target, panel: {nRA}{nDec}"
+                    self.goto_target({'ra': cur_ra, 'dec': cur_dec, 'is_j2000': False, 'target_name': save_target_name})
+                    result = self.wait_end_op("goto_target")
+                    self.logger.info(f"Goto operation finished with result code: {result}")
+
+                    time.sleep(3)
+
                     if result == True:
-                        time.sleep(4)
-                        if not self.start_stack({"gain": gain, "restart": True}):
-                            return
-
-                        for i in range(sleep_time_per_panel):
-                            threading.current_thread().last_run = datetime.now()
-
-                            if self.scheduler_state != "Running":
-                                self.logger.info("Scheduler was requested to stop. Stopping current mosaic.")
-                                self.stop_stack()
-                                self.scheduler_item_state = "Stopped"
-                                self.scheduler_state = "Stopped"
+                        self.send_message_param_sync(
+                            {"method": "set_setting", "params": {"stack_lenhance": is_use_LP_filter}})
+                        if is_use_autofocus == True:
+                            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "auto focusing"
+                            result = self.try_auto_focus(2)
+                        if result == False:
+                            self.logger.info("Failed to auto focus, but will continue to next panel anyway.")
+                            result = True
+                        if result == True:
+                            time.sleep(4)
+                            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = f"start stacking for panel {nRA}{nDec} for {sleep_time_per_panel} seconds"
+                            if not self.start_stack({"gain": gain, "restart": True}):
                                 return
-                            time.sleep(1)
 
-                        self.stop_stack()
-                        self.logger.info("Stacking operation finished " + save_target_name)
-                else:
-                    self.logger.info("Goto failed.")
+                            for i in range(sleep_time_per_panel/5):
+                                threading.current_thread().last_run = datetime.now()
 
-                cur_ra += delta_RA
-            cur_dec += delta_Dec
-        self.logger.info("Finished mosaic.")
-        self.scheduler_item_state = "Stopped"
-        self.cur_mosaic_nDec = -1
-        self.cur_mosaic_nRA = -1
+                                if self.schedule['state'] != "working":
+                                    self.logger.info("Scheduler was requested to stop. Stopping current mosaic.")
+                                    self.stop_stack()
+                                    self.schedule['state'] = "stopped"
+                                    return
+                                time.sleep(5)
+                                time_remaining -= 5
+                                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = f"stacked panel {nRA}{nDec} for {5*i} seconds"
+                                self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = time_remaining
+                            self.stop_stack()
+                            self.logger.info("Stacking operation finished " + save_target_name)
+                    else:
+                        self.logger.info("Goto failed.")
+
+                    cur_ra += delta_RA
+                cur_dec += delta_Dec
+            self.logger.info("Finished mosaic.")
+            self.cur_mosaic_nDec = -1
+            self.cur_mosaic_nRA = -1
+            self.event_state["scheduler"]["cur_scheduler_item"]["acquire_remaining_time_s"] = 0
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "complete"
+        finally:
+            self.is_cur_scheduler_item_working = False
 
     def start_mosaic_item(self, params):
-        if self.scheduler_state != "Running":
+        if self.schedule['state'] != "working":
             self.logger.info("Run Scheduler is stopping")
-            self.scheduler_state = "Stopped"
+            self.schedule['state'] = "stopped"
             return
-        self.scheduler_item_state = "Running"
         target_name = params['target_name']
         center_RA = params['ra']
         center_Dec = params['dec']
@@ -1248,8 +1328,7 @@ class Seestar:
 
         # verify mosaic pattern
         if nRA < 1 or nDec < 0:
-            self.logger.info("Mosaic size is invalid")
-            self.scheduler_item_state = "Stopped"
+            self.logger.info("Mosaic size is invalid. Moving to next schedule item if any.")
             return
 
         if not isinstance(center_RA, str) and center_RA == -1 and center_Dec == -1:
@@ -1275,6 +1354,7 @@ class Seestar:
         self.logger.info("  use autofocus : %s", is_use_autofocus)
         self.logger.info("  select panels : %s", selected_panels)
 
+        self.is_cur_scheduler_item_working = True
         self.mosaic_thread = threading.Thread(
             target=lambda: self.mosaic_thread_fn(target_name, center_RA, center_Dec, is_use_LP_filter, session_time,
                                                  nRA, nDec, overlap_percent, gain, is_use_autofocus, selected_panels))
@@ -1286,16 +1366,15 @@ class Seestar:
             if self.schedule['schedule_id'] != params['schedule_id']:
                 return {}
             
-        self.schedule['state'] = self.scheduler_state
         self.schedule['cur_mosaic_panel_ra'] = self.cur_mosaic_nRA
         self.schedule['cur_mosaic_panel_dec'] = self.cur_mosaic_nDec
         return self.schedule
 
     def create_schedule(self, params):
-        if self.scheduler_state == "Running":
+        if self.schedule['state'] == "working":
             return "scheduler is still active"
-        if self.scheduler_state == "Stopping":
-            self.scheduler_state = "Stopped"
+        if self.schedule['state'] == "stopping":
+            self.schedule['state'] = "stopped"
         
         if 'schedule_id' in params:
             schedule_id = params['schedule_id']
@@ -1303,7 +1382,7 @@ class Seestar:
             schedule_id = str(uuid.uuid4())
 
         self.schedule['schedule_id'] = schedule_id
-        self.schedule['state'] = self.scheduler_state
+        self.schedule['state'] = self.schedule['state']
         self.schedule['list'].clear()
         return self.schedule
 
@@ -1321,7 +1400,7 @@ class Seestar:
                     mosaic_params['is_j2000'] = False
                 mosaic_params['ra'] = round(mosaic_params['ra'], 4)
                 mosaic_params['dec'] = round(mosaic_params['dec'], 4)
-        params['id'] = str(uuid.uuid4())
+        params['item_id'] = str(uuid.uuid4())
         return params
 
     def add_schedule_item(self, params):
@@ -1332,11 +1411,11 @@ class Seestar:
     def insert_schedule_item_before(self, params):
         targeted_item_id = params['before_id']
         index = 0
-        if self.scheduler_state == 'Running':
+        if self.schedule['state'] == 'working':
             active_schedule_item_id = self.schedule['current_item_id']
             reached_cur_item = False
             while index < len(self.schedule['list']) and not reached_cur_item:
-                item_id = self.schedule['list'][index].get('id', 'UNKNOWN')
+                item_id = self.schedule['list'][index].get('item_id', 'UNKNOWN')
                 if item_id == targeted_item_id:
                     self.logger.warn("Cannot insert schedule item that has already been executed")
                     return self.schedule
@@ -1345,7 +1424,7 @@ class Seestar:
                 index += 1
         while index < len(self.schedule['list']):
             item = self.schedule['list'][index]
-            item_id = item.get('id', 'UNKNOWN')
+            item_id = item.get('item_id', 'UNKNOWN')
             if item_id == targeted_item_id:
                 new_item = self.construct_schedule_item(params)
                 self.schedule['list'].insert(index, new_item)
@@ -1354,13 +1433,13 @@ class Seestar:
         return self.schedule
 
     def remove_schedule_item(self, params):
-        targeted_item_id = params['id']
+        targeted_item_id = params['item_id']
         index = 0
-        if self.scheduler_state == 'Running':
+        if self.schedule['state'] == 'working':
             active_schedule_item_id = self.schedule['current_item_id']
             reached_cur_item = False
             while index < len(self.schedule['list']) and not reached_cur_item:
-                item_id = self.schedule['list'][index].get('id', 'UNKNOWN')
+                item_id = self.schedule['list'][index].get('item_id', 'UNKNOWN')
                 if item_id == targeted_item_id:
                     self.logger.warn("Cannot remove schedule item that has already been executed")
                     return self.schedule
@@ -1369,7 +1448,7 @@ class Seestar:
                 index += 1
         while index < len(self.schedule['list']):
             item = self.schedule['list'][index]
-            item_id = item.get('id', 'UNKNOWN')
+            item_id = item.get('item_id', 'UNKNOWN')
             if item_id == targeted_item_id:
                 self.schedule['list'].remove(item)
                 break
@@ -1378,7 +1457,7 @@ class Seestar:
 
     # shortcut to start a new scheduler with only a mosaic request
     def start_mosaic(self, params):
-        if self.scheduler_state != "Stopped":
+        if self.schedule['state'] != "stopped":
             return self.json_result("start_mosaic", -1, "An existing scheduler is active. Returned with no action.")
         self.create_schedule(params)
         schedule_item = {}
@@ -1389,7 +1468,7 @@ class Seestar:
 
     # shortcut to start a new scheduler with only a spectra request
     def start_spectra(self, params):
-        if self.scheduler_state != "Stopped":
+        if self.schedule['state'] != "stopped":
             return self.json_result("start_spectra", -1, "An existing scheduler is active. Returned with no action.")
         self.create_schedule(params)
         schedule_item = {}
@@ -1409,74 +1488,93 @@ class Seestar:
     def start_scheduler(self, params):
         if "schedule_id" in params and params['schedule_id'] != self.schedule['schedule_id']:
             return self.json_result("start_scheduler", 0, f"Schedule with id {params['schedule_id']} did not match this device's schedule. Returned with no action.")
-        if self.scheduler_state != "Stopped":
+        if self.schedule['state'] != "stopped":
             return self.json_result("start_scheduler", -1, "An existing scheduler is active. Returned with no action.")
         self.scheduler_thread = threading.Thread(target=lambda: self.scheduler_thread_fn(), daemon=True)
         self.scheduler_thread.name = f"SchedulerThread.{self.device_name}"
         self.scheduler_thread.start()
-        self.scheduler_state = "Running"
-        self.schedule['state'] = self.scheduler_state
+        self.schedule['state'] = "working"
         return self.schedule
+
+    # scheduler state example: {"state":"working", "schedule_id":"abcdefg", 
+    #       "result":0, "error":"dummy error",
+    #       "cur_schedule_item":{   "type":"mosaic", "schedule_item_GUID":"abcde", "state":"working",
+    #                               "stack_status":{"target_name":"test_target", "stack_count": 23, "rejected_count": 2},
+    #                               "item_elapsed_time_s":123, "item_remaining_time":-1}
+    #       }
 
     def scheduler_thread_fn(self):
         def update_time():
             threading.current_thread().last_run = datetime.now()
 
-        self.scheduler_state = "Running"
+        self.schedule['state'] = "working"
         issue_shutdown = False
         self.play_sound(80)
         self.logger.info("schedule started ...")
         index = 0
         while index < len(self.schedule['list']):
             update_time()
-            if self.scheduler_state != "Running":
+            if self.schedule['state'] != "working":
                 break
-            item = self.schedule['list'][index]
-            self.schedule['current_item_id'] = item.get('id', 'UNKNOWN')
-            action = item['action']
+            cur_schedule_item = self.schedule['list'][index]
+            self.schedule['current_item_id'] = cur_schedule_item.get('id', 'UNKNOWN')
+            action = cur_schedule_item['action']
             if action == 'start_mosaic':
-                self.start_mosaic_item(item['params'])
-                while self.scheduler_item_state == "Running":
+                self.start_mosaic_item(cur_schedule_item['params'])
+                while self.is_cur_scheduler_item_working == True:
                     update_time()
                     time.sleep(2)
             elif action == 'start_spectra':
-                self.start_spectra_item(item['params'])
-                while self.scheduler_item_state == "Running":
+                self.start_spectra_item(cur_schedule_item['params'])
+                while self.is_cur_scheduler_item_working == True:
                     update_time()
                     time.sleep(2)
             elif action == 'auto_focus':
-                self.try_auto_focus(item['params']['try_count'])
+                item_state = {"type": "auto_focus", "schedule_item_id": self.schedule['current_item_id'], "action": "auto focus"}
+                self.update_scheduler_state_obj(item_state)
+                self.try_auto_focus(cur_schedule_item['params']['try_count'])
             elif action == 'shutdown':
-                self.scheduler_state = "Stopped"
+                item_state = {"type": "shut_down", "schedule_item_id": self.schedule['current_item_id'], "action": "shut down"}
+                self.update_scheduler_state_obj(item_state)
+                self.schedule['state'] = "stopped"
                 issue_shutdown = True
                 break
             elif action == 'wait_for':
-                sleep_time = item['params']['timer_sec']
+                sleep_time = cur_schedule_item['params']['timer_sec']
+                item_state = {"type": "wait_for", "schedule_item_id": self.schedule['current_item_id'], "action": f"wait for {sleep_time} seconds", "remaining s": sleep_time}
+                self.update_scheduler_state_obj(item_state)
                 sleep_count = 0
-                while sleep_count < sleep_time and self.scheduler_state == "Running":
+                while sleep_count < sleep_time and self.schedule['state'] == "working":
                     update_time()
-                    time.sleep(2)
-                    sleep_count += 2
+                    time.sleep(5)
+                    sleep_count += 5
+                    self.event_state["scheduler"]["cur_scheduler_item"]["remaining s"] = sleep_time - sleep_count
+
             elif action == 'wait_until':
-                wait_until_time = item['params']['local_time'].split(":")
+                wait_until_time = cur_schedule_item['params']['local_time'].split(":")
                 time_hour = int(wait_until_time[0])
                 time_minute = int(wait_until_time[1])
-                while self.scheduler_state == "Running":
+                sleep_time = cur_schedule_item['params']['timer_sec']
+                local_time = local_time = datetime.now()
+                item_state = {"type": "wait_until", "schedule_item_id": self.schedule['current_item_id'], 
+                              "action": f"wait until local time of {cur_schedule_item['params']['local_time']}", "current time": f"{local_time.hour:{local_time.minute}}"}
+                self.update_scheduler_state_obj(item_state)
+                while self.schedule['state'] == "working":
                     update_time()
                     local_time = datetime.now()
                     if local_time.hour == time_hour and local_time.minute == time_minute:
                         break
-                    time.sleep(2)
+                    time.sleep(5)
+                    self.event_state["scheduler"]["cur_scheduler_item"]["current time"] = f"{local_time.hour:{local_time.minute}}"
             else:
-                request = {'method': action, 'params': item['params']}
+                request = {'method': action, 'params': cur_schedule_item['params']}
                 self.send_message_param_sync(request)
             index += 1
-
         self.reset_below_horizon_dec_offset()
 
-        self.scheduler_state = "Stopped"
+        self.schedule['state'] = "stopped"
         self.schedule['current_item_id'] = ""
-        self.logger.info("Scheduler Stopped.")
+        self.logger.info("Scheduler stopped.")
         self.play_sound(82)
         if issue_shutdown:
             self.send_message_param_sync({"method":"pi_shutdown"})
@@ -1485,14 +1583,14 @@ class Seestar:
         if 'schedule_id' in params and self.schedule['schedule_id'] != params['schedule_id']:
             return self.json_result("stop_scheduler", 0, f"Schedule with id {params['schedule_id']} did not match this device's schedule. Returned with no action.")
             
-        if self.scheduler_state == "Running":
-            self.scheduler_state = "Stopping"
+        if self.schedule['state'] == "working":
+            self.schedule['state'] = "stopping"
             self.stop_slew()
             self.stop_stack()
             self.play_sound(83)
             return self.json_result("stop_scheduler", 0, f"Scheduler stopped successfully.")
 
-        elif self.scheduler_state == "Stopped":
+        elif self.schedule['state'] == "stopped":
             return self.json_result("stop_scheduler", -3, "Scheduler is not running while trying to stop!")
         else:
             return self.json_result("stop_scheduler", -4, "scheduler has already been requested to stop")

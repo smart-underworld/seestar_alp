@@ -1386,7 +1386,7 @@ class ImageResource:
             state = current["Value"]["state"]
             schedule = current["Value"]
         else:
-            state = "Stopped"
+            state = "stopped"
             schedule = {"list": get_queue(telescope_id)}
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
@@ -1410,7 +1410,7 @@ class GotoResource:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
         else:
-            state = "Stopped"
+            state = "stopped"
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'goto.html', state=state, schedule=schedule, values=values, errors=errors, action=f"/{telescope_id}/goto", **context)
@@ -1435,7 +1435,7 @@ class CommandResource:
             
         else:
             schedule = {"list": get_queue(telescope_id)}
-            state = "Stopped"
+            state = "stopped"
 
         context = get_context(telescope_id, req)
 
@@ -1468,7 +1468,7 @@ class MosaicResource:
             state = current["Value"]["state"]
             schedule = current["Value"]
         else:
-            state = "Stopped"
+            state = "stopped"
             schedule = {"list": get_queue(telescope_id)}
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
@@ -1639,7 +1639,7 @@ class ScheduleToggleResource:
     def on_post(self, req, resp, telescope_id=0):
         current = do_action_device("get_schedule", telescope_id, {})
         state = current["Value"]["state"]
-        if state == "Stopped":
+        if state == "stopped":
             do_action_device("start_scheduler", telescope_id, {})
         else:
             do_action_device("stop_scheduler", telescope_id, {})
@@ -1651,7 +1651,7 @@ class ScheduleToggleResource:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
         else:
-            state = "Stopped"
+            state = "stopped"
         context = get_context(telescope_id, req)
         render_template(req, resp, 'partials/schedule_state.html', state=state, **context)
 
@@ -1663,7 +1663,7 @@ class ScheduleClearResource:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
 
-            if state == "Running":
+            if state == "working":
                 do_action_device("stop_scheduler", telescope_id, {})
                 flash(resp, "Stopping scheduler")
 

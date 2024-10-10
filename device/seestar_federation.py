@@ -16,7 +16,7 @@ class Seestar_Federation:
         self.seestar_devices = seestar_devices
         self.schedule = {}
         self.schedule['list'] = []
-        self.schedule['state'] = "Stopped"
+        self.schedule['state'] = "stopped"
         self.schedule['schedule_id'] = str(uuid.uuid4())
 
     def disconnect(self):
@@ -150,7 +150,7 @@ class Seestar_Federation:
                 device_schedule = cur_device.get_schedule(params)
                 if 'state' not in device_schedule:
                     continue
-                if device_schedule['state'] == "Stopped":
+                if device_schedule['state'] == "stopped":
                     availiable_device_list.append(key)
                 result['device'][key] = device_schedule
         result['available_device_list'] = availiable_device_list
@@ -160,7 +160,7 @@ class Seestar_Federation:
     def create_schedule(self, params):
         self.schedule = {}
         self.schedule['list'] = []
-        self.schedule['state'] = "Stopped"
+        self.schedule['state'] = "stopped"
         self.schedule['schedule_id'] = str(uuid.uuid4())
         return self.schedule
 
@@ -228,7 +228,7 @@ class Seestar_Federation:
 
         self.schedule = {}
         self.schedule['list'] = []
-        self.schedule['state'] = "Stopped"
+        self.schedule['state'] = "stopped"
         self.schedule['schedule_id'] = str(uuid.uuid4())
         schedule_item = {}
         schedule_item['action'] = "start_mosaic"
