@@ -1,0 +1,42 @@
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <h4>Current Status of Devices</h4>
+        </div>
+    </div>
+
+    {% if results and results|length >0 %}
+        {% set has_device_id = results[0].DeviceID is defined %}
+
+        {% if has_device_id %}
+            {% set grouped_results = results | groupby('DeviceID') %}
+            {% for device_id, device_events in grouped_results %}
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <h5>Device ID: {{ device_id }}</h5>
+                    </div>
+                </div>
+                <div class="row">
+                    {% for event_name in ['3PPA', 'AutoFocus', 'DarkLibrary', 'PlateSolve', 'Stack', 'WheelMove'] %}
+                        <div class="col-md-2 mb-3">
+                            {% set event_status = device_events | selectattr('Event', 'equalto', event_name) | first %}
+                            {% include 'event_card.html' %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="row">
+                {% for event_name in ['3PPA', 'AutoFocus', 'DarkLibrary', 'PlateSolve', 'Stack', 'WheelMove'] %}
+                    <div class="col-md-2 mb-3">
+                        {% set event_status = results | selectattr('Event', 'equalto', event_name) | first %}
+                        {% include 'event_card.html' %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% else %}
+        <p>No results available.</p>
+    {% endif %}
+
+</div>
