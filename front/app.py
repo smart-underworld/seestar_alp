@@ -422,7 +422,7 @@ def method_sync(method, telescope_id=1, **kwargs):
             for tel in get_telescopes():
                 devnum = str(tel.get("device_num"))
                 dev_value = value.get(devnum) if value else None
-                results[devnum] = err_extractor(dev_value)
+                results[devnum] = err_extractor(dev_value) or "Offline"
                 if results[devnum] is None:
                     results[devnum] = "Offline"
                 else:
@@ -430,12 +430,12 @@ def method_sync(method, telescope_id=1, **kwargs):
                         results[devnum] = results[devnum]["result"]
         else:
             results = err_extractor(value) if value else "Offline"
-            if results["status"] == "error":
+            if results.get("status",{}) == "error":
                 return results
-            if results["result"] == 0:
+            if results.get("result",{}) == 0:
                 return results
             else:
-                return results["result"]
+                return results.get("result",{})
         return results
     return None
 
@@ -1275,8 +1275,10 @@ def get_live_status(telescope_id: int):
             # print("stage", stage, substage, dev.view_state.get(stage))
 
         if stack:
+            # TODO : change below multiplier to actual exposure length
             stats = {
                 "gain": stack.get("gain"),
+                "integration_time": str(timedelta(seconds=stack.get("stacked_frame") * 10)),
                 "stacked_frame": stack.get("stacked_frame"),
                 "dropped_frame": stack.get("dropped_frame"),
                 "elapsed": human_ts(stack["lapse_ms"]),
@@ -1703,7 +1705,37 @@ class ScheduleImportResource:
         flash(resp, f"Schedule imported from {filename}.")
         redirect(f"/{telescope_id}/schedule")
 
+class EventStatus:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        results = []
+        telescopes = get_telescopes()
+        context = get_context(telescope_id, req)
+        now = datetime.now()
+        event_state = do_action_device("get_event_state", telescope_id, {})
 
+        if "Value" in event_state:
+            events = event_state["Value"]
+        if "result" in events:
+            if isinstance(events, dict):
+                result_info = events["result"]
+                if isinstance(result_info, dict):
+                    for event_key, event_value in result_info.items():
+                        if isinstance(event_value, dict):
+                            results.append(event_value)
+        else:
+            for device_id, device_info in events.items():
+                # Ensure device_info contains "result" and it is a dictionary
+                if isinstance(device_info, dict) and "result" in device_info:
+                    result_info = device_info["result"]
+                    if isinstance(result_info, dict):
+                        for event_key, event_value in result_info.items():
+                            if isinstance(event_value, dict):
+                                # Add the device ID to each event
+                                event_value['DeviceID'] = device_id
+                                results.append(event_value)
+        render_template(req, resp, 'eventstatus.html', results=results, now=now, **context)
+        
 class LivePage:
     @staticmethod
     def on_get(req, resp, telescope_id=1, mode=None):
@@ -2506,6 +2538,7 @@ class FrontMain:
         app.add_route('/schedule/wait-for', ScheduleWaitForResource())
         app.add_route('/stats', StatsResource())
         app.add_route('/support', SupportResource())
+        app.add_route('/eventstatus', EventStatus())
         app.add_route('/reload', ReloadResource())
         app.add_route('/{telescope_id:int}/', HomeTelescopeResource())
         app.add_route('/{telescope_id:int}/goto', GotoResource())
@@ -2543,6 +2576,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/stats', StatsResource())
         app.add_route('/{telescope_id:int}/support', SupportResource())
         app.add_route('/{telescope_id:int}/system', SystemResource())
+        app.add_route('/{telescope_id:int}/eventstatus', EventStatus())
         app.add_route('/{telescope_id:int}/gensupportbundle', GenSupportBundleResource())
         app.add_route('/{telescope_id:int}/config', ConfigResource() )
         app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")

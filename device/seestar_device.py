@@ -1251,9 +1251,9 @@ class Seestar:
 
     def json_result(self, command_name, code, result):
         if code != 0:
-            self.logger.warn(f"Returing not normal result for command {command_name}, code: {code}, result: {result}.")
+            self.logger.warn(f"Returning not normal result for command {command_name}, code: {code}, result: {result}.")
         else:
-            self.logger.info(f"Returing result for command {command_name}, code: {code}, result: {result}.")
+            self.logger.debug(f"Returning result for command {command_name}, code: {code}, result: {result}.")
 
         return {"jsonrpc": "2.0", "TimeStamp":time.time(), "command":command_name, "code":code, "result":result}
     

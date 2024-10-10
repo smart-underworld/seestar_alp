@@ -9,7 +9,7 @@ function validate_access {
     exit 255
   fi
 
-  timeout 2 sudo id 2>&1 > /dev/null && sudo="true" || sudo="false"
+  sudo -n id 2>&1 > /dev/null && sudo="true" || sudo="false"
   if [ "$sudo" = "false" ]; then
     echo "ERROR: User does not have sudo access required for setup"
     exit 255

@@ -1,0 +1,74 @@
+{% set card_class = 'bg-dark' %}  <!-- Default card class -->
+{% if event_status %}
+    {% if event_status.state == 'complete' %}
+        {% set card_class = 'bg-success' %}  <!-- Green for complete -->
+    {% elif event_status.state == 'fail' %}
+        {% set card_class = 'bg-danger' %}  <!-- Red for fail -->
+    {% elif event_status.state == 'in progress' %}
+        {% set card_class = 'bg-warning' %}  <!-- Yellow for in progress -->
+    {% else %}
+        {% set card_class = 'bg-secondary' %}  <!-- Gray for unknown states -->
+    {% endif %}
+{% endif %}
+<div class="card text-center {{ card_class }}">
+    <div class="card-header">
+        {% if event_name == '3PPA' %}
+            <strong>PolarAlign</strong>
+        {% elif event_name == 'WheelMove' %}
+            <strong>FilterWheel</strong>
+        {% else %}
+            <strong>{{ event_name }}</strong>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        <p class="card-text">
+            <strong>State:</strong> {{ event_status.state if event_status and event_status.state else 'Idle' }}<br>
+            {% if event_status and event_status.error %}
+                <strong>Error:</strong> {{ event_status.error }}<br>
+            {% endif %}
+
+            {% if event_name == '3PPA' %}
+                {% if event_status and event_status.percent %}
+                    <strong>% Complete:</strong> {{ event_status.percent }}<br>
+                {% endif %}
+            {% endif %}
+
+            {% if event_name == 'AutoFocus' %}
+                {% if event_status and event_status.position %}
+                    <strong>Position:</strong> {{ event_status.position }}<br>
+                {% endif %}
+            {% endif %}
+
+            {% if event_name == 'DarkLibrary' %}
+                {% if event_status and event_status.percent %}
+                    <strong>% Complete:</strong> {{ event_status.percent }}<br>
+                {% endif %}
+            {% endif %}
+
+            {% if event_name == 'Stack' %}
+                {% if event_status %}
+                    {% set stacked_frame = event_status.stacked_frame | default(0) %}
+                    {% set dropped_frame = event_status.dropped_frame | default(0) %}
+                    {% set total_frame = stacked_frame + dropped_frame %}
+                    {% set failure_rate = (dropped_frame / total_frame * 100) if total_frame > 0 else 0.0 %}
+                    <strong>Stacked:</strong> {{ stacked_frame }}<br>
+                    <strong>Dropped:</strong> {{ dropped_frame }}<br>
+                    <strong>Fail Rate:</strong> {{ failure_rate | round(2) }}%<br>
+                {% endif %}
+            {% endif %}
+
+            {% if event_name == 'WheelMove' %}
+                {% if event_status and event_status.position %}
+                    {% if event_status.position == 1 %}
+                        {% set filter = "IRCUT" %}
+                    {% elif event_status.position == 2 %}
+                        {% set filter = "LP" %}
+                    {% elif event_status.position == 0 %}
+                        {% set filter = "DARK" %}
+                    {% endif %}
+                    <strong>Filter:</strong> {{ filter }}<br>
+                {% endif %}
+            {% endif %}
+        </p>
+    </div>
+</div>

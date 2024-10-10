@@ -8,6 +8,7 @@
 # This is just the beginning
 #
 import datetime
+import os
 import socket
 import threading
 import zipfile
@@ -269,7 +270,13 @@ class SeestarImaging:
                                             image_type = "lights_lp"
                                             image_dir = "lights"
 
-                                filename = f'{Config.save_frames_dir}/frames/{target_dir}/{image_dir}/{image_type}.{self.device_name}.{now}'
+                                directory = f'{Config.save_frames_dir}/frames/{target_dir}/{image_dir}'
+                                if not os.path.exists(directory):
+                                    try:
+                                        os.makedirs(directory)
+                                    except Exception as e:
+                                        self.logger.error(f"Device {self.device_name}: create directory failed: {e}")
+                                filename = f'{directory}/{image_type}.{self.device_name}.{now}'
                                 # filename = f'{Config.save_frames_dir}/frames/{self.device_name}/lights/lights.{self.device_name}.{now}'
                                 self.logger.info(f"saving image to {filename}")
                                 #print("Image:", image.shape)

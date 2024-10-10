@@ -8,6 +8,8 @@ if getattr(sys, "frozen",  False):
 else:
     search_path = os.path.join(os.path.dirname(__file__))
 
+logger = logging.getLogger()
+
 _version = None
 class Version:
     # https://stackoverflow.com/questions/14989858/get-the-current-git-hash-in-a-python-script
@@ -35,7 +37,7 @@ class Version:
             try:
                 _minimal_ext_cmd(['git', 'fetch', '--tags'])
             except OSError:
-                logging.log.warn("unable to get git tags")
+                logger.warning("unable to get git tags")
 
             try:
                 out = _minimal_ext_cmd(['git', 'describe', '--tags'])
