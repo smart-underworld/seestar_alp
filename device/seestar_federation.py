@@ -150,7 +150,7 @@ class Seestar_Federation:
                 device_schedule = cur_device.get_schedule(params)
                 if 'state' not in device_schedule:
                     continue
-                if device_schedule['state'] == "stopped":
+                if device_schedule['state'] == "stopped" or device_schedule['state'] == "complete":
                     availiable_device_list.append(key)
                 result['device'][key] = device_schedule
         result['available_device_list'] = availiable_device_list

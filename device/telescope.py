@@ -898,7 +898,8 @@ class ispulseguiding:
 class rightascension:
 
     def on_get(self, req: Request, resp: Response, devnum: int):
-        if not seestar_dev[devnum].is_connected:
+
+        if not devnum in seestar_dev or not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
                             NotConnectedException("Not connected.")).json
             return

@@ -409,7 +409,12 @@ class Seestar:
     def goto_target(self, params):
         if self.is_goto():
             self.logger.info("Failed: mount is in goto routine.")
-            return "Failed: mount is in goto routine."
+            return {"result":"Failed: mount is in goto routine."}
+        
+        threading.Thread(name=f"goto-target-thread.{self.device_name}", target=lambda: self.goto_target_thread(params)).start()
+        return {"result":0}
+
+    def goto_target_thread(self, params):
 
         is_j2000 = params['is_j2000']
         in_ra = params['ra']
@@ -419,13 +424,13 @@ class Seestar:
         in_dec = parsed_coord.dec.deg
         target_name = params.get("target_name", "unknown")
         self.logger.info("%s: going to target... %s %s %s, with dec offset %s", self.device_name, target_name, in_ra,
-                         in_dec, self.below_horizon_dec_offset)
+                         in_dec, self.below_horizon_dec_offset)        
         result = True
         if self.is_EQ_mode:
             if in_dec < -Config.init_lat:
                 msg = f"Failed. You tried to geto to a target [ {in_ra}, {in_dec} ] that seems to be too low for your location at lat={Config.init_lat}"
                 self.logger.warn(msg)
-                return msg
+                return
 
             safe_dec_offset = -in_dec+self.safe_dec_for_offset
             if safe_dec_offset > self.below_horizon_dec_offset:
@@ -434,7 +439,7 @@ class Seestar:
             elif self.below_horizon_dec_offset > 0 and in_dec > self.safe_dec_for_offset:
                 result = self.reset_below_horizon_dec_offset()
         if result != True:
-            return "Failed to goto target!"
+            return
         
         if self.below_horizon_dec_offset == 0:
             data = {}
@@ -446,10 +451,12 @@ class Seestar:
             params['target_name'] = target_name
             params['lp_filter'] = False
             data['params'] = params
-            return self.send_message_param_sync(data)
+            self.send_message_param_sync(data)
+            return
         else:
             # do the same, but when trying to center on target, need to implement ourselves to platesolve correctly to compensate for the dec offset
-            return self.goto_target_with_dec_offset_async(target_name, in_ra, in_dec)
+            self.goto_target_with_dec_offset_async(target_name, in_ra, in_dec)
+            return
 
     # {"method":"scope_goto","params":[1.2345,75.0]}
     def _slew_to_ra_dec(self, params):
@@ -660,7 +667,7 @@ class Seestar:
                 while True:
                     if "3PPA" in self.event_state:
                         event_state = self.event_state["3PPA"]
-                        if "state" in event_state and event_state["state"] == "fail":
+                        if "state" in event_state and (event_state["state"] == "fail"):
                             self.logger.info(f"3PPA failed: {event_state}.")
                             if not is_3PPA:
                                 response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"AutoGoto"}})
@@ -677,12 +684,16 @@ class Seestar:
                                 self.logger.info(response)
                                 result = True
                                 break
+                        elif "state" in event_state and (event_state["state"] == "cancel"):
+                            self.logger.info("Should not found a cancel state for 3PPA since we explicitly cancel only when we past 100% plate solve")
+                            result = False
+                            break
                     time.sleep(1)
                 if result == True:
                     break
         # give extra time to settle focuser
         time.sleep(2)
-        self.logger.info("3PPA completed")
+        self.logger.info(f"3PPA done with result {result}")
         return result
 
     def try_dark_frame(self):
@@ -829,7 +840,7 @@ class Seestar:
             if self.cur_solve_RA == 0 and self.cur_solve_Dec == 0:
                 if search_count > 5:
                     self.custom_goto_state = "fail"
-                    self.logger.warn(f"auto center failed after {search_count+1} tries.")
+                    self.logger.warn(f"auto center failed after {search_count} tries.")
                     return
                 else:
                     search_count += 1
@@ -851,7 +862,7 @@ class Seestar:
                 self.logger.warn(f"Failed to get close enough to target, try # {search_count}. Will try again.")
             else:
                 self.custom_goto_state = "fail"
-                self.logger.warn("auto center failed after {search_count+1} tries.")
+                self.logger.warn(f"auto center failed after {search_count} tries.")
                 return
             
         self.logger.info("auto center thread stopped because the scheduler was requested to stop")
@@ -950,25 +961,7 @@ class Seestar:
             self.logger.info("verify datetime string: %s", date_data)
             self.logger.info("verify location string: %s", loc_data)
 
-            self.send_message_param_sync({"method": "pi_is_verified"})
-
-            msg = "Need to park scope first for a good reference start point"
-            self.logger.info(msg)
-            self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
-            response = self.send_message_param_sync({"method":"scope_park"})
-            self.logger.info(f"scope park response: {response}")
-            if "error" in response:
-                msg = "Failed to park scope. Need to restart Seestar and try again."
-                self.logger.error(msg)
-                return msg
-            
-            result = self.wait_end_op("ScopeHome")
-
-            if result == True:
-                self.logger.info(f"scope_park completed.")
-            else:
-                self.logger.info(f"scope_park failed.")
-            
+            self.send_message_param_sync({"method": "pi_is_verified"})            
             msg = f"Setting location to {Config.init_lat}, {Config.init_long}"
             self.logger.info(msg)
             self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
@@ -988,6 +981,23 @@ class Seestar:
 
             # save frames setting
             self.send_message_param_sync({"method":"set_stack_setting", "params":{"save_discrete_ok_frame":Config.init_save_good_frames, "save_discrete_frame":Config.init_save_all_frames}})
+
+            msg = "Need to park scope first for a good reference start point"
+            self.logger.info(msg)
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+            response = self.send_message_param_sync({"method":"scope_park"})
+            self.logger.info(f"scope park response: {response}")
+            if "error" in response:
+                msg = "Failed to park scope. Need to restart Seestar and try again."
+                self.logger.error(msg)
+                return msg
+            
+            result = self.wait_end_op("ScopeHome")
+
+            if result == True:
+                self.logger.info(f"scope_park completed.")
+            else:
+                self.logger.info(f"scope_park failed.")
 
             # move the arm up using a thread runner
             # move 10 degrees from polaris
@@ -1077,6 +1087,15 @@ class Seestar:
                     self.logger.warn("Start-up sequence stopped and was unsuccessful.")
                     return
             
+            if do_3PPA:
+                msg = "perform a quick goto routine to confirm and add to the sky model"
+                self.logger.info(msg)
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+                goto_params = {'is_j2000':False, 'ra': self.ra+1.5, 'dec': self.dec}
+                result = self.goto_target(goto_params)
+                result = self.wait_end_op("goto_target")
+                self.logger.info(f"Goto operation finished with result code: {result}")
+
             self.logger.info(f"Start-up sequence result: {result}")
             self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
         finally:
