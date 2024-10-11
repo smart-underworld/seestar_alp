@@ -91,7 +91,7 @@ jobs:
           zip -r ../linux_seestar_alp.zip  ./seestar_alp/*
           echo "device_script_result=linux_seestar_alp.zip" >> $GITHUB_ENV
           echo "device_script_version=$(echo $git_version)" >> $GITHUB_ENV
-          if [[ "$git_version" =~ ".*[0-9]*-g.*" ]]; then
+          if [[ $git_version =~ .*[0-9]*-g.* ]]; then
             echo "device_script_prerelease=true"  >> $GITHUB_ENV
           else
             echo "device_script_prerelease=false"  >> $GITHUB_ENV
