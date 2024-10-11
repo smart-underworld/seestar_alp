@@ -2275,17 +2275,19 @@ class StellariumResource:
             StelJSON = json.loads(html_content)
             ra_j2000 = StelJSON['raJ2000']
             dec_J2000 = StelJSON['decJ2000']
-            if (StelJSON['localized-name'] != "" ):
-                objName = StelJSON['localized-name']
-            elif (StelJSON['name'] != ""):
-
-                objname = StelJSON['localized-name']
-            elif (StelJSON['designations'] != ""):
-                tmpObj = StelJSON['designations']
-                objName = tmpObj.split(" - ")[0]
+            if (StelJSON['object-type'] == 'star' and StelJSON['name'] == ''):
+                objName = 'Unnamed Star'
             else:
-                # Should never get here but whatever
-                objName = "Unknown"
+                if (StelJSON['localized-name'] != "" ):
+                    objName = StelJSON['localized-name']
+                elif (StelJSON['name'] != ""):
+                    objname = StelJSON['localized-name']
+                elif (StelJSON['designations'] != ""):
+                    tmpObj = StelJSON['designations']
+                    objName = tmpObj.split(" - ")[0]
+                else:
+                    # Should never get here but whatever
+                    objName = "Unknown"
             
             lpFilter = False
             objType = StelJSON['type']
