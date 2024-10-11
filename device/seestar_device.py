@@ -73,7 +73,7 @@ class Seestar:
         self.schedule['list'] = collections.deque()
         self.schedule['state'] = "stopped"
         self.schedule['current_item_id'] = ""       # uuid of the current/active item in the schedule list
-        self.schedule["item_index"] = 0             # order number of the schedule_item in the schedule list
+        self.schedule["item_number"] = 0             # order number of the schedule_item in the schedule list
         self.is_cur_scheduler_item_working = False
 
         self.event_state = {}
@@ -107,7 +107,7 @@ class Seestar:
 
     def update_scheduler_state_obj(self, item_state, result = 0):
         self.event_state["scheduler"]  = {"schedule_id": self.schedule['schedule_id'], "state":self.schedule['state'], 
-                                            "item_index": self.schedule["item_index"], "cur_scheduler_item": item_state , "result":result}
+                                            "item_number": self.schedule["item_number"], "cur_scheduler_item": item_state , "result":result}
     
     def heartbeat(self):  # I noticed a lot of pairs of test_connection followed by a get if nothing was going on
         #    json_message("test_connection")
@@ -899,7 +899,7 @@ class Seestar:
             self.schedule['state'] = "working"
             self.logger.info("start up sequence begins ...")
             self.play_sound(80)
-            self.schedule['item_index'] = 0     # there is really just one item in this container schedule, with many sub steps
+            self.schedule['item_number'] = 0     # there is really just one item in this container schedule, with many sub steps
             item_state = {"type": "start_up_sequence", "schedule_item_id": "Not Applicable", "action": "set configurations"}
             self.update_scheduler_state_obj(item_state)
             tz_name = tzlocal.get_localzone_name()
@@ -1123,7 +1123,7 @@ class Seestar:
             is_LP = [False, False, True, False, False, False, True, False]
             num_segments = len(spacing)
 
-            item_state = {"type": "spectra", "schedule_item_id": self.schedule['current_item_id'], "target_name":target_name, "action": "slew to target", "acquire_total_time_s":session_length, "acquire_remaining_time_s":session_length}
+            item_state = {"type": "spectra", "schedule_item_id": self.schedule['current_item_id'], "target_name":target_name, "action": "slew to target", "item_total_time_s":session_length, "item_remaining_time_s":session_length}
             self.update_scheduler_state_obj(item_state)
             parsed_coord = Util.parse_coordinate(is_j2000, center_RA, center_Dec)
             center_RA = parsed_coord.ra.hour
@@ -1151,7 +1151,7 @@ class Seestar:
             time.sleep(60)
             self.stop_stack()
             time_remaining -= 60
-            self.event_state["scheduler"]["cur_scheduler_item"]["acquire_remaining_time_s"] = time_remaining
+            self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = time_remaining
 
             # capture spectra
             cur_dec = center_Dec
@@ -1176,11 +1176,11 @@ class Seestar:
                     time.sleep(10)
                     count_down -= 10
                     time_remaining -= 10
-                    self.event_state["scheduler"]["cur_scheduler_item"]["acquire_remaining_time_s"] = time_remaining
+                    self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = time_remaining
                 self.stop_stack()
 
             self.logger.info("Finished spectra mosaic.")
-            self.event_state["scheduler"]["cur_scheduler_item"]["acquire_remaining_time_s"] = 0
+            self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = 0
             self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "complete"
         finally:
             self.is_cur_scheduler_item_working = False
@@ -1220,9 +1220,8 @@ class Seestar:
 
             sleep_time_per_panel = round(session_time / nRA / nDec)
 
-            item_session_time = sleep_time_per_panel * num_panels
-            item_remaining_time = item_session_time
-            item_state = {"type": "mosaic", "schedule_item_id": self.schedule['current_item_id'], "target_name":target_name, "action": "starting", "acquire_total_time_s":item_session_time, "acquire_remaining_time_s":item_session_time}
+            item_remaining_time_s = sleep_time_per_panel * num_panels
+            item_state = {"type": "mosaic", "schedule_item_id": self.schedule['current_item_id'], "target_name":target_name, "action": "starting", "item_total_time_s":item_remaining_time_s, "item_remaining_time_s":item_remaining_time_s}
             self.update_scheduler_state_obj(item_state)
 
             cur_dec = center_Dec - int(nDec / 2) * delta_Dec
@@ -1277,7 +1276,8 @@ class Seestar:
                                 self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Failed to start stacking."
                                 return
 
-                            for i in range(sleep_time_per_panel/5):
+                            panel_remaining_time_s = sleep_time_per_panel
+                            for i in range(round(sleep_time_per_panel/5)):
                                 threading.current_thread().last_run = datetime.now()
 
                                 if self.schedule['state'] != "working":
@@ -1287,9 +1287,10 @@ class Seestar:
                                     self.schedule['state'] = "stopped"
                                     return
                                 time.sleep(5)
-                                time_remaining -= 5
-                                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = f"stacked panel for {5*i} out of {sleep_time_per_panel} seconds"
-                                self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = time_remaining
+                                panel_remaining_time_s -= 5
+                                item_remaining_time_s -= 5
+                                self.event_state["scheduler"]["cur_scheduler_item"]["panel_remaining_time_s"] = panel_remaining_time_s
+                                self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = item_remaining_time_s
                             self.stop_stack()
                             self.logger.info("Stacking operation finished " + save_target_name)
                     else:
@@ -1298,7 +1299,7 @@ class Seestar:
                     cur_ra += delta_RA
                 cur_dec += delta_Dec
             self.logger.info("Finished mosaic.")
-            self.event_state["scheduler"]["cur_scheduler_item"]["acquire_remaining_time_s"] = 0
+            self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = 0
             self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "complete"
         finally:
             self.is_cur_scheduler_item_working = False
@@ -1517,7 +1518,7 @@ class Seestar:
                 break
             cur_schedule_item = self.schedule['list'][index]
             self.schedule['current_item_id'] = cur_schedule_item.get('schedule_item_id', 'UNKNOWN')
-            self.schedule['item_index'] = index
+            self.schedule['item_number'] = index+1
             action = cur_schedule_item['action']
             if action == 'start_mosaic':
                 self.start_mosaic_item(cur_schedule_item['params'])
@@ -1574,6 +1575,7 @@ class Seestar:
         if self.schedule['state'] != "stopped":
             self.schedule['state'] = "complete"
         self.schedule['current_item_id'] = ""
+        self.schedule['item_number'] = 0
         self.logger.info("Scheduler finished.")
         self.play_sound(82)
         if issue_shutdown:
