@@ -40,9 +40,9 @@ jobs:
           echo "device_script_result=win_seestar_alp.zip" >> $env:GITHUB_ENV
           echo "device_script_version=$(echo $git_version)" >> $env:GITHUB_ENV
           if ($git_version -match ".*[0-9]-g.*") {
-            echo "device_script_prerelease=true"
+            echo "device_script_prerelease=true" >> $env:GITHUB_ENV
           } else {
-            echo "device_script_prerelease=false"
+            echo "device_script_prerelease=false" >> $env:GITHUB_ENV
           }
         shell: pwsh
 
@@ -92,9 +92,9 @@ jobs:
           echo "device_script_result=linux_seestar_alp.zip" >> $GITHUB_ENV
           echo "device_script_version=$(echo $git_version)" >> $GITHUB_ENV
           if [[ "$git_version" =~ ".*[0-9]*-g.*" ]]; then
-            echo "device_script_prerelease=true"
+            echo "device_script_prerelease=true"  >> $GITHUB_ENV
           else
-            echo "device_script_prerelease=false"
+            echo "device_script_prerelease=false"  >> $GITHUB_ENV
           fi
         shell: bash
 
