@@ -75,6 +75,7 @@ class SeestarImaging:
         self.is_connected = False
         self.is_streaming = False
         self.is_gazing = False
+        self.is_live_viewing = False
         self.sent_subscription = False
         self.mode = None
         self.exposure_mode = None  # "stream"  # None | preview | stack | stream
@@ -107,14 +108,12 @@ class SeestarImaging:
             match event['Event']:
                 case 'Stack':
                     stacked_frame = event['stacked_frame']
-                    dropped_frame = event['dropped_frame']
-                    stacking_frame = stacked_frame + dropped_frame
                     # xxx change to just stacked frame _or_ initial request?
-                    if self.is_connected and stacking_frame != self.last_stacking_frame:
-                        self.logger.info(f'Received Stack event.  Fetching stacked image')
+                    if self.is_connected and stacked_frame != self.last_stacking_frame and stacked_frame > 0 and self.is_live_viewing:
+                        self.logger.debug(f'Received Stack event.  Fetching stacked image') # xxx trace
                         # If we get a stack event, we're going to assume we're stacking!
                         self.request_stacked_image()
-                    self.last_stacking_frame = stacking_frame
+                    self.last_stacking_frame = stacked_frame
                 case _:
                     pass
         except:
@@ -165,7 +164,7 @@ class SeestarImaging:
                 return False
             except socket.error as e:
                 # Don't bother trying to recover if watch events is False
-                self.logger.error(f"Device {self.device_name}: send Socket error: {e}")
+                self.logger.error(f"Send Socket error: {e}")
                 # if self.is_watch_events:
                 self.disconnect()
                 if self.reconnect():
@@ -213,6 +212,7 @@ class SeestarImaging:
                     # print(f"Elapsed time since last frame send: {elapsed}")
                     if elapsed > 10:
                         self.last_live_view_time = None
+                        self.is_live_viewing = False
                         # If it's been more than 30 seconds since the last frame was sent, shut down things if they're running
                         self.logger.warn(f"{elapsed} seconds since last live view send.  Shutting down imager")
                         self.stop()
@@ -346,7 +346,7 @@ class SeestarImaging:
             self.logger.debug(f"size: {calcsize(fmt)}")
             _s1, _s2, _s3, size, _s5, _s6, code, id, width, height = unpack(fmt, header)
             if size > 100:
-                self.logger.info(f"header: {size=} {width=} {height=} {_s1=} {_s2=} {_s3=} {code=} {id=}")
+                self.logger.debug(f"header: {size=} {width=} {height=} {_s1=} {_s2=} {_s3=} {code=} {id=}") # xxx trace
 
             return size, id, width, height
         return 0, None, None, None
@@ -482,7 +482,7 @@ class SeestarImaging:
 
     def start(self, new_exposure_mode=None):
         with self.lock:
-            print(f"start imaging {new_exposure_mode=} {self.exposure_mode=} {self.is_gazing=} {self.sent_subscription=}")
+            # print(f"start imaging {new_exposure_mode=} {self.exposure_mode=} {self.is_gazing=} {self.sent_subscription=}")
             self.exposure_mode = new_exposure_mode
             self.is_streaming = self.exposure_mode == "stream"
             self.is_gazing = self.is_star_mode()
@@ -516,17 +516,18 @@ class SeestarImaging:
                 self.get_image_thread.start()
 
     def stop(self):
-        self.disconnect()
-        # self.is_connected = False
-        self.is_streaming = False
-        self.is_gazing = False
-        # self.sent_subscription = False
-        # xxx might want to reset some things?
-        self.raw_img = None
-        self.raw_img_size = [None, None]
-        self.last_stat_time = None
-        self.last_live_view_time = None
         with self.lock:
+            self.disconnect()
+            # self.is_connected = False
+            self.is_streaming = False
+            self.is_gazing = False
+            self.is_live_viewing = False
+            # self.sent_subscription = False
+            # xxx might want to reset some things?
+            self.raw_img = None
+            self.raw_img_size = [None, None]
+            self.last_stat_time = None
+            self.last_live_view_time = None
             self.exposure_mode = None
 
     def blank_frame(self, message="Loading..."):
@@ -548,9 +549,8 @@ class SeestarImaging:
     # deprecated!
     def get_live_status(self):
         while True:
-            with self.lock:
-                self.last_live_view_time = int(time())
-            print(self.device.event_state)
+            self.update_live_status()
+            # print(self.device.event_state)
             status = table([["RA", "%.3f" % self.device.ra], ["Dec", "%.3f" % self.device.dec]]).encode('utf-8')
             # status = "Testing..."
             frame = (b'data: ' + status + b'\n\n')
@@ -560,6 +560,7 @@ class SeestarImaging:
 
     def update_live_status(self):
         with self.lock:
+            self.is_live_viewing = True
             self.last_live_view_time = int(time())
 
 
@@ -683,6 +684,7 @@ class SeestarImaging:
         # view_state = self.device.view_state
         # self.logger.info(f"mode: {self.mode} {type(self.mode)} view_state: {view_state}")
 
+        exiting = False
         while not self.is_idle():
             exposure_mode = self.compare_set_exposure_mode()
             image, delay, snr = self.get_image(exposure_mode)
@@ -720,6 +722,7 @@ class SeestarImaging:
                     # with self.lock:
                     #     self.raw_img = None
                     #     self.raw_img_size = [None, None]
+                    exiting = True
                     break
                 except Exception as e:
                     # print(traceback.format_exc())
@@ -732,7 +735,8 @@ class SeestarImaging:
 
         self.stop()
 
-        yield self.blank_frame("Idle")
+        if not exiting:
+            yield self.blank_frame("Idle")
 
 
 if __name__ == '__main__':
