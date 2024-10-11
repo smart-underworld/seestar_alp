@@ -34,11 +34,17 @@ If you just want to use the GUI and commnicate with your Seestar then the standa
 #### Windows/Linux
 The easiest way to install and run on Windows is to download a zip file that will allow you to run from one .exe file and everything will come up. If you want to run from source code then you will need to follow the Mac/Source install below.
 
-Download win_seestar_alp.zip or linux_seestar_alp.zip from the lastest Python Package workflow at [this github location](https://github.com/smart-underworld/seestar_alp/actions/workflows/build_seestar_alp.yaml)
+Download win_seestar_alp.zip or linux_seestar_alp.zip from the lastest release at [this github location](https://github.com/smart-underworld/seestar_alp/releases)
 
-Artifacts will be named with the version of the seestar code. Eg:
+Releases will be named with the version of the seestar code. Eg:
 
-`SeeStarAlp-windows-v2.1.1-51-gdb0d6cc.zip`
+`v2.1.1`
+
+or
+
+`v2.1.1-51-gdb0d6cc`
+
+NOTE that the simpler of the two, without the `-51-gdb0d6cc` is an official release, and the other one is a build done in-between official releases. Know that these may not be as stable.
 
 Unzip the file and put the enclosed folder anywhere you would like.
 Open a command window and navigate the the foler that contains seestar_alp.exe
