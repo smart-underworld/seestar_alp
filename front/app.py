@@ -2022,10 +2022,10 @@ class SettingsResource:
         }
         # Maybe we can store this better?
         settings_helper_text = {
-            "stack_dither_pix": "Dither by (x) pixels. Reset apon Seestar reboot.",
-            "stack_dither_interval": "Dither every (x) sub frames. Reset apon Seestar reboot.",
-            "stack_dither_enable": "Enable or disable dither. Reset apon Seestar reboot.",
-            "exp_ms_stack_l": "Stacking Exposure Lenght (ms).",
+            "stack_dither_pix": "Dither by (x) pixels. Reset upon Seestar reboot.",
+            "stack_dither_interval": "Dither every (x) sub frames. Reset upon Seestar reboot.",
+            "stack_dither_enable": "Enable or disable dither. Reset upon Seestar reboot.",
+            "exp_ms_stack_l": "Stacking Exposure Length (ms).",
             "exp_ms_continuous": "Continuous Preview Exposure Length (ms), used in the live view.",
             "save_discrete_ok_frame": "Save sub frames. (Doesn't include failed.)",
             "save_discrete_frame": "Save failed sub frames. (Failed sub frames will have \"_failed\" added to their filename.)",
