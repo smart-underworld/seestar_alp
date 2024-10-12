@@ -75,7 +75,8 @@ class Seestar:
         self.schedule['current_item_id'] = ""       # uuid of the current/active item in the schedule list
         self.schedule["item_number"] = 0             # order number of the schedule_item in the schedule list
         self.is_cur_scheduler_item_working = False
-
+        self.is_below_horizon_goto_method = False
+        
         self.event_state = {}
         self.update_scheduler_state_obj({}, result=0)
 
@@ -84,7 +85,7 @@ class Seestar:
         self.connect_count = 0
         self.below_horizon_dec_offset = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
         self.safe_dec_for_offset = 10.0     # declination angle in degrees as the lower limit for dec values before below_horizon logic kicks in
-        self.custom_goto_state = "stopped" # for custom goto logic used by below_horizon 
+        self.custom_goto_state = "stopped" # for custom goto logic used by below_horizon, using auto centering algorithm
         self.view_state = {}
 
         # self.event_queue = queue.Queue()
@@ -389,20 +390,20 @@ class Seestar:
 
     def is_goto(self):
         try:
-            if self.below_horizon_dec_offset == 0:
-                event_watch = "AutoGoto"
-            else:
+            if self.is_below_horizon_goto_method:
                 event_watch = "ScopeGoto"
+            else:
+                event_watch = "AutoGoto"
             return self.event_state[event_watch]["state"] == "working" or self.event_state[event_watch]["state"] == "start"
         except:
             return False
 
     def is_goto_completed_ok(self):
         try:
-            if self.below_horizon_dec_offset == 0:
-                return self.event_state["AutoGoto"]["state"] == "complete"
-            else:
+            if self.is_below_horizon_goto_method:
                 return self.event_state["ScopeGoto"]["state"] == "complete"
+            else:
+                return self.event_state["AutoGoto"]["state"] == "complete"
         except:
             return False
                 
@@ -423,7 +424,7 @@ class Seestar:
         in_ra = parsed_coord.ra.hour
         in_dec = parsed_coord.dec.deg
         target_name = params.get("target_name", "unknown")
-        self.logger.info("%s: going to target... %s %s %s, with dec offset %s", self.device_name, target_name, in_ra,
+        self.logger.info("%s: going to target... %s %s %s, with initial dec offset %s", self.device_name, target_name, in_ra,
                          in_dec, self.below_horizon_dec_offset)        
         result = True
         if self.is_EQ_mode:
@@ -431,17 +432,19 @@ class Seestar:
                 msg = f"Failed. You tried to geto to a target [ {in_ra}, {in_dec} ] that seems to be too low for your location at lat={Config.init_lat}"
                 self.logger.warn(msg)
                 return
-
+            
             safe_dec_offset = -in_dec+self.safe_dec_for_offset
-            if safe_dec_offset > self.below_horizon_dec_offset:
+            if self.below_horizon_dec_offset > 0 and in_dec > self.safe_dec_for_offset:
+                result = self.reset_below_horizon_dec_offset()
+            elif safe_dec_offset > self.below_horizon_dec_offset:
                 result = self.set_below_horizon_dec_offset(safe_dec_offset, in_dec)
 
-            elif self.below_horizon_dec_offset > 0 and in_dec > self.safe_dec_for_offset:
-                result = self.reset_below_horizon_dec_offset()
         if result != True:
+            self.logger.warn("Failed to set or reset horizontal dec offset. Goto will not proceed.")
             return
         
         if self.below_horizon_dec_offset == 0:
+            self.is_below_horizon_goto_method = False
             data = {}
             data['method'] = 'iscope_start_view'
             params = {}
@@ -462,7 +465,7 @@ class Seestar:
     def _slew_to_ra_dec(self, params):
         in_ra = params[0]
         in_dec = params[1]
-        self.logger.info(f"{self.device_name}: slew to {in_ra}, {in_dec} with dec_offset of {self.below_horizon_dec_offset}"                         )
+        self.logger.info(f"{self.device_name}: slew to {in_ra}, {in_dec} with dec_offset of {self.below_horizon_dec_offset}")
         if self.is_goto():
             self.logger.info("Failed: mount is in goto routine.")
             return "Failed: mount is in goto routine."
@@ -474,7 +477,8 @@ class Seestar:
         if 'error' in result:
             self.logger.warn("Error while trying to move: %s", result)
             return False
-        
+        else:
+            self.is_below_horizon_goto_method = True
         self.reset_goto_status()
 
         # wait till movement is finished
@@ -484,7 +488,7 @@ class Seestar:
             if self.schedule['state'] == "stopping":
                 return False
             time.sleep(2)
-        return True
+        return self.is_goto_completed_ok
 
     def set_below_horizon_dec_offset(self, offset, target_dec):
         if offset <= 0:
@@ -503,10 +507,6 @@ class Seestar:
              
         # we cannot fake the position too high, so we may need to move the scope down first
         if self.dec + offset > 70.0:
-            # a hack to just use force below_horizon_dec_offset flow if it is not already
-            if self.below_horizon_dec_offset == 0:
-                self.below_horizon_dec_offset = 0.01
-
             if not self.reset_below_horizon_dec_offset():
                 self.logger.warn(f"Failed to reset dec offset before applying a large offset  of {self.dec + offset}")
                 return False
@@ -525,10 +525,6 @@ class Seestar:
         return True
 
     def reset_below_horizon_dec_offset(self):
-        if self.below_horizon_dec_offset == 0:
-            msg = "No offset was active. No action taken."
-            self.logger.info(msg)
-            return True  
         if self.is_goto():
             self.logger.warn("Failed: mount is in goto routine.")
             return False
@@ -638,6 +634,7 @@ class Seestar:
     
     def try_3PPA(self, try_count):
         self.logger.info("trying 3PPA...")
+        self.is_below_horizon_goto_method = False
         cur_count = 0
         result = False
         self.event_state["3PPA"] = {"state":"working"}
@@ -804,6 +801,7 @@ class Seestar:
         self.logger.info("trying to go with explicit dec offset logic: %s %s %s", target_ra, target_dec,
                          self.below_horizon_dec_offset)
 
+        self.custom_goto_state = "starting"
         result = self._slew_to_ra_dec([target_ra, target_dec])
         if result == True:
             self.set_target_name(target_name)
@@ -870,6 +868,12 @@ class Seestar:
         return
 
     def start_stack(self, params={"gain": Config.init_gain, "restart": True}):
+        while self.custom_goto_state == "starting" or self.custom_goto_state == "working":
+            if self.custom_goto_state == "fail":
+                self.logger.warn("Failed to goto the target with custom goto logic before stacking. Will stop here.")
+                return False
+        self.custom_goto_state = "stopped"
+
         stack_gain = params["gain"]
         result = self.send_message_param_sync({"method": "iscope_start_stack", "params": {"restart": params["restart"]}})
         self.logger.info(result)
@@ -1058,8 +1062,10 @@ class Seestar:
             cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
             self.logger.info(f"final lat-lon after move:  {cur_latlon[0]}, {cur_latlon[1]}")
 
+            if self.schedule["state"] != "working":
+                return
+
             result = True
-            
             if do_AF:
                 msg = f"auto focus"
                 self.logger.info(msg)
@@ -1068,6 +1074,9 @@ class Seestar:
                 if result == False:
                     self.logger.warn("Start-up sequence stopped and was unsuccessful.")
                     return
+            
+            if self.schedule["state"] != "working":
+                return
             
             if do_3PPA:
                 msg = f"3 point polar alignment"
@@ -1078,6 +1087,9 @@ class Seestar:
                     self.logger.warn("Start-up sequence stopped and was unsuccessful.")
                     return
 
+            if self.schedule["state"] != "working":
+                return
+            
             if do_dark_frames:
                 msg = f"dark frame measurement"
                 self.logger.info(msg)
@@ -1087,6 +1099,9 @@ class Seestar:
                     self.logger.warn("Start-up sequence stopped and was unsuccessful.")
                     return
             
+            if self.schedule["state"] != "working":
+                return
+                
             if do_3PPA:
                 msg = "perform a quick goto routine to confirm and add to the sky model"
                 self.logger.info(msg)
@@ -1099,7 +1114,10 @@ class Seestar:
             self.logger.info(f"Start-up sequence result: {result}")
             self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
         finally:
-            self.schedule['state'] = "complete"
+            if self.schedule['state'] == "stopping":
+                self.sechedule['state'] = "stopped"
+            else:
+                self.schedule['state'] = "complete"
             self.play_sound(82)
 
     def action_set_dew_heater(self, params):
@@ -1425,6 +1443,30 @@ class Seestar:
     def add_schedule_item(self, params):
         new_item = self.construct_schedule_item(params)
         self.schedule['list'].append(new_item)
+        return self.schedule
+
+    def replace_schedule_item(self, params):
+        targeted_item_id = params['item_id']
+        index = 0
+        if self.schedule['state'] == 'working':
+            active_schedule_item_id = self.schedule['current_item_id']
+            reached_cur_item = False
+            while index < len(self.schedule['list']) and not reached_cur_item:
+                item_id = self.schedule['list'][index].get('schedule_item_id', 'UNKNOWN')
+                if item_id == targeted_item_id:
+                    self.logger.warn("Cannot insert schedule item that has already been executed")
+                    return self.schedule
+                if item_id == active_schedule_item_id:
+                    reached_cur_item = True
+
+        while index < len(self.schedule['list']):
+            item = self.schedule['list'][index]
+            item_id = item.get('schedule_item_id', 'UNKNOWN')
+            if item_id == targeted_item_id:
+                new_item = self.construct_schedule_item(params)
+                self.schedule['list'][index] = new_item
+                break
+            index += 1
         return self.schedule
 
     def insert_schedule_item_before(self, params):
