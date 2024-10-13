@@ -25,13 +25,7 @@ RUN groupadd -g ${SEESTAR_UID} ${SEESTAR_USER} && \
 ARG DEBIAN_FRONTEND=noninteractive
 ARG TZ=Etc/UTC
 RUN apt-get update && \
-    apt-get install -y \
-        python3 \
-        python3-pip \
-        software-properties-common \
-        vim \
-        git \
-        tzdata && \
+    apt-get install --yes python3 python3-pip software-properties-common vim git tzdata libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev libgdbm-dev lzma lzma-dev tcl-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev wget curl make build-essential openssl libgl1 && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
