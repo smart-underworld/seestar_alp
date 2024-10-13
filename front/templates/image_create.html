@@ -1,3 +1,4 @@
+<script src="/public/fit_import.js"></script>
 <form method="post" action="{{ action }}">
     <div class="card border-primary mb-3">
         <div class="card-body">
@@ -52,6 +53,16 @@
                           </svg>
                     </button>                    
                     <div id="targetNameHelp" class="form-text">Retreive RA/Dec from Stellarium</div>
+                </div>
+                <div class="col">
+                    <label for="getHeaders" class="form-label">&nbsp;</label><br>
+                    <button type="button" id="getHeaders" class="btn btn-primary" title="Retrieve info from previous FIT image">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16">
+                            <path fill="currentColor" d="M.002 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2zm1 9v1a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5l-3.777-1.947a.5.5 0 0 0-.577.093l-3.71 3.71l-2.66-1.772a.5.5 0 0 0-.63.062zm5-6.5a1.5 1.5 0 1 0-3 0a1.5 1.5 0 0 0 3 0"/>
+                        </svg>
+                    </button>
+                    <input type="file" id="fileInput" style="display:none;" />
+                    <div id="targetNameHelp" class="form-text">Retrieve from previous Seestar FIT File</div>
                 </div>
 				{% if errors.ra %}
 				   <div id="raError" class="form-text" style="color:red;">The RA value you provided {{errors.ra}} is not valid.
