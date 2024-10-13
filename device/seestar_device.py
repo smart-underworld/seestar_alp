@@ -382,11 +382,17 @@ class Seestar:
                 return "Stop requested."
         return "goto stopped already: no action taken"
 
-    def reset_goto_status(self):
+    def mark_goto_status_as_start(self):
         if self.below_horizon_dec_offset == 0:
-            self.event_state["AutoGoto"] = {"state":"working"}
+            self.event_state["AutoGoto"] = {"state":"start"}
         else:
-            self.event_state["ScopeGoto"] = {"state":"working"}
+            self.event_state["ScopeGoto"] = {"state":"start"}
+
+    def mark_goto_status_as_stopped(self):
+        if self.below_horizon_dec_offset == 0:
+            self.event_state["AutoGoto"] = {"state":"stopped"}
+        else:
+            self.event_state["ScopeGoto"] = {"state":"stopped"}
 
     def is_goto(self):
         try:
@@ -394,6 +400,7 @@ class Seestar:
                 event_watch = "ScopeGoto"
             else:
                 event_watch = "AutoGoto"
+            self.logger.debug(f"{event_watch} status is {self.event_state[event_watch]["state"]}")
             return self.event_state[event_watch]["state"] == "working" or self.event_state[event_watch]["state"] == "start"
         except:
             return False
@@ -409,9 +416,9 @@ class Seestar:
                 
     def goto_target(self, params):
         if self.is_goto():
-            self.logger.info("Failed: mount is in goto routine.")
-            return {"result":"Failed: mount is in goto routine."}
-        
+            self.logger.info("Failed to goto target: mount is in goto routine.")
+            return {"result":"Failed to goto target: mount is in goto routine."}
+        self.mark_goto_status_as_start()
         threading.Thread(name=f"goto-target-thread.{self.device_name}", target=lambda: self.goto_target_thread(params)).start()
         return {"result":0}
 
@@ -431,6 +438,7 @@ class Seestar:
             if in_dec < -Config.init_lat:
                 msg = f"Failed. You tried to geto to a target [ {in_ra}, {in_dec} ] that seems to be too low for your location at lat={Config.init_lat}"
                 self.logger.warn(msg)
+                self.mark_goto_status_as_stopped()
                 return
             
             safe_dec_offset = -in_dec+self.safe_dec_for_offset
@@ -439,9 +447,10 @@ class Seestar:
             elif safe_dec_offset > self.below_horizon_dec_offset:
                 result = self.set_below_horizon_dec_offset(safe_dec_offset, in_dec)
 
-        if result != True:
-            self.logger.warn("Failed to set or reset horizontal dec offset. Goto will not proceed.")
-            return
+            if result != True:
+                self.logger.warn("Failed to set or reset horizontal dec offset. Goto will not proceed.")
+                self.mark_goto_status_as_stopped()
+                return
         
         if self.below_horizon_dec_offset == 0:
             self.is_below_horizon_goto_method = False
@@ -466,9 +475,6 @@ class Seestar:
         in_ra = params[0]
         in_dec = params[1]
         self.logger.info(f"{self.device_name}: slew to {in_ra}, {in_dec} with dec_offset of {self.below_horizon_dec_offset}")
-        if self.is_goto():
-            self.logger.info("Failed: mount is in goto routine.")
-            return "Failed: mount is in goto routine."
         data = {}
         data['method'] = 'scope_goto'
         params = [in_ra, in_dec + self.below_horizon_dec_offset]
@@ -479,24 +485,12 @@ class Seestar:
             return False
         else:
             self.is_below_horizon_goto_method = True
-        self.reset_goto_status()
 
-        # wait till movement is finished
-        time.sleep(2)
-        self.logger.info(f"current event state: {self.event_state}")
-        while self.is_goto():
-            if self.schedule['state'] == "stopping":
-                return False
-            time.sleep(2)
-        return self.is_goto_completed_ok
+        return self.wait_end_op("goto_target")
 
     def set_below_horizon_dec_offset(self, offset, target_dec):
         if offset <= 0:
             msg = f"Failed: offset must be greater or equal to 0: {offset}"
-            self.logger.warn(msg)
-            return False  
-        if self.is_goto():
-            msg = f"Failed to set offset {offset}. Mount is moving. No action taken."
             self.logger.warn(msg)
             return False  
         
@@ -525,9 +519,8 @@ class Seestar:
         return True
 
     def reset_below_horizon_dec_offset(self):
-        if self.is_goto():
-            self.logger.warn("Failed: mount is in goto routine.")
-            return False
+        if not self.is_EQ_mode:
+            return
         
         old_ra = self.ra
         old_dec = self.dec
@@ -558,9 +551,6 @@ class Seestar:
         in_dec = params[1]
         self.logger.info("%s: sync to target... %s %s with dec_offset of %s", self.device_name, in_ra, in_dec,
                          self.below_horizon_dec_offset)
-        if self.is_goto():
-            self.logger.info("Failed: mount is in goto routine.")
-            return "Failed: mount is in goto routine."
         data = {}
         data['method'] = 'scope_sync'
         data['params'] = [in_ra, in_dec + self.below_horizon_dec_offset]
@@ -585,7 +575,7 @@ class Seestar:
     def move_scope(self, in_angle, in_speed, in_dur=3):
         self.logger.debug("%s: moving slew angle: %s, speed: %s, dur: %s", self.device_name, in_angle, in_speed, in_dur)
         if self.is_goto():
-            self.logger.warn("Failed: mount is in goto routine.")
+            self.logger.warn("Failed to move scope: mount is in goto routine.")
             return False
         data = {}
         data['method'] = 'scope_speed_move'
@@ -801,7 +791,7 @@ class Seestar:
         self.logger.info("trying to go with explicit dec offset logic: %s %s %s", target_ra, target_dec,
                          self.below_horizon_dec_offset)
 
-        self.custom_goto_state = "starting"
+        self.custom_goto_state = "start"
         result = self._slew_to_ra_dec([target_ra, target_dec])
         if result == True:
             self.set_target_name(target_name)
@@ -868,7 +858,7 @@ class Seestar:
         return
 
     def start_stack(self, params={"gain": Config.init_gain, "restart": True}):
-        while self.custom_goto_state == "starting" or self.custom_goto_state == "working":
+        while self.custom_goto_state == "start" or self.custom_goto_state == "working":
             if self.custom_goto_state == "fail":
                 self.logger.warn("Failed to goto the target with custom goto logic before stacking. Will stop here.")
                 return False
@@ -1106,7 +1096,7 @@ class Seestar:
                 msg = "perform a quick goto routine to confirm and add to the sky model"
                 self.logger.info(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
-                goto_params = {'is_j2000':False, 'ra': self.ra+1.5, 'dec': self.dec}
+                goto_params = {'is_j2000':False, 'ra': self.ra+0.5, 'dec': self.dec}
                 result = self.goto_target(goto_params)
                 result = self.wait_end_op("goto_target")
                 self.logger.info(f"Goto operation finished with result code: {result}")
@@ -1258,7 +1248,7 @@ class Seestar:
             sleep_time_per_panel = round(session_time / nRA / nDec)
 
             item_remaining_time_s = sleep_time_per_panel * num_panels
-            item_state = {"type": "mosaic", "schedule_item_id": self.schedule['current_item_id'], "target_name":target_name, "action": "starting", "item_total_time_s":item_remaining_time_s, "item_remaining_time_s":item_remaining_time_s}
+            item_state = {"type": "mosaic", "schedule_item_id": self.schedule['current_item_id'], "target_name":target_name, "action": "start", "item_total_time_s":item_remaining_time_s, "item_remaining_time_s":item_remaining_time_s}
             self.update_scheduler_state_obj(item_state)
 
             cur_dec = center_Dec - int(nDec / 2) * delta_Dec
@@ -1659,14 +1649,14 @@ class Seestar:
             return self.json_result("stop_scheduler", -4, "scheduler has already been requested to stop")
         
     def wait_end_op(self, in_op_name):
-        self.event_state[in_op_name] = {"state":"working"}
-        time.sleep(1)
         if in_op_name == "goto_target":
+            self.mark_goto_status_as_start()
             while self.is_goto() == True:
                 time.sleep(1)
             return self.is_goto_completed_ok()
             
         else:
+            self.event_state[in_op_name] = {"state":"stopped"}
             while in_op_name not in self.event_state or (self.event_state[in_op_name]["state"] != "complete" and self.event_state[in_op_name]["state"] != "fail"):
                 time.sleep(1)
             return self.event_state[in_op_name]["state"] == "complete"
