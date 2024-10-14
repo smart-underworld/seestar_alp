@@ -249,10 +249,10 @@ class Seestar:
                     if 'jsonrpc' in parsed_data:
                         # {"jsonrpc":"2.0","Timestamp":"9507.244805160","method":"scope_get_equ_coord","result":{"ra":17.093056,"dec":34.349722},"code":0,"id":83}
                         if parsed_data["method"] == "scope_get_equ_coord":
-                            self.logger.debug(f'{self.device_name} : {parsed_data}')
+                            self.logger.debug(f'{parsed_data}')
                             self.update_equ_coord(parsed_data)
                         else:
-                            self.logger.debug(f'{self.device_name} : {parsed_data}')
+                            self.logger.debug(f'{parsed_data}')
                         if parsed_data["method"] == "get_view_state":
                             self.update_view_state(parsed_data)
                         # keep a running queue of last 100 responses for sync call results
@@ -265,9 +265,9 @@ class Seestar:
 
                         # xxx: make this a common method....
                         if Config.log_events_in_info:
-                            self.logger.info(f'{self.device_name} received : {parsed_data}')
+                            self.logger.info(f'received : {parsed_data}')
                         else:
-                            self.logger.debug(f'{self.device_name} received : {parsed_data}')
+                            self.logger.debug(f'received : {parsed_data}')
                         event_name = parsed_data['Event']
                         self.event_state[event_name] = parsed_data
 
@@ -294,9 +294,9 @@ class Seestar:
         self.cmdid += 1
         json_data = json.dumps(data)
         if instruction == 'scope_get_equ_coord':
-            self.logger.debug(f'{self.device_name} sending: {json_data}')
+            self.logger.debug(f'sending: {json_data}')
         else:
-            self.logger.debug(f'{self.device_name} sending: {json_data}')
+            self.logger.debug(f'sending: {json_data}')
         self.send_message(json_data + "\r\n")
 
     def send_message_param(self, data):
@@ -305,9 +305,9 @@ class Seestar:
         self.cmdid += 1 # can this overflow?  not in JSON...
         json_data = json.dumps(data)
         if 'method' in data and data['method'] == 'scope_get_equ_coord':
-            self.logger.debug(f'{self.device_name} sending: {json_data}')
+            self.logger.debug(f'sending: {json_data}')
         else:
-            self.logger.debug(f'{self.device_name} sending: {json_data}')
+            self.logger.debug(f'sending: {json_data}')
 
         self.send_message(json_data + "\r\n")
         return cur_cmdid
@@ -325,7 +325,7 @@ class Seestar:
 
     def send_message_param_sync(self, data):
         if data['method'] == 'pi_shutdown' or data['method'] == 'pi_reboot':
-            threading.Thread(name=f"shutdown-thread.{self.device_name}", target=lambda: self.shut_down_thread(data)).start()
+            threading.Thread(name=f"shutdown-thread:{self.device_name}", target=lambda: self.shut_down_thread(data)).start()
             return {'method': data['method'], 'result': "Sent command async for these types of commands." }
         else:
             cur_cmdid = self.send_message_param(data)
@@ -344,7 +344,7 @@ class Seestar:
                 else:
                     self.logger.warn(f'SLOW message response.  {elapsed} seconds. {cur_cmdid=} {data=}')
             time.sleep(0.5)
-        self.logger.debug(f'{self.device_name} response is {self.response_dict[cur_cmdid]}')
+        self.logger.debug(f'response is {self.response_dict[cur_cmdid]}')
         return self.response_dict[cur_cmdid]
 
     def get_event_state(self, params=None):
@@ -383,16 +383,16 @@ class Seestar:
         return "goto stopped already: no action taken"
 
     def mark_goto_status_as_start(self):
-        if self.below_horizon_dec_offset == 0:
-            self.event_state["AutoGoto"] = {"state":"start"}
-        else:
+        if self.is_below_horizon_goto_method:
             self.event_state["ScopeGoto"] = {"state":"start"}
+        else:
+            self.event_state["AutoGoto"] = {"state":"start"}
 
     def mark_goto_status_as_stopped(self):
-        if self.below_horizon_dec_offset == 0:
-            self.event_state["AutoGoto"] = {"state":"stopped"}
-        else:
+        if self.is_below_horizon_goto_method:
             self.event_state["ScopeGoto"] = {"state":"stopped"}
+        else:
+            self.event_state["AutoGoto"] = {"state":"stopped"}
 
     def is_goto(self):
         try:
@@ -419,7 +419,7 @@ class Seestar:
             self.logger.info("Failed to goto target: mount is in goto routine.")
             return {"result":"Failed to goto target: mount is in goto routine."}
         self.mark_goto_status_as_start()
-        threading.Thread(name=f"goto-target-thread.{self.device_name}", target=lambda: self.goto_target_thread(params)).start()
+        threading.Thread(name=f"goto-target-thread:{self.device_name}", target=lambda: self.goto_target_thread(params)).start()
         return {"result":0}
 
     def goto_target_thread(self, params):
@@ -474,7 +474,7 @@ class Seestar:
     def _slew_to_ra_dec(self, params):
         in_ra = params[0]
         in_dec = params[1]
-        self.logger.info(f"{self.device_name}: slew to {in_ra}, {in_dec} with dec_offset of {self.below_horizon_dec_offset}")
+        self.logger.info(f"slew to {in_ra}, {in_dec} with dec_offset of {self.below_horizon_dec_offset}")
         data = {}
         data['method'] = 'scope_goto'
         params = [in_ra, in_dec + self.below_horizon_dec_offset]
@@ -639,7 +639,7 @@ class Seestar:
 #            response = response["result"]
 #            if "3PPA" not in response or ("3PPA" in response and response["3PPA"]["state"] == "fail"):
             response = self.send_message_param_sync({"method":"get_device_state"})
-            self.logger.info(f"get 3PPA state to determine ow to proceede: {response}")
+            self.logger.info(f"get 3PPA state to determine how to proceede: {response}")
 
             response = response["result"]["setting"]
             is_3PPA = True
@@ -796,7 +796,7 @@ class Seestar:
         if result == True:
             self.set_target_name(target_name)
             # repeat plate solve and adjust position as needed
-            threading.Thread(name=f"goto-dec-offset-thread.{self.device_name}", target=lambda: self.auto_center_thread(target_ra, target_dec)).start()
+            threading.Thread(name=f"goto-dec-offset-thread:{self.device_name}", target=lambda: self.auto_center_thread(target_ra, target_dec)).start()
             return True
         else:
             self.logger.info("Failed to slew")
@@ -858,12 +858,6 @@ class Seestar:
         return
 
     def start_stack(self, params={"gain": Config.init_gain, "restart": True}):
-        while self.custom_goto_state == "start" or self.custom_goto_state == "working":
-            if self.custom_goto_state == "fail":
-                self.logger.warn("Failed to goto the target with custom goto logic before stacking. Will stop here.")
-                return False
-        self.custom_goto_state = "stopped"
-
         stack_gain = params["gain"]
         result = self.send_message_param_sync({"method": "iscope_start_stack", "params": {"restart": params["restart"]}})
         self.logger.info(result)
@@ -1095,8 +1089,11 @@ class Seestar:
             if do_3PPA:
                 msg = "perform a quick goto routine to confirm and add to the sky model"
                 self.logger.info(msg)
+                response = self.send_message_param_sync({"method":"get_last_solve_result"})
+                last_pos = response["result"]["ra_dec"]
+                self.logger.info(f"move from {last_pos[0]}, {last_pos[1]}")
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
-                goto_params = {'is_j2000':False, 'ra': self.ra+0.5, 'dec': self.dec}
+                goto_params = {'is_j2000':False, 'ra': last_pos[0]+0.1, 'dec': last_pos[1]}
                 result = self.goto_target(goto_params)
                 result = self.wait_end_op("goto_target")
                 self.logger.info(f"Goto operation finished with result code: {result}")
@@ -1117,7 +1114,7 @@ class Seestar:
         if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete" :
             return self.json_result("start_up_sequence", -1, "Device is busy. Try later.")
 
-        move_up_dec_thread = threading.Thread(name=f"start-up-thread.{self.device_name}", target=lambda: self.start_up_thread_fn(params))
+        move_up_dec_thread = threading.Thread(name=f"start-up-thread:{self.device_name}", target=lambda: self.start_up_thread_fn(params))
         move_up_dec_thread.start()
         return self.json_result("start_up_sequence", 0, "Sequence started.")
 
@@ -1220,12 +1217,43 @@ class Seestar:
             self.schedule['state'] = "stopped"
             return
         self.is_cur_scheduler_item_working = True
-        self.mosaic_thread = threading.Thread(name=f"spectra-thread.{self.device_name}", target=lambda: self.spectra_thread_fn(params))
+        self.mosaic_thread = threading.Thread(name=f"spectra-thread:{self.device_name}", target=lambda: self.spectra_thread_fn(params))
         self.mosaic_thread.start()
         return "spectra mosiac started"
 
+    def mosaic_goto_inner_worker(self, cur_ra, cur_dec, save_target_name, is_use_autofocus, is_use_LP_filter):
+        self.goto_target({'ra': cur_ra, 'dec': cur_dec, 'is_j2000': False, 'target_name': save_target_name})
+        result = self.wait_end_op("goto_target")
+        self.logger.info(f"Goto operation finished with result code: {result}")
+
+        time.sleep(3)
+
+        if result == True:
+            self.send_message_param_sync(
+                {"method": "set_setting", "params": {"stack_lenhance": is_use_LP_filter}})
+            if is_use_autofocus == True:
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "auto focusing"
+                result = self.try_auto_focus(2)
+            if result == False:
+                self.logger.info("Failed to auto focus, but will continue to next panel anyway.")
+                result = True
+            if result == True:
+                # need to check if we have a custom goto running, and make sure it is finished before stacking
+                while self.custom_goto_state == "start" or self.custom_goto_state == "working":
+                    if self.custom_goto_state == "fail":
+                        self.logger.warn("Failed to goto the target with custom goto logic before stacking. Will stop here.")
+                        return False
+                    time.sleep(3)
+                self.custom_goto_state = "stopped"
+                time.sleep(4)
+                return True
+        else:
+            self.logger.info("Goto failed.")
+            return False
+
+
     def mosaic_thread_fn(self, target_name, center_RA, center_Dec, is_use_LP_filter, session_time, nRA, nDec,
-                         overlap_percent, gain, is_use_autofocus, selected_panels):
+                         overlap_percent, gain, is_use_autofocus, selected_panels, num_tries, retry_wait_s):
         try:
             spacing_result = Util.mosaic_next_center_spacing(center_RA, center_Dec, overlap_percent)
             delta_RA = spacing_result[0]
@@ -1256,7 +1284,7 @@ class Seestar:
                 spacing_result = Util.mosaic_next_center_spacing(center_RA, cur_dec, overlap_percent)
                 delta_RA = spacing_result[0]
                 cur_ra = center_RA - int(nRA / 2) * spacing_result[0]
-                for index_ra in range(nRA):
+                for index_ra in range(nRA):                   
                     if self.schedule['state'] != "working":
                         self.logger.info("Mosaic mode was requested to stop. Stopping")
                         self.schedule['state'] = "stopped"
@@ -1281,47 +1309,41 @@ class Seestar:
                     # TODO: Need to set correct parameters
                     self.send_message_param_sync({"method": "set_setting", "params": {"stack_lenhance": False}})
                     self.event_state["scheduler"]["cur_scheduler_item"]["action"] = f"slewing to target panel centered at {cur_ra:.2f}, {cur_dec:.2f}"                 
-                    self.goto_target({'ra': cur_ra, 'dec': cur_dec, 'is_j2000': False, 'target_name': save_target_name})
-                    result = self.wait_end_op("goto_target")
-                    self.logger.info(f"Goto operation finished with result code: {result}")
 
-                    time.sleep(3)
-
-                    if result == True:
-                        self.send_message_param_sync(
-                            {"method": "set_setting", "params": {"stack_lenhance": is_use_LP_filter}})
-                        if is_use_autofocus == True:
-                            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "auto focusing"
-                            result = self.try_auto_focus(2)
-                        if result == False:
-                            self.logger.info("Failed to auto focus, but will continue to next panel anyway.")
-                            result = True
+                    for try_count in range(num_tries):
+                        try_count_plus_one = try_count+1
+                        self.logger.info(f"Trying to readch target, attempt #{try_count_plus_one}")
+                        result = self.mosaic_goto_inner_worker(cur_ra, cur_dec, save_target_name, is_use_autofocus, is_use_LP_filter)
                         if result == True:
-                            time.sleep(4)
-                            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = f"stacking the panel for {sleep_time_per_panel} seconds"
-                            if not self.start_stack({"gain": gain, "restart": True}):
-                                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Failed to start stacking."
-                                return
+                            break
+                        else:
+                            time.sleep(retry_wait_s)
 
-                            panel_remaining_time_s = sleep_time_per_panel
-                            for i in range(round(sleep_time_per_panel/5)):
-                                threading.current_thread().last_run = datetime.now()
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = f"stacking the panel for {sleep_time_per_panel} seconds"
+                    if not self.start_stack({"gain": gain, "restart": True}):
+                        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Failed to start stacking."
+                        return True
 
-                                if self.schedule['state'] != "working":
-                                    self.logger.info("Scheduler was requested to stop. Stopping current mosaic.")
-                                    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Scheduler was requested to stop. Stopping current mosaic."
-                                    self.stop_stack()
-                                    self.schedule['state'] = "stopped"
-                                    return
-                                time.sleep(5)
-                                panel_remaining_time_s -= 5
-                                item_remaining_time_s -= 5
-                                self.event_state["scheduler"]["cur_scheduler_item"]["panel_remaining_time_s"] = panel_remaining_time_s
-                                self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = item_remaining_time_s
+                    panel_remaining_time_s = sleep_time_per_panel
+                    for i in range(round(sleep_time_per_panel/5)):
+                        threading.current_thread().last_run = datetime.now()
+
+                        if self.schedule['state'] != "working":
+                            self.logger.info("Scheduler was requested to stop. Stopping current mosaic.")
+                            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Scheduler was requested to stop. Stopping current mosaic."
                             self.stop_stack()
-                            self.logger.info("Stacking operation finished " + save_target_name)
-                    else:
-                        self.logger.info("Goto failed.")
+                            self.schedule['state'] = "stopped"
+                            return True
+                        time.sleep(5)
+                        panel_remaining_time_s -= 5
+                        item_remaining_time_s -= 5
+                        self.event_state["scheduler"]["cur_scheduler_item"]["panel_remaining_time_s"] = panel_remaining_time_s
+                        self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = item_remaining_time_s
+                    self.stop_stack()
+                    self.logger.info("Stacking operation finished " + save_target_name)
+                    return True
+
+
 
                     cur_ra += delta_RA
                 cur_dec += delta_Dec
@@ -1354,6 +1376,8 @@ class Seestar:
             selected_panels = ""
         else:
             selected_panels = params['selected_panels']
+        num_tries = params.get("num_tries", 1)
+        retry_wait_s = params.get("retry_wait_s", 300)
 
         # verify mosaic pattern
         if nRA < 1 or nDec < 0:
@@ -1374,20 +1398,24 @@ class Seestar:
         self.logger.info("  target        : " + target_name)
         self.logger.info("  RA            : %s", center_RA)
         self.logger.info("  Dec           : %s", center_Dec)
+        self.logger.info("  from RA       : %s", self.ra)
+        self.logger.info("  from Dec      : %s", self.dec)
         self.logger.info("  use LP filter : %s", is_use_LP_filter)
         self.logger.info("  session time  : %s", session_time)
         self.logger.info("  RA num panels : %s", nRA)
         self.logger.info("  Dec num panels: %s", nDec)
-        self.logger.info("  overlap %%     : %s", overlap_percent)
+        self.logger.info("  overlap %%    : %s", overlap_percent)
         self.logger.info("  gain          : %s", gain)
         self.logger.info("  use autofocus : %s", is_use_autofocus)
         self.logger.info("  select panels : %s", selected_panels)
+        self.logger.info("  # goto tries  : %s", num_tries)
+        self.logger.info("  retry wait sec: %s", retry_wait_s)
 
         self.is_cur_scheduler_item_working = True
         self.mosaic_thread = threading.Thread(
             target=lambda: self.mosaic_thread_fn(target_name, center_RA, center_Dec, is_use_LP_filter, session_time,
-                                                 nRA, nDec, overlap_percent, gain, is_use_autofocus, selected_panels))
-        self.mosaic_thread.name = f"MosaicThread.{self.device_name}"
+                                                 nRA, nDec, overlap_percent, gain, is_use_autofocus, selected_panels, num_tries, retry_wait_s))
+        self.mosaic_thread.name = f"MosaicThread:{self.device_name}"
         self.mosaic_thread.start()
 
     def get_schedule(self, params):
@@ -1542,7 +1570,7 @@ class Seestar:
         if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete":
             return self.json_result("start_scheduler", -1, "An existing scheduler is active. Returned with no action.")
         self.scheduler_thread = threading.Thread(target=lambda: self.scheduler_thread_fn(), daemon=True)
-        self.scheduler_thread.name = f"SchedulerThread.{self.device_name}"
+        self.scheduler_thread.name = f"SchedulerThread:{self.device_name}"
         self.scheduler_thread.start()
         self.schedule['state'] = "working"
         return self.schedule
@@ -1700,24 +1728,24 @@ class Seestar:
 
             for i in range(3, 0, -1):
                 if self.reconnect():
-                    self.logger.info(f'{self.device_name}: Connected')
+                    self.logger.info(f'Connected')
                     break
                 else:
-                    self.logger.info(f'{self.device_name}: Connection Failed, is Seestar turned on?')
+                    self.logger.info(f'Connection Failed, is Seestar turned on?')
                     time.sleep(1)
             else:
                 self.logger.info(
-                    f'{self.device_name}: Could not establish connection to Seestar. Starting in offline mode')
+                    f'Could not establish connection to Seestar. Starting in offline mode')
 
             try:
                 # Start up heartbeat and receive threads
 
                 self.get_msg_thread = threading.Thread(target=self.receive_message_thread_fn, daemon=True)
-                self.get_msg_thread.name = f"ALPReceiveMessageThread.{self.device_name}"
+                self.get_msg_thread.name = f"IncomingMsgThread:{self.device_name}"
                 self.get_msg_thread.start()
 
                 self.heartbeat_msg_thread = threading.Thread(target=self.heartbeat_message_thread_fn, daemon=True)
-                self.heartbeat_msg_thread.name = f"ALPHeartbeatMessageThread.{self.device_name}"
+                self.heartbeat_msg_thread.name = f"HeartbeatMsgThread:{self.device_name}"
                 self.heartbeat_msg_thread.start()
             except Exception as ex:
                 # todo : Disconnect socket and set is_watch_events false
@@ -1757,169 +1785,3 @@ class Seestar:
             except:
                 time.sleep(2)
 
-if __name__ == '__main__':
-    try:
-        if len(sys.argv) != 5:
-            print(sys.argv[0], " <ip_address> <port> <device name> <device num>")
-            sys.exit()
-        seestar_core = Seestar(sys.argv[1], int(sys.argv[2]), sys.argv[3], int(sys.argv[4]), is_debug=True)
-        seestar_core.start_watch_thread()
-        request = {}
-        request['method'] = 'iscope_stop_view'
-        print("sync response: ", seestar_core.send_message_param_sync(request))
-        time.sleep(10)
-        seestar_core.end_watch_thread()
-    except KeyboardInterrupt:
-        print('Interrupted')
-        seestar_core.end_watch_thread()
-        try:
-            sys.exit(130)
-        except SystemExit:
-            os._exit(130)
-
-'''    
-def main():
-    global is_debug
-    
-    version_string = "1.0.0b1"
-    print("seestar_run version: ", version_string)
-    
-    if len(sys.argv) != 11 and len(sys.argv) != 12:
-        print("expected seestar_run <ip_address> <target_name> <ra> <dec> <is_use_LP_filter> <session_time> <RA panel size> <Dec panel size> <RA offset factor> <Dec offset factor>")
-        sys.exit()
-    
-    in_host = sys.argv[1]
-    target_name = sys.argv[2]
-    try:
-        center_RA = float(sys.argv[3])
-    except ValueError:
-        center_RA = parse_ra_to_float(sys.argv[3])
-        
-    try:
-        center_Dec = float(sys.argv[4])
-    except ValueError:
-        center_Dec = parse_dec_to_float(sys.argv[4])
-    
-    is_use_LP_filter = sys.argv[5] == '1'
-    session_time = int(sys.argv[6])
-    nRA = int(sys.argv[7])
-    nDec = int(sys.argv[8])
-    mRA = float(sys.argv[9])
-    mDec = float(sys.argv[10])
-    is_debug = False
-
-    if len(sys.argv) == 12:
-        is_debug = sys.argv[11]=="Kai"
-        
-    print(in_host, target_name, center_RA, center_Dec, is_use_LP_filter, session_time, nRA, nDec, mRA, mDec)
-    
-    # verify mosaic pattern
-    if nRA < 1 or nDec < 0:
-        print("Mosaic size is invalid")
-        sys.exit()
-    
-    print("nRA: %d", nRA)
-    print("nDec:%d", nDec)
-    
-    in_port = 4700 
-    delta_RA = 0.06
-    delta_Dec = 0.9
-
-    start_watch_thread(in_host, in_port)
-        
-    # flush the socket input stream for garbage
-    #get_socket_msg()
-    
-    if center_RA < 0:
-        # wait until we get a valid eq coordinate from the thread
-        while ra == 0:
-            time.sleep(1)              
-        center_RA = ra
-        center_Dec = dec
-        
-    # print input requests
-    print("received parameters:")
-    print("  ip address    : " + HOST)
-    print("  target        : " + target_name)
-    print("  RA            : ", center_RA)
-    print("  Dec           : ", center_Dec)
-    print("  use LP filter : ", is_use_LP_filter)
-    print("  session time  : ", session_time)
-    print("  RA num panels : ", nRA)
-    print("  Dec num panels: ", nDec)
-    print("  RA offset x   : ", mRA)
-    print("  Dec offset x  : ", mDec)
-    
-    delta_RA *= mRA
-    delta_Dec *= mDec
-    
-    # adjust mosaic center if num panels is even
-    if nRA % 2 == 0:
-        center_RA += delta_RA/2
-    if nDec % 2 == 0:
-        center_Dec += delta_Dec/2
-            
-  
-    mosaic_index = 0
-    cur_ra = center_RA-int(nRA/2)*delta_RA
-    for index_ra in range(nRA):
-        cur_dec = center_Dec-int(nDec/2)*delta_Dec
-        for index_dec in range(nDec):
-            if nRA == 1 and nDec == 1:
-                save_target_name = target_name
-            else:
-                save_target_name = target_name+"_"+str(index_ra+1)+str(index_dec+1)
-            print("goto ", (cur_ra, cur_dec))
-            # set_settings(x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, heater_enable):
-            set_setting(10000,500,50,5,True,False,False)    # switch off LP filter to get more stars
-            goto_target(cur_ra, cur_dec, save_target_name)
-            result = wait_end_op("AutoGoto")
-            print("Goto operation finished")
-            
-            time.sleep(3)
-            
-            if result == True:
-                # set_settings(x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, heater_enable):
-                set_setting(10000,500,50,5,True,is_use_LP_filter,False)
-                result = try_auto_focus()
-                if result == True:
-                    start_stack()    
-                    sleep_with_heartbeat(session_time)
-                    print()
-                    stop_stack()
-                    print("Stacking operation finished" + save_target_name)
-
-            else:
-                print("Goto failed.")
-                
-            cur_dec += delta_Dec
-            mosaic_index += 1
-        cur_ra += delta_RA
-
-    print("Finishing seestar_run ...", end = " ")
-    end_watch_thread()
-    print("Finished")
-    try:
-        sys.exit(130)
-    except SystemExit:
-        os._exit(130)
-    
-    
-    
-
-# seestar_run <ip_address> <target_name> <ra> <dec> <is_use_LP_filter> <session_time> <RA panel size> <Dec panel size> <RA offset factor> <Dec offset factor>
-# python seestar_run.py 192.168.110.30 'Castor' '7:24:32.5' '-41:24:23.5' 0 60 2 2 1.0 1.0
-# python seestar_run.py 192.168.110.30 'Castor' '7:24:32.5' '+41:24:23.5' 0 60 2 2 1.0 1.0
-# python seestar_run.py 192.168.110.30 'Castor' '7:24:32.5' '41:24:23.5' 0 60 2 2 1.0 1.0
-# python seestar_run.py 192.168.110.30 'Castor' 7.4090278 41.4065278 0 60 2 2 1.0 1.0
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print('Interrupted')
-        try:
-            sys.exit(130)
-        except SystemExit:
-            os._exit(130)
-    
-'''
