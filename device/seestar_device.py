@@ -1308,11 +1308,11 @@ class Seestar:
                     # set_settings(x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, heater_enable):
                     # TODO: Need to set correct parameters
                     self.send_message_param_sync({"method": "set_setting", "params": {"stack_lenhance": False}})
-                    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = f"slewing to target panel centered at {cur_ra:.2f}, {cur_dec:.2f}"                 
 
-                    for try_count in range(num_tries):
-                        try_count_plus_one = try_count+1
-                        self.logger.info(f"Trying to readch target, attempt #{try_count_plus_one}")
+                    for try_index in range(num_tries):
+                        try_count = try_index+1
+                        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = f"attempt #{try_count} slewing to target panel centered at {cur_ra:.2f}, {cur_dec:.2f}"                 
+                        self.logger.info(f"Trying to readch target, attempt #{try_count}")
                         result = self.mosaic_goto_inner_worker(cur_ra, cur_dec, save_target_name, is_use_autofocus, is_use_LP_filter)
                         if result == True:
                             break
