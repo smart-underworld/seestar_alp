@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('targetName').value = objectName[1];
             document.getElementById('ra').value = getHeaderValue(headerText, 'RA');
             document.getElementById('dec').value = getHeaderValue(headerText, 'DEC');
-            document.getElementById('sessionTime').value = getHeaderValue(headerText, 'EXPOSURE').replace('.','s');
+            // document.getElementById('sessionTime').value = getHeaderValue(headerText, 'EXPOSURE').replace('.','s');
             document.getElementById('gain').value = getHeaderValue(headerText,'GAIN');
             document.getElementById('useLpFilter').checked = getHeaderValue(headerText,'FILTER').includes('LP')
 
