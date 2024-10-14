@@ -1295,7 +1295,7 @@ class Seestar:
                     if is_use_selected_panels and panel_string not in panel_set:
                         cur_ra += delta_RA
                         continue
-
+                    
                     self.event_state["scheduler"]["cur_scheduler_item"]["cur_ra_panel_num"] = index_ra+1
                     self.event_state["scheduler"]["cur_scheduler_item"]["cur_dec_panel_num"] = index_dec+1 
 
@@ -1303,6 +1303,8 @@ class Seestar:
                         save_target_name = target_name
                     else:
                         save_target_name = target_name + "_" + panel_string
+                    
+                    self.logger.info("Stacking operation started for " + save_target_name)
                     self.logger.info("mosaic goto for panel %s, to location %s", panel_string, (cur_ra, cur_dec))
 
                     # set_settings(x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, heater_enable):
@@ -1341,10 +1343,6 @@ class Seestar:
                         self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = item_remaining_time_s
                     self.stop_stack()
                     self.logger.info("Stacking operation finished " + save_target_name)
-                    return True
-
-
-
                     cur_ra += delta_RA
                 cur_dec += delta_Dec
             self.logger.info("Finished mosaic.")
