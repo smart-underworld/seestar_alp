@@ -83,8 +83,7 @@ main() {
         "${SCRIPT_DIR}/../"
 
     if [ ! -f "${SCRIPT_DIR}/config.toml" ]; then
-        echo "S{SCRIPT_DIR}/config.toml doesn't exist.  Copy and customize ${SCRIPT_DIR}/config.toml.example."
-        return 1
+        cp ${SCRIPT_DIR}/config.toml.example ${SCRIPT_DIR}/config.toml
     fi
 
     if [ -z "${TIME_ZONE}" ]; then

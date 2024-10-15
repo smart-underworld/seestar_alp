@@ -15,6 +15,7 @@ SHELL ["/bin/bash", "-c"]
 
 ENV SEESTAR_USER=seestar
 ENV SEESTAR_USER_HOME=/home/seestar
+ENV ROOT=root
 
 RUN groupadd -g ${SEESTAR_UID} ${SEESTAR_USER} && \
     useradd ${SEESTAR_USER} -u ${SEESTAR_UID} -g ${SEESTAR_GID} -r -m -d ${SEESTAR_USER_HOME} -s /bin/bash
