@@ -40,7 +40,7 @@ COPY --chown=${SEESTAR_USER}:${SEESTAR_USER} ./requirements.txt ${SEESTAR_ALP_DI
 
 RUN python3 -m pip install -U pip && \
     python3 -m pip install -r requirements.txt
-    
+
 
 COPY --chown=${SEESTAR_USER}:${SEESTAR_USER} . ${SEESTAR_ALP_DIR}
 COPY --chown=${SEESTAR_USER}:${SEESTAR_USER} ./docker/entrypointALPACA.sh ${SEESTAR_ALP_DIR}/entrypointALPACA.sh
