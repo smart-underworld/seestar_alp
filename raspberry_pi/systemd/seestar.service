@@ -5,7 +5,8 @@ After=network-online.target
 User=<username>
 Type=simple
 Restart=always
+EnvironmentFile=/etc/seestar.env
 WorkingDirectory=/home/<username>/seestar_alp
-ExecStart=/usr/bin/python3 /home/<username>/seestar_alp/root_app.py
+ExecStart=python3 /home/<username>/seestar_alp/root_app.py
 [Install]
 WantedBy=network-online.target
