@@ -1,6 +1,6 @@
 import time
 from datetime import datetime, timedelta
-from tzlocal import get_localzone
+import tzlocal
 
 import falcon
 from falcon import HTTPTemporaryRedirect, HTTPFound
@@ -30,7 +30,9 @@ import signal
 import math
 import numpy as np
 
-from skyfield.api import load
+from skyfield.api import load 
+from skyfield.data import mpc 
+from skyfield.constants import GM_SUN_Pitjeva_2005_km3_s2 as GM_SUN
 
 from device.seestar_logs import SeestarLogging
 from device.config import Config  # type: ignore
@@ -873,11 +875,16 @@ def do_command(req, resp, telescope_id):
         case "start_up_sequence":
             lat = form.get("lat","").strip()
             long = form.get("long","").strip()
+            auto_focus = form.get("auto_focus","False").strip()
+            dark_frames = form.get("dark_frames","False").strip()
+            polar_align = form.get("3ppa","False").strip()
+            raise_arm = form.get("raise_arm","False").strip()
+
             #print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
             if not lat or not long:
                 output = do_action_device("action_start_up_sequence", telescope_id, {})
             else:
-                output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
+                output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long, "auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
             return output
         case "get_event_state":
             output = do_action_device("get_event_state", telescope_id, {})
@@ -1386,7 +1393,7 @@ class ImageResource:
             state = current["Value"]["state"]
             schedule = current["Value"]
         else:
-            state = "Stopped"
+            state = "stopped"
             schedule = {"list": get_queue(telescope_id)}
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
@@ -1410,7 +1417,7 @@ class GotoResource:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
         else:
-            state = "Stopped"
+            state = "stopped"
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'goto.html', state=state, schedule=schedule, values=values, errors=errors, action=f"/{telescope_id}/goto", **context)
@@ -1435,7 +1442,7 @@ class CommandResource:
             
         else:
             schedule = {"list": get_queue(telescope_id)}
-            state = "Stopped"
+            state = "stopped"
 
         context = get_context(telescope_id, req)
 
@@ -1468,7 +1475,7 @@ class MosaicResource:
             state = current["Value"]["state"]
             schedule = current["Value"]
         else:
-            state = "Stopped"
+            state = "stopped"
             schedule = {"list": get_queue(telescope_id)}
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
@@ -1639,7 +1646,7 @@ class ScheduleToggleResource:
     def on_post(self, req, resp, telescope_id=0):
         current = do_action_device("get_schedule", telescope_id, {})
         state = current["Value"]["state"]
-        if state == "Stopped":
+        if state == "stopped" or state == "complete":
             do_action_device("start_scheduler", telescope_id, {})
         else:
             do_action_device("stop_scheduler", telescope_id, {})
@@ -1651,7 +1658,7 @@ class ScheduleToggleResource:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
         else:
-            state = "Stopped"
+            state = "stopped"
         context = get_context(telescope_id, req)
         render_template(req, resp, 'partials/schedule_state.html', state=state, **context)
 
@@ -1663,7 +1670,7 @@ class ScheduleClearResource:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
 
-            if state == "Running":
+            if state == "working":
                 do_action_device("stop_scheduler", telescope_id, {})
                 flash(resp, "Stopping scheduler")
 
@@ -2022,10 +2029,10 @@ class SettingsResource:
         }
         # Maybe we can store this better?
         settings_helper_text = {
-            "stack_dither_pix": "Dither by (x) pixels. Reset apon Seestar reboot.",
-            "stack_dither_interval": "Dither every (x) sub frames. Reset apon Seestar reboot.",
-            "stack_dither_enable": "Enable or disable dither. Reset apon Seestar reboot.",
-            "exp_ms_stack_l": "Stacking Exposure Lenght (ms).",
+            "stack_dither_pix": "Dither by (x) pixels. Reset upon Seestar reboot.",
+            "stack_dither_interval": "Dither every (x) sub frames. Reset upon Seestar reboot.",
+            "stack_dither_enable": "Enable or disable dither. Reset upon Seestar reboot.",
+            "exp_ms_stack_l": "Stacking Exposure Length (ms).",
             "exp_ms_continuous": "Continuous Preview Exposure Length (ms), used in the live view.",
             "save_discrete_ok_frame": "Save sub frames. (Doesn't include failed.)",
             "save_discrete_frame": "Save failed sub frames. (Failed sub frames will have \"_failed\" added to their filename.)",
@@ -2275,17 +2282,19 @@ class StellariumResource:
             StelJSON = json.loads(html_content)
             ra_j2000 = StelJSON['raJ2000']
             dec_J2000 = StelJSON['decJ2000']
-            if (StelJSON['localized-name'] != "" ):
-                objName = StelJSON['localized-name']
-            elif (StelJSON['name'] != ""):
-
-                objname = StelJSON['localized-name']
-            elif (StelJSON['designations'] != ""):
-                tmpObj = StelJSON['designations']
-                objName = tmpObj.split(" - ")[0]
+            if (StelJSON['object-type'] == 'star' and StelJSON['name'] == ''):
+                objName = 'Unnamed Star'
             else:
-                # Should never get here but whatever
-                objName = "Unknown"
+                if (StelJSON['localized-name'] != "" ):
+                    objName = StelJSON['localized-name']
+                elif (StelJSON['name'] != ""):
+                    objname = StelJSON['localized-name']
+                elif (StelJSON['designations'] != ""):
+                    tmpObj = StelJSON['designations']
+                    objName = tmpObj.split(" - ")[0]
+                else:
+                    # Should never get here but whatever
+                    objName = "Unknown"
             
             lpFilter = False
             objType = StelJSON['type']
@@ -2504,6 +2513,107 @@ class GetPlanetCoordinates():
         resp.content_type = 'application/text'
         resp.text = (f"{ra}, {dec}")
 
+def checkFileAge():
+    if (os.path.exists('CometEls.txt') == False):
+        redownload = True
+    else:
+        creation_date = datetime.fromtimestamp(os.path.getctime('CometEls.txt'))
+        today = datetime.today()
+        delta = today - creation_date
+        if (delta.days > 7): 
+            redownload  = True
+        else:
+            redownload = False
+    return redownload
+
+
+def get_UTC_Time():
+    local_time = datetime.now(tzlocal.get_localzone())
+    utc_time = local_time - local_time.utcoffset()  # Manually adjust to UTC
+    return utc_time.year, utc_time.month, utc_time.day, utc_time.hour, utc_time.minute, utc_time.second
+
+def searchComet(name):
+    with load.open(mpc.COMET_URL, reload=checkFileAge()) as f:
+        comets = mpc.load_comets_dataframe(f)
+
+    # Keep only the most recent orbit for each comet,
+    # and index by designation for fast lookup.
+    comets = (comets.sort_values('reference')
+            .groupby('designation', as_index=False).last()
+            .set_index('designation', drop=False))
+
+    regex = re.compile(r'\b{}\b'.format(name), re.IGNORECASE)
+
+    row =  comets[comets['designation'].str.contains(regex)]
+    print(row['designation'].str)
+    if (len(row) == 0):
+        return 9999, 9999
+    ts = load.timescale()
+    eph = load('de440s.bsp')
+    sun, earth = eph['sun'], eph['earth']
+
+    comet = sun + mpc.comet_orbit(row.iloc[0], ts, GM_SUN)
+    Y,M,D,h,m,s = get_UTC_Time()
+    t = ts.utc(Y,M,D,h,m,s)
+    ra, dec, distance = earth.at(t).observe(comet).radec()
+
+    return str(ra).replace(" ",""), str(dec).replace('deg','d').replace("'","m").replace('"',"s").replace(" ",""), comet.target
+
+def searchMinorPlanet(name):
+    with load.open('https://www.minorplanetcenter.net/iau/Ephemerides/Bright/2024/Soft00Bright.txt') as f:
+        minor_planets = mpc.load_mpcorb_dataframe(f)
+
+    bad_orbits = minor_planets.semimajor_axis_au.isnull()
+    minor_planets = minor_planets[~bad_orbits]
+
+    regex = re.compile(r'\b{}\b'.format(name), re.IGNORECASE)
+    # Example: Filter for a specific asteroid by designation
+    row = minor_planets[minor_planets['designation'].str.contains(regex)]
+
+    if row.empty:
+         return 9999, 9999
+    
+    ts = load.timescale()
+    eph = load('de440s.bsp')
+    sun, earth = eph['sun'], eph['earth']
+
+    object = sun + mpc.mpcorb_orbit(row.iloc[0], ts, GM_SUN)
+    Y,M,D,h,m,s = get_UTC_Time()
+    t = ts.utc(Y,M,D,h,m,s)
+    ra, dec, distance = earth.at(t).observe(object).radec()
+    
+    return str(ra).replace(" ",""), str(dec).replace('deg','d').replace("'","m").replace('"',"s").replace(" ","")
+
+class GetCometCoordinates():
+    @staticmethod
+    def on_get(req, resp):
+        cometName = req.get_param('cometname')
+        ra, dec, target = searchComet(cometName)
+        if (ra == 9999 or dec == 9999):
+            resp.status = falcon.HTTP_404
+            resp.content_type = 'application/text'
+            resp.text = 'Object not found'
+            return
+        else:
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'application/text'
+            resp.text = (f"{ra}|{dec}|{target}")
+
+class GetMinorPlanetCoordinates():
+    @staticmethod
+    def on_get(req, resp):
+        minorname = req.get_param('minorname')
+        ra, dec = searchMinorPlanet(minorname)
+        if (ra == 9999 or dec == 9999):
+            resp.status = falcon.HTTP_404
+            resp.content_type = 'application/text'
+            resp.text = 'Object not found'
+            return
+        else:
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'application/text'
+            resp.text = (f"{ra} {dec}")
+
 
 class FrontMain:
     def __init__(self):
@@ -2590,6 +2700,8 @@ class FrontMain:
         app.add_route('/getbalancesensor', GetBalanceSensorResource())
         app.add_route('/gensupportbundle', GenSupportBundleResource())
         app.add_route('/getplanetcoordinates', GetPlanetCoordinates())
+        app.add_route('/getcometcoordinates', GetCometCoordinates())
+        app.add_route('/getminorplanetcoordinates', GetMinorPlanetCoordinates())
         app.add_route('/config', ConfigResource())
 
         try:

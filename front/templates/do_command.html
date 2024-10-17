@@ -32,36 +32,57 @@
 
  <div class="container">
 	<div class="row">
-		<div class="col-md-6 border border-primary">
-			<h5 class="card-title">Start-Up Sequence</h5>
-			<form method="post" action="{{ action }}" class="bordered-form" onsubmit="showModal(event, this)">
-			<div class="container">
-				<div class="mb3 row align-items-end">
-					<input type="hidden" name="command" value="start_up_sequence">
-					<div class="mb3 col-sm-2">
-						<label for="lat" class="form-label" style="margin-bottom:5px;font-weight:bold">Latitude</label>
-						<input type="text" class="form-control form-control-sm" style="width: 100px" id="lat" name="lat">
-					</div>
+<div class="col-md-6 border border-primary p-3">
+    <h5 class="card-title pb-2">Start-Up Sequence</h5>
+    <form method="post" action="{{ action }}" class="bordered-form" onsubmit="showModal(event, this)">
+        <div class="container">
+            <div class="row">
+                <!-- Left column: Form -->
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <input type="hidden" name="command" value="start_up_sequence">
+                        <label for="lat" class="form-label font-weight-bold">Latitude</label>
+                        <input type="text" class="form-control form-control-sm" id="lat" name="lat">
+                        <label for="long" class="form-label font-weight-bold">Longitude</label>
+                        <input type="text" class="form-control form-control-sm" id="long" name="long">
+                    </div>
+                    <div class="row mb-3">
+                        <!-- Checkbox Inputs -->
+                        <div class="col-sm-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="raise_arm" name="raise_arm">
+                                <label class="form-check-label" for="raise_arm">Raise Arm</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="auto_focus" name="auto_focus">
+                                <label class="form-check-label" for="auto_focus">AutoFocus</label>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="polar_align" name="polar_align">
+                                <label class="form-check-label" for="polar_align">Polar Align</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="dark_frames" name="dark_frames">
+                                <label class="form-check-label" for="dark_frames">Dark Frames</label>
+                            </div>
+                        </div>
+                    </div>
 
-					<div class="mb3 col-sm-2">
-						<label for="long"class="form-label" style="margin-bottom:5px;font-weight:bold">Longitude</label>
-						<input type="text" class="form-control form-control-sm" style="width: 100px" id="long" name="long">
-					</div>
-					<div class = "col-sm-2">
-						<button type="submit" class="btn btn-primary btn-sm">Execute</button>
-					</div>
-				</div>
-				<div class="mb3 row"><p></p></div>
-					<div class="mb3 col-7">
-						<div class="mb3 row">
-							<p>This will override whatever value you have set in config.toml. Leaving this blank will not override your values specified in config.toml.  Specifying a value of 0 will attempt to determine your location based on IP Geolocation. <b>The machine you run seestar_alp on must have internet service for this to work!</b></p>
-						</div>
-					</div>
-				</div>
-			</form>
-		</div>
-		<div class="col-md-6 border border-primary">
-			<h5 class="card-title">Output</h5>
+                    <button type="submit" class="btn btn-primary btn-sm">Execute</button>
+                </div>
+
+                <!-- Right column: Information block -->
+                <div class="col-md-6">
+                    <p>This will override whatever value you have set in config.toml. Leaving this blank will not override your values specified in config.toml. Specifying a value of 0 will attempt to determine your location based on IP Geolocation. <b>The machine you run seestar_alp on must have internet service for this to work!</b></p>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+		<div class="col-md-6 border border-primary p-3">
+			<h5 class="card-title pb-2">Output</h5>
 			<div id="outputAlert" class="alert alert-primary" role="alert">
 				{% if output %}
 					{{ output }}
