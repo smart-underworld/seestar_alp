@@ -123,6 +123,8 @@ function setup() {
   git clone https://github.com/smart-underworld/seestar_alp.git
   cd  seestar_alp
 
+  user=$(whoami)
+  group=$(id -gn)
   src_home=$(pwd)
   mkdir -p logs
 
