@@ -1,6 +1,6 @@
 import time
 from datetime import datetime, timedelta
-from tzlocal import get_localzone
+import tzlocal
 
 import falcon
 from falcon import HTTPTemporaryRedirect, HTTPFound
@@ -30,7 +30,9 @@ import signal
 import math
 import numpy as np
 
-from skyfield.api import load
+from skyfield.api import load 
+from skyfield.data import mpc 
+from skyfield.constants import GM_SUN_Pitjeva_2005_km3_s2 as GM_SUN
 
 from device.seestar_logs import SeestarLogging
 from device.config import Config  # type: ignore
@@ -2506,6 +2508,107 @@ class GetPlanetCoordinates():
         resp.content_type = 'application/text'
         resp.text = (f"{ra}, {dec}")
 
+def checkFileAge():
+    if (os.path.exists('CometEls.txt') == False):
+        redownload = True
+    else:
+        creation_date = datetime.fromtimestamp(os.path.getctime('CometEls.txt'))
+        today = datetime.today()
+        delta = today - creation_date
+        if (delta.days > 7): 
+            redownload  = True
+        else:
+            redownload = False
+    return redownload
+
+
+def get_UTC_Time():
+    local_time = datetime.now(tzlocal.get_localzone())
+    utc_time = local_time - local_time.utcoffset()  # Manually adjust to UTC
+    return utc_time.year, utc_time.month, utc_time.day, utc_time.hour, utc_time.minute, utc_time.second
+
+def searchComet(name):
+    with load.open(mpc.COMET_URL, reload=checkFileAge()) as f:
+        comets = mpc.load_comets_dataframe(f)
+
+    # Keep only the most recent orbit for each comet,
+    # and index by designation for fast lookup.
+    comets = (comets.sort_values('reference')
+            .groupby('designation', as_index=False).last()
+            .set_index('designation', drop=False))
+
+    regex = re.compile(r'\b{}\b'.format(name), re.IGNORECASE)
+
+    row =  comets[comets['designation'].str.contains(regex)]
+    print(row['designation'].str)
+    if (len(row) == 0):
+        return 9999, 9999
+    ts = load.timescale()
+    eph = load('de440s.bsp')
+    sun, earth = eph['sun'], eph['earth']
+
+    comet = sun + mpc.comet_orbit(row.iloc[0], ts, GM_SUN)
+    Y,M,D,h,m,s = get_UTC_Time()
+    t = ts.utc(Y,M,D,h,m,s)
+    ra, dec, distance = earth.at(t).observe(comet).radec()
+
+    return str(ra).replace(" ",""), str(dec).replace('deg','d').replace("'","m").replace('"',"s").replace(" ",""), comet.target
+
+def searchMinorPlanet(name):
+    with load.open('https://www.minorplanetcenter.net/iau/Ephemerides/Bright/2024/Soft00Bright.txt') as f:
+        minor_planets = mpc.load_mpcorb_dataframe(f)
+
+    bad_orbits = minor_planets.semimajor_axis_au.isnull()
+    minor_planets = minor_planets[~bad_orbits]
+
+    regex = re.compile(r'\b{}\b'.format(name), re.IGNORECASE)
+    # Example: Filter for a specific asteroid by designation
+    row = minor_planets[minor_planets['designation'].str.contains(regex)]
+
+    if row.empty:
+         return 9999, 9999
+    
+    ts = load.timescale()
+    eph = load('de440s.bsp')
+    sun, earth = eph['sun'], eph['earth']
+
+    object = sun + mpc.mpcorb_orbit(row.iloc[0], ts, GM_SUN)
+    Y,M,D,h,m,s = get_UTC_Time()
+    t = ts.utc(Y,M,D,h,m,s)
+    ra, dec, distance = earth.at(t).observe(object).radec()
+    
+    return str(ra).replace(" ",""), str(dec).replace('deg','d').replace("'","m").replace('"',"s").replace(" ","")
+
+class GetCometCoordinates():
+    @staticmethod
+    def on_get(req, resp):
+        cometName = req.get_param('cometname')
+        ra, dec, target = searchComet(cometName)
+        if (ra == 9999 or dec == 9999):
+            resp.status = falcon.HTTP_404
+            resp.content_type = 'application/text'
+            resp.text = 'Object not found'
+            return
+        else:
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'application/text'
+            resp.text = (f"{ra}|{dec}|{target}")
+
+class GetMinorPlanetCoordinates():
+    @staticmethod
+    def on_get(req, resp):
+        minorname = req.get_param('minorname')
+        ra, dec = searchMinorPlanet(minorname)
+        if (ra == 9999 or dec == 9999):
+            resp.status = falcon.HTTP_404
+            resp.content_type = 'application/text'
+            resp.text = 'Object not found'
+            return
+        else:
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'application/text'
+            resp.text = (f"{ra} {dec}")
+
 
 class FrontMain:
     def __init__(self):
@@ -2592,6 +2695,8 @@ class FrontMain:
         app.add_route('/getbalancesensor', GetBalanceSensorResource())
         app.add_route('/gensupportbundle', GenSupportBundleResource())
         app.add_route('/getplanetcoordinates', GetPlanetCoordinates())
+        app.add_route('/getcometcoordinates', GetCometCoordinates())
+        app.add_route('/getminorplanetcoordinates', GetMinorPlanetCoordinates())
         app.add_route('/config', ConfigResource())
 
         try:
