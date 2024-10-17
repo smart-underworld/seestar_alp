@@ -1,0 +1,17 @@
+[Unit]
+Description=INDI server
+After=seestar.service
+PartOf=seestar.service
+[Service]
+User=<username>
+Type=simple
+Restart=always
+WorkingDirectory=/home/<username>/seestar_alp/indi
+EnvironmentFile=/etc/seestar.env
+ExecStartPre=bash -c 'rm -f /tmp/seestar; mkfifo /tmp/seestar'
+ExecStart=indiserver -f /tmp/seestar
+ExecStartPost=python3 /home/<username>/seestar_alp/indi/start_indi_devices.py
+ExecPostStop=rm /tmp/seestar
+
+[Install]
+WantedBy=network-online.target
