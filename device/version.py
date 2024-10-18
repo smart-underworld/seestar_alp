@@ -40,7 +40,7 @@ class Version:
                 logger.warning("unable to get git tags")
 
             try:
-                out = _minimal_ext_cmd(['git', 'describe', '--tags'])
+                out = _minimal_ext_cmd(['git', 'describe', '--tags', '--always', '--exclude', '*[0-9]-g*', '--match', 'v*'])
                 GIT_REVISION = out.strip().decode('ascii')
             except OSError:
                 GIT_REVISION = "Unknown"
