@@ -166,7 +166,6 @@ class _Config:
         self.init_dew_heater_power: int = self.get_toml(section, 'dew_heater_power', 0)
         self.scope_aim_lat: float = self.get_toml(section, 'scope_aim_lat', 60.0)
         self.scope_aim_lon: float = self.get_toml(section, 'scope_aim_lon', 20.0)
-        self.is_EQ_mode: bool = self.get_toml(section, 'is_EQ_mode', False)
 
     def load_from_form(self, req):
         """
@@ -222,7 +221,6 @@ class _Config:
         self.set_toml('seestar_initialization', 'dew_heater_power', int(req.media['init_dew_heater_power']))
         self.set_toml('seestar_initialization', 'scope_aim_lat', float(req.media['scope_aim_lat']))
         self.set_toml('seestar_initialization', 'scope_aim_lon', float(req.media['scope_aim_lon']))
-        self.set_toml('seestar_initialization', 'is_EQ_mode', 'is_EQ_mode' in req.media)
 
     def load_toml(self, load_name = None):
         """
@@ -353,8 +351,7 @@ class _Config:
                 self.render_checkbox('init_activate_LP_filter', 'Activate LP filter:', self.init_activate_LP_filter) + \
                 self.render_text('init_dew_heater_power', 'Dew heater power:', self.init_dew_heater_power) + \
                 self.render_text('scope_aim_lat', 'Scope aim latitude:', self.scope_aim_lat) + \
-                self.render_text('scope_aim_lon', 'Scope aim longitude:', self.scope_aim_lon) + \
-                self.render_checkbox('is_EQ_mode', 'Scope in EQ Mode:', self.is_EQ_mode) 
+                self.render_text('scope_aim_lon', 'Scope aim longitude:', self.scope_aim_lon)
             )
 
 Config = _Config()
