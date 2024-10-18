@@ -2,8 +2,6 @@
 <form method="post" action="{{ action }}">
     <div class="card border-primary mb-3">
         <div class="card-body">
-            <h5 class="card-title">Target</h5>
-    
             <!-- First Row: Target Name and Search For -->
             <div class="mb-3 row">
                 <div class="d-flex align-items-center">
@@ -151,10 +149,12 @@
         </div>
     </div>
     
-
+    <p>
+        <h5 class="card-title">Exposure Settings</h5>
+    </p>
     <div class="card border-primary mb-3">
         <div class="card-body">
-            <h5 class="card-title">Exposure</h5>
+           
 
             <div class="mb-3">
                 <label for="sessionTime" class="form-label">Total Session Time</label>
@@ -195,10 +195,7 @@
 
         </div>
     </div>
-
     <button type="submit" class="btn btn-primary">Submit</button>
-
-    
 </form>
 <!-- Modal structure -->
 <div class="modal fade" id="cometModal" tabindex="-1" aria-labelledby="cometModalLabel" aria-hidden="true">
