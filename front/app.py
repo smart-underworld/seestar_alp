@@ -2577,7 +2577,12 @@ def searchComet(name):
  
 
 def searchMinorPlanet(name):
-    with load.open('https://www.minorplanetcenter.net/iau/Ephemerides/Bright/2024/Soft00Bright.txt') as f:
+    if os.path.exists('Soft00Bright.txt'):
+        mpcFile = 'Soft00Bright.txt'
+    else:
+        mpcFile = 'https://www.minorplanetcenter.net/iau/Ephemerides/Bright/2024/Soft00Bright.txt'
+
+    with load.open(mpcFile) as f:
         minor_planets = mpc.load_mpcorb_dataframe(f)
 
     bad_orbits = minor_planets.semimajor_axis_au.isnull()
