@@ -875,14 +875,16 @@ def do_command(req, resp, telescope_id):
         case "start_up_sequence":
             lat = form.get("lat","").strip()
             long = form.get("long","").strip()
-            auto_focus = form.get("auto_focus","False").strip()
-            dark_frames = form.get("dark_frames","False").strip()
-            polar_align = form.get("3ppa","False").strip()
-            raise_arm = form.get("raise_arm","False").strip()
+            auto_focus = form.get("auto_focus",False).strip()  == "on"
+            dark_frames = form.get("dark_frames",False).strip() == "on"
+            polar_align = form.get("polar_align",False).strip() == "on"
+            raise_arm = form.get("raise_arm",False).strip() == "on"
 
+            print(f" AF: {auto_focus} DF: {dark_frames} PA: {polar_align} RA: {raise_arm}")
+            
             #print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
             if not lat or not long:
-                output = do_action_device("action_start_up_sequence", telescope_id, {})
+                output = do_action_device("action_start_up_sequence", telescope_id, {"auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
             else:
                 output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long, "auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
             return output
