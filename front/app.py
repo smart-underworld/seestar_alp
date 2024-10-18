@@ -875,11 +875,18 @@ def do_command(req, resp, telescope_id):
         case "start_up_sequence":
             lat = form.get("lat","").strip()
             long = form.get("long","").strip()
+            auto_focus = form.get("auto_focus",False).strip()  == "on"
+            dark_frames = form.get("dark_frames",False).strip() == "on"
+            polar_align = form.get("polar_align",False).strip() == "on"
+            raise_arm = form.get("raise_arm",False).strip() == "on"
+
+            print(f" AF: {auto_focus} DF: {dark_frames} PA: {polar_align} RA: {raise_arm}")
+            
             #print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
             if not lat or not long:
-                output = do_action_device("action_start_up_sequence", telescope_id, {})
+                output = do_action_device("action_start_up_sequence", telescope_id, {"auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
             else:
-                output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long})
+                output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long, "auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
             return output
         case "get_event_state":
             output = do_action_device("get_event_state", telescope_id, {})
@@ -1388,7 +1395,7 @@ class ImageResource:
             state = current["Value"]["state"]
             schedule = current["Value"]
         else:
-            state = "Stopped"
+            state = "stopped"
             schedule = {"list": get_queue(telescope_id)}
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
@@ -1412,7 +1419,7 @@ class GotoResource:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
         else:
-            state = "Stopped"
+            state = "stopped"
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'goto.html', state=state, schedule=schedule, values=values, errors=errors, action=f"/{telescope_id}/goto", **context)
@@ -1437,7 +1444,7 @@ class CommandResource:
             
         else:
             schedule = {"list": get_queue(telescope_id)}
-            state = "Stopped"
+            state = "stopped"
 
         context = get_context(telescope_id, req)
 
@@ -1470,7 +1477,7 @@ class MosaicResource:
             state = current["Value"]["state"]
             schedule = current["Value"]
         else:
-            state = "Stopped"
+            state = "stopped"
             schedule = {"list": get_queue(telescope_id)}
         context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
@@ -1641,7 +1648,7 @@ class ScheduleToggleResource:
     def on_post(self, req, resp, telescope_id=0):
         current = do_action_device("get_schedule", telescope_id, {})
         state = current["Value"]["state"]
-        if state == "Stopped":
+        if state == "stopped" or state == "complete":
             do_action_device("start_scheduler", telescope_id, {})
         else:
             do_action_device("stop_scheduler", telescope_id, {})
@@ -1653,7 +1660,7 @@ class ScheduleToggleResource:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
         else:
-            state = "Stopped"
+            state = "stopped"
         context = get_context(telescope_id, req)
         render_template(req, resp, 'partials/schedule_state.html', state=state, **context)
 
@@ -1665,7 +1672,7 @@ class ScheduleClearResource:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
 
-            if state == "Running":
+            if state == "working":
                 do_action_device("stop_scheduler", telescope_id, {})
                 flash(resp, "Stopping scheduler")
 
