@@ -17,16 +17,12 @@ function update() {
       exit 0
   fi
 
-  if $(systemctl is-active --quiet seestar_device); then
-    sudo systemctl stop seestar_device
-  fi
-
-  if $(systemctl is-active --quiet seestar_front); then
-    sudo systemctl stop seestar_front
-  fi
-
   if $(systemctl is-active --quiet seestar); then
     sudo systemctl stop seestar
+  fi
+
+  if $(systemctl is-active --quiet INDI); then
+    sudo systemctl stop INDI
   fi
 
   cd ${src_home}

@@ -1041,7 +1041,9 @@ def do_support_bundle(req, telescope_id = 1):
 
         if os_name == "Linux":
             cmd_result = subprocess.check_output(['journalctl', '-u', 'seestar'])
-            zip_file.writestr("service_journal.txt", cmd_result)
+            zip_file.writestr("seestar_service_journal.txt", cmd_result)
+            cmd_result = subprocess.check_output(['journalctl', '-u', 'INDI'])
+            zip_file.writestr("INDI_service_journal.txt", cmd_result)
         #if os.path.isdir('.git'):
         #    cmd_result = subprocess.check_output(['git', 'log', '-n', '1'])
         #    zip_file.writestr("git_version.txt", cmd_result)
@@ -1063,11 +1065,10 @@ def do_support_bundle(req, telescope_id = 1):
             if path is not None:
                 cmd_result = subprocess.check_output(['python3', '--version'])
                 zip_file.writestr("python3_version.txt", cmd_result)
-                    
+
         env_vars = os.environ
         env_content = "\n".join(f"{key}={value}" for key, value in env_vars.items())
         zip_file.writestr("env.txt", env_content)
-                    
 
         if telescope_id in telescope.seestar_logcollector:
             dev_log = telescope.get_seestar_logcollector(telescope_id)
