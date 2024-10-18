@@ -174,12 +174,6 @@ class action:
             elif action_name == "is_goto_completed_ok":
                 result = cur_dev.is_goto_completed_ok()
                 resp.text = MethodResponse(req, value = result).json
-            elif action_name == "set_below_horizon_dec_offset":
-                result = cur_dev.set_below_horizon_dec_offset(params['offset'])
-                resp.text = MethodResponse(req, value = result).json
-            elif action_name == "reset_below_horizon_dec_offset":
-                result = cur_dev.reset_below_horizon_dec_offset()
-                resp.text = MethodResponse(req, value = result).json
             elif action_name == "start_spectra":
                 result = cur_dev.start_spectra(params)
                 resp.text = MethodResponse(req, value = result).json

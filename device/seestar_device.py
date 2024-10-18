@@ -509,10 +509,10 @@ class Seestar:
 
         old_dec = self.dec
         self.below_horizon_dec_offset = offset
-        result = self.sync_target([self.ra, old_dec])
+        result = self._sync_target([self.ra, old_dec])
         if 'error' in result:
             self.below_horizon_dec_offset = 0
-            self.sync_target([self.ra, old_dec])
+            self._sync_target([self.ra, old_dec])
             self.logger.warn(result)
             self.logger.warn("Failed to set dec offset. Move the mount up first?")
             return False
@@ -534,7 +534,7 @@ class Seestar:
             #time.sleep(10)
             self.below_horizon_dec_offset = 0
             self.logger.info(f"syncing to {old_ra}, {new_dec}")
-            response = self.sync_target([old_ra, new_dec])
+            response = self._sync_target([old_ra, new_dec])
             self.logger.info(f"response from synC: {response}")
             if "error" in response:
                 return False
@@ -547,6 +547,14 @@ class Seestar:
 
 
     def sync_target(self, params):
+        if self.schedule['state'] != "stopped" or self.schedule['state'] != "complete":
+            msg = f"Cannot sync target while scheduler is active: {self.schedule['state']}"
+            self.logger.warn(msg)
+            return msg
+        else:
+            return self._sync_target(params)
+
+    def _sync_target(self, params):
         in_ra = params[0]
         in_dec = params[1]
         self.logger.info("%s: sync to target... %s %s with dec_offset of %s", self.device_name, in_ra, in_dec,
@@ -844,7 +852,7 @@ class Seestar:
                 self.logger.info("auto center completed")
                 return
             elif search_count <= 7:
-                self.sync_target([self.cur_solve_RA, self.cur_solve_Dec])
+                self._sync_target([self.cur_solve_RA, self.cur_solve_Dec])
                 self._slew_to_ra_dec([target_ra, target_dec])
                 search_count += 1
                 self.logger.warn(f"Failed to get close enough to target, try # {search_count}. Will try again.")
