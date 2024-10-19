@@ -1,40 +1,8 @@
-{% block extra_styles %}
-    <style>
-        .navbar {
-			position: relative;
-            z-index: 1060;
-        }
-
-        .modal {
-			position: fixed;
-            z-index: 1055;
-        }
-    </style>
-{% endblock %}
-
-<div class="modal fade {% if confirm %}show{% endif %}" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="{% if not confirm %}true{% else %}false{% endif %}">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="confirmationModalLabel">Confirmation</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body" id="modalBody">
-                You selected: <span id="selectedCommandText"></span>. Do you want to proceed?
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" id="confirmButton">Confirm</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <div class="container">
 	<div class="row">
 		<div class="col-md-6 border border-primary p-3">
 			<h5 class="card-title pb-2">Start-Up Sequence</h5>
-			<form method="post" action="{{ action }}" class="bordered-form" onsubmit="showModal(event, this)">
+			<form method="post" action="{{ action }}" class="bordered-form">
 			<div class="container">
 				<div class="row">
                 <!-- Left column: Form -->
@@ -97,7 +65,7 @@
 		<div class="card-body">
 			<div class="row mb-2">
 				<div class="col">
-					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
+					<form method="post" action="{{ action }}">
 						<div style="margin-bottom:5px;font-weight:bold">
 							<label for="dropdown1">Startup / Shutdown</label>
 						</div>
@@ -111,7 +79,7 @@
 					</form>
 				</div>
 				<div class="col">
-					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
+					<form method="post" action="{{ action }}">
 						<div style="margin-bottom:5px;font-weight:bold">
 							<label for="dropdown2">Polar Align</label>
 						</div>
@@ -123,7 +91,7 @@
 					</form>
 				</div>
 				<div class="col">
-					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
+					<form method="post" action="{{ action }}">
 						<div style="margin-bottom:5px;font-weight:bold">
 							<label for="dropdown3">AutoFocus</label>
 						</div>
@@ -139,7 +107,7 @@
 			</div>
 			<div class="row mb-2">
 				<div class ="col">
-					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
+					<form method="post" action="{{ action }}">
 						<div style="margin-bottom:5px;font-weight:bold">
 							<label for="dropdown4">Dark Frame Generation</label>
 						</div>
@@ -151,7 +119,7 @@
 					</form>
 				</div>
 				<div class="col">
-					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
+					<form method="post" action="{{ action }}">
 						<div style="margin-bottom:5px;font-weight:bold">
 							<label for="dropdown5">Filter</label>
 						</div>
@@ -166,7 +134,7 @@
 					</form>
 				</div>
 				<div class="col">
-					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
+					<form method="post" action="{{ action }}">
 						<div style="margin-bottom:5px;font-weight:bold">
 							<label for="dropdown6">Plate Solve</label>
 						</div>
@@ -181,7 +149,7 @@
 			</div>
 			<div class="row mb-2">
 				<div class="col">
-					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
+					<form method="post" action="{{ action }}">
 						<div style="margin-bottom:5px;font-weight:bold">
 							<label for="dropdown7">Get Infomation / Settings</label>
 						</div>
@@ -203,7 +171,7 @@
 					</form>
 				</div>
 				<div class="col">
-					<form method="post" action="{{ action }}" onsubmit="showModal(event, this)">
+					<form method="post" action="{{ action }}">
 						<div style="margin-bottom:5px;font-weight:bold">
 							<label for="dropdown8">Imaging</label>
 						</div>
@@ -225,18 +193,3 @@
 		</div>
 	</div>
 </div>
-
-<script>
-function showModal(event, form) {
-    event.preventDefault(); // Prevent the form from submitting immediately
-
-    // Show the modal (with its predefined message)
-    const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
-    confirmationModal.show();
-
-    // When the confirm button is clicked, submit the form
-    document.getElementById('confirmButton').onclick = function () {
-        form.submit(); // Submit the form after confirmation
-    };
-}
-</script>
