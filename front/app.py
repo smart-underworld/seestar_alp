@@ -168,7 +168,7 @@ def get_flash_cookie(req, resp):
 def update_twilight_times(latitude=None, longitude=None):
     observer = ephem.Observer()
     observer.date = datetime.now()
-    local_timezone = get_localzone()
+    local_timezone = tzlocal.get_localzone()
     sun = ephem.Sun()
     current_date_formatted = str(datetime.now().strftime("%Y-%m-%d"))
 
@@ -1283,7 +1283,7 @@ def get_live_status(telescope_id: int):
             # TODO : change below multiplier to actual exposure length
             stats = {
                 "gain": stack.get("gain"),
-                "integration_time": str(timedelta(seconds=stack.get("stacked_frame") * 10)),
+                "integration_time": str(timedelta(seconds=stack.get("stacked_frame") * (int(stack.get("exp_ms")) / 1000))),
                 "stacked_frame": stack.get("stacked_frame"),
                 "dropped_frame": stack.get("dropped_frame"),
                 "elapsed": human_ts(stack["lapse_ms"]),
@@ -2067,7 +2067,7 @@ class PlanningResource:
             nearest_csc["full_img"] = ""
         
         planning_cards = get_planning_cards()
-        local_timezone = get_localzone()
+        local_timezone = tzlocal.get_localzone()
         current_time = datetime.now(local_timezone)
         utc_offset = current_time.utcoffset()
         utc_offset = int(utc_offset.total_seconds() / 3600) # Convert the offset to hours, used for astromosaic
@@ -2541,22 +2541,49 @@ def searchComet(name):
     regex = re.compile(r'\b{}\b'.format(name), re.IGNORECASE)
 
     row =  comets[comets['designation'].str.contains(regex)]
-    print(row['designation'].str)
-    if (len(row) == 0):
-        return 9999, 9999
-    ts = load.timescale()
-    eph = load('de440s.bsp')
-    sun, earth = eph['sun'], eph['earth']
+    match len(row):
+        case 0: # Nothing returned
+            return ""
+        case 1: # Single record returned
+            ts = load.timescale()
+            eph = load('de440s.bsp')
+            sun, earth = eph['sun'], eph['earth']
+            comet = sun + mpc.comet_orbit(row.iloc[0], ts, GM_SUN)
+            Y,M,D,h,m,s = get_UTC_Time()
+            t = ts.utc(Y,M,D,h,m,s)
+            ra, dec, distance = earth.at(t).observe(comet).radec()
+            data = {"ra" : str(ra).replace(" ",""), "dec" : str(dec).replace('deg','d').replace("'","m").replace('"',"s").replace(" ",""), "cometName" : str(comet.target)}
+            return json.dumps(data, indent = 4)
 
-    comet = sun + mpc.comet_orbit(row.iloc[0], ts, GM_SUN)
-    Y,M,D,h,m,s = get_UTC_Time()
-    t = ts.utc(Y,M,D,h,m,s)
-    ra, dec, distance = earth.at(t).observe(comet).radec()
+        case r if r > 1: # Multiple records returned
+            ts = load.timescale()
+            eph = load('de440s.bsp')
+            sun, earth = eph['sun'], eph['earth']
+            Y,M,D,h,m,s = get_UTC_Time()
+            t = ts.utc(Y,M,D,h,m,s)
 
-    return str(ra).replace(" ",""), str(dec).replace('deg','d').replace("'","m").replace('"',"s").replace(" ",""), comet.target
+            data = []
+            for index, r in row.iterrows():
+                comet = sun + mpc.comet_orbit(r, ts, GM_SUN)  # Use `r`, the current row
+                ra, dec, distance = earth.at(t).observe(comet).radec()
+                
+                data.append({
+                    "ra": str(ra).replace(" ",""),
+                    "dec": str(dec).replace('deg','d').replace("'","m").replace('"',"s").replace(" ",""),
+                    "cometName": str(comet.target)
+                })
+            return json.dumps(data, indent = 4)
+
+            
+ 
 
 def searchMinorPlanet(name):
-    with load.open('https://www.minorplanetcenter.net/iau/Ephemerides/Bright/2024/Soft00Bright.txt') as f:
+    if os.path.exists('Soft00Bright.txt'):
+        mpcFile = 'Soft00Bright.txt'
+    else:
+        mpcFile = 'https://www.minorplanetcenter.net/iau/Ephemerides/Bright/2024/Soft00Bright.txt'
+
+    with load.open(mpcFile) as f:
         minor_planets = mpc.load_mpcorb_dataframe(f)
 
     bad_orbits = minor_planets.semimajor_axis_au.isnull()
@@ -2567,7 +2594,7 @@ def searchMinorPlanet(name):
     row = minor_planets[minor_planets['designation'].str.contains(regex)]
 
     if row.empty:
-         return 9999, 9999
+         return ""
     
     ts = load.timescale()
     eph = load('de440s.bsp')
@@ -2578,14 +2605,15 @@ def searchMinorPlanet(name):
     t = ts.utc(Y,M,D,h,m,s)
     ra, dec, distance = earth.at(t).observe(object).radec()
     
-    return str(ra).replace(" ",""), str(dec).replace('deg','d').replace("'","m").replace('"',"s").replace(" ","")
+    data = {"ra" : str(ra).replace(" ",""), "dec" : str(dec).replace('deg','d').replace("'","m").replace('"',"s").replace(" ","")}
+    return json.dumps(data, indent = 4)
 
 class GetCometCoordinates():
     @staticmethod
     def on_get(req, resp):
         cometName = req.get_param('cometname')
-        ra, dec, target = searchComet(cometName)
-        if (ra == 9999 or dec == 9999):
+        rtn = searchComet(cometName)
+        if (len(rtn) == 0):
             resp.status = falcon.HTTP_404
             resp.content_type = 'application/text'
             resp.text = 'Object not found'
@@ -2593,22 +2621,22 @@ class GetCometCoordinates():
         else:
             resp.status = falcon.HTTP_200
             resp.content_type = 'application/text'
-            resp.text = (f"{ra}|{dec}|{target}")
+            resp.text = (rtn)
 
 class GetMinorPlanetCoordinates():
     @staticmethod
     def on_get(req, resp):
         minorname = req.get_param('minorname')
-        ra, dec = searchMinorPlanet(minorname)
-        if (ra == 9999 or dec == 9999):
+        rtn = searchMinorPlanet(minorname)
+        if (len(rtn) == 0):
             resp.status = falcon.HTTP_404
             resp.content_type = 'application/text'
             resp.text = 'Object not found'
-            return
+            return 
         else:
             resp.status = falcon.HTTP_200
             resp.content_type = 'application/text'
-            resp.text = (f"{ra} {dec}")
+            resp.text = (rtn)
 
 
 class FrontMain:

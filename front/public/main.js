@@ -94,7 +94,7 @@ async function fetchCoordinates() {
                         return;
                     } else {
                         alert('There is an issue contacting the server');
-                    }
+                    }clearInterval
                     throw new Error('Network response was not ok ' + response.statusText);
                 }
                 return response.text();
@@ -102,9 +102,9 @@ async function fetchCoordinates() {
             .then(data => {
                 // Only proess if object data sent back
                 if (data){
-                    elements = data.trim().split(/\s+/);
-                    document.getElementById('ra').value = elements[0];
-                    document.getElementById('dec').value = elements[1];
+                    elements = JSON.parse(data)
+                    document.getElementById('ra').value = elements.ra;
+                    document.getElementById('dec').value = elements.dec;
                     document.getElementById('useLpFilter').checked = false;
                     document.getElementById("useJ2000").checked = true;
                 };
@@ -136,12 +136,14 @@ async function fetchCoordinates() {
             .then(data => {
                 // Only proess if object data sent back
                 if (data){
-                    elements = data.trim().split(/\|+/);
-                    document.getElementById('ra').value = elements[0];
-                    document.getElementById('dec').value = elements[1];
-                    document.getElementById('targetName').value = elements[2];
-                    document.getElementById('useLpFilter').checked = false;
-                    document.getElementById("useJ2000").checked = true;
+                    cometData = JSON.parse(data)
+                    openCometModal(cometData).then(selectedComet => {
+                        document.getElementById('ra').value = selectedComet.ra;
+                        document.getElementById('dec').value = selectedComet.dec;
+                        document.getElementById('targetName').value = selectedComet.cometName;
+                        document.getElementById('useLpFilter').checked = false;
+                        document.getElementById("useJ2000").checked = true;
+                    });
                 };
             });
             break;
@@ -294,4 +296,41 @@ async function get_location_from_IP() {
     } catch (error) {
         console.error(error.message);
     }
+}
+
+let selectedComet = null;
+
+// Function to open the modal and populate the comet list
+function openCometModal(comets) {
+    return new Promise((resolve) => {
+        const cometList = document.getElementById("cometList");
+        const modal = new bootstrap.Modal(document.getElementById('cometModal'));
+
+        cometList.innerHTML = '';
+
+        comets.forEach(comet => {
+            const li = document.createElement('li');
+            li.classList.add('list-group-item', 'list-group-item-action');
+            li.textContent = comet.cometName;
+            li.addEventListener('click', () => {
+                selectedComet = comet;
+                resolve(selectedComet);  // Resolve the promise with the selected comet
+                modal.hide();
+            });
+            cometList.appendChild(li);
+        });
+
+        modal.show();
+    });
+}
+
+// Function to handle the selected comet object (optional)
+function handleCometSelection(comet) {
+    //console.log("Comet selected:", comet);
+    document.getElementById('ra').value = scomet.ra;
+    document.getElementById('dec').value = comet.dec;
+    document.getElementById('targetName').value = comet.cometName;
+    document.getElementById('useLpFilter').checked = false;
+    document.getElementById("useJ2000").checked = true;
+    
 }
