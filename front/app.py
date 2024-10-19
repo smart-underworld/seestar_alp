@@ -875,7 +875,7 @@ def do_command(req, resp, telescope_id):
             long = form.get("long","").strip()
             auto_focus = form.get("auto_focus","False").strip() == "on"
             dark_frames = form.get("dark_frames","False").strip() == "on"
-            polar_align = form.get("3ppa","False").strip() == "on"
+            polar_align = form.get("polar_align","False").strip() == "on"
             raise_arm = form.get("raise_arm","False").strip() == "on"
 
             #print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")

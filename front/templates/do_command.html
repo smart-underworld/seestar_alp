@@ -30,7 +30,7 @@
     </div>
 </div>
 
- <div class="container">
+<div class="container">
 	<div class="row">
 		<div class="col-md-6 border border-primary p-3">
 			<h5 class="card-title pb-2">Start-Up Sequence</h5>
@@ -220,10 +220,23 @@
 						<button type="submit" class="btn btn-primary">Execute</button>
 					</form>
 				</div>
-        <div class="col"></div>
+				<div class="col"></div>
 			</div>
 		</div>
 	</div>
 </div>
 
+<script>
+function showModal(event, form) {
+    event.preventDefault(); // Prevent the form from submitting immediately
 
+    // Show the modal (with its predefined message)
+    const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+    confirmationModal.show();
+
+    // When the confirm button is clicked, submit the form
+    document.getElementById('confirmButton').onclick = function () {
+        form.submit(); // Submit the form after confirmation
+    };
+}
+</script>
