@@ -882,7 +882,7 @@ def do_command(req, resp, telescope_id):
             if not lat or not long:
                 output = do_action_device("action_start_up_sequence", telescope_id, {"auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
             else:
-                output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long "auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
+                output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long, "auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
             return output
         case "get_event_state":
             output = do_action_device("get_event_state", telescope_id, {})
