@@ -18,7 +18,12 @@ function validate_access {
 
 function install_apt_packages {
   sudo apt-get update --yes
-  sudo apt-get install --yes git libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev libgdbm-dev lzma lzma-dev tcl-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev wget curl make build-essential openssl libgl1
+  sudo apt-get install --yes software-properties-common \
+    git libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
+    libsqlite3-dev llvm libncurses5-dev libncursesw5-dev \
+    xz-utils tk-dev libgdbm-dev lzma lzma-dev tcl-dev \
+    libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev \
+    wget curl make build-essential openssl libgl1 indi-bin
 }
 
 function config_toml_setup {
@@ -66,17 +71,32 @@ _EOF
 
 function systemd_service_setup {
   cd raspberry_pi
+
+  cat systemd/seestar.env |sed -e "s/<username>/$USER/g" > /tmp/seestar.env
+
   cat systemd/seestar.service | sed \
   -e "s|/home/.*/seestar_alp|$src_home|g" \
   -e "s|^User=.*|User=${user}|g" \
   -e "s|^ExecStart=.*|ExecStart=$HOME/.pyenv/versions/ssc-3.12.5/bin/python3 $src_home/root_app.py|" > /tmp/seestar.service
-  sudo chown root:root /tmp/seestar*.service
+
+  cat systemd/INDI.service | sed \
+  -e "s|/home/.*/seestar_alp|$src_home|g" \
+  -e "s|^User=.*|User=${user}|g" > /tmp/INDI.service
+
+  sudo chown root:root /tmp/seestar.service /tmp/INDI.service /tmp/seestar.env
   sudo mv /tmp/seestar.service /etc/systemd/system
+  sudo mv /tmp/INDI.service /etc/systemd/system
+  sudo mv /tmp/seestar.env /etc
 
   sudo systemctl daemon-reload
 
   sudo systemctl enable seestar
   sudo systemctl start seestar
+
+  sudo systemctl enable INDI
+  sudo systemctl start INDI
+
+  # INDI service left disabled
 
   if ! $(systemctl is-active --quiet seestar); then
     echo "ERROR: seestar service is not running"
@@ -100,9 +120,11 @@ $(printf "| %-36s|" "http://${host}.local:5432")
 |                                     |
 | Systemd logs can be viewed via      |
 | journalctl -u seestar               |
+| journalctl -u INDI                  |
 |                                     |
 | Current status can be viewed via    |
 | systemctl status seestar            |
+| systemctl status INDI               |
 |-------------------------------------|
 _EOF
 }
