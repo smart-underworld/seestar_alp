@@ -5,7 +5,7 @@
                 <span class="me-3">State: {{ schedule['state'] }}</span>
                 <span>
                     <button type="submit" class="btn btn-primary">
-                        {% if schedule['state'] == "stopped" %}Start{% else %}Stop{% endif %}
+                        {% if schedule['state'] == "stopped" or schedule['state'] == 'complete' %}Start{% else %}Stop{% endif %}
                     </button>
                 </span>
             </div>
