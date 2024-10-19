@@ -17,7 +17,7 @@ We recommend Pi 3 or newer.
 Avoid Pi Zero, and Pico variants.
 
 ## Installing
-These insructions are based from a fresh install of Raspberry Pi OS Lite, written by the [Raspberry Pi imager](https://www.raspberrypi.com/software/)
+These insructions are based from a fresh install of Raspberry Pi OS Lite (64 bit), written by the [Raspberry Pi imager](https://www.raspberrypi.com/software/)
 
 To automatically set up the Raspberry Pi for Seestar_alp, run the following command as a non-root user:
 
