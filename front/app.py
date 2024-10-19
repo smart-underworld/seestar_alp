@@ -1283,7 +1283,7 @@ def get_live_status(telescope_id: int):
             # TODO : change below multiplier to actual exposure length
             stats = {
                 "gain": stack.get("gain"),
-                "integration_time": str(timedelta(seconds=stack.get("stacked_frame") * (int(stack.get("exp_ms")) / 1000))),
+                "integration_time": str(timedelta(seconds=stack.get("stacked_frame") * 10)),
                 "stacked_frame": stack.get("stacked_frame"),
                 "dropped_frame": stack.get("dropped_frame"),
                 "elapsed": human_ts(stack["lapse_ms"]),
