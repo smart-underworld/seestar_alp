@@ -100,6 +100,8 @@ The `seestar` service can be started/stopped/restarted using the appropriate ver
 
 Replace the `stop` verb with the appropriate action that you are trying to achieve.
 
+The service should start at boot time, without the need for a manual start.
+
 ## Persistent logs
 
 Should you find the need to look over systemd logs across boots, you can use `journalctl` to do so.
@@ -117,3 +119,29 @@ Most of the developers are responsive on the `#seestar_alp-ask-developers` chann
 Additional RPi specifics may be foun din the `#seestar_alp-raspberry-pi` channel.
 
 See the [How to get Support](../README.md#how-to-get-support) section of the top-level README.md file for details.
+
+## Stellarium control via INDI
+
+Stellarium may be used to control the seestar, by using an INDI proxy server running on the RPi.
+
+### Service control
+Similar to the `seestar` service, this service is orchestrated by the `systemd` init system.
+
+The `INDI` service can be started/stopped/restarted using the appropriate verb via the following command:
+
+`sudo systemctl stop INDI`
+
+Replace the `stop` verb with the appropriate action that you are trying to achieve.
+
+The service should start at boot time, without the need for a manual start.
+
+### Stellarium configuration
+
+Stellarium configuration largely mirrors the steps laid out in [this wiki page](https://github.com/smart-underworld/seestar_alp/wiki/Stellarium#controlling-seestar-from-stellarium) - starting on step 2 - with one modification:
+
+Under "INDI Settings" in the "Configure Telescope" section - you will need to change your "Host" setting to point to your RPi hostname / IP address.
+Eg:
+```
+Host: my-s50-pi.local
+Post 7624
+```
