@@ -14,6 +14,11 @@ function validate_access {
     echo "ERROR: User does not have sudo access required for setup"
     exit 255
   fi
+
+  if [ "$(arch)" != "aarch64" ]; then
+    echo "ERROR: Unsupported architecture. Please ensure you are running the 64bit raspberry pi OS"
+    exit 255
+  fi
 }
 
 function install_apt_packages {
