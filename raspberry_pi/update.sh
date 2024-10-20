@@ -9,12 +9,27 @@ function update() {
       FORCE=true
   fi
 
+  # internal parameter used to re-launch self with new source
+  if [ "$1" = "--relaunch" ]; then
+      FORCE=true
+      RELAUNCH=true
+  fi
+
   # check if update is required
   cd "${src_home}"
   git fetch origin
   if [ $(git rev-parse HEAD) = $(git rev-parse @{u}) ] && [ "${FORCE}" != "true" ]; then
       echo "Nothing to do, you're already up-to-date!"
       exit 0
+  fi
+
+  cd ${src_home}
+  git pull
+
+  # Update script needs to relaunch itsself, to pick up source changes
+  if [ -z "${RELAUNCH}" ]; then
+    echo "Re-launching update script with new source"
+    exec ${src_home}/raspberry_pi/update.sh --relaunch
   fi
 
   if $(systemctl is-active --quiet seestar); then
@@ -24,8 +39,6 @@ function update() {
   if $(systemctl is-active --quiet INDI); then
     sudo systemctl stop INDI
   fi
-
-  cd ${src_home}
 
   # Perform any update operations here, that need to change
   # prior behavior on the system
