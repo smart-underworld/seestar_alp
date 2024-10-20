@@ -30,9 +30,10 @@ import signal
 import math
 import numpy as np
 
-from skyfield.api import load 
+from skyfield.api import Loader
 from skyfield.data import mpc 
 from skyfield.constants import GM_SUN_Pitjeva_2005_km3_s2 as GM_SUN
+
 
 from device.seestar_logs import SeestarLogging
 from device.config import Config  # type: ignore
@@ -43,7 +44,7 @@ import threading
 import pydash
 
 logger = init_logging()
-
+load = Loader('data/')
 
 def get_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -2510,10 +2511,10 @@ class GetPlanetCoordinates():
         resp.text = (f"{ra}, {dec}")
 
 def checkFileAge():
-    if (os.path.exists('CometEls.txt') == False):
+    if (os.path.exists('data/CometEls.txt') == False):
         redownload = True
     else:
-        creation_date = datetime.fromtimestamp(os.path.getctime('CometEls.txt'))
+        creation_date = datetime.fromtimestamp(os.path.getctime('data/CometEls.txt'))
         today = datetime.today()
         delta = today - creation_date
         if (delta.days > 7): 
@@ -2538,7 +2539,7 @@ def searchComet(name):
             .groupby('designation', as_index=False).last()
             .set_index('designation', drop=False))
 
-    regex = re.compile(r'\b{}\b'.format(name), re.IGNORECASE)
+    regex = re.compile(r'{}'.format(re.escape(name)), re.IGNORECASE)
 
     row =  comets[comets['designation'].str.contains(regex)]
     match len(row):
@@ -2575,13 +2576,11 @@ def searchComet(name):
             return json.dumps(data, indent = 4)
 
             
- 
-
 def searchMinorPlanet(name):
-    if os.path.exists('Soft00Bright.txt'):
-        mpcFile = 'Soft00Bright.txt'
+    if os.path.exists('data/mpn-01.txt'):
+        mpcFile = 'mpn-01.txt'
     else:
-        mpcFile = 'https://www.minorplanetcenter.net/iau/Ephemerides/Bright/2024/Soft00Bright.txt'
+        mpcFile = 'http://dss.stellarium.org/MPC/mpn-01.txt'
 
     with load.open(mpcFile) as f:
         minor_planets = mpc.load_mpcorb_dataframe(f)

@@ -103,6 +103,7 @@ async function fetchCoordinates() {
                 // Only proess if object data sent back
                 if (data){
                     elements = JSON.parse(data)
+                    
                     document.getElementById('ra').value = elements.ra;
                     document.getElementById('dec').value = elements.dec;
                     document.getElementById('useLpFilter').checked = false;
@@ -136,20 +137,29 @@ async function fetchCoordinates() {
             .then(data => {
                 // Only proess if object data sent back
                 if (data){
-                    cometData = JSON.parse(data)
-                    openCometModal(cometData).then(selectedComet => {
+                    cometData = JSON.parse(data);
+                    if (cometData.length > 1) {
+                        openCometModal(cometData).then(selectedComet => {
                         document.getElementById('ra').value = selectedComet.ra;
                         document.getElementById('dec').value = selectedComet.dec;
                         document.getElementById('targetName').value = selectedComet.cometName;
                         document.getElementById('useLpFilter').checked = false;
                         document.getElementById("useJ2000").checked = true;
-                    });
+                        });
+                    } else {
+                        selectedComet = cometData;
+                        document.getElementById('ra').value = selectedComet.ra;
+                        document.getElementById('dec').value = selectedComet.dec;
+                        document.getElementById('targetName').value = selectedComet.cometName;
+                        document.getElementById('useLpFilter').checked = false;
+                        document.getElementById("useJ2000").checked = true;
+                    };
+                
                 };
             });
-            break;
+        break;
     }
-}
-
+};
 
 async function fetchClipboard() {
     try {
