@@ -16,7 +16,7 @@ class Seestar_Federation:
         self.seestar_devices = seestar_devices
         self.schedule = {}
         self.schedule['list'] = []
-        self.schedule['state'] = "Stopped"
+        self.schedule['state'] = "stopped"
         self.schedule['schedule_id'] = str(uuid.uuid4())
 
     def disconnect(self):
@@ -39,6 +39,13 @@ class Seestar_Federation:
                 result[key] = self.seestar_devices[key].send_message_param_sync(data)
         return result
                 
+    def goto_target(self, params):
+        result = {}
+        for key in self.seestar_devices:
+            if self.seestar_devices[key].is_connected:
+                result[key] = self.seestar_devices[key].goto_target(params)
+        return result
+    
     def stop_goto_target(self):
         result = {}
         for key in self.seestar_devices:
@@ -46,19 +53,18 @@ class Seestar_Federation:
                 result[key] = result[key] = self.seestar_devices[key].stop_goto_target()
         return result
     
-    def goto_target(self, params):
+    def is_goto(self):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                result[key] = self.seestar_devices[key].goto_target(params)
+                result[key] = result[key] = self.seestar_devices[key].is_goto()
         return result
-
-    # {"method":"scope_goto","params":[1.2345,75.0]}
-    def slew_to_ra_dec(self, params):
+    
+    def is_goto_completed_ok(self):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                result[key] = self.seestar_devices[key].slew_to_ra_dec[params]
+                result[key] = result[key] = self.seestar_devices[key].is_goto_completed_ok()
         return result
     
     def set_below_horizon_dec_offset(self, offset):
@@ -144,7 +150,7 @@ class Seestar_Federation:
                 device_schedule = cur_device.get_schedule(params)
                 if 'state' not in device_schedule:
                     continue
-                if device_schedule['state'] == "Stopped":
+                if device_schedule['state'] == "stopped" or device_schedule['state'] == "complete":
                     availiable_device_list.append(key)
                 result['device'][key] = device_schedule
         result['available_device_list'] = availiable_device_list
@@ -154,7 +160,7 @@ class Seestar_Federation:
     def create_schedule(self, params):
         self.schedule = {}
         self.schedule['list'] = []
-        self.schedule['state'] = "Stopped"
+        self.schedule['state'] = "stopped"
         self.schedule['schedule_id'] = str(uuid.uuid4())
         return self.schedule
 
@@ -222,7 +228,7 @@ class Seestar_Federation:
 
         self.schedule = {}
         self.schedule['list'] = []
-        self.schedule['state'] = "Stopped"
+        self.schedule['state'] = "stopped"
         self.schedule['schedule_id'] = str(uuid.uuid4())
         schedule_item = {}
         schedule_item['action'] = "start_mosaic"

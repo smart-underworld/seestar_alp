@@ -67,10 +67,10 @@ def start_seestar_federation(logger: logger): # type: ignore
     global seestar_federation
     seestar_federation = Seestar_Federation(logger, seestar_dev)
 
-def start_seestar_device(logger: logger, name: str, ip_address: str, port: int, device_num: int): # type: ignore
+def start_seestar_device(logger: logger, name: str, ip_address: str, port: int, device_num: int, is_EQ_mode: bool): # type: ignore
     # logger = logger
     global seestar_dev
-    seestar_dev[device_num] = Seestar(logger, ip_address, port, name, device_num, True)
+    seestar_dev[device_num] = Seestar(logger, ip_address, port, name, device_num, is_EQ_mode, True)
     seestar_dev[device_num].start_watch_thread()
     return seestar_dev[device_num]
 
@@ -165,11 +165,14 @@ class action:
             elif action_name == "goto_target":
                 result = cur_dev.goto_target(params)
                 resp.text = MethodResponse(req, value = result).json
-            elif action_name == "scope_stop_goto_auto_center":
+            elif action_name == "stop_goto_target":
                 result = cur_dev.stop_goto_target()
                 resp.text = MethodResponse(req, value = result).json
-            elif action_name == "set_below_horizon_dec_offset":
-                result = cur_dev.set_below_horizon_dec_offset(params['offset'])
+            elif action_name == "is_goto":
+                result = cur_dev.is_goto()
+                resp.text = MethodResponse(req, value = result).json
+            elif action_name == "is_goto_completed_ok":
+                result = cur_dev.is_goto_completed_ok()
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "start_spectra":
                 result = cur_dev.start_spectra(params)
@@ -185,6 +188,9 @@ class action:
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "insert_schedule_item_before":
                 result = cur_dev.insert_schedule_item_before(params)
+                resp.text = MethodResponse(req, value = result).json
+            elif action_name == "replace_schedule_item":
+                result = cur_dev.replace_schedule_item(params)
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "remove_schedule_item":
                 result = cur_dev.remove_schedule_item(params)
@@ -203,7 +209,10 @@ class action:
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "get_last_image":
                 redirect_url = cur_dev.get_last_image(params)
-                resp.text = MethodResponse(req, value = redirect_url).json   
+                resp.text = MethodResponse(req, value = redirect_url).json  
+            elif action_name == "adjust_mag_declination":
+                result = cur_dev.adjust_mag_declination(params) 
+                resp.text = MethodResponse(req, value = result).json
         except Exception as ex:
             resp.text = MethodResponse(req,
                             DevDriverException(0x500, '\n'.join(ex.args), ex)).json
@@ -886,7 +895,8 @@ class ispulseguiding:
 class rightascension:
 
     def on_get(self, req: Request, resp: Response, devnum: int):
-        if not seestar_dev[devnum].is_connected:
+
+        if not devnum in seestar_dev or not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
                             NotConnectedException("Not connected.")).json
             return

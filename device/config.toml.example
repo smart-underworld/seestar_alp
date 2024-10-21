@@ -44,6 +44,7 @@ activate_LP_filter = false
 dew_heater_power = 0                # 0 - 100; 0 is off, 100 is max
 scope_aim_lat = 60          # start up latitude in degrees -90 to 80
 scope_aim_lon = 20          # start up longitude in degrees 0 to 360
+is_EQ_mode = false
 
 [logging]
 log_level = 'INFO'   #'WARN' only if trouble    #'INFO' to output more logging      #'DEBUG' still more output
@@ -61,6 +62,7 @@ device_num = 1
 # You can specify the following settings to override those found in the seestar_initialization section on a per-device level
 #scope_aim_lat = 60          # start up latitude in degrees -90 to 80 (override default)
 #scope_aim_lon = 20          # start up longitude in degrees 0 to 360 (override default)
+#is_EQ_mode = false          # can be used to override default
 
 #[[seestars]]
 #name = "Seestar Beta"
