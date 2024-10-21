@@ -35,6 +35,7 @@ jobs:
           --add-data="device/config.toml.example;." --add-data="./version.txt;." --add-data="front/citation;astroquery" --add-data="front/templates;front/templates" --add-data="front/public;front/public" `
           --add-data="front/csc_sites.json;." --add-data="data/de440s.bsp;data/de440s.bsp" `
           --paths=./front --paths=./device `
+          --collect-all=geomag `
           root_app.py
           Compress-Archive -Path ./dist/seestar_alp/* -DestinationPath win_seestar_alp.zip
           echo "device_script_result=win_seestar_alp.zip" >> $env:GITHUB_ENV
@@ -86,6 +87,7 @@ jobs:
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
           --add-data="front/csc_sites.json:." \
           --paths=./front --paths=./device \
+          --collect-all=geomag \
           root_app.py
           cd dist
           zip -r ../linux_seestar_alp.zip  ./seestar_alp/*
