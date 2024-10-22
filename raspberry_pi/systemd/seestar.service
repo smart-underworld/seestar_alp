@@ -1,12 +1,14 @@
 [Unit]
 Description=SeeStar ALP communications
 After=network-online.target
+
 [Service]
 User=<username>
-Type=simple
+Type=notify
 Restart=always
 EnvironmentFile=/etc/seestar.env
 WorkingDirectory=/home/<username>/seestar_alp
 ExecStart=python3 /home/<username>/seestar_alp/root_app.py
+
 [Install]
 WantedBy=network-online.target
