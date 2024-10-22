@@ -112,7 +112,6 @@ function systemd_service_setup {
 function network_config {
   sudo bash -c 'echo "net.ipv6.conf.all.disable_ipv6 = 1" > /etc/sysctl.d/98-ssc.conf'
   sudo sysctl -p
-  touc
 }
 
 function print_banner {
