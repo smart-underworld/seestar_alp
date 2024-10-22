@@ -924,6 +924,7 @@ class Seestar:
             date_data['method'] = 'pi_set_time'
             date_data['params'] = [date_json]
 
+            do_raise_arm = params.get("raise_arm", True)
             do_AF = params.get("auto_focus", False)
             do_3PPA = params.get("3ppa", False)
             do_dark_frames = params.get("dark_frames", False)
@@ -978,86 +979,88 @@ class Seestar:
             # save frames setting
             self.send_message_param_sync({"method":"set_stack_setting", "params":{"save_discrete_ok_frame":Config.init_save_good_frames, "save_discrete_frame":Config.init_save_all_frames}})
 
-            msg = "Need to park scope first for a good reference start point"
-            self.logger.info(msg)
-            self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
-            response = self.send_message_param_sync({"method":"scope_park"})
-            self.logger.info(f"scope park response: {response}")
-            if "error" in response:
-                msg = "Failed to park scope. Need to restart Seestar and try again."
-                self.logger.error(msg)
-                return msg
-            
-            result = self.wait_end_op("ScopeHome")
-
-            if result == True:
-                self.logger.info(f"scope_park completed.")
-            else:
-                self.logger.info(f"scope_park failed.")
-
-            # move the arm up using a thread runner
-            # move 10 degrees from polaris
-            # first check if a device specific setting is available
-
-            for device in Config.seestars:
-                if device['device_num'] == self.device_num:
-                    break
-            
-            lat = Config.scope_aim_lat
-            lon = Config.scope_aim_lon
-
-            lat = device.get('scope_aim_lat', lat)   
-            lon = device.get('scope_aim_lon', lon)
-            self.below_horizon_dec_offset = 0
-
-            if lon < 0:
-                lon = 360+lon
-
-            if lat > 80:
-                self.logger.warn(f"lat has max value of 80. You requested {lat}.")
-                lat = 80
-
-            cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
-
-            msg = f"moving scope's aim toward a clear patch of sky for HC, from lat-lon {cur_latlon[0]}, {cur_latlon[1]} to {lat}, {lon}"
-            self.logger.info(msg)
-            self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
-
-            while True:
-                delta_lat = lat-cur_latlon[0]
-                if abs(delta_lat) < 5:
-                    break
-                elif delta_lat > 0:
-                    direction = 90
-                else:
-                    direction = -90
-                if self.move_scope(direction, 1000, 10) == False:
-                    break
-                time.sleep(0.1)
-                cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
-            self.move_scope(0, 0, 0)
-
-            while True:
-                delta_lon = lon-cur_latlon[1]
-                if abs(delta_lon) < 5:
-                    break
-                elif delta_lon > 0 or delta_lon < -180:
-                    direction = 0
-                else:
-                    direction = 180
-                if self.move_scope(direction, 1000, 10) == False:
-                    break
-                time.sleep(0.1)
-                cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
-            self.move_scope(0, 0, 0)
-
-            cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
-            self.logger.info(f"final lat-lon after move:  {cur_latlon[0]}, {cur_latlon[1]}")
-
-            if self.schedule["state"] != "working":
-                return
-
             result = True
+            
+            if do_raise_arm:
+                msg = "Need to park scope first for a good reference start point"
+                self.logger.info(msg)
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+                response = self.send_message_param_sync({"method":"scope_park"})
+                self.logger.info(f"scope park response: {response}")
+                if "error" in response:
+                    msg = "Failed to park scope. Need to restart Seestar and try again."
+                    self.logger.error(msg)
+                    return msg
+                
+                result = self.wait_end_op("ScopeHome")
+
+                if result == True:
+                    self.logger.info(f"scope_park completed.")
+                else:
+                    self.logger.info(f"scope_park failed.")
+
+                # move the arm up using a thread runner
+                # move 10 degrees from polaris
+                # first check if a device specific setting is available
+
+                for device in Config.seestars:
+                    if device['device_num'] == self.device_num:
+                        break
+                
+                lat = Config.scope_aim_lat
+                lon = Config.scope_aim_lon
+
+                lat = device.get('scope_aim_lat', lat)   
+                lon = device.get('scope_aim_lon', lon)
+                self.below_horizon_dec_offset = 0
+
+                if lon < 0:
+                    lon = 360+lon
+
+                if lat > 80:
+                    self.logger.warn(f"lat has max value of 80. You requested {lat}.")
+                    lat = 80
+
+                cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+
+                msg = f"moving scope's aim toward a clear patch of sky for HC, from lat-lon {cur_latlon[0]}, {cur_latlon[1]} to {lat}, {lon}"
+                self.logger.info(msg)
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+
+                while True:
+                    delta_lat = lat-cur_latlon[0]
+                    if abs(delta_lat) < 5:
+                        break
+                    elif delta_lat > 0:
+                        direction = 90
+                    else:
+                        direction = -90
+                    if self.move_scope(direction, 1000, 10) == False:
+                        break
+                    time.sleep(0.1)
+                    cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+                self.move_scope(0, 0, 0)
+
+                while True:
+                    delta_lon = lon-cur_latlon[1]
+                    if abs(delta_lon) < 5:
+                        break
+                    elif delta_lon > 0 or delta_lon < -180:
+                        direction = 0
+                    else:
+                        direction = 180
+                    if self.move_scope(direction, 1000, 10) == False:
+                        break
+                    time.sleep(0.1)
+                    cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+                self.move_scope(0, 0, 0)
+
+                cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+                self.logger.info(f"final lat-lon after move:  {cur_latlon[0]}, {cur_latlon[1]}")
+
+                if self.schedule["state"] != "working":
+                    return
+
             if do_AF:
                 msg = f"auto focus"
                 self.logger.info(msg)
