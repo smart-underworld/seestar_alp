@@ -400,7 +400,7 @@ class Seestar:
                 event_watch = "ScopeGoto"
             else:
                 event_watch = "AutoGoto"
-            self.logger.debug(f"{event_watch} status is {self.event_state[event_watch]["state"]}")
+            self.logger.debug(f"{event_watch} status is {self.event_state[event_watch]['state']}")
             return self.event_state[event_watch]["state"] == "working" or self.event_state[event_watch]["state"] == "start"
         except:
             return False
