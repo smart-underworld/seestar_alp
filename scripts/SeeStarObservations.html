@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SeeStar Observations</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            cursor: pointer;
+        }
+        .right-align {
+            text-align: right;
+        }
+        .search-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 10px;
+        }
+        .search-row-advanced {
+            display: block;
+        }
+        .sorted-asc::after {
+            content: ' ▲';
+        }
+        .sorted-desc::after {
+            content: ' ▼';
+        }
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>SeeStar Observations</h1>
+
+    <label for="csvFileInput">Load CSV File:</label>
+    <input type="file" id="csvFileInput" accept=".csv">
+
+    <br><br>
+
+    <label for="searchMode">Search:</label>
+    <select id="searchMode">
+        <option value="standard">Standard</option>
+        <option value="advanced">Advanced</option>
+    </select>
+
+    <br><br>
+
+    <label for="targetName">Target Name (use * for wildcards):</label>
+    <input type="text" id="targetName" name="targetName">
+
+    <br><br>
+
+    <div class="search-row">
+        <div>
+            <label for="startDate">Start Date:</label>
+            <input type="date" id="startDate" name="startDate">
+        </div>
+        <div>
+            <label for="endDate">End Date:</label>
+            <input type="date" id="endDate" name="endDate">
+        </div>
+    </div>
+
+    <div id="advancedSearch" style="display: none;">
+        <div class="search-row-advanced">
+            <label for="filter">Filter:</label>
+            <select id="filter" name="filter">
+                <option value="">All</option>
+                <option value="IRCUT">IRCUT</option>
+                <option value="LP">LP</option>
+            </select>
+        </div>
+
+        <br>
+
+        <div class="search-row-advanced">
+            <label for="exposure">Exposure:</label>
+            <select id="exposure" name="exposure">
+                <option value="">All</option>
+                <option value="10.0s">10.0s</option>
+                <option value="20.0s">20.0s</option>
+                <option value="30.0s">30.0s</option>
+            </select>
+        </div>
+        
+        <br>
+        
+        <div class="search-row">
+            <div>
+                <label for="fromFrame">Frame Count - From:</label>
+                <input type="number" id="fromFrame" name="fromFrame" min="0" max="10000" step="1">
+            </div>
+            <div>
+                <label for="toFrame">To:</label>
+                <input type="number" id="toFrame" name="toFrame" min="0" max="10000" step="1">
+            </div>
+        </div>
+
+        <div class="search-row-advanced">
+            <label for="mosaicFrame">Mosaic Frame:</label>
+            <input type="text" id="mosaicFrame" name="mosaicFrame" placeholder="Enter text">
+        </div>
+    </div>
+
+    <br>
+
+    <button id="searchButton">Search</button>
+
+    <br><br>
+
+    <div id="results"></div>
+
+    <script>
+        let csvData = [];
+
+        document.getElementById('csvFileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const text = e.target.result;
+                    csvData = parseCSV(text);
+                    console.log("CSV Data Loaded");
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        document.getElementById('searchMode').addEventListener('change', function() {
+            const mode = this.value;
+            const advancedSearchDiv = document.getElementById('advancedSearch');
+            advancedSearchDiv.style.display = mode === 'advanced' ? 'block' : 'none';
+        });
+
+        document.getElementById('searchButton').addEventListener('click', function() {
+            if (csvData.length === 0) {
+                displayError("Load a CSV file first");
+                return;
+            }
+
+            const targetName = document.getElementById('targetName').value.trim().toLowerCase();
+            const targetNameRegex = targetName.includes('*') ? new RegExp('^' + targetName.replace(/\*/g, '.*'), 'i') : null;
+            const startDateInput = document.getElementById('startDate').value;
+            const endDateInput = document.getElementById('endDate').value;
+            const filter = document.getElementById('filter').value;
+            const exposure = document.getElementById('exposure').value;
+            const mosaicFrame = document.getElementById('mosaicFrame').value.trim();
+
+            const startDate = startDateInput ? formatDate(startDateInput) : '00000000';
+            const endDate = endDateInput ? formatDate(endDateInput) : '99999999';
+
+            console.log("Search Criteria:", { targetName, startDate, endDate, filter, exposure, mosaicFrame });
+
+            const results = searchCSV(targetName, targetNameRegex, startDate, endDate, filter, exposure, mosaicFrame);
+            displayResults(results);
+        });
+
+        function parseCSV(text) {
+            const lines = text.split('\n').filter(line => line.trim() !== '');
+            const headers = lines[0].split(',').map(header => header.trim());
+
+            return lines.slice(1).map(row => {
+                const columns = row.split(',');
+                return headers.reduce((acc, header, i) => {
+                    acc[header] = columns[i] ? columns[i].trim() : '';
+                    return acc;
+                }, {});
+            });
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const year = date.getFullYear();
+            const month = ('0' + (date.getMonth() + 1)).slice(-2);
+            const day = ('0' + date.getDate()).slice(-2);
+            return `${year}${month}${day}`;
+        }
+
+        function searchCSV(targetName, targetNameRegex, startDate, endDate, filter, exposure, mosaicFrame) {
+            console.log("Filtering CSV Data...");
+            return csvData.filter(row => {
+                const csvTargetName = row['Target Name'].toLowerCase().replace(/\s/g, '');
+                
+                const matchesName = !targetName || (targetNameRegex ? 
+                    targetNameRegex.test(csvTargetName) : 
+                    csvTargetName === targetName.toLowerCase().replace(/\s/g, '')
+                );
+                
+                const withinDateRange = parseInt(row['Date']) >= parseInt(startDate) && parseInt(row['Date']) <= parseInt(endDate);
+                const matchesFilter = !filter || row['Filter'] === filter;
+                const matchesExposure = !exposure || row['Exposure'] === exposure;
+                
+                let matchesMosaicFrame = true;
+                if (mosaicFrame) {
+                    matchesMosaicFrame = row['Mosaic Frame'] === mosaicFrame;
+                }
+
+                return matchesName && withinDateRange && matchesFilter && matchesExposure && matchesMosaicFrame;
+            });
+        }
+
+        function displayResults(results) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            if (results.length === 0) {
+                resultsDiv.innerHTML = '<p>No records found.</p>';
+                return;
+            }
+
+            const totals = calculateTotals(results);
+
+            const totalTable = document.createElement('table');
+            const totalRow = totalTable.insertRow();
+            totalRow.insertCell().textContent = `Total Records: ${results.length}`;
+            totalRow.insertCell();
+            totalRow.insertCell().className = 'right-align';
+            totalRow.insertCell().textContent = totals['Frame'] > 0 ? formatNumber(totals['Frame']) : '';
+            totalRow.insertCell().className = 'right-align';
+            totalRow.insertCell().textContent = totals['FIT'] > 0 ? formatNumber(totals['FIT']) : '';
+            totalRow.insertCell().className = 'right-align';
+            totalRow.insertCell().textContent = totals['JPG'] > 0 ? formatNumber(totals['JPG']) : '';
+            totalRow.insertCell().className = 'right-align';
+            totalRow.insertCell().textContent = totals['TXT'] > 0 ? formatNumber(totals['TXT']) : '';
+            totalRow.insertCell().className = 'right-align';
+            totalRow.insertCell().textContent = totals['MP4'] > 0 ? formatNumber(totals['MP4']) : '';
+            totalRow.insertCell().className = 'right-align';
+            totalRow.insertCell().textContent = totals['AVI'] > 0 ? formatNumber(totals['AVI']) : '';
+            resultsDiv.appendChild(totalTable);
+
+            const table = document.createElement('table');
+            const thead = table.createTHead();
+            const headerRow = thead.insertRow();
+            Object.keys(results[0]).forEach(key => {
+                const cell = headerRow.insertCell();
+                cell.textContent = key;
+                cell.style.fontWeight = 'bold';
+                cell.setAttribute('data-type', ['Frame Count', 'FIT Count', 'JPG Count', 'TXT Count', 'MP4 Count', 'AVI Count'].includes(key) ? 'number' : (key === 'Date' ? 'date' : 'string'));
+            });
+
+            const tbody = table.createTBody();
+            results.forEach(record => {
+                const row = tbody.insertRow();
+                Object.values(record).forEach(value => {
+                    const cell = row.insertCell();
+                    if (['Frame Count', 'FIT Count', 'JPG Count', 'TXT Count', 'MP4 Count', 'AVI Count'].includes(Object.keys(record).find(key => record[key] === value))) {
+                        cell.className = 'right-align';
+                        cell.textContent = parseInt(value) > 0 ? value : '';
+                    } else if (Object.keys(record).find(key => record[key] === value) === 'Date') {
+                        cell.textContent = formatDateDisplay(value);
+                    } else {
+                        cell.textContent = value;
+                    }
+                });
+            });
+
+            resultsDiv.appendChild(table);
+
+            // Add sorting functionality after table creation
+            document.querySelectorAll('th').forEach((headerCell, index) => {
+			console.log('Attaching listener to header at index:', index); // Add this line
+			headerCell.addEventListener('click', () => {
+				console.log('Header clicked at index:', index); // And this line
+				const table = headerCell.closest('table');
+				const isAscending = headerCell.classList.contains('sorted-asc');
+				sortTableByColumn(table, index, !isAscending);
+			});
+		});
+        }
+
+		
+function sortTableByColumn(table, columnIndex, ascending = true) {
+    const tbody = table.querySelector('tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+
+    const sortDirection = ascending ? 1 : -1;
+    const columnType = table.rows[0].cells[columnIndex].getAttribute('data-type') || 'string';
+
+    rows.sort((a, b) => {
+        let aValue = a.cells[columnIndex].textContent;
+        let bValue = b.cells[columnIndex].textContent;
+
+        if (columnType === 'number') {
+            aValue = parseFloat(aValue) || 0;
+            bValue = parseFloat(bValue) || 0;
+        } else if (columnType === 'date') {
+            aValue = new Date(aValue.split('/').reverse().join('-'));
+            bValue = new Date(bValue.split('/').reverse().join('-'));
+        } // else it remains as string comparison
+
+        if (aValue < bValue) return -sortDirection;
+        if (aValue > bValue) return sortDirection;
+        return 0;
+    });
+
+    // Remove all rows
+    while (tbody.firstChild) {
+        tbody.removeChild(tbody.firstChild);
+    }
+
+    // Re-add the sorted rows
+    rows.forEach(row => tbody.appendChild(row));
+
+    // Update the sorting indicator
+    const headers = table.querySelectorAll('th');
+    headers.forEach(header => header.classList.remove('sorted-asc', 'sorted-desc'));
+    headers[columnIndex].classList.add(ascending ? 'sorted-asc' : 'sorted-desc');
+}
+
+function displayError(message) {
+    const resultsDiv = document.getElementById('results');
+    resultsDiv.innerHTML = `<p class="error">${message}</p>`;
+}
+
+function calculateTotals(results) {
+    return results.reduce((totals, row) => {
+        ['Frame', 'FIT', 'JPG', 'TXT', 'MP4', 'AVI'].forEach(type => {
+            totals[type] = (totals[type] || 0) + (parseInt(row[`${type} Count`]) || 0);
+        });
+        return totals;
+    }, {});
+}
+
+function formatNumber(num) {
+    return num.toString().replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
+}
+
+function formatDateDisplay(dateString) {
+    return `${dateString.slice(6, 8)}/${dateString.slice(4, 6)}/${dateString.slice(0, 4)}`;
+}
+
+// Initial setup for sorting
+document.querySelectorAll('th').forEach((headerCell, index) => {
+    headerCell.addEventListener('click', () => {
+        const table = headerCell.closest('table');
+        const isAscending = headerCell.classList.contains('sorted-asc');
+        sortTableByColumn(table, index, !isAscending);
+    });
+});
+    </script>
+</body>
+</html>
