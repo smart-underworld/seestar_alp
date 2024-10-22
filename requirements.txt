@@ -27,4 +27,5 @@ pydash==8.0.3
 blinker==1.8.2
 pandas==2.2.3
 pyindi @ git+https://github.com/MMTObservatory/pyINDI.git@c12590fbe310c34cadb03713051789a4d76d80c7
-geomag
+geomag==0.9.2015
+sdnotify==0.3.2

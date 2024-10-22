@@ -8,6 +8,7 @@ import time
 import sys
 import os
 import waitress
+import sdnotify
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -84,6 +85,8 @@ class ConfigChangeHandler(FileSystemEventHandler):
         #    print(f"ConfigChangeHandler Ignoring event type: {event.event_type}  path : {event.src_path}")
 
 if __name__ == "__main__":
+    n = sdnotify.SystemdNotifier()
+
     if Config.rtsp_udp:
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;udp"
     # We want to initialize ALP logger
@@ -136,11 +139,13 @@ if __name__ == "__main__":
             return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(),
                             mimetype='multipart/x-mixed-replace; boundary=frame')
 
+        n.notify("READY=1")
         print("Startup Complete")
 
         # telescope.telescopes()
 
         waitress.serve(app, host=Config.ip_address, port=Config.imgport, threads=10, channel_timeout=30)
     else:
+        n.notify("READY=1")
         print("Startup Complete")
         front.join()

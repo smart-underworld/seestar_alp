@@ -53,6 +53,7 @@ function update() {
   config_toml_setup
   install_apt_packages
   python_virtualenv_setup
+  
   systemd_service_setup
   print_banner "update"
 }
