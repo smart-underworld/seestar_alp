@@ -110,8 +110,8 @@ function systemd_service_setup {
 }
 
 function network_config {
-  if ! grep -q disable_ipv6 /etc/sysctl.conf; then
-    sudo echo "net.ipv6.conf.all.disable_ipv6 = 1" >> /etc/sysctl.conf
+  if [ ! -e  /etc/sysctl.d/98-ssc.conf ]; then
+    sudo echo "net.ipv6.conf.all.disable_ipv6 = 1" >> /etc/sysctl.d/98-ssc.conf
     sudo sysctl -p
   fi
 }
