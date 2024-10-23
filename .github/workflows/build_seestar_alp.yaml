@@ -33,7 +33,7 @@ jobs:
           echo $git_version > ./version.txt
           pyinstaller --name="seestar_alp" `
           --add-data="device/config.toml.example;." --add-data="./version.txt;." --add-data="front/citation;astroquery" --add-data="front/templates;front/templates" --add-data="front/public;front/public" `
-          --add-data="front/csc_sites.json;." --add-data="data/de440s.bsp;data/de440s.bsp" `
+          --add-data="front/planning.json;." --add-data="front/csc_sites.json;." --add-data="data/de440s.bsp;data/de440s.bsp" `
           --paths=./front --paths=./device `
           --collect-all=geomag `
           root_app.py
@@ -85,7 +85,7 @@ jobs:
           echo $git_version > ./version.txt
           pyinstaller --name="seestar_alp" \
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
-          --add-data="front/csc_sites.json:." \
+          --add-data="front/planning.json:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp" \
           --paths=./front --paths=./device \
           --collect-all=geomag \
           root_app.py
