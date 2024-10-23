@@ -1,7 +1,7 @@
 [Unit]
 Description=INDI server
 After=seestar.service
-PartOf=seestar.service
+
 [Service]
 User=<username>
 Type=simple

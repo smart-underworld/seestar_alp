@@ -109,6 +109,11 @@ function systemd_service_setup {
   fi
 }
 
+function network_config {
+  sudo bash -c 'echo "net.ipv6.conf.all.disable_ipv6 = 1" > /etc/sysctl.d/98-ssc.conf'
+  sudo sysctl -p
+}
+
 function print_banner {
   local operation="$1"
   local host=$(hostname)
@@ -156,6 +161,7 @@ function setup() {
 
   config_toml_setup
   python_virtualenv_setup
+  network_config
   systemd_service_setup
   print_banner "setup"
 }
