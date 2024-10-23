@@ -29,7 +29,7 @@
 			<div class="col-2 align-self-start">Selected Panels</div>
         </div>
         {% for item in schedule.list %}
-            <div class="row border-bottom py-2 text-start {% if schedule['current_item_id'] == item['id'] %}bg-primary{% endif %}">
+            <div class="row border-bottom py-2 text-start {% if schedule['current_item_id'] == item['schedule_item_id'] %}bg-primary{% endif %}">
                 {% if item["action"] == 'wait_until' %}
                     <div class="col-2 align-self-start">Wait Until</div>
                     <div class="col align-self-start">{{ item["params"]["local_time"] }}</div>
