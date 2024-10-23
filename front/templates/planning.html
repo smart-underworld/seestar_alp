@@ -3,8 +3,8 @@
 {% block header %}
     <meta http-equiv="Cache-Control" content="no-cache">
     <script>
-        function update_card_toggle(card_name){
-            console.log("Toggle planning card: " + card_name);
+        function card_enable_toggle(card_name){
+            console.log("Enable toggle planning card: " + card_name);
             fetch("/toggleplanningcard", {
                 method: "POST",
                 headers: {
@@ -13,6 +13,30 @@
                 body: JSON.stringify({ "card_name": card_name }),
             });
             window.location.reload();
+        }
+
+        function card_collapse_toggle(card_name){
+            console.log("Collapse toggle planning card: " + card_name);
+            fetch("/collapseplanningcard", {
+                method: "POST",
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ "card_name": card_name }),
+            });
+
+            var card_div_name = "collapse_" + card_name;
+            var card_div = document.getElementById(card_div_name);
+            var card_collapse_toggle_btn_name = "card_collapse_toggle_" + card_name;
+            var card_collapse_toggle_btn = document.getElementById(card_collapse_toggle_btn_name);
+
+            if(card_div.classList.contains("show")){
+                card_div.classList.remove("show");
+                card_collapse_toggle_btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-down-fill" viewBox="0 0 16 16"><path d="M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z"/></svg>';
+            }else{
+                card_div.classList.add("show");
+                card_collapse_toggle_btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-up-fill" viewBox="0 0 16 16"><path d="m7.247 4.86-4.796 5.481c-.566.647-.106 1.659.753 1.659h9.592a1 1 0 0 0 .753-1.659l-4.796-5.48a1 1 0 0 0-1.506 0z"/></svg>';               
+            }
         }
 
         // ## Based on https://stackoverflow.com/a/53269990 ##
@@ -38,9 +62,9 @@
                         <div class="form-check form-switch ms-2">
                             <label for="toggle_{{ card['card_name'] }}" class="form-label">{{ card["card_friendly_name"] }}</label>
                             {% if card["planning_page_enable"] %}
-                            <input class="form-check-input" type="checkbox" role="switch" id="toggle_{{ card['card_name'] }}" onclick="update_card_toggle('{{ card['card_name'] }}')" checked>
+                            <input class="form-check-input" type="checkbox" role="switch" id="toggle_{{ card['card_name'] }}" onclick="card_enable_toggle('{{ card['card_name'] }}')" checked>
                             {% else %}
-                            <input class="form-check-input" type="checkbox" role="switch" id="toggle_{{ card['card_name'] }}" onclick="update_card_toggle('{{ card['card_name'] }}')">
+                            <input class="form-check-input" type="checkbox" role="switch" id="toggle_{{ card['card_name'] }}" onclick="card_enable_toggle('{{ card['card_name'] }}')">
                             {% endif %}
                         </div>
                     </li>
@@ -56,10 +80,34 @@
             {% if card["planning_page_enable"] %}
             <div class="card mb-3">
                 <div class="card-header">
-                    <h4>{{ card["card_friendly_name"] }}</h4>
+                    <h4>{{ card["card_friendly_name"] }}
+                        {% if card["planning_page_collapsed"] %}
+                            <span class="float-end">
+                                <button type="button" id="card_collapse_toggle_{{ card['card_name'] }}" class="btn" title="Expand Card" onclick="card_collapse_toggle('{{ card['card_name'] }}')">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-down-fill" viewBox="0 0 16 16">
+                                        <path d="M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z"/>
+                                    </svg>
+                                </button>
+                            </span>
+                        {% else %}
+                            <span class="float-end">
+                                <button type="button" id="card_collapse_toggle_{{ card['card_name'] }}" class="btn" title="Collapse Card" onclick="card_collapse_toggle('{{ card['card_name'] }}')">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-up-fill" viewBox="0 0 16 16">
+                                        <path d="m7.247 4.86-4.796 5.481c-.566.647-.106 1.659.753 1.659h9.592a1 1 0 0 0 .753-1.659l-4.796-5.48a1 1 0 0 0-1.506 0z"/>
+                                    </svg>
+                                </button>
+                            </span>
+                        {% endif %}
+                    </h4>
                 </div>
-                <div class="card-body">
-                    {% include card["template"] %}
+                {% if card["planning_page_collapsed"] %}
+                    <div class="collapse" id="collapse_{{ card['card_name'] }}">
+                {% else %}
+                    <div class="collapse show" id="collapse_{{ card['card_name'] }}">
+                {% endif %}
+                    <div class="card-body">
+                        {% include card["template"] %}
+                    </div>
                 </div>
             </div>
             {% endif %}
@@ -85,7 +133,6 @@
 
             // Make all panels visable by default for the Planning page.
             if(lastPath == "planning"){
-
                 // Only trigger if the twilight card is enabled/loaded
                 isElementLoaded('#twilightcollapse').then((selector) => {
                     var twilight_times_div = document.getElementById("twilightcollapse");
