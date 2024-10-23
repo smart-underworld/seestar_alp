@@ -670,7 +670,7 @@ class Seestar:
                             result = False
                             break
                         elif "percent" in event_state:
-                            if event_state["percent"] > 99.9:
+                            if event_state["percent"] >= 99.0 or event_state["state"] == "complete":
                                 self.logger.info("3PPA reached 100%. Will stop return to origin now.")
                                 if is_3PPA:
                                     response = self.send_message_param_sync({"method":"stop_polar_align"})
@@ -980,7 +980,7 @@ class Seestar:
             self.send_message_param_sync({"method":"set_stack_setting", "params":{"save_discrete_ok_frame":Config.init_save_good_frames, "save_discrete_frame":Config.init_save_all_frames}})
 
             result = True
-            
+
             if do_raise_arm:
                 msg = "Need to park scope first for a good reference start point"
                 self.logger.info(msg)
