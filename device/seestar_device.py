@@ -1330,12 +1330,25 @@ class Seestar:
                         if result == True:
                             break
                         else:
-                            time.sleep(retry_wait_s)
+                            if try_count <= num_tries:
+                                time.sleep(retry_wait_s)
 
-                    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = f"stacking the panel for {sleep_time_per_panel} seconds"
+                    # if we failed goto
+                    if result != True:
+                        msg = f"Failed to goto target after {num_tries} tries."
+                        self.logger.warn(msg)
+                        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+                        return
+                    
+                    msg = f"stacking the panel for {sleep_time_per_panel} seconds"
+                    self.logger.info(msg)
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+
                     if not self.start_stack({"gain": gain, "restart": True}):
-                        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Failed to start stacking."
-                        return True
+                        msg = "Failed to start stacking."
+                        self.logger.warn(msg)
+                        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+                        return
 
                     panel_remaining_time_s = sleep_time_per_panel
                     for i in range(round(sleep_time_per_panel/5)):
@@ -1346,14 +1359,17 @@ class Seestar:
                             self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Scheduler was requested to stop. Stopping current mosaic."
                             self.stop_stack()
                             self.schedule['state'] = "stopped"
-                            return True
+                            return
+                        
                         time.sleep(5)
                         panel_remaining_time_s -= 5
                         item_remaining_time_s -= 5
                         self.event_state["scheduler"]["cur_scheduler_item"]["panel_remaining_time_s"] = panel_remaining_time_s
                         self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = item_remaining_time_s
                     self.stop_stack()
-                    self.logger.info("Stacking operation finished " + save_target_name)
+                    msg = "Stacking operation finished " + save_target_name
+                    self.logger.info(msg)
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
                     cur_ra += delta_RA
                 cur_dec += delta_Dec
             self.logger.info("Finished mosaic.")
