@@ -2430,6 +2430,18 @@ class TogglePlanningCardResource:
         else:
             update_planning_card_state(card_name, "planning_page_enable", True)
 
+class CollapsePlanningCardResource:
+    @staticmethod
+    def on_post(req, resp):
+        PostedForm = req.media
+        card_name = str(PostedForm["card_name"])
+        # Get current card state
+        current_card_state = get_planning_card_state(card_name)
+        if current_card_state["planning_page_collapsed"]:
+            update_planning_card_state(card_name, "planning_page_collapsed", False)
+        else:
+            update_planning_card_state(card_name, "planning_page_collapsed", True)
+
 
 class UpdateTwilightTimesResource:
     @staticmethod
@@ -2727,6 +2739,7 @@ class FrontMain:
         app.add_route('/stellarium', StellariumResource())
         app.add_route('/toggleuitheme', ToggleUIThemeResource())
         app.add_route('/toggleplanningcard', TogglePlanningCardResource())
+        app.add_route('/collapseplanningcard', CollapsePlanningCardResource())
         app.add_route('/updatetwilighttimes', UpdateTwilightTimesResource())
         app.add_route('/getbalancesensor', GetBalanceSensorResource())
         app.add_route('/gensupportbundle', GenSupportBundleResource())
