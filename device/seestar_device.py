@@ -662,23 +662,32 @@ class Seestar:
                 while True:
                     if "3PPA" in self.event_state:
                         event_state = self.event_state["3PPA"]
-                        if "state" in event_state and (event_state["state"] == "fail"):
-                            self.logger.info(f"3PPA failed: {event_state}.")
-                            if not is_3PPA:
-                                response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"AutoGoto"}})
-                                self.logger.info(response)
-                            result = False
-                            break
-                        elif "percent" in event_state:
-                            if event_state["percent"] >= 99.0 or event_state["state"] == "complete":
-                                self.logger.info("3PPA reached 100%. Will stop return to origin now.")
-                                if is_3PPA:
-                                    response = self.send_message_param_sync({"method":"stop_polar_align"})
+                        if "state" in event_state and (event_state["state"] == "fail" or event_state["state"] == "complete"):
+                            if "percent" in event_state:
+                                if event_state["percent"] >= 99.0:
+                                    self.logger.info("3PPA reached 100%. Will stop return to origin now.")
+                                    if is_3PPA:
+                                        response = self.send_message_param_sync({"method":"stop_polar_align"})
+                                    else:
+                                        response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"AutoGoto"}})
+                                    self.logger.info(response)
+                                    result = True
+                                    break
                                 else:
+                                    self.logger.info(f"3PPA failed: {event_state}.")
+                                    if not is_3PPA:
+                                        response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"AutoGoto"}})
+                                        self.logger.info(response)
+                                    result = False
+                                    break
+                            else:
+                                self.logger.info(f"3PPA failed: {event_state}.")
+                                if not is_3PPA:
                                     response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"AutoGoto"}})
-                                self.logger.info(response)
-                                result = True
+                                    self.logger.info(response)
+                                result = False
                                 break
+
                         elif "state" in event_state and (event_state["state"] == "cancel"):
                             self.logger.info("Should not found a cancel state for 3PPA since we explicitly cancel only when we past 100% plate solve")
                             result = False
