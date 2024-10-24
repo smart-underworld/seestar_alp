@@ -17,6 +17,7 @@ import tzlocal
 import queue
 
 from device.config import Config
+from device.version import Version # type: ignore
 from device.seestar_util import Util
 
 from collections import OrderedDict
@@ -689,6 +690,12 @@ class Seestar:
         # give extra time to settle focuser
         time.sleep(2)
         self.logger.info(f"3PPA done with result {result}")
+
+        #override 3ppa event state to complete since we intentionally stop the go back to origin logic
+        if result == True:
+            time.sleep(1)
+            self.event_state["3PPA"]["state"] = "complete"
+            
         return result
 
     def try_dark_frame(self):
@@ -929,6 +936,8 @@ class Seestar:
             do_3PPA = params.get("3ppa", False)
             do_dark_frames = params.get("dark_frames", False)
 
+            self.logger.info(f"begin start_up sequence with seestar_alp version {Version.app_version()}")
+
             loc_data = {}
             loc_param = {}
             # special loc for south pole: (-90, 0)
@@ -1084,7 +1093,8 @@ class Seestar:
 
             if self.schedule["state"] != "working":
                 return
-            
+        
+
             if do_dark_frames:
                 msg = f"dark frame measurement"
                 self.logger.info(msg)
@@ -1622,6 +1632,8 @@ class Seestar:
     def scheduler_thread_fn(self):
         def update_time():
             threading.current_thread().last_run = datetime.now()
+
+        self.logger.info(f"start run scheduler with seestar_alp version {Version.app_version}")
 
         self.schedule['state'] = "working"
         issue_shutdown = False

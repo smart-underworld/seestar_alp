@@ -52,7 +52,7 @@ log_prefix = ''
 log_to_stdout = false
 max_size_mb = 5
 num_keep_logs = 10
-log_events_in_info = false
+log_events_in_info = true
 
 [[seestars]]
 name = "Seestar Alpha"
