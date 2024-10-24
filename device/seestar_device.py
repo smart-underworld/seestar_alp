@@ -1330,8 +1330,20 @@ class Seestar:
                         if result == True:
                             break
                         else:
-                            if try_count <= num_tries:
-                                time.sleep(retry_wait_s)
+                            if try_count < num_tries:
+                                # wait as requested before the next try
+                                for i in range(round(retry_wait_s/5)):
+                                    if self.schedule['state'] != "working":
+                                        self.logger.info("Scheduler was requested to stop. Stopping at current mosaic.")
+                                        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Scheduler was requested to stop. Stopping at current mosaic."
+                                        self.schedule['state'] = "stopped"
+                                        return
+                                    else:
+                                        waited_time = i*5
+                                        msg = f"waited {waited_time}s of requested {retry_wait_s}s before retry GOTO target."
+                                        self.logger.info(msg)
+                                        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+                                    time.sleep(5)
 
                     # if we failed goto
                     if result != True:
@@ -1355,8 +1367,8 @@ class Seestar:
                         threading.current_thread().last_run = datetime.now()
 
                         if self.schedule['state'] != "working":
-                            self.logger.info("Scheduler was requested to stop. Stopping current mosaic.")
-                            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Scheduler was requested to stop. Stopping current mosaic."
+                            self.logger.info("Scheduler was requested to stop. Stopping at current mosaic.")
+                            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Scheduler was requested to stop. Stopping at current mosaic."
                             self.stop_stack()
                             self.schedule['state'] = "stopped"
                             return
