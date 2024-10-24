@@ -16,6 +16,17 @@
 						{% if key == "Balance Sensor (angle)" %}
 							<div class="col fw-bold"><p>{{ key }}</p></div>
 							<div class="col"><p class="text-end">{{ value }}</p><p>{% include 'partials/bubble_level.html' with context %}</p></div>
+						{% elif key == "Wi-Fi Signal" %}
+							{% if value[:3]|int >= -69 %}
+								<div class="col fw-bold"><p>{{ key }}</p></div>
+								<div class="col"><p class="text-end text-success">{{ value }}</p></div>
+							{% elif (value[:3]|int <= -70) and (value[:3]|int >= -79) %}
+								<div class="col fw-bold"><p>{{ key }}</p></div>
+								<div class="col"><p class="text-end text-warning">{{ value }}</p></div>
+							{% else %}
+								<div class="col fw-bold"><p>{{ key }}</p></div>
+								<div class="col"><p class="text-end text-danger">{{ value }}</p></div>
+							{% endif %}
 						{% else %}
 							<div class="col fw-bold"><p>{{ key }}</p></div>
 							<div class="col"><p class="text-end">{{ value }}</p></div>
