@@ -1019,6 +1019,7 @@ def do_command(req, resp, telescope_id):
 def do_support_bundle(req, telescope_id = 1):
     zip_buffer = io.BytesIO()
     desc = req.media["desc"]
+    getSeestarLogs = req.media.get("getSeestarLogs") == "on"
     logger.debug("do_support_bundle: getting logs (starting)")
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         # Add logs
@@ -1076,7 +1077,9 @@ def do_support_bundle(req, telescope_id = 1):
         env_content = "\n".join(f"{key}={value}" for key, value in env_vars.items())
         zip_file.writestr("env.txt", env_content)
 
-        if telescope_id in telescope.seestar_logcollector:
+        online = check_api_state(telescope_id)
+
+        if online and getSeestarLogs and telescope_id in telescope.seestar_logcollector:
             dev_log = telescope.get_seestar_logcollector(telescope_id)
             zip_data = dev_log.get_logs_sync()
             zip_file.writestr(f"seestar_{telescope_id}_logs.zip", zip_data)
@@ -2427,6 +2430,18 @@ class TogglePlanningCardResource:
         else:
             update_planning_card_state(card_name, "planning_page_enable", True)
 
+class CollapsePlanningCardResource:
+    @staticmethod
+    def on_post(req, resp):
+        PostedForm = req.media
+        card_name = str(PostedForm["card_name"])
+        # Get current card state
+        current_card_state = get_planning_card_state(card_name)
+        if current_card_state["planning_page_collapsed"]:
+            update_planning_card_state(card_name, "planning_page_collapsed", False)
+        else:
+            update_planning_card_state(card_name, "planning_page_collapsed", True)
+
 
 class UpdateTwilightTimesResource:
     @staticmethod
@@ -2724,6 +2739,7 @@ class FrontMain:
         app.add_route('/stellarium', StellariumResource())
         app.add_route('/toggleuitheme', ToggleUIThemeResource())
         app.add_route('/toggleplanningcard', TogglePlanningCardResource())
+        app.add_route('/collapseplanningcard', CollapsePlanningCardResource())
         app.add_route('/updatetwilighttimes', UpdateTwilightTimesResource())
         app.add_route('/getbalancesensor', GetBalanceSensorResource())
         app.add_route('/gensupportbundle', GenSupportBundleResource())
