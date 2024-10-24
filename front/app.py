@@ -1019,6 +1019,7 @@ def do_command(req, resp, telescope_id):
 def do_support_bundle(req, telescope_id = 1):
     zip_buffer = io.BytesIO()
     desc = req.media["desc"]
+    getSeestarLogs = req.media.get("getSeestarLogs") == "on"
     logger.debug("do_support_bundle: getting logs (starting)")
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         # Add logs
@@ -1076,7 +1077,9 @@ def do_support_bundle(req, telescope_id = 1):
         env_content = "\n".join(f"{key}={value}" for key, value in env_vars.items())
         zip_file.writestr("env.txt", env_content)
 
-        if telescope_id in telescope.seestar_logcollector:
+        online = check_api_state(telescope_id)
+
+        if online and getSeestarLogs and telescope_id in telescope.seestar_logcollector:
             dev_log = telescope.get_seestar_logcollector(telescope_id)
             zip_data = dev_log.get_logs_sync()
             zip_file.writestr(f"seestar_{telescope_id}_logs.zip", zip_data)
