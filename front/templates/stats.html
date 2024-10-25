@@ -17,10 +17,10 @@
 						{% if key == "Balance Sensor (angle)" %}
 							<div class="col"><p class="text-end">{{ value }}</p><p>{% include 'partials/bubble_level.html' with context %}</p></div>
 						{% elif key == "Free Storage" %}
-							{% if (value[:2]|int <= 10) and (value[:2]|int >= 6) %}
-								<div class="col"><p class="text-end text-warning">{{ value }}</p></div>
-							{% elif (value[:2]|int <= 5) or (value.split(" ")[1] == "MB") %}
+							{% if (value[:2]|int <= 5) or (value.split(" ")[1] != "GB") %}
 								<div class="col"><p class="text-end text-danger">{{ value }}</p></div>
+							{% elif (value[:2]|int <= 10) and (value[:2]|int >= 6) %}
+								<div class="col"><p class="text-end text-warning">{{ value }}</p></div>
 							{% else %}
 								<div class="col"><p class="text-end text-success">{{ value }}</p></div>
 							{% endif %}
@@ -32,6 +32,14 @@
 							{% else %}
 								<div class="col"><p class="text-end text-danger">{{ value }}</p></div>
 							{% endif %}
+						{% elif key == "Battery %" %}
+                            {% if value|int <= 5 %}
+                                <div class="col"><p class="text-end text-danger">{{ value }}</p></div>
+                            {% elif (value|int <= 15) and (value|int > 6) %}
+                                <div class="col"><p class="text-end text-warning">{{ value }}</p></div>
+                            {% else %}
+                                <div class="col"><p class="text-end text-success">{{ value }}</p></div>
+                            {% endif %} 
 						{% else %}
 							<div class="col"><p class="text-end">{{ value }}</p></div>
 						{% endif %}
