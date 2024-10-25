@@ -361,7 +361,11 @@ class Seestar:
         return self.json_result("get_event_state", 0, result)
 
         
-    def set_setting(self, x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance):
+    def set_setting(self, x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, auto_af=False):
+        # auto_af was introduced in recent firmware that seems to perform autofocus after a goto. We still need to verify that a auto_stack is not enabled as well.
+        result - self.send_message_param_sync({"method":"set_setting", "params":{"auto_af": auto_af}})
+        self.logger.info(f"trying to set auto_af: {result}")
+
         # TODO:
         #   heater_enable failed. 
         #   lenhace should be by itself as it moves the wheel and thus need to wait a bit
@@ -695,7 +699,7 @@ class Seestar:
         if result == True:
             time.sleep(1)
             self.event_state["3PPA"]["state"] = "complete"
-            
+
         return result
 
     def try_dark_frame(self):
@@ -1720,10 +1724,12 @@ class Seestar:
             self.play_sound(83)
             return self.json_result("stop_scheduler", 0, f"Scheduler stopped successfully.")
 
+        elif self.schedule['state'] == "complete":
+            return self.json_result("stop_scheduler", -4, "scheduler has already in complete state")
         elif self.schedule['state'] == "stopped":
             return self.json_result("stop_scheduler", -3, "Scheduler is not running while trying to stop!")
         else:
-            return self.json_result("stop_scheduler", -4, "scheduler has already been requested to stop")
+            return self.json_result("stop_scheduler", -5, f"scheduler is in unaccounted for state: {self.schedule['state']}")
         
     def wait_end_op(self, in_op_name):
         if in_op_name == "goto_target":
