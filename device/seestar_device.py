@@ -17,6 +17,7 @@ import tzlocal
 import queue
 
 from device.config import Config
+from device.version import Version # type: ignore
 from device.seestar_util import Util
 
 from collections import OrderedDict
@@ -689,6 +690,12 @@ class Seestar:
         # give extra time to settle focuser
         time.sleep(2)
         self.logger.info(f"3PPA done with result {result}")
+
+        #override 3ppa event state to complete since we intentionally stop the go back to origin logic
+        if result == True:
+            time.sleep(1)
+            self.event_state["3PPA"]["state"] = "complete"
+            
         return result
 
     def try_dark_frame(self):
@@ -929,6 +936,8 @@ class Seestar:
             do_3PPA = params.get("3ppa", False)
             do_dark_frames = params.get("dark_frames", False)
 
+            self.logger.info(f"begin start_up sequence with seestar_alp version {Version.app_version()}")
+
             loc_data = {}
             loc_param = {}
             # special loc for south pole: (-90, 0)
@@ -1084,7 +1093,8 @@ class Seestar:
 
             if self.schedule["state"] != "working":
                 return
-            
+        
+
             if do_dark_frames:
                 msg = f"dark frame measurement"
                 self.logger.info(msg)
@@ -1330,30 +1340,58 @@ class Seestar:
                         if result == True:
                             break
                         else:
-                            time.sleep(retry_wait_s)
+                            if try_count < num_tries:
+                                # wait as requested before the next try
+                                for i in range(round(retry_wait_s/5)):
+                                    if self.schedule['state'] != "working":
+                                        self.logger.info("Scheduler was requested to stop. Stopping at current mosaic.")
+                                        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Scheduler was requested to stop. Stopping at current mosaic."
+                                        self.schedule['state'] = "stopped"
+                                        return
+                                    else:
+                                        waited_time = i*5
+                                        msg = f"waited {waited_time}s of requested {retry_wait_s}s before retry GOTO target."
+                                        self.logger.info(msg)
+                                        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+                                    time.sleep(5)
 
-                    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = f"stacking the panel for {sleep_time_per_panel} seconds"
+                    # if we failed goto
+                    if result != True:
+                        msg = f"Failed to goto target after {num_tries} tries."
+                        self.logger.warn(msg)
+                        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+                        return
+                    
+                    msg = f"stacking the panel for {sleep_time_per_panel} seconds"
+                    self.logger.info(msg)
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+
                     if not self.start_stack({"gain": gain, "restart": True}):
-                        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Failed to start stacking."
-                        return True
+                        msg = "Failed to start stacking."
+                        self.logger.warn(msg)
+                        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+                        return
 
                     panel_remaining_time_s = sleep_time_per_panel
                     for i in range(round(sleep_time_per_panel/5)):
                         threading.current_thread().last_run = datetime.now()
 
                         if self.schedule['state'] != "working":
-                            self.logger.info("Scheduler was requested to stop. Stopping current mosaic.")
-                            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Scheduler was requested to stop. Stopping current mosaic."
+                            self.logger.info("Scheduler was requested to stop. Stopping at current mosaic.")
+                            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Scheduler was requested to stop. Stopping at current mosaic."
                             self.stop_stack()
                             self.schedule['state'] = "stopped"
-                            return True
+                            return
+                        
                         time.sleep(5)
                         panel_remaining_time_s -= 5
                         item_remaining_time_s -= 5
                         self.event_state["scheduler"]["cur_scheduler_item"]["panel_remaining_time_s"] = panel_remaining_time_s
                         self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = item_remaining_time_s
                     self.stop_stack()
-                    self.logger.info("Stacking operation finished " + save_target_name)
+                    msg = "Stacking operation finished " + save_target_name
+                    self.logger.info(msg)
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
                     cur_ra += delta_RA
                 cur_dec += delta_Dec
             self.logger.info("Finished mosaic.")
@@ -1594,6 +1632,8 @@ class Seestar:
     def scheduler_thread_fn(self):
         def update_time():
             threading.current_thread().last_run = datetime.now()
+
+        self.logger.info(f"start run scheduler with seestar_alp version {Version.app_version}")
 
         self.schedule['state'] = "working"
         issue_shutdown = False
