@@ -361,10 +361,14 @@ class Seestar:
         return self.json_result("get_event_state", 0, result)
 
 
-    def set_setting(self, x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, auto_af=False):
-        # auto_af was introduced in recent firmware that seems to perform autofocus after a goto. We still need to verify that a auto_stack is not enabled as well.
+    def set_setting(self, x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, auto_af=False, stack_after_goto=False):
+        # auto_af was introduced in recent firmware that seems to perform autofocus after a goto.
         result = self.send_message_param_sync({"method":"set_setting", "params":{"auto_af": auto_af}})
         self.logger.info(f"trying to set auto_af: {result}")
+
+        # stack_after_goto is in 2.1+ firmware. Disable if possible
+        result = self.send_message_param_sync({"method":"set_setting", "params":{"stack_after_goto": stack_after_goto}})
+        self.logger.info(f"trying to set stack_after_goto: {result}")
 
         # TODO:
         #   heater_enable failed.
