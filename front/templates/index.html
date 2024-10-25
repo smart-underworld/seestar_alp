@@ -17,10 +17,9 @@
 
         {% if telescope.stats %}
             <div class="container mt-3">
-
                 {% for key, value in telescope["stats"].items() %}
                     <div class="row border-bottom py-1">
-                        <div class="col fw-bold"><p>{{ key }}</p></div> 
+                        <div class="col fw-bold"><p>{{ key }}</p></div>
                         {% if key == "Wi-Fi Signal" %}
                             {% if value[:3]|int >= -69 %}
                                 <div class="col"><p class="text-end text-success">{{ value }}</p></div>
@@ -30,19 +29,26 @@
                                 <div class="col"><p class="text-end text-danger">{{ value }}</p></div>
                             {% endif %}
                         {% elif key == "Free Storage" %}
-							{% if (value[:2]|int <= 10) and (value[:2]|int >= 6) %}
-								<div class="col"><p class="text-end text-warning">{{ value }}</p></div>
-							{% elif (value[:2]|int <= 5) or (value.split(" ")[1] == "MB") %}
-								<div class="col"><p class="text-end text-danger">{{ value }}</p></div>
-							{% else %}
-								<div class="col"><p class="text-end text-success">{{ value }}</p></div>
-							{% endif %}
+                            {% if (value[:2]|int <= 5) or (value.split(" ")[1] != "GB") %}
+                                <div class="col"><p class="text-end text-danger">{{ value }}</p></div>
+                            {% elif (value[:2]|int <= 10) and (value[:2]|int >= 6) %}
+                                <div class="col"><p class="text-end text-warning">{{ value }}</p></div>
+                            {% else %}
+                                <div class="col"><p class="text-end text-success">{{ value }}</p></div>
+                            {% endif %}
+                        {% elif key == "Battery %" %}
+                            {% if value|int <= 5 %}
+                                <div class="col"><p class="text-end text-danger">{{ value }}</p></div>
+                            {% elif (value|int <= 15) and (value|int > 6) %}
+                                <div class="col"><p class="text-end text-warning">{{ value }}</p></div>
+                            {% else %}
+                                <div class="col"><p class="text-end text-success">{{ value }}</p></div>
+                            {% endif %}    
                         {% else %}
                             <div class="col"><p class="text-end">{{ value }}</p></div>
                         {% endif %}
                     </div>
                 {% endfor %}
-
             </div>
         {% else %}
             <div class="container mt-3">
