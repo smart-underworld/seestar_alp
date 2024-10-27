@@ -1651,7 +1651,7 @@ class ScheduleToggleResource:
     def on_post(self, req, resp, telescope_id=0):
         current = do_action_device("get_schedule", telescope_id, {})
         state = current["Value"]["state"]
-        if state == "stopped":
+        if state == "stopped" or state == "complete":
             do_action_device("start_scheduler", telescope_id, {})
         else:
             do_action_device("stop_scheduler", telescope_id, {})
