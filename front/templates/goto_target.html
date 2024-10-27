@@ -15,7 +15,8 @@
                         <label for="searchFor" class="form-label">Search For</label>
                         <div class="d-flex mb-0">
                             <select class="form-select" id="searchFor" title="Select type of target" aria-label="Default select example">
-                                <option value="DS" selected>Deepsky</option>
+                                <option value="LS" selected>Local Deepsky DB</option>
+                                <option value="DS">Simbad Deepsky</option>
                                 <option value="PL">Planet</option>
                                 <option value="MP">Minor Planet (Asteroid)</option>
                                 <option value="CO">Comet</option>
@@ -110,15 +111,15 @@
 </form>
 
 <!-- Modal structure -->
-<div class="modal fade" id="cometModal" tabindex="-1" aria-labelledby="cometModalLabel" aria-hidden="true">
+<div class="modal fade" id="itemModal" tabindex="-1" aria-labelledby="itemModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="cometModalLabel">Select a Comet</h5>
+                <h5 class="modal-title" id="itemModalLabel">Select an Object</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <ul id="cometList" class="list-group">
+                <ul id="itemList" class="list-group">
                     <!-- List of comets will be dynamically inserted here -->
                 </ul>
             </div>

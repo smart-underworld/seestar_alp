@@ -2,6 +2,55 @@
 
 async function fetchCoordinates() {
     switch (document.getElementById('searchFor').value){
+        // Local Deepsky Search
+        case 'LS':
+            if (document.getElementById('targetName').value == '') {
+                alert('You must supply a target name to be looked up in local database');
+                return;
+            }
+            target = document.getElementById('targetName').value;
+            queryURL = '/localsearch?target=' + target
+            fetch(queryURL)
+            .then(response => {
+                if (!response.ok) {
+                    if (response.statusText = "Internal SerInternal Server Error") {
+                        alert("Object " + document.getElementById('targetName').value + " not found!" )
+                        return;
+                    } else {
+                        alert('There is an issue contacting local server');
+                    }
+                    throw new Error('Network response was not ok ' + response.statusText);
+                }
+                return response.text();
+            })
+            .then(data => {
+                // Only proess if object data sent back
+                if (data){
+                    objects = JSON.parse(data);
+                    if (objects.length > 1) {
+                        openItemModal(objects, 'objectName').then(selectedObject => {
+                            document.getElementById('ra').value = selectedObject.ra;
+                            document.getElementById('dec').value = selectedObject.dec;
+                            document.getElementById("useJ2000").checked = true;
+                            document.getElementById("useLpFilter").checked = selectedObject.lp;
+                            if (selectedObject.name != '') {
+                                document.getElementById("targetName").value = selectedObject.objectName;
+                            };
+                        });
+                    } else {
+                        selectedObject = objects[0];
+                        document.getElementById('ra').value = selectedObject.ra;
+                        document.getElementById('dec').value = selectedObject.dec;
+                        document.getElementById("useJ2000").checked = true;
+                        document.getElementById("useLpFilter").checked = selectedObject.lp;
+                        if (selectedObject.name != '') {
+                            document.getElementById("targetName").value = selectedObject.objectName;
+                        };
+                    }
+                };
+            });
+            break;
+
         // Deepsky    
         case 'DS':
             if (document.getElementById('targetName').value == '') {
@@ -139,7 +188,7 @@ async function fetchCoordinates() {
                 if (data){
                     cometData = JSON.parse(data);
                     if (cometData.length > 1) {
-                        openCometModal(cometData).then(selectedComet => {
+                        openItemModal(cometData, 'cometName').then(selectedComet => {
                         document.getElementById('ra').value = selectedComet.ra;
                         document.getElementById('dec').value = selectedComet.dec;
                         document.getElementById('targetName').value = selectedComet.cometName;
@@ -147,7 +196,7 @@ async function fetchCoordinates() {
                         document.getElementById("useJ2000").checked = true;
                         });
                     } else {
-                        selectedComet = cometData;
+                        selectedComet = cometData[0];
                         document.getElementById('ra').value = selectedComet.ra;
                         document.getElementById('dec').value = selectedComet.dec;
                         document.getElementById('targetName').value = selectedComet.cometName;
@@ -308,39 +357,38 @@ async function get_location_from_IP() {
     }
 }
 
-let selectedComet = null;
+let selectedItem = null;
 
-// Function to open the modal and populate the comet list
-function openCometModal(comets) {
+// Function to open the modal and populate the item list
+function openItemModal(items, displayProperty, callback) {
     return new Promise((resolve) => {
-        const cometList = document.getElementById("cometList");
-        const modal = new bootstrap.Modal(document.getElementById('cometModal'));
+        const itemList = document.getElementById("itemList");  // Update to generic list ID
+        const modal = new bootstrap.Modal(document.getElementById('itemModal'));  // Update to generic modal ID
 
-        cometList.innerHTML = '';
+        itemList.innerHTML = '';
 
-        comets.forEach(comet => {
+        items.forEach(item => {
             const li = document.createElement('li');
             li.classList.add('list-group-item', 'list-group-item-action');
-            li.textContent = comet.cometName;
+            li.textContent = item[displayProperty];  // Display chosen property of item
             li.addEventListener('click', () => {
-                selectedComet = comet;
-                resolve(selectedComet);  // Resolve the promise with the selected comet
+                selectedItem = item;
+                resolve(selectedItem);  // Resolve with the selected item
                 modal.hide();
+                if (callback) callback(item);  // Call the callback function if provided
             });
-            cometList.appendChild(li);
+            itemList.appendChild(li);
         });
 
         modal.show();
     });
 }
 
-// Function to handle the selected comet object (optional)
-function handleCometSelection(comet) {
-    //console.log("Comet selected:", comet);
-    document.getElementById('ra').value = scomet.ra;
-    document.getElementById('dec').value = comet.dec;
-    document.getElementById('targetName').value = comet.cometName;
+// Example callback function to handle selected item properties
+function handleItemSelection(item) {
+    document.getElementById('ra').value = item.ra || '';
+    document.getElementById('dec').value = item.dec || '';
+    document.getElementById('targetName').value = item.name || '';  // Use 'name' or other fields
     document.getElementById('useLpFilter').checked = false;
     document.getElementById("useJ2000").checked = true;
-    
 }
