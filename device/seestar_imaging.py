@@ -26,10 +26,13 @@ from blinker import signal
 import sys
 
 from device import log
+from device.protocols.binary import SeestarBinaryProtocol
+from device.protocols.imager import SeestarImagerProtocol
 from device.rtspclient import RtspClient
 from imaging.snr import calculate_snr_auto
 from imaging.stretch import stretch, StretchParameters
 from device.config import Config
+from lib.trace import MessageTrace
 
 
 # view modes:
@@ -90,6 +93,9 @@ class SeestarImaging:
         self.eventbus = signal(f"{device_name}.eventbus")
         self.eventbus.connect(self.event_handler)
         self.BOUNDARY = b'\r\n--frame\r\n'
+        self.trace = MessageTrace(self.device_num, self.port, False)
+        self.comm = SeestarImagerProtocol(logger=logger, device_name=device_name, device_num=device_num, host=host, port=port)
+        self.comm.start()
 
         # Star imaging metrics
         self.snr = None
@@ -107,7 +113,7 @@ class SeestarImaging:
         try:
             match event['Event']:
                 case 'Stack':
-                    stacked_frame = event['stacked_frame']
+                    stacked_frame = event['stacked_frame'] + event['dropped_frame']
                     # xxx change to just stacked frame _or_ initial request?
                     if self.is_connected and stacked_frame != self.last_stacking_frame and stacked_frame > 0 and self.is_live_viewing:
                         self.logger.debug(f'Received Stack event.  Fetching stacked image') # xxx trace
@@ -159,6 +165,7 @@ class SeestarImaging:
         with self.lock:
             try:
                 self.s.sendall(data.encode())  # TODO: would utf-8 or unicode_escaped help here
+                self.trace.save_message(data, 'send')
                 return True
             except socket.timeout:
                 return False
@@ -243,6 +250,7 @@ class SeestarImaging:
                         self.raw_img = data
                         self.raw_img_size = [width, height]
                         if Config.save_frames:
+                            filename = None
                             try:
                                 # Write the frame IFF stacking is enabled
                                 image = self.get_star_preview()
@@ -252,7 +260,11 @@ class SeestarImaging:
                                 # - target
                                 # - unified vs per-device
                                 # - name the frames based on which filter is in place
-                                wheel = self.device.event_state['WheelMove']
+                                print(f"Device state: {self.device.event_state}")
+                                # todo : make this get the correct value
+                                wheel = self.device.event_state.get('WheelMove')
+                                if wheel is None:
+                                    wheel = { 'position': 1 }
                                 image_type = "unknown"
                                 image_dir = "unknown"
                                 # xxx : have a config or schedule-specific setting to combine images in "unified" directory
@@ -306,7 +318,7 @@ class SeestarImaging:
                                 # img = cv2.cvtColor(img, cv2.COLOR_BAYER_GRBG2BGR)
                                 hdu.writeto(f'{filename}.fits', overwrite=True)
                             except Exception as e:
-                                pass
+                                self.logger.error(f"Error saving image file {filename=}: {e}")
 
 
                     elif id == 23:  # self.exposure_mode == "stack":
@@ -335,21 +347,6 @@ class SeestarImaging:
             else:
                 # If we aren't connected, just wait...
                 sleep(1)
-
-    def parse_header(self, header):
-        if header is not None and len(header) > 20:
-            # print(type(header))
-            self.logger.debug("Header:" + ":".join("{:02x}".format(c) for c in header))
-            # We ignore all values at end of header...
-            header = header[:20]
-            fmt = ">HHHIHHBBHH"
-            self.logger.debug(f"size: {calcsize(fmt)}")
-            _s1, _s2, _s3, size, _s5, _s6, code, id, width, height = unpack(fmt, header)
-            if size > 100:
-                self.logger.debug(f"header: {size=} {width=} {height=} {_s1=} {_s2=} {_s3=} {code=} {id=}") # xxx trace
-
-            return size, id, width, height
-        return 0, None, None, None
 
     def streaming_thread_fn(self):
         self.logger.info("starting streaming thread")
@@ -414,6 +411,7 @@ class SeestarImaging:
         l = len(data)
         if l < 100 and l != 80:
             self.logger.debug(f'Message: {data}')
+        self.trace.save_message(data, 'recv')
         return data
 
     def get_star_preview(self):
@@ -471,16 +469,17 @@ class SeestarImaging:
     def is_star_mode(self):
         return self.exposure_mode == "preview" or self.exposure_mode == "stack"
 
-    def set_exposure_mode(self, exposure_mode):
-        self.logger.info(f"changing subscription from {self.exposure_mode} to {exposure_mode}")
-        # if self.exposure_mode != exposure_mode:
-        self.stop()
-        sleep(0.5)
-        with self.lock:
-            self.exposure_mode = exposure_mode
-            self.start(exposure_mode)
+    # def set_exposure_mode(self, exposure_mode):
+    #     self.logger.info(f"changing subscription from {self.exposure_mode} to {exposure_mode}")
+    #     # if self.exposure_mode != exposure_mode:
+    #     self.stop()
+    #     sleep(0.5)
+    #     with self.lock:
+    #         self.exposure_mode = exposure_mode
+    #         self.start(exposure_mode)
 
-    def start(self, new_exposure_mode=None):
+    def start(self, new_exposure_mode=None, goto_target=False):
+        self.comm.start()
         with self.lock:
             # print(f"start imaging {new_exposure_mode=} {self.exposure_mode=} {self.is_gazing=} {self.sent_subscription=}")
             self.exposure_mode = new_exposure_mode
@@ -516,6 +515,7 @@ class SeestarImaging:
                 self.get_image_thread.start()
 
     def stop(self):
+        self.comm.stop()
         with self.lock:
             self.disconnect()
             # self.is_connected = False
@@ -530,7 +530,9 @@ class SeestarImaging:
             self.last_live_view_time = None
             self.exposure_mode = None
 
-    def blank_frame(self, message="Loading..."):
+    def blank_frame(self, message="Loading...", timestamp=False):
+        # todo : support customizable image for loading...
+
         blank_image = np.ones((1920, 1080, 3), dtype=np.uint8)
         font = cv2.FONT_HERSHEY_SIMPLEX
         image = cv2.putText(blank_image, message,
@@ -539,6 +541,17 @@ class SeestarImaging:
                             font, 5,
                             (128, 128, 128),
                             4, cv2.LINE_8)
+        # image = cv2.imread('img/blank.jpg')
+        if timestamp:
+            dt = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-5]
+
+            w = 1080
+            h = 1920
+            image = cv2.putText(np.copy(image), dt,  # f'{dt} {self.received_frame}',
+                                (int(w / 2 - 240), h - 70),
+                                font, 1,
+                                (210, 210, 210),
+                                4, cv2.LINE_8)
         imgencode = cv2.imencode('.png', image)[1]
         stringData = imgencode.tobytes()
         return (b'Content-Type: image/png\r\n\r\n' + stringData + self.BOUNDARY)
@@ -588,18 +601,18 @@ class SeestarImaging:
         if stage == 'RTSP':
             # if self.is_working():
             exposure_mode = 'stream'
-            if self.exposure_mode != exposure_mode:
-                self.start(exposure_mode)
+            #if self.exposure_mode != exposure_mode:
+            #    self.start(exposure_mode)
         elif stage == 'ContinuousExposure':
             exposure_mode = 'preview'
-            if self.exposure_mode != exposure_mode:
-                self.start(exposure_mode)
+            #if self.exposure_mode != exposure_mode:
+            #    self.start(exposure_mode)
         elif stage == 'Stack':
             # If stage is stack, leave exposure mode alone UNLESS exposure mode isn't set.
             # if self.exposure_mode is None and  the number of stacked exposures is > 2:
             exposure_mode = 'stack'
-            if self.exposure_mode != exposure_mode:
-                self.start(exposure_mode)
+            #if self.exposure_mode != exposure_mode:
+            #    self.start(exposure_mode)
 
         # xxx what other exposure modes?
         return exposure_mode
@@ -637,14 +650,14 @@ class SeestarImaging:
 
         return image, delay, snr_value
 
-    def build_frame_bytes(self, image):
+    def build_frame_bytes(self, image: np.ndarray, width: int, height: int):
         font = cv2.FONT_HERSHEY_COMPLEX
 
         dt = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-5]
         # print("Emiting frame", dt)
 
-        w = self.raw_img_size[0] or 1080
-        h = self.raw_img_size[1] or 1920
+        w = width or self.raw_img_size[0] or 1080
+        h = height or self.raw_img_size[1] or 1920
         image = cv2.putText(np.copy(image), dt,  # f'{dt} {self.received_frame}',
                             (int(w / 2 - 240), h - 70),
                             font, 1,
@@ -672,27 +685,40 @@ class SeestarImaging:
         # - https://issues.chromium.org/issues/41199053 "mjpeg image always shows the second to last image" from 2015
         # - https://issues.chromium.org/issues/40277613 "multipart/x-mixed-replace no longer working reliably" from 2012!
         yield b'\r\n--frame\r\n'
-        if self.raw_img is not None and self.exposure_mode is not None:
-            image, _, _ = self.get_image(self.exposure_mode)
-            frame = self.build_frame_bytes(image)
+        image, width, height = self.comm.get_image()
+        if image is not None:
+            #image, _, _ = self.get_image(self.exposure_mode)
+            frame = self.build_frame_bytes(image, width, height)
             yield frame
             yield frame
         else:
-            yield self.blank_frame()
-            yield self.blank_frame()
+            yield self.blank_frame("Loading", True)
+            yield self.blank_frame("Loading", True)
 
         # view_state = self.device.view_state
         # self.logger.info(f"mode: {self.mode} {type(self.mode)} view_state: {view_state}")
 
         exiting = False
+        first_image = False
         while not self.is_idle():
+            # print("get_frame LOOP")
+            # todo : grabs exposure mode from seestar itself and updates imager appropriately!
             exposure_mode = self.compare_set_exposure_mode()
-            image, delay, snr = self.get_image(exposure_mode)
+            self.comm.set_exposure_mode(exposure_mode)
+            # image, _, snr = self.get_image(exposure_mode)
+            image, width, height = self.comm.get_image()
+            snr = None
+
+            if self.comm.is_streaming():
+                delay = 0.015
+            else:
+                delay = 0.5
 
             if image is not None:
+                # print("get_frame image!")
                 try:
-                    if self.last_frame != self.received_frame:
-                        frame = self.build_frame_bytes(image)
+                    if self.last_frame != self.comm.received_frame():
+                        frame = self.build_frame_bytes(image, width, height)
                         # print("sending frame bytes=", len(stringData))
 
                         # Update stats!
@@ -712,9 +738,12 @@ class SeestarImaging:
                         self.last_frame = self.received_frame
                         self.snr = snr
 
+                        first_image = True
                         yield frame
-                        if not self.is_gazing:
+                        if not self.comm.is_streaming():
                             yield frame
+                        #if not self.is_gazing:
+                        #    yield frame
                     else:
                         pass
                         # self.logger.info("skipping send")
@@ -731,7 +760,13 @@ class SeestarImaging:
                     with self.lock:
                         self.raw_img = None
                         self.raw_img_size = [None, None]
+            else:
+                # print("Did not get frame!")
+                if not first_image:
+                    yield self.blank_frame("Loading", True)
+                    yield self.blank_frame("Loading", True)
             sleep(delay)
+        print("END LOOP")
 
         self.stop()
 
