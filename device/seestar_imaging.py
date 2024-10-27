@@ -529,19 +529,26 @@ class SeestarImaging:
             self.last_stat_time = None
             self.last_live_view_time = None
             self.exposure_mode = None
-
-    def blank_frame(self, message="Loading..."):
-        blank_image = np.ones((1920, 1080, 3), dtype=np.uint8)
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        image = cv2.putText(blank_image, message,
-                            (200, 900),
-                            # (300, 1850),
-                            font, 5,
-                            (128, 128, 128),
-                            4, cv2.LINE_8)
-        imgencode = cv2.imencode('.png', image)[1]
-        stringData = imgencode.tobytes()
-        return (b'Content-Type: image/png\r\n\r\n' + stringData + self.BOUNDARY)
+            
+    def blank_frame(self, gif_path="/home/pi/seestar_alp/device/loading.gif"):
+        #load the gif image
+        with open(gif_path, 'rb') as gif_file:
+            gif_data = gif_file.read()
+            
+            return (b'Content~Type: image/gif\r\n\r\n' + gif_data +self.BOUNDARY)
+            
+    # def blank_frame(self, message="Loading..."):
+        # blank_image = np.ones((1920, 1080, 3), dtype=np.uint8)
+        # font = cv2.FONT_HERSHEY_SIMPLEX
+        # image = cv2.putText(blank_image, message,
+         #                   (200, 900),
+         #                   # (300, 1850),
+         #                   font, 5,
+         #                   (128, 128, 128),
+         #                   4, cv2.LINE_8)
+       # imgencode = cv2.imencode('.png', image)[1]
+       # stringData = imgencode.tobytes()
+       # return (b'Content-Type: image/png\r\n\r\n' + stringData + self.BOUNDARY)
 
     # render the template?
     # print("get_live_status:",  self.device.ra, self.device.dec)
