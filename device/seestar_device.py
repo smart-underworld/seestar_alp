@@ -699,6 +699,9 @@ class Seestar:
         time.sleep(2)
         self.logger.info(f"3PPA done with result {result}")
 
+        # explicitly stop imaging
+        self.send_message_param_sync({"method":"stop_exposure"})
+
         #override 3ppa event state to complete since we intentionally stop the go back to origin logic
         if result == True:
             time.sleep(1)
