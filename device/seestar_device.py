@@ -1124,6 +1124,7 @@ class Seestar:
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
                 goto_params = {'is_j2000':False, 'ra': last_pos[0]+0.1, 'dec': last_pos[1]}
                 result = self.goto_target(goto_params)
+                self.logger.info(f"result from goto request: {result}")
                 result = self.wait_end_op("goto_target")
                 self.logger.info(f"Goto operation finished with result code: {result}")
 

@@ -1,13 +1,13 @@
-{% set card_class = 'bg-dark' %}  <!-- Default card class -->
+{% set card_class = 'text-bg-dark' %}  <!-- Default card class -->
 {% if event_status %}
     {% if event_status.state == 'complete' %}
-        {% set card_class = 'bg-success' %}  <!-- Green for complete -->
+        {% set card_class = 'text-bg-success' %}  <!-- Green for complete -->
     {% elif event_status.state == 'fail' %}
-        {% set card_class = 'bg-danger' %}  <!-- Red for fail -->
+        {% set card_class = 'text-bg-danger' %}  <!-- Red for fail -->
     {% elif event_status.state == 'in progress' %}
-        {% set card_class = 'bg-warning' %}  <!-- Yellow for in progress -->
+        {% set card_class = 'text-bg-warning' %}  <!-- Yellow for in progress -->
     {% else %}
-        {% set card_class = 'bg-secondary' %}  <!-- Gray for unknown states -->
+        {% set card_class = 'text-bg-secondary' %}  <!-- Gray for unknown states -->
     {% endif %}
 {% endif %}
 <div class="card text-center {{ card_class }}">
