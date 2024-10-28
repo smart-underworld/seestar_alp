@@ -33,7 +33,7 @@ class SeestarBinaryProtocol(SocketBase):
             self.protocol = protocol
 
         def on_connect(self):
-            print("CONNECTED!!")
+            pass
 
         def on_heartbeat(self):
             #self.protocol.logger.info("send HEARTBEAT!!")
@@ -41,7 +41,7 @@ class SeestarBinaryProtocol(SocketBase):
             #self.protocol.logger.info("sent HEARTBEAT!!")
 
         def on_disconnect(self):
-            print("DISCONNECTED!!")
+            pass
 
 
     def send_message(self, data):
@@ -50,7 +50,7 @@ class SeestarBinaryProtocol(SocketBase):
             soc = self._s if self.is_connected() else None
 
         if soc is not None:
-           self.logger.debug(f"sending message: {data}")  # temp made info
+           self.logger.info(f"sending message: {data}")  # temp made info
            try:
                soc.sendall(data.encode())  # TODO: would utf-8 or unicode_escaped help here
                # self.trace.save_message(data, 'send')
@@ -93,7 +93,7 @@ class SeestarBinaryProtocol(SocketBase):
                 return None
 
             # self.logger.debug(f'{self.device_name} received : {len(data)}')
-            self.logger.debug(f'received : {len(data)}')
+            self.logger.info(f'received : {len(data)}') # todo : make debug!
             l = len(data)
             if l < 100 and l != 80:
                 self.logger.debug(f'Message: {data}')

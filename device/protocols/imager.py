@@ -5,11 +5,14 @@ from enum import Enum
 from io import BytesIO
 from struct import unpack, calcsize
 from time import sleep
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
+import cv2
 import numpy as np
 
 from device.config import Config
+from device.processors.graxpert_stretch import GraxpertStretch
+from device.processors.image_processor import ImageProcessor
 from device.protocols.binary import SeestarBinaryProtocol
 from device.protocols.socket_base import SocketListener
 from device.rtspclient import RtspClient
@@ -30,6 +33,26 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
         self.raw_img = None
         self.raw_img_size: Tuple[Optional[int], Optional[int]] = [None, None]
         self.latest_image = None
+        self.StarProcessors: List[ImageProcessor] = [GraxpertStretch()]
+        self.imaging_listener = SeestarImagerProtocol.ImagingListener(self)
+        self.add_listener(self.imaging_listener)
+
+    def __del__(self):
+        self.remove_listener(self.imaging_listener)
+
+    class ImagingListener(SocketListener):
+        def __init__(self, protocol):
+            self.protocol = protocol
+
+        def on_connect(self):
+            if self.protocol.exposure_mode == "preview":
+                self.protocol.send_message('{"id": 21, "method": "begin_streaming"}' + "\r\n")
+
+        def on_heartbeat(self):
+            pass
+
+        def on_disconnect(self):
+            pass
 
     # enable mode - stream, preview, stacking
 
@@ -63,10 +86,20 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
 
     def set_exposure_mode(self, exposure_mode: ExposureModes):
         with self.lock:
-            #print(f"Changing exposure mode to {exposure_mode} from {self.exposure_mode}")
+            # print(f"CHANGING exposure mode to {exposure_mode} from {self.exposure_mode}")
+            if self.exposure_mode != exposure_mode and exposure_mode == "preview":
+                self.send_message('{"id": 21, "method": "begin_streaming"}' + "\r\n")
             self.exposure_mode = exposure_mode
 
     def get_image(self) -> Tuple[Optional[np.ndarray], Optional[int], Optional[int]]:
+        with self.lock:
+            image = self.latest_image
+            if image is not None and not self.is_streaming():
+                for process in self.StarProcessors:
+                    image = process.process(image)
+            return image, self.raw_img_size[0], self.raw_img_size[1]
+
+    def get_unprocessed_image(self) -> Tuple[Optional[np.ndarray], Optional[int], Optional[int]]:
         with self.lock:
             return self.latest_image, self.raw_img_size[0], self.raw_img_size[1]
 
@@ -77,22 +110,24 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
     def receiving_thread_fn(self):
         self.logger.info("starting image receiving thread")
 
-        while self.is_started():
-            #print("RECEIVING non-stream image loop")
+        while True:
+            # print(f"RECEIVING non-stream image loop {self.exposure_mode=} {self._is_started=} {self.is_streaming()}")
             threading.current_thread().last_run = datetime.now()
 
-            self._run_receive_message()
+            if not self.is_streaming():
+                self._run_receive_message()
+            else:
+                sleep(1)
 
         self.logger.info("STOPPING image receiving thread")
 
     def streaming_thread_fn(self):
         self.logger.info("starting image stream receiving thread")
 
-        while self.is_started():
-            # print("RECEIVING stream loop")
+        while True:
+            # print(f"RECEIVING stream loop {self.exposure_mode=} {self._is_started=} {self.is_streaming()}")
             threading.current_thread().last_run = datetime.now()
 
-            # todo : check exposure mode too!
             if self.is_streaming():
                 # print("Streaming loop")
                 self._run_streaming_loop()
@@ -104,26 +139,29 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
     def _run_receive_message(self):
         if self.is_connected():
             header = self.recv_exact(80)
-            size, _id, width, height = self._parse_header(header)
+            size, _id, width, height = self.parse_header(header)
             data = None
             if size is not None:
                 data = self.recv_exact(size)
 
             # This isn't a payload message, so skip it.  xxx: probably header item to indicate this...
             if size < 1000:
+                # print("SKIPPING")
                 return
 
             if data is not None:
                 if _id == 21: # Preview frame
+                    print("HANDLE preview frame")
                     self.handle_preview_frame(width, height, data)
                 elif _id == 23:
+                    print("HANDLE stack")
                     self.handle_stack(width, height, data)
                 else:
                     return
 
                 self._received_frame += 1
                 if self.raw_img is not None:
-                    self.logger.debug(f"read image size={len(self.raw_img)}")
+                    self.logger.info(f"read image size={len(self.raw_img)}")
                 # todo : run on message listeners here!
         else:
             # If we aren't connected, just wait...
@@ -164,27 +202,26 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
         except Exception as e:
             self.logger.error(f"Exception in stream thread... {e=}")
 
-
-
-    def _parse_header(self, header) -> Tuple[int, Optional[int], Optional[int], Optional[int]]:
-        if header is not None and len(header) > 20:
-            # print(type(header))
-            self.logger.debug("Header:" + ":".join("{:02x}".format(c) for c in header))
-            # We ignore all values at end of header...
-            header = header[:20]
-            fmt = ">HHHIHHBBHH"
-            self.logger.debug(f"size: {calcsize(fmt)}")
-            _s1, _s2, _s3, size, _s5, _s6, code, id, width, height = unpack(fmt, header)
-            if size > 100:
-                self.logger.debug(f"header: {size=} {width=} {height=} {_s1=} {_s2=} {_s3=} {code=} {id=}") # xxx trace
-
-            return size, id, width, height
-
-        return 0, None, None, None
+    # def _parse_header(self, header) -> Tuple[int, Optional[int], Optional[int], Optional[int]]:
+    #     if header is not None and len(header) > 20:
+    #         # print(type(header))
+    #         self.logger.debug("Header:" + ":".join("{:02x}".format(c) for c in header))
+    #         # We ignore all values at end of header...
+    #         header = header[:20]
+    #         fmt = ">HHHIHHBBHH"
+    #         self.logger.debug(f"size: {calcsize(fmt)}")
+    #         _s1, _s2, _s3, size, _s5, _s6, code, id, width, height = unpack(fmt, header)
+    #         if size > 100:
+    #             self.logger.debug(f"header: {size=} {width=} {height=} {_s1=} {_s2=} {_s3=} {code=} {id=}") # xxx trace
+    #
+    #         return size, id, width, height
+    #
+    #     return 0, None, None, None
 
     def handle_preview_frame(self, width, height, data):
         self.raw_img = data
         self.raw_img_size = [width, height]
+        self.latest_image = self.convert_star_image(self.raw_img, width, height)
         if Config.save_frames:
             # save the raw frames
             pass
@@ -197,6 +234,7 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
                 contents = {name: zip.read(name) for name in zip.namelist()}
                 self.raw_img = contents['raw_data']
                 self.raw_img_size = [width, height]
+                self.latest_image = self.convert_star_image(self.raw_img, width, height)
 
             # xxx Temp hack: just disconnect for now...
             # xxx Ideally we listen for an event that stack count has increased, or we track the stack
@@ -208,3 +246,18 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
             self.logger.error(f"Exception handling zip stack: {e}")
             self.raw_img = None
             self.raw_img_size = [None, None]
+
+    def convert_star_image(self, raw_image: np.array, width: int, height: int) -> np.array:
+        # if self.exposure_mode == "stack" or len(self.raw_img) == 1920 * 1080 * 6:
+        w = width or 1080
+        h = height or 1920
+        if len(raw_image) == w * h * 6:
+             # print("raw buffer size:", len(self.raw_img))
+             img = np.frombuffer(raw_image, dtype=np.uint16).reshape(h, w, 3)
+             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+             return img
+
+        img = np.frombuffer(raw_image, np.uint16).reshape(h, w)
+        img = cv2.cvtColor(img, cv2.COLOR_BAYER_GRBG2BGR)
+        return img

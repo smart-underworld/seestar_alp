@@ -50,7 +50,7 @@ class SocketBase:
     def start(self):
         """Starts socket. Attempts to connect, and continues to keep alive until stopped."""
         with self.lock:
-            print("Start SocketBase!")
+            # print("Start SocketBase!")
             if self._is_started:
                 return
 
@@ -93,7 +93,7 @@ class SocketBase:
                 self.logger.error(f"connect socket error: {e}")
                 self._is_connected = False
                 self._s = None
-                sleep(0.1)
+                time.sleep(0.1)
                 return False
 
     def disconnect(self):
@@ -141,23 +141,16 @@ class SocketBase:
 
     def _heartbeat_message_thread_fn(self):
         while True:
-            # self.logger.info("heartbeat loop")
             threading.current_thread().last_run = datetime.datetime.now()
 
             # Minimize time holding lock
             if self.is_started():
                 # Only run heartbeat logic or try reconnecting if we're started
-                # self.logger.info(f"heartbeat loop started for {self._is_connected=}")
                 if not self.is_connected() and not self.reconnect():
-                    # self.logger.info("heartbeat reconnect failed")
                     time.sleep(1)
                     continue
 
                 for listener in self._listeners:
                     listener.on_heartbeat()
-            else:
-                # self.logger.info("heartbeat loop stopped")
-                pass
 
-            # self.logger.info("waiting")
             time.sleep(3)
