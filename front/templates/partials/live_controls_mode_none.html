@@ -1,4 +1,8 @@
-<button id="stop" class="col mode-button btn btn-secondary m-1"
-        hx-delete="{{ root }}/live/mode">
-    Stop
+<button id="open_stop_exposure_dialog_btn2"
+        class="col mode-button btn btn-secondary m-1"
+        hx-delete="{{ root }}/live/mode"
+        hx-swap="none"
+        hx-confirm="Are you sure you want to stop imaging this target or the currently running schedule, if there is one?"
+>
+  Stop
 </button>

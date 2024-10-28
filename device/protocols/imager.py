@@ -46,7 +46,7 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
 
         def on_connect(self):
             if self.protocol.exposure_mode == "preview":
-                self.protocol.send_message('{"id": 21, "method": "begin_streaming"}' + "\r\n")
+                self.protocol.start_preview()
 
         def on_heartbeat(self):
             pass
@@ -60,17 +60,23 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
         with self.lock:
             return self._is_started and self.exposure_mode == "stream"
 
+    def start_preview(self):
+        self.send_message('{"id": 21, "method": "begin_streaming"}' + "\r\n")
+
+    def stop_preview(self):
+        self.send_message('{"id": 22, "method": "stop_streaming"}' + "\r\n")
+
     def start(self):
         super().start()
         if self.receiving_thread is None or not self.receiving_thread.is_alive():
             self.logger.info("Starting ImagingReceiverImagingThread")
             self.receiving_thread = threading.Thread(target=self.receiving_thread_fn, daemon=True)
-            self.receiving_thread.name = f"ImagingReceiveThread2.{self.device_name}"
+            self.receiving_thread.name = f"ImagingReceiveStarThread.{self.device_name}"
             self.receiving_thread.start()
         if self.streaming_thread is None or not self.streaming_thread.is_alive():
             self.logger.info("Starting ImagingReceiverStreamingThread")
             self.streaming_thread = threading.Thread(target=self.streaming_thread_fn, daemon=True)
-            self.streaming_thread.name = f"ImagingReceiveStreamingThread2.{self.device_name}"
+            self.streaming_thread.name = f"ImagingReceiveStreamingThread.{self.device_name}"
             self.streaming_thread.start()
 
     def stop(self):
@@ -87,8 +93,11 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
     def set_exposure_mode(self, exposure_mode: ExposureModes):
         with self.lock:
             # print(f"CHANGING exposure mode to {exposure_mode} from {self.exposure_mode}")
-            if self.exposure_mode != exposure_mode and exposure_mode == "preview":
-                self.send_message('{"id": 21, "method": "begin_streaming"}' + "\r\n")
+            if self.exposure_mode != exposure_mode:
+                if exposure_mode == "preview":
+                    self.start_preview()
+                else:
+                    self.stop_preview()
             self.exposure_mode = exposure_mode
 
     def get_image(self) -> Tuple[Optional[np.ndarray], Optional[int], Optional[int]]:
@@ -151,10 +160,10 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
 
             if data is not None:
                 if _id == 21: # Preview frame
-                    print("HANDLE preview frame")
+                    # print("HANDLE preview frame")
                     self.handle_preview_frame(width, height, data)
                 elif _id == 23:
-                    print("HANDLE stack")
+                    # print("HANDLE stack")
                     self.handle_stack(width, height, data)
                 else:
                     return
