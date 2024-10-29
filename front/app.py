@@ -1032,6 +1032,12 @@ def do_command(req, resp, telescope_id):
         case "iscope_stop_view":
             output = method_sync("iscope_stop_view", telescope_id)
             return output
+        case "grab_control":
+            output = do_action_device("method_sync", telescope_id, {"method": "set_setting", "params": {"master_cli":True}})
+            return output
+        case "release_control":
+            output = do_action_device("method_sync", telescope_id, {"method": "set_setting", "params": {"master_cli":False}})
+            return output
         case _:
             logger.warn("No command found: %s", value)
     # print ("Output: ", output)
