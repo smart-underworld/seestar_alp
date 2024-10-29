@@ -29,6 +29,7 @@ import shutil
 import signal
 import math
 import numpy as np
+import sqlite3
 
 from skyfield.api import Loader
 from skyfield.data import mpc 
@@ -2627,6 +2628,47 @@ def searchMinorPlanet(name):
     data = {"ra" : str(ra).replace(" ",""), "dec" : str(dec).replace('deg','d').replace("'","m").replace('"',"s").replace(" ","")}
     return json.dumps(data, indent = 4)
 
+def searchLocal(object):
+    try:
+        con = sqlite3.connect('data/alp.dat')
+    except:
+        return
+
+    cursor = con.cursor()
+    search = f"SELECT ra, dec, objectType, commonNames FROM objects where m like '{object}' or ngc like '{object}' or ic like '{object}' or commonNames like '%{object}%' COLLATE NOCASE"
+    result = cursor.execute(search)
+    sqlReturn = result.fetchall()
+
+    
+    if len(sqlReturn) > 0:
+        data = []
+        for row in sqlReturn:
+        
+            objectType = row[2]
+            if objectType == "Planetary Nebula" or \
+                objectType == "Nebula" or \
+                objectType == "Star cluster + Nebula" or \
+                objectType == "HII Ionized region" or \
+                objectType == "Supernova remnant" :
+                lp = "true"
+            else:
+                lp = "false"
+
+            if (row[3]): # We searched for a name so lets send back the full name
+                name = row[3]
+            else:
+                name = ''
+    
+            data.append({
+                "ra": row[0],
+                "dec": row[1],
+                "lp": lp,
+                "objectName": name
+            })
+
+    con.close()   
+    return json.dumps(data, indent = 4)
+
 class GetCometCoordinates():
     @staticmethod
     def on_get(req, resp):
@@ -2647,6 +2689,21 @@ class GetMinorPlanetCoordinates():
     def on_get(req, resp):
         minorname = req.get_param('minorname')
         rtn = searchMinorPlanet(minorname)
+        if (len(rtn) == 0):
+            resp.status = falcon.HTTP_404
+            resp.content_type = 'application/text'
+            resp.text = 'Object not found'
+            return 
+        else:
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'application/text'
+            resp.text = (rtn)
+
+class GetLocalSearch():
+    @staticmethod
+    def on_get(req, resp):
+        searchText = req.get_param('target')
+        rtn = searchLocal(searchText)
         if (len(rtn) == 0):
             resp.status = falcon.HTTP_404
             resp.content_type = 'application/text'
@@ -2745,6 +2802,7 @@ class FrontMain:
         app.add_route('/gensupportbundle', GenSupportBundleResource())
         app.add_route('/getplanetcoordinates', GetPlanetCoordinates())
         app.add_route('/getcometcoordinates', GetCometCoordinates())
+        app.add_route('/localsearch', GetLocalSearch())
         app.add_route('/getminorplanetcoordinates', GetMinorPlanetCoordinates())
         app.add_route('/config', ConfigResource())
 
