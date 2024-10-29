@@ -450,13 +450,10 @@ def method_sync(method, telescope_id=1, **kwargs):
 
 def get_client_master(telescope_id):
     client_master = True # Assume master for older firmware
-    if check_api_state(telescope_id):
-        result = method_sync("get_device_state", telescope_id)
-        if result is not None:
-            device = result.get("device",{})
-            if device.get("firmware_ver_int", 0) > 2300:
-                device = result.get("device",{})
-                client_master = result.get("client", { "is_master": False }).get("is_master", False)
+    event_state = do_action_device("get_event_state", telescope_id, {})
+    if 'Client' in event_state:
+        client_master = event_state['Client'].get('is_master', True)
+
     return client_master
 
 def get_device_state(telescope_id):
