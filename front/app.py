@@ -31,7 +31,7 @@ import math
 import numpy as np
 
 from skyfield.api import Loader
-from skyfield.data import mpc 
+from skyfield.data import mpc
 from skyfield.constants import GM_SUN_Pitjeva_2005_km3_s2 as GM_SUN
 
 
@@ -73,6 +73,7 @@ base_url = "http://" + get_listening_ip() + ":" + str(Config.port)
 simbad_url = 'https://simbad.cds.unistra.fr/simbad/sim-id?output.format=ASCII&obj.bibsel=off&Ident='
 messages = []
 online = None
+client_master = True
 queue = {}
 
 #
@@ -140,6 +141,7 @@ def get_context(telescope_id, req):
     root = get_root(telescope_id)
     imager_root = get_imager_root(telescope_id)
     online = check_api_state(telescope_id)
+    client_master = get_client_master(telescope_id)
     segments = req.relative_uri.lstrip("/").split("/", 1)
     partial_path = segments[1] if len(segments) > 1 else segments[0]
     experimental = Config.experimental
@@ -155,7 +157,9 @@ def get_context(telescope_id, req):
         }
 
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
-            "online": online, "imager_root": imager_root, "experimental": experimental, "confirm": confirm, "uitheme": uitheme}
+            "online": online, "imager_root": imager_root, "experimental": experimental, "confirm": confirm,
+            "uitheme": uitheme, "client_master": client_master
+        }
 
 
 def get_flash_cookie(req, resp):
@@ -444,6 +448,16 @@ def method_sync(method, telescope_id=1, **kwargs):
         return results
     return None
 
+def get_client_master(telescope_id):
+    client_master = True # Assume master for older firmware
+    if check_api_state(telescope_id):
+        result = method_sync("get_device_state", telescope_id)
+        if result is not None:
+            device = result.get("device",{})
+            if device.get("firmware_ver_int", 0) > 2300:
+                device = result.get("device",{})
+                client_master = result.get("client", { "is_master": False }).get("is_master", False)
+    return client_master
 
 def get_device_state(telescope_id):
     if check_api_state(telescope_id):
@@ -463,19 +477,20 @@ def get_device_state(telescope_id):
         target = ""
         stacked = ""
         failed = ""
+        client_master = True
         if status is not None:
             view_info = status.get("View", {})
             view_state = view_info.get("state", "Idle")
             mode = view_info.get("mode", "")
-    
+
             target = view_info.get("target_name", "")
             stage = view_info.get("stage", "")
             stack_info = view_info.get("Stack", {})
-    
+
             if stack_info.get("state") == "working":
                 stacked = stack_info.get("stacked_frame", "")
                 failed = stack_info.get("dropped_frame", "")
-                
+
         # Check for bad data
         if status is not None and result is not None:
             schedule = do_action_device("get_schedule", telescope_id, {})
@@ -489,9 +504,15 @@ def get_device_state(telescope_id):
                     free_storage = humanize.naturalsize(storage.get("freeMB",0) * 1024 * 1024)
                 elif  storage.get("state") == "connected":
                     free_storage = "Unavailable while in USB storage mode."
+
+                if device.get("firmware_ver_int", 0) > 2300:
+                    client_master = result.get("client", { "is_master": False }).get("is_master", False)
+
             if wifi_status is not None:
-                if wifi_status["server"]:  # sig_lev is only there while in station mode.
+                if wifi_status.get("server", False) and client_master:  # sig_lev is only there while in station mode.
                     wifi_signal = f"{wifi_status['sig_lev']} dBm"
+                elif not client_master:
+                    wifi_signal = f"Unavailable in Guest mode."
                 else:
                     wifi_signal = f"Unavailable in AP mode."
             stats = {
@@ -514,6 +535,7 @@ def get_device_state(telescope_id):
                 "Successful Frames": stacked,
                 "Failed Frames": failed,
                 "Wi-Fi Signal": wifi_signal,
+                "Master client": client_master,
             }
         else:
             logger.info(f"Stats: Unable to get data.")
@@ -530,33 +552,35 @@ def get_device_settings(telescope_id):
         if len(telescopes) > 0:
             telescope_id = telescopes[0]["device_num"]
 
-    settings_result = method_sync("get_setting", telescope_id)
-    stack_settings_result = method_sync("get_stack_setting", telescope_id)
+    settings = None
+    if (get_client_master(telescope_id)):
+        settings_result = method_sync("get_setting", telescope_id)
+        stack_settings_result = method_sync("get_stack_setting", telescope_id)
 
-    settings = {
-        "stack_dither_pix": settings_result["stack_dither"]["pix"],
-        "stack_dither_interval": settings_result["stack_dither"]["interval"],
-        "stack_dither_enable": settings_result["stack_dither"]["enable"],
-        "exp_ms_stack_l": settings_result["exp_ms"]["stack_l"],
-        "exp_ms_continuous": settings_result["exp_ms"]["continuous"],
-        "save_discrete_ok_frame": stack_settings_result["save_discrete_ok_frame"],
-        "save_discrete_frame": stack_settings_result["save_discrete_frame"],
-        "light_duration_min": stack_settings_result["light_duration_min"],
-        "auto_3ppa_calib": settings_result["auto_3ppa_calib"],
-        "frame_calib": settings_result["frame_calib"],
-        #"stack_masic": settings_result["stack_masic"],
-        # "rec_stablzn": settings_result["rec_stablzn"], # Unavailable for firmware 3.11
-        "manual_exp": settings_result["manual_exp"],
-        # "isp_exp_ms": settings_result["isp_exp_ms"],
-        # "calib_location": settings_result["calib_location"],
-        # "wide_cam": settings_result["wide_cam"],
-        # "temp_unit": settings_result["temp_unit"],
-        "focal_pos": settings_result["focal_pos"],
-        # "factory_focal_pos": settings_result["factory_focal_pos"],
-        "heater_enable": settings_result["heater_enable"],
-        "auto_power_off": settings_result["auto_power_off"],
-        "stack_lenhance": settings_result["stack_lenhance"]
-    }
+        settings = {
+            "stack_dither_pix": settings_result["stack_dither"]["pix"],
+            "stack_dither_interval": settings_result["stack_dither"]["interval"],
+            "stack_dither_enable": settings_result["stack_dither"]["enable"],
+            "exp_ms_stack_l": settings_result["exp_ms"]["stack_l"],
+            "exp_ms_continuous": settings_result["exp_ms"]["continuous"],
+            "save_discrete_ok_frame": stack_settings_result["save_discrete_ok_frame"],
+            "save_discrete_frame": stack_settings_result["save_discrete_frame"],
+            "light_duration_min": stack_settings_result["light_duration_min"],
+            "auto_3ppa_calib": settings_result["auto_3ppa_calib"],
+            "frame_calib": settings_result["frame_calib"],
+            #"stack_masic": settings_result["stack_masic"],
+            # "rec_stablzn": settings_result["rec_stablzn"], # Unavailable for firmware 3.11
+            "manual_exp": settings_result["manual_exp"],
+            # "isp_exp_ms": settings_result["isp_exp_ms"],
+            # "calib_location": settings_result["calib_location"],
+            # "wide_cam": settings_result["wide_cam"],
+            # "temp_unit": settings_result["temp_unit"],
+            "focal_pos": settings_result["focal_pos"],
+            # "factory_focal_pos": settings_result["factory_focal_pos"],
+            "heater_enable": settings_result["heater_enable"],
+            "auto_power_off": settings_result["auto_power_off"],
+            "stack_lenhance": settings_result["stack_lenhance"]
+        }
 
     return settings
 
@@ -721,7 +745,7 @@ def get_nearest_csc():
             closest_site['full_img'] = "https://www.cleardarksky.com/c/"+closest_site['id']+"csk.gif"
             closest_site['mini_img'] = "https://www.cleardarksky.com/c/"+closest_site['id']+"cs0.gif"
             closest_site['href'] = "https://www.cleardarksky.com/c/"+closest_site['id']+"key.html"
-        else: 
+        else:
             closest_site = {'status_msg': "No sites within 100 km. CSC sites are only available in the Continental US, Canada, and Northern Mexico"}
 
         return closest_site
@@ -1133,7 +1157,7 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
         twilight_times = get_twilight_times()
     else:
         twilight_times = {}
-    
+
     nearest_csc = get_nearest_csc()
     if nearest_csc["status_msg"] != "SUCCESS":
         nearest_csc["href"] = ""
@@ -1194,15 +1218,15 @@ def str2bool(v):
 def import_schedule(input, telescope_id):
     for line in input:
         fields = line.split(',')
-        
+
         fixed_params_length = len(FIXED_PARAMS_KEYS) + 1
         # Check if the line has the expected number of fields
         if len(fields) != fixed_params_length:
             logger.warn(f"Skipping bad line: Line has {len(fields)} fields, expected {fixed_params_length}")
             continue
-            
+
         (action, local_time, timer_sec, try_count, target_name, is_j2000, ra, dec, is_use_lp_filter, session_time_sec, ra_num, dec_num, panel_overlap_percent, gain, is_use_autofocus, heater, nokey, selected_panels) = fields
-      
+
         match action:
             case "action":
                 pass
@@ -1224,7 +1248,7 @@ def import_schedule(input, telescope_id):
                                            "ra_num": int(ra_num),
                                            "dec_num": int(dec_num),
                                            "panel_overlap_percent": int(panel_overlap_percent),
-                                           "gain": int(gain), 
+                                           "gain": int(gain),
                                            "selected_panels": selected_panels}, int(telescope_id))
             case "shutdown":
                 do_schedule_action_device("shutdown", "", telescope_id)
@@ -1406,7 +1430,7 @@ class ImageResource:
                         action=f"/{telescope_id}/image", **context)
 
 
-class GotoResource:  
+class GotoResource:
     def on_get(self, req, resp, telescope_id=0):
         values = {}
         self.goto(req, resp, {}, {}, telescope_id)
@@ -1418,7 +1442,7 @@ class GotoResource:
     @staticmethod
     def goto(req, resp, values, errors, telescope_id):
         schedule = {}
-        if check_api_state(telescope_id):            
+        if check_api_state(telescope_id):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
         else:
@@ -1444,7 +1468,7 @@ class CommandResource:
                 return
             schedule = current["Value"]
             state = schedule["state"]
-            
+
         else:
             schedule = {"list": get_queue(telescope_id)}
             state = "stopped"
@@ -1505,7 +1529,7 @@ class ScheduleListResource:
             get_schedule = do_action_device("get_schedule", telescope_id, {})
             current_queue_list = get_queue(telescope_id)
             if get_schedule == None:
-                #todo seems like SSC tries to connect to daemon before it is ready for the Federation device, and thus raise exception here. 
+                #todo seems like SSC tries to connect to daemon before it is ready for the Federation device, and thus raise exception here.
                 # will return without any action for now
                 return
             else:
@@ -1749,7 +1773,7 @@ class EventStatus:
                                 event_value['DeviceID'] = device_id
                                 results.append(event_value)
         render_template(req, resp, 'eventstatus.html', results=results, now=now, **context)
-        
+
 class LivePage:
     @staticmethod
     def on_get(req, resp, telescope_id=1, mode=None):
@@ -2069,12 +2093,12 @@ class PlanningResource:
             twilight_times = get_twilight_times()
         else:
             twilight_times = {}
-        
+
         nearest_csc = get_nearest_csc()
         if nearest_csc["status_msg"] != "SUCCESS":
             nearest_csc["href"] = ""
             nearest_csc["full_img"] = ""
-        
+
         planning_cards = get_planning_cards()
         local_timezone = tzlocal.get_localzone()
         current_time = datetime.now(local_timezone)
@@ -2216,11 +2240,11 @@ def decimal_RA_to_Sexagesimal(deg):
     # Normalize the degree value
     total_hours = deg / 15.0  # Convert degrees to total hours
     total_hours = total_hours % 24  # Wrap around to stay within 0-24 hours
-    
+
     hours = int(total_hours)
     minutes = int((total_hours - hours) * 60)
     seconds = (total_hours - hours - minutes / 60) * 3600
-    
+
     # Ensure minutes and seconds are positive
     if minutes < 0:
         minutes += 60
@@ -2228,7 +2252,7 @@ def decimal_RA_to_Sexagesimal(deg):
     if seconds < 0:
         seconds += 60
         minutes -= 1
-    
+
     return f'{hours}h{minutes:02}m{abs(seconds):.2f}s'
 
 # Convert decimal DEC into DMS format
@@ -2246,7 +2270,7 @@ def vector_to_ra_dec(vector):
     # Calculate declination (δ)
     dec = np.arcsin(z)
     dec_deg = np.degrees(dec)
-    
+
     # Calculate right ascension (α)
     ra = np.arctan2(y, x)
     ra_deg = np.degrees(ra) % 360
@@ -2264,10 +2288,10 @@ class StellariumResource:
             resp.content_type = 'application/text'
             resp.text = 'Requst had communications error.'
             return
-        
+
         # Check if object is selected
         if html_content == "no current selection, and no name parameter given":
-            
+
             stellarium_url = 'http://' + str(Config.sthost) + ':' + str(Config.stport) + '/api/main/view?coord=j2000'
             try:
                 r = requests.get(stellarium_url)
@@ -2300,13 +2324,13 @@ class StellariumResource:
                 else:
                     # Should never get here but whatever
                     objName = "Unknown"
-            
+
             lpFilter = False
             objType = StelJSON['type']
             filterTypes = ["HII region", "emission nebula", "supernova remnant", "planetary nebula"]
             if objType in filterTypes:
                 lpFilter = True
-        
+
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
         tmpText = json.dumps({"ra":decimal_RA_to_Sexagesimal(ra_j2000), "dec": decimal_DEC_to_Sexagesimal(dec_J2000), "lp": lpFilter, "name": objName})
@@ -2537,7 +2561,7 @@ def checkFileAge():
         creation_date = datetime.fromtimestamp(os.path.getctime('data/CometEls.txt'))
         today = datetime.today()
         delta = today - creation_date
-        if (delta.days > 7): 
+        if (delta.days > 7):
             redownload  = True
         else:
             redownload = False
@@ -2587,7 +2611,7 @@ def searchComet(name):
             for index, r in row.iterrows():
                 comet = sun + mpc.comet_orbit(r, ts, GM_SUN)  # Use `r`, the current row
                 ra, dec, distance = earth.at(t).observe(comet).radec()
-                
+
                 data.append({
                     "ra": str(ra).replace(" ",""),
                     "dec": str(dec).replace('deg','d').replace("'","m").replace('"',"s").replace(" ",""),
@@ -2595,7 +2619,7 @@ def searchComet(name):
                 })
             return json.dumps(data, indent = 4)
 
-            
+
 def searchMinorPlanet(name):
     if os.path.exists('data/mpn-01.txt'):
         mpcFile = 'mpn-01.txt'
@@ -2614,7 +2638,7 @@ def searchMinorPlanet(name):
 
     if row.empty:
          return ""
-    
+
     ts = load.timescale()
     eph = load('de440s.bsp')
     sun, earth = eph['sun'], eph['earth']
@@ -2623,7 +2647,7 @@ def searchMinorPlanet(name):
     Y,M,D,h,m,s = get_UTC_Time()
     t = ts.utc(Y,M,D,h,m,s)
     ra, dec, distance = earth.at(t).observe(object).radec()
-    
+
     data = {"ra" : str(ra).replace(" ",""), "dec" : str(dec).replace('deg','d').replace("'","m").replace('"',"s").replace(" ","")}
     return json.dumps(data, indent = 4)
 
@@ -2651,7 +2675,7 @@ class GetMinorPlanetCoordinates():
             resp.status = falcon.HTTP_404
             resp.content_type = 'application/text'
             resp.text = 'Object not found'
-            return 
+            return
         else:
             resp.status = falcon.HTTP_200
             resp.content_type = 'application/text'

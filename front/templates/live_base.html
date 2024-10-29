@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-    {% if online %}
+    {% if client_master and online %}
         <script>
             let navigating = false;
             document.body.addEventListener('htmx:sseBeforeMessage', function(evt) {
@@ -75,6 +75,10 @@
             new LiveViewJoystick('{{ root }}', 'zone').register();
         </script>
 
+    {% elif not client_master %}
+        <div class="container mt-3">
+          <p>You are currently in guest mode</p>
+        </div>
     {% else %}
         <div class="container mt-3">
             <p>You are currently in offline mode</p>

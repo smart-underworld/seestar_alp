@@ -8,7 +8,7 @@
 
 {% block content %}
 
-	{% if online %}
+	{% if client_master and online %}
 		<div class="container mt-3">
 			<!-- <p class="h3 mb-2">Enter a new mosaic</p> -->
 
@@ -16,7 +16,11 @@
 
 			{% include 'mosaic_create.html' with context %}
 		</div>
-	{% else %}
+  {% elif not client_master %}
+    <div class="container mt-3">
+      <p>You are currently in guest mode</p>
+    </div>
+  {% else %}
 		<div class="container mt-3">
 			<p>You are currently in offline mode</p>
 		</div>

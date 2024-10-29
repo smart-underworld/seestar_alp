@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block content %}
-	{% if online %}
+	{% if client_master and online %}
 		<div class="mb-3 card card-body p-3">
 			<div class="acordion" id="eventStatusAccordion">
 				<div class="accordion-item">
@@ -44,6 +44,10 @@
 			const confirm = {{ confirm|tojson }};
 		</script>
 
+  {% elif not client_master %}
+    <div class="container mt-3">
+      <p>You are currently in guest mode</p>
+    </div>
 	{% else %}
 		<div class="container mt-3">
 			<p>You are currently in offline mode</p>
