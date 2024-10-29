@@ -2665,9 +2665,9 @@ def searchLocal(object):
                 "lp": lp,
                 "objectName": name
             })
-
-    con.close()   
-    return json.dumps(data, indent = 4)
+        con.close()   
+        return json.dumps(data, indent = 4)
+    return ""    
 
 class GetCometCoordinates():
     @staticmethod
