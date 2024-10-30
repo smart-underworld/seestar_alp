@@ -1757,15 +1757,16 @@ class EventStatus:
         now = datetime.now()
         event_state = do_action_device("get_event_state", telescope_id, {})
 
-        if "Value" in event_state:
-            events = event_state["Value"]
-        if "result" in events:
-            if isinstance(events, dict):
-                result_info = events["result"]
-                if isinstance(result_info, dict):
-                    for event_key, event_value in result_info.items():
-                        if isinstance(event_value, dict):
-                            results.append(event_value)
+        events = pydash.get(event_state, 'Value')
+        
+        if events:
+            if "result" in events:
+                if isinstance(events, dict):
+                    result_info = events["result"]
+                    if isinstance(result_info, dict):
+                        for event_key, event_value in result_info.items():
+                            if isinstance(event_value, dict):
+                                results.append(event_value)
         else:
             for device_id, device_info in events.items():
                 # Ensure device_info contains "result" and it is a dictionary
