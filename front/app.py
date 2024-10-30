@@ -1757,26 +1757,31 @@ class EventStatus:
         now = datetime.now()
         event_state = do_action_device("get_event_state", telescope_id, {})
 
+        if event_state is None:
+            event_state = {}
+            events = {}
+        
         if "Value" in event_state:
             events = event_state["Value"]
-        if "result" in events:
-            if isinstance(events, dict):
-                result_info = events["result"]
-                if isinstance(result_info, dict):
-                    for event_key, event_value in result_info.items():
-                        if isinstance(event_value, dict):
-                            results.append(event_value)
-        else:
-            for device_id, device_info in events.items():
-                # Ensure device_info contains "result" and it is a dictionary
-                if isinstance(device_info, dict) and "result" in device_info:
-                    result_info = device_info["result"]
+            if "result" in events:
+                if isinstance(events, dict):
+                    result_info = events["result"]
                     if isinstance(result_info, dict):
                         for event_key, event_value in result_info.items():
                             if isinstance(event_value, dict):
-                                # Add the device ID to each event
-                                event_value['DeviceID'] = device_id
                                 results.append(event_value)
+        else:
+            if events:
+                for device_id, device_info in events.items():
+                    # Ensure device_info contains "result" and it is a dictionary
+                    if isinstance(device_info, dict) and "result" in device_info:
+                        result_info = device_info["result"]
+                        if isinstance(result_info, dict):
+                            for event_key, event_value in result_info.items():
+                                if isinstance(event_value, dict):
+                                    # Add the device ID to each event
+                                    event_value['DeviceID'] = device_id
+                                    results.append(event_value)
         render_template(req, resp, 'eventstatus.html', results=results, now=now, **context)
 
 class LivePage:

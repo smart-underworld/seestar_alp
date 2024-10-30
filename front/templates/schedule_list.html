@@ -59,7 +59,7 @@
 						<p class="mt-0 mb-0">RA: {{ item["params"]["ra"] }}</p>
 						<p class="mt-0 mb-0">DEC: {{ item["params"]["dec"] }}</p>
 					</div>
-					{% if item["params"]["ra_num"] > 1 and item["params"]["dec_num"] > 1 %}
+					{% if item["params"]["ra_num"] > 1 or item["params"]["dec_num"] > 1 %}
 						<div class="col align-self-start">
 							<p class="mt-0 mb-0"> RA: {{ item["params"]["ra_num"] }}</p>
 							<p class="mt-0 mb-0"> DEC: {{ item["params"]["dec_num"] }}</p>
