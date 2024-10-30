@@ -8,12 +8,16 @@
 
 {% block content %}
 
-	{% if online %}
+	{% if client_master and online %}
 		<div class="container mt-3">
 		<!--	<p class="h3 mb-2">Enter Target</p> -->
 			<p>Locates an object and starts tracking</p>
 			{% include 'goto_target.html' with context %}
 		</div>
+  {% elif not client_master %}
+    <div class="container mt-3">
+      <p>You are currently in guest mode. You can release this in the Advanced->Guest Mode of the SeeStar app.</p>
+    </div>
 	{% else %}
 		<div class="container mt-3">
 			<p>You are currently in offline mode</p>

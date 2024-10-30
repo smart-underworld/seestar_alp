@@ -1,5 +1,5 @@
 <div class="mb-3">
-    {% if online %}
+    {% if client_master and online %}
         <div style="height: 45px;">
             <div hx-post="{{ root }}/schedule/state" hx-swap="outerHTML">
                 <span class="me-3">State: {{ schedule['state'] }}</span>
@@ -10,6 +10,8 @@
                 </span>
             </div>
         </div>
+    {% elif not client_master %}
+        <p>You are currently in guest mode. You can release this in the Advanced->Guest Mode of the SeeStar app.</p>
     {% else %}
         <p>You are currently in offline mode</p>
     {% endif %}
@@ -44,13 +46,13 @@
                 {% elif item["action"] == 'shutdown' %}
                     <div class="col-2 align-self-start">Shutdown</div>
                 {% elif item["action"] == 'set_wheel_position' %}
-					
+
 					{% if item["params"] == [2] %}
 						<div class="col-2 align-self-start">Enable LP Filter</div>
 					{% elif item["params"] == [1] %}
 						<div class="col-2 align-self-start">Disable LP Filter</div>
 					{% endif %}
-                    
+
                 {% elif item["action"] == 'start_mosaic' %}
                     <div class="col-2 align-self-start text-break">{{ item["params"]["target_name"] }}</div>
                     <div class="col-2 align-self-start">

@@ -8,7 +8,7 @@
 
 {% block content %}
 
-	{% if online %}
+	{% if client_master and online %}
 		<div class="container mt-3">
 			<!-- <p class="h3 mb-2">Enter a new image</p> -->
 
@@ -16,6 +16,10 @@
 
 			{% include 'image_create.html' with context %}
 		</div>
+  {% elif not client_master %}
+    <div class="container mt-3">
+      <p>You are currently in guest mode. You can release this in the Advanced->Guest Mode of the SeeStar app.</p>
+    </div>
 	{% else %}
 		<div class="container mt-3">
 			<p>You are currently in offline mode</p>
