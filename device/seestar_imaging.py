@@ -535,7 +535,7 @@ class SeestarImaging:
         with open(gif_path, 'rb') as gif_file:
             gif_data = gif_file.read()
             
-            return (b'Content~Type: image/gif\r\n\r\n' + gif_data +self.BOUNDARY)
+            return (b'Content-Type: image/gif\r\n\r\n' + gif_data +self.BOUNDARY)
             
     # def blank_frame(self, message="Loading..."):
         # blank_image = np.ones((1920, 1080, 3), dtype=np.uint8)
