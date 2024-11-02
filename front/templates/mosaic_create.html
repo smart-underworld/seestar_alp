@@ -18,11 +18,12 @@
                         <label for="searchFor" class="form-label">Search For</label>
                         <div class="d-flex mb-0">
                             <select class="form-select" id="searchFor" name="searchFor" title="Select type of target">
-                                <option value="LS" selected>Local Deepsky DB</option>
-                                <option value="DS">Simbad Deepsky</option>
+                                <option value="DS" selected>Simbad Deepsky (Online)</option>
+                                <option value="LS" >Local Deepsky DB</option> 
                                 <option value="PL">Planet</option>
                                 <option value="MP">Minor Planet (Asteroid)</option>
                                 <option value="CO">Comet</option>
+                                <option value="VS"> AAVSO Varible Star (Online)</option>
                             </select>
                             <button type="button" id="getSimbad" class="btn btn-primary ms-2" title="Search for Coordinates" onclick="fetchCoordinates()">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">

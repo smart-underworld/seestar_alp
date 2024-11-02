@@ -196,15 +196,48 @@ async function fetchCoordinates() {
                         document.getElementById("useJ2000").checked = true;
                         });
                     } else {
-                        selectedComet = cometData[0];
-                        document.getElementById('ra').value = selectedComet.ra;
-                        document.getElementById('dec').value = selectedComet.dec;
-                        document.getElementById('targetName').value = selectedComet.cometName;
+                        document.getElementById('ra').value = cometData.ra;
+                        document.getElementById('dec').value = cometData.dec;
+                        document.getElementById('targetName').value = cometData.cometName;
                         document.getElementById('useLpFilter').checked = false;
                         document.getElementById("useJ2000").checked = true;
                     };
                 
                 };
+            });
+        break;
+        
+        // Variable Star
+        case 'VS':
+            if (document.getElementById('targetName').value == '') {
+                alert('You must supply a planet name to be looked up');
+                return;
+            }
+            starName = document.getElementById('targetName').value;
+            queryURL = '/getaavsocoordinates?target=' + starName;
+            fetch(queryURL)
+            .then(response => {
+                // If a server error or object not found
+                if (!response.ok) {
+                    if (response.statusText = "Not Found") {
+                        alert("Variable star " + document.getElementById('targetName').value + " not found!" )
+                        return;
+                    } else {
+                        alert('There is an issue contacting the server');
+                    }
+                    throw new Error('Network response was not ok ' + response.statusText);
+                }
+                return response.text();
+            })
+            .then(data => {
+                // Only proess if object data sent back
+                if (data){
+                    starData = JSON.parse(data);
+                        document.getElementById('ra').value = starData["ra"];
+                        document.getElementById('dec').value = starData["dec"];
+                        document.getElementById('useLpFilter').checked = false;
+                        document.getElementById("useJ2000").checked = true;
+                    };
             });
         break;
     }
