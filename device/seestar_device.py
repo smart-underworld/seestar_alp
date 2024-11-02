@@ -8,6 +8,8 @@ import math
 import uuid
 from time import sleep
 import collections
+from typing import Optional, Any
+
 from blinker import signal
 import geomag
 
@@ -340,17 +342,18 @@ class Seestar:
                 last_slow = now
                 if elapsed > 10:
                     self.logger.error(f'Failed to wait for message response.  {elapsed} seconds. {cur_cmdid=} {data=}')
-                    data['result'] = "Error: Exceeded alloted wait time for result"
+                    data['result'] = "Error: Exceeded allotted wait time for result"
                     return data
                 else:
                     self.logger.warn(f'SLOW message response.  {elapsed} seconds. {cur_cmdid=} {data=}')
+                    # todo : dump out stats.  last run time on threads, connection status, etc.
             time.sleep(0.5)
         self.logger.debug(f'response is {self.response_dict[cur_cmdid]}')
         return self.response_dict[cur_cmdid]
 
     def get_event_state(self, params=None):
         self.event_state["scheduler"]["state"] = self.schedule["state"]
-        if params != None and 'event_name' in params:
+        if params is not None and 'event_name' in params:
             event_name = params['event_name']
             if event_name in self.event_state:
                 result = self.event_state[event_name]
@@ -971,9 +974,7 @@ class Seestar:
             loc_param['force'] = True
             loc_data['method'] = 'set_user_location'
             loc_data['params'] = loc_param
-            lang_data = {}
-            lang_data['method'] = 'set_setting'
-            lang_data['params'] = {'lang': 'en'}
+            lang_data = {'method': 'set_setting', 'params': {'lang': 'en'}}
 
             self.logger.info("verify datetime string: %s", date_data)
             self.logger.info("verify location string: %s", loc_data)
@@ -1135,7 +1136,7 @@ class Seestar:
             self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
         finally:
             if self.schedule['state'] == "stopping":
-                self.sechedule['state'] = "stopped"
+                self.schedule['state'] = "stopped"
             else:
                 self.schedule['state'] = "complete"
             self.play_sound(82)
