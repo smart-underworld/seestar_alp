@@ -196,10 +196,9 @@ async function fetchCoordinates() {
                         document.getElementById("useJ2000").checked = true;
                         });
                     } else {
-                        selectedComet = cometData[0];
-                        document.getElementById('ra').value = selectedComet.ra;
-                        document.getElementById('dec').value = selectedComet.dec;
-                        document.getElementById('targetName').value = selectedComet.cometName;
+                        document.getElementById('ra').value = cometData.ra;
+                        document.getElementById('dec').value = cometData.dec;
+                        document.getElementById('targetName').value = cometData.cometName;
                         document.getElementById('useLpFilter').checked = false;
                         document.getElementById("useJ2000").checked = true;
                     };
