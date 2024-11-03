@@ -134,6 +134,7 @@ if __name__ == "__main__":
                             mimetype='text/event-stream')
 
 
+        @cross_origin()
         @app.route('/<dev_num>/vid')
         def vid(dev_num):
             return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(),

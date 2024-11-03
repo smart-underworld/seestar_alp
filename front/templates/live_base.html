@@ -1,7 +1,15 @@
 {% extends 'base.html' %}
 
 {% block content %}
-    {% if client_master and online %}
+    <style>
+       .dimmable:hover {
+           opacity: 1.0;
+       }
+       .dimmable {
+           opacity: 0.00;
+       }
+    </style>
+  {% if client_master and online %}
         <script>
             let navigating = false;
             document.body.addEventListener('htmx:sseBeforeMessage', function(evt) {

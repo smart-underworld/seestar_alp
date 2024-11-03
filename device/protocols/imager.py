@@ -170,7 +170,7 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
 
                 self._received_frame += 1
                 if self.raw_img is not None:
-                    self.logger.info(f"read image size={len(self.raw_img)}")
+                    self.logger.debug(f"read image size={len(self.raw_img)}")
                 # todo : run on message listeners here!
         else:
             # If we aren't connected, just wait...
