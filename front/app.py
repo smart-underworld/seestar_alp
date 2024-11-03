@@ -2266,7 +2266,7 @@ def decimal_RA_to_Sexagesimal(deg):
     return f'{hours}h{minutes:02}m{abs(seconds):.2f}s'
 
 # Convert decimal DEC into DMS format
-def decimal_DEC_to_Sexagesimal(deg):
+def decimal_DEC_to_Sexagesimal(deg:float):
     sign = "+" if deg >= 0 else "-"
     abs_deg = abs(deg)
     degrees = int(abs_deg)
@@ -2747,6 +2747,27 @@ class GetLocalSearch():
             resp.content_type = 'application/text'
             resp.text = (rtn)
 
+class GetAAVSOSearch():
+    @staticmethod
+    def on_get(req, resp):
+        objName = req.get_param("target")
+        aavso_URL = 'https://www.aavso.org/vsx/index.php?view=api.object&format=json&ident='
+        rtn = requests.get(aavso_URL + objName, timeout=10)
+        rtnJson = json.loads(rtn.text)
+        if len(rtnJson["VSXObject"]) == 0:
+            resp.status = falcon.HTTP_404
+            resp.content_type = 'application/text'
+            resp.text = 'Object not found'
+            return
+        else:
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'application/json'
+            
+            ra = decimal_RA_to_Sexagesimal(float(rtnJson["VSXObject"]["RA2000"]))
+            dec = decimal_DEC_to_Sexagesimal(float(rtnJson["VSXObject"]["Declination2000"]))
+
+            resp.text = (json.dumps({"ra": ra, "dec": dec}))
+
 
 class FrontMain:
     def __init__(self):
@@ -2837,6 +2858,7 @@ class FrontMain:
         app.add_route('/getcometcoordinates', GetCometCoordinates())
         app.add_route('/localsearch', GetLocalSearch())
         app.add_route('/getminorplanetcoordinates', GetMinorPlanetCoordinates())
+        app.add_route('/getaavsocoordinates', GetAAVSOSearch())
         app.add_route('/config', ConfigResource())
 
         try:
