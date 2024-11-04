@@ -46,6 +46,12 @@ class ManualMosaic:
         center_RA = parsed_coord.ra.hour
         center_Dec = parsed_coord.dec.deg
 
+        # adjust mosaic center if num panels is even
+        if self.tunables.nRA % 2 == 0:
+            center_RA += delta_RA / 2
+        if self.tunables.nDec % 2 == 0:
+            center_Dec += delta_Dec / 2
+
         spacing_result = Util.mosaic_next_center_spacing(center_RA, center_Dec, self.tunables.overlap_percent)
         delta_RA = spacing_result[0]
         delta_Dec = spacing_result[1]
