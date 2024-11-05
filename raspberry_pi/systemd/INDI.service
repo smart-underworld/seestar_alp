@@ -11,7 +11,7 @@ EnvironmentFile=/etc/seestar.env
 ExecStartPre=bash -c 'rm -f /tmp/seestar; mkfifo /tmp/seestar'
 ExecStart=indiserver -f /tmp/seestar
 ExecStartPost=python3 /home/<username>/seestar_alp/indi/start_indi_devices.py
-ExecPostStop=rm /tmp/seestar
+ExecStopPost=rm /tmp/seestar
 
 [Install]
 WantedBy=network-online.target
