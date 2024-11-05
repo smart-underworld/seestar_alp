@@ -453,8 +453,9 @@ def get_client_master(telescope_id):
     client_master = True # Assume master for older firmware
     event_state = do_action_device("get_event_state", telescope_id, {})
     if event_state != None:
-        if 'Client' in event_state:
-            client_master = event_state['Client'].get('is_master', True)
+        result = event_state['Value']['result']
+        if 'Client' in result:
+            client_master = result['Client'].get('is_master', True)
 
     return client_master
 
@@ -1760,7 +1761,7 @@ class EventStatus:
         if event_state is None:
             event_state = {}
             events = {}
-        
+
         if "Value" in event_state:
             events = event_state["Value"]
             if "result" in events:
@@ -2672,11 +2673,11 @@ def searchLocal(object):
     result = cursor.execute(search)
     sqlReturn = result.fetchall()
 
-    
+
     if len(sqlReturn) > 0:
         data = []
         for row in sqlReturn:
-        
+
             objectType = row[2]
             if objectType == "Planetary Nebula" or \
                 objectType == "Nebula" or \
@@ -2691,16 +2692,16 @@ def searchLocal(object):
                 name = row[3]
             else:
                 name = ''
-    
+
             data.append({
                 "ra": row[0],
                 "dec": row[1],
                 "lp": lp,
                 "objectName": name
             })
-        con.close()   
+        con.close()
         return json.dumps(data, indent = 4)
-    return ""    
+    return ""
 
 class GetCometCoordinates():
     @staticmethod
@@ -2741,7 +2742,7 @@ class GetLocalSearch():
             resp.status = falcon.HTTP_404
             resp.content_type = 'application/text'
             resp.text = 'Object not found'
-            return 
+            return
         else:
             resp.status = falcon.HTTP_200
             resp.content_type = 'application/text'
@@ -2762,7 +2763,7 @@ class GetAAVSOSearch():
         else:
             resp.status = falcon.HTTP_200
             resp.content_type = 'application/json'
-            
+
             ra = decimal_RA_to_Sexagesimal(float(rtnJson["VSXObject"]["RA2000"]))
             dec = decimal_DEC_to_Sexagesimal(float(rtnJson["VSXObject"]["Declination2000"]))
 
