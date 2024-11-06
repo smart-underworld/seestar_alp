@@ -535,11 +535,11 @@ class SeestarImaging:
     #         self.last_live_view_time = None
     #         self.exposure_mode = None
 
-    def blank_frame(self, message="Loading...", timestamp=False):
+    def blank_frame(self, message="Loading", timestamp=False):
         #load the gif image
         gif_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "loading.gif")
 
-        if message == "Loading...":
+        if message == "Loading":
             try:
                 with open(gif_path, 'rb') as gif_file:
                     gif_data = gif_file.read()
