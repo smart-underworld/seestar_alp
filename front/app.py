@@ -156,10 +156,14 @@ def get_context(telescope_id, req):
             "name": "Seestar Federation",
             "ip_address": get_ip()
         }
-
+    scheduler_state = do_action_device("get_event_state", telescope_id, {"event_name":"scheduler"})
+    current_item = scheduler_state.get("Value", {}).get("result", {}).get("cur_scheduler_item")
+    print(f"current_item: {json.dumps(current_item)}")
+    
+    do_action_device("get_event_state", telescope_id, {})
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
             "online": online, "imager_root": imager_root, "experimental": experimental, "confirm": confirm,
-            "uitheme": uitheme, "client_master": client_master
+            "uitheme": uitheme, "client_master": client_master, "current_item": current_item
         }
 
 
