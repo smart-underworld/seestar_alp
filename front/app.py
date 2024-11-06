@@ -160,7 +160,6 @@ def get_context(telescope_id, req):
     scheduler_state = do_action_device("get_event_state", telescope_id, {"event_name":"scheduler"})
     if scheduler_state:
         current_item = scheduler_state.get("Value", {}).get("result", {}).get("cur_scheduler_item")
-
     do_action_device("get_event_state", telescope_id, {})
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
             "online": online, "imager_root": imager_root, "experimental": experimental, "confirm": confirm,
