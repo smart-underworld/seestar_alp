@@ -9,11 +9,37 @@
 {% block content %}
 
 	{% if client_master and online %}
+		<div class="mb-3 card card-body p-3">
+			<div class="acordion" id="eventStatusAccordion">
+				<div class="accordion-item">
+					<h2 class="accordion-header" id="headingOne">
+						<button class="accordion-button fs-5 fw-bold" type="button"
+								data-bs-toggle="collapse"
+								data-bs-target="#eventStatusDiv"
+								aria-expanded="true"
+								aria-controls="eventStatusDiv">
+							Event status
+						</button>
+					</h2>
+				</div>
+			</div>
+			<div id="eventStatusDiv" class="accordion-collapse collapse show"
+				 aria-labelledby="headingOne"
+				 data-bs-parent="#eventStatusAccordion">
+				<div class="accordion-body" id="eventStatusContent"
+					 hx-get="{{ root }}/eventstatus?action=goto"
+					 hx-trigger="load, every 1s"
+					 hx-swap="innerHTML">
+					Loading event status...
+				</div>
+			</div>
+		</div>
 		<div class="container mt-3">
 		<!--	<p class="h3 mb-2">Enter Target</p> -->
 			<p>Locates an object and starts tracking</p>
 			{% include 'goto_target.html' with context %}
 		</div>
+
   {% elif not client_master %}
     <div class="container mt-3">
       <p>You are currently in guest mode. You can release this in the Advanced->Guest Mode of the SeeStar app.</p>
@@ -30,3 +56,8 @@
 	</footer>
 
 {% endblock %}
+
+{% block scripts %}
+	<script src="/public/command.js"></script>
+{% endblock %}
+

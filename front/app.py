@@ -156,10 +156,11 @@ def get_context(telescope_id, req):
             "name": "Seestar Federation",
             "ip_address": get_ip()
         }
+    current_item = None
     scheduler_state = do_action_device("get_event_state", telescope_id, {"event_name":"scheduler"})
-    current_item = scheduler_state.get("Value", {}).get("result", {}).get("cur_scheduler_item")
-    print(f"current_item: {json.dumps(current_item)}")
-    
+    if scheduler_state:
+        current_item = scheduler_state.get("Value", {}).get("result", {}).get("cur_scheduler_item")
+
     do_action_device("get_event_state", telescope_id, {})
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
             "online": online, "imager_root": imager_root, "experimental": experimental, "confirm": confirm,
@@ -455,11 +456,12 @@ def method_sync(method, telescope_id=1, **kwargs):
 
 def get_client_master(telescope_id):
     client_master = True # Assume master for older firmware
-    event_state = do_action_device("get_event_state", telescope_id, {})
-    if event_state != None:
-        result = event_state['Value']['result']
-        if 'Client' in result:
-            client_master = result['Client'].get('is_master', True)
+    if telescope_id > 0:
+        event_state = do_action_device("get_event_state", telescope_id, {})
+        if event_state != None:
+            result = event_state['Value']['result']
+            if 'Client' in result:
+                client_master = result['Client'].get('is_master', True)
 
     return client_master
 
@@ -1757,6 +1759,15 @@ class EventStatus:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
         results = []
+        action = req.get_param('action')
+        if action == 'command':
+            eventlist = ['WheelMove', 'AutoFocus', '3PPA', 'AutoGoto', 'PlateSolve', 'DarkLibrary']
+        elif action == 'goto':
+            eventlist = ['WheelMove', 'AutoGoto', 'PlateSolve']
+        elif action == 'image' or action == 'mosaic':
+            eventlist = ['WheelMove', 'AutoGoto', 'PlateSolve', 'DarkLibrary', 'AutoFocus', 'Stack']
+        else:
+            eventlist = ['WheelMove', 'AutoFocus', 'AutoGoto', 'PlateSolve']
         telescopes = get_telescopes()
         context = get_context(telescope_id, req)
         now = datetime.now()
@@ -1775,19 +1786,19 @@ class EventStatus:
                         for event_key, event_value in result_info.items():
                             if isinstance(event_value, dict):
                                 results.append(event_value)
-        else:
-            if events:
-                for device_id, device_info in events.items():
-                    # Ensure device_info contains "result" and it is a dictionary
-                    if isinstance(device_info, dict) and "result" in device_info:
-                        result_info = device_info["result"]
-                        if isinstance(result_info, dict):
-                            for event_key, event_value in result_info.items():
-                                if isinstance(event_value, dict):
-                                    # Add the device ID to each event
-                                    event_value['DeviceID'] = device_id
-                                    results.append(event_value)
-        render_template(req, resp, 'eventstatus.html', results=results, now=now, **context)
+            else:
+                if events:
+                    for device_id, device_info in events.items():
+                        # Ensure device_info contains "result" and it is a dictionary
+                        if isinstance(device_info, dict) and "result" in device_info:
+                            result_info = device_info["result"]
+                            if isinstance(result_info, dict):
+                                for event_key, event_value in result_info.items():
+                                    if isinstance(event_value, dict):
+                                        # Add the device ID to each event
+                                        event_value['DeviceID'] = device_id
+                                        results.append(event_value)
+        render_template(req, resp, 'eventstatus.html', results=results, events=eventlist, now=now, **context)
 
 class LivePage:
     @staticmethod
