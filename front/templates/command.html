@@ -26,7 +26,7 @@
 				 aria-labelledby="headingOne"
 				 data-bs-parent="#eventStatusAccordion">
 				<div class="accordion-body" id="eventStatusContent"
-					 hx-get="{{ root }}/eventstatus"
+					 hx-get="{{ root }}/eventstatus?action=command"
 					 hx-trigger="load, every 1s"
 					 hx-swap="innerHTML">
 					Loading event status...
