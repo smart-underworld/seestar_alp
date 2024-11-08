@@ -17,7 +17,7 @@
                     </div>
                 </div>
                 <div class="row">
-                    {% for event_name in ['3PPA', 'AutoFocus', 'DarkLibrary', 'PlateSolve', 'Stack', 'WheelMove'] %}
+                    {% for event_name in events %}
                         <div class="col-md-2 mb-3">
                             {% set event_status = device_events | selectattr('Event', 'equalto', event_name) | first %}
                             {% include 'event_card.html' %}
@@ -27,7 +27,7 @@
             {% endfor %}
         {% else %}
             <div class="row">
-                {% for event_name in ['3PPA', 'AutoFocus', 'DarkLibrary', 'PlateSolve', 'Stack', 'WheelMove'] %}
+                {% for event_name in events %}
                     <div class="col-md-2 mb-3">
                         {% set event_status = results | selectattr('Event', 'equalto', event_name) | first %}
                         {% include 'event_card.html' %}

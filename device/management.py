@@ -42,6 +42,8 @@
 # 23-May-2023   rbd 0.2 Refactoring for  multiple ASCOM device type support
 #               GitHub issue #1
 #
+import uuid
+
 from falcon import Request, Response
 from device.shr import PropertyResponse, DeviceMetadata
 from device.config import Config
@@ -84,10 +86,10 @@ class configureddevices():
     def on_get(self, req: Request, resp: Response):
         confarray = [    # TODO ADD ONE FOR EACH DEVICE TYPE AND INSTANCE SERVED
             {
-            'DeviceName'    : TelescopeMetadata.Name,
+            'DeviceName'    : dev['name'],
             'DeviceType'    : TelescopeMetadata.DeviceType,
-            'DeviceNumber'  : 0,
-            'UniqueID'      : TelescopeMetadata.DeviceID
-            }
+            'DeviceNumber'  : dev['device_num'],
+            'UniqueID'      : str(uuid.uuid4()),
+            } for dev in Config.seestars
         ]
         resp.text = PropertyResponse(confarray, req).json
