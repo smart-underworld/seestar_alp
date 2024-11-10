@@ -112,6 +112,7 @@ class _Config:
         self.confirm: bool = self.get_toml('webui_settings', 'confirm', True)
         self.save_frames: bool = self.get_toml('webui_settings', 'save_frames', False)
         self.save_frames_dir: str = self.get_toml('webui_settings', 'save_frames_dir', '.')
+        self.loading_gif: str = self.get_toml('webui_settings', 'loading_gif', 'loading.gif')
 
         # --------------
         # Server Section
@@ -189,6 +190,7 @@ class _Config:
         self.set_toml('webui_settings', 'confirm', 'confirm' in req.media)
         self.set_toml('webui_settings', 'save_frames', 'save_frames' in req.media)
         self.set_toml('webui_settings', 'save_frames_dir', 'save_frames_dir' in req.media)
+        self.set_toml('webui_settings', 'loading_gif', 'loading_gif' in req.media)
 
         # server
         self.set_toml('server', 'location', req.media['location'])
@@ -316,7 +318,8 @@ class _Config:
                 self.render_checkbox('experimental', 'Experimental:', self.experimental) + \
                 self.render_checkbox('confirm', 'Commands Confirmation Dialog:', self.confirm) + \
                 self.render_checkbox('save_frames', 'Save star preview frames locally:', self.save_frames) + \
-                self.render_text('save_frames_dir', 'Save frames base directory:', self.save_frames_dir)
+                self.render_text('save_frames_dir', 'Save frames base directory:', self.save_frames_dir) + \
+                self.render_text('loading_gif', 'Loading gif:', self.loading_gif)
             ) + \
             self.render_config_section(
                 'Server',
