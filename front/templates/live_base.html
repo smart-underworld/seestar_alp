@@ -1,15 +1,6 @@
 {% extends 'base.html' %}
 
 {% block content %}
-  <style>
-    .dimmable:hover {
-      opacity: 1.0;
-    }
-
-    .dimmable {
-      opacity: 0.00;
-    }
-  </style>
   {% if client_master and online %}
     <script>
       let navigating = false;
