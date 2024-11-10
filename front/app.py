@@ -2683,7 +2683,7 @@ def searchLocal(object):
         return
 
     cursor = con.cursor()
-    search = f"SELECT ra, dec, objectType, commonNames FROM objects where m like '{object}' or ngc like '{object}' or ic like '{object}' or commonNames like '%{object}%' COLLATE NOCASE"
+    search = f"SELECT ra, dec, objectType, commonNames, identifiers FROM objects where identifiers like '%{object}%' or commonNames like '%{object}%' COLLATE NOCASE"
     result = cursor.execute(search)
     sqlReturn = result.fetchall()
 
@@ -2705,7 +2705,7 @@ def searchLocal(object):
             if (row[3]): # We searched for a name so lets send back the full name
                 name = row[3]
             else:
-                name = ''
+                name = row[4]
 
             data.append({
                 "ra": row[0],
