@@ -3,16 +3,21 @@
 {% block header %}
     <meta http-equiv="Cache-Control" content="no-cache">
     <script>
-        function card_enable_toggle(card_name){
+        async function card_enable_toggle(card_name){
             console.log("Enable toggle planning card: " + card_name);
-            fetch("/toggleplanningcard", {
+            await fetch("/toggleplanningcard", {
                 method: "POST",
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ "card_name": card_name }),
+            }).then(function(res) {
+                if(res.ok){
+                    window.location.reload();
+                }
+            }).catch(function(e) {
+                console.log(e);
             });
-            window.location.reload();
         }
 
         function card_collapse_toggle(card_name){
