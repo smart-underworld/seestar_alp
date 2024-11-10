@@ -4,7 +4,7 @@
     {% if client_master and online %}
         <script>
             let navigating = false;
-            document.body.addEventListener('htmx:sseBeforeMessage', function(evt) {
+            document.body.addEventListener('htmx:sseBeforeMessage', function (evt) {
                 if (navigating) return;
                 //console.log('sse event:', evt.detail.type, evt.detail);
                 switch (evt.detail.type) {
@@ -41,7 +41,7 @@
                             updateMovementControls(stage);
                         }
                     }
-                    break;
+                        break;
 
                     case 'liveViewModeChange': {
                         const payload = JSON.parse(evt.detail.data);
@@ -59,13 +59,15 @@
 
                         updateModeButtons(mode);
                     }
-                    break;
+                        break;
 
                 }
             });
         </script>
 
+        <div hx-ext="sse" sse-connect="{{ imager_root }}/events">
         {% block live_content %}{% endblock %}
+        </div>
 
         <footer class="bg-body-tertiary text-center mt-3">
             Version: {{ version }} | Last updated: {{ now }}
