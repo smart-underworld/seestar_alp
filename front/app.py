@@ -1885,10 +1885,58 @@ class LiveExposureRecordResource:
             }
         })
         print(f"LiveExposureRecordResource: {response=}")
+        # Note: streaming should stop automatically in imaging system...
 
         resp.status = falcon.HTTP_200
         resp.content_type = 'application/text'
         resp.text = "Ok"
+
+
+class LiveFocusResource:
+    def __init__(self):
+        self.focus = {}
+
+    def on_get(self, req, resp, telescope_id: int=1):
+        output = self.current_focus(telescope_id)
+        # print("Current focus:", output)
+
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'text/plain'
+        resp.text = str(output)
+
+    def on_post(self, req, resp, telescope_id: int=1):
+        focus = self.current_focus(telescope_id)
+        increment = int(req.media["inc"])
+        # print("LiveFocusResource.post", increment)
+
+        if -50 <= increment <= 50:
+            focus += increment
+            ts = time.time()
+            output = do_action_device("method_sync", telescope_id,
+                                     {"method": "move_focuser", "params": {"step": focus, "ret_step": True}})
+            te = time.time()
+            print(f'move_focuser elapsed {te - ts:2.4f} seconds')
+            focus = pydash.get(output, 'Value.result.step')
+            self.focus[telescope_id] = focus
+
+        # print("LiveFocusResource.post return", focus)
+
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'text/plain'
+        resp.text = str(focus)
+
+    def current_focus(self, telescope_id):
+        focus = pydash.get(self.focus, telescope_id)
+
+        if focus is None:
+            ts = time.time()
+            focus = method_sync("get_focuser_position", telescope_id)
+            te = time.time()
+            # print(f'get_focuser_position elapsed {te - ts:2.4f} seconds')
+
+            self.focus[telescope_id] = focus
+
+        return focus
 
 
 class LiveStatusResource:
@@ -2827,11 +2875,12 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/console', ConsoleResource())
         app.add_route('/{telescope_id:int}/image', ImageResource())
         app.add_route('/{telescope_id:int}/live', LivePage())
-        app.add_route('/{telescope_id:int}/live/status', LiveStatusResource())
+        # app.add_route('/{telescope_id:int}/live/status', LiveStatusResource())
         app.add_route('/{telescope_id:int}/live/mode', LiveModeResource())
-        app.add_route('/{telescope_id:int}/live/exposure_mode', LiveExposureModeResource())
+        # app.add_route('/{telescope_id:int}/live/exposure_mode', LiveExposureModeResource())
         app.add_route('/{telescope_id:int}/live/record', LiveExposureRecordResource())
         # app.add_route('/{telescope_id:int}/live/state', LiveStateResource())
+        app.add_route('/{telescope_id:int}/live/focus', LiveFocusResource())
         app.add_route('/{telescope_id:int}/live/{mode}', LivePage())
         app.add_route('/{telescope_id:int}/mosaic', MosaicResource())
         app.add_route('/{telescope_id:int}/planning', PlanningResource())

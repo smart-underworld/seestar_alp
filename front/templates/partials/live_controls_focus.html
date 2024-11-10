@@ -1,68 +1,54 @@
 <style>
-    ::backdrop {
-        {#background-image:#}
-                {#linear-gradient(#}
-                {#45deg,#}
-                {#magenta,#}
-                {#rebeccapurple,#}
-                {#dodgerblue,#}
-                {#green#}
-        {#);#}
-        background-color: rgba(75, 75, 75, 50%);
-        {#backdrop-filter: blur(5px);#}
-        {#opacity: 0.5;#}
-    }
+  ::backdrop {
+  {#background-image:#}{#linear-gradient(#}{#45deg,#}{#magenta,#}{#rebeccapurple,#}{#dodgerblue,#}{#green#}{#);#} background-color: rgba(75, 75, 75, 50%);
+  {#backdrop-filter: blur(5px);#}{#opacity: 0.5;#}
+  }
 
-    #focusOptionsDialog {
-        border-radius: 8px;
-        border: none;
-    }
+  #focusOptionsDialog {
+    border-radius: 8px;
+    border: none;
+  }
 </style>
 
-<button id="focus-options" class="btn btn-outline-primary p-3"
-        hx-post="{{ root }}/command" hx-swap="none" hx-vals='{"command": "start_auto_focus"}'>
-    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor"
-         class="bi bi-bullseye" viewBox="0 0 16 16">
-        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
-        <path d="M8 13A5 5 0 1 1 8 3a5 5 0 0 1 0 10m0 1A6 6 0 1 0 8 2a6 6 0 0 0 0 12"/>
-        <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6m0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8"/>
-        <path d="M9.5 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/>
-    </svg>
-    Focus
-</button>
-<div class="collapse" id="focusOptions2">
-</div>
-<dialog id="focusOptionsDialog">
-    <div class="card card-body mt-3">
-        <div class="d-flex">
-            <button class="btn btn-outline-primary me-3" hx-post="{{ root }}/command"
-                    hx-swap="none" hx-vals='{"command": "start_auto_focus"}'>
-                <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30"
-                     fill="currentColor" class="bi bi-crosshair" viewBox="0 0 16 16">
-                    <path d="M8.5.5a.5.5 0 0 0-1 0v.518A7 7 0 0 0 1.018 7.5H.5a.5.5 0 0 0 0 1h.518A7 7 0 0 0 7.5 14.982v.518a.5.5 0 0 0 1 0v-.518A7 7 0 0 0 14.982 8.5h.518a.5.5 0 0 0 0-1h-.518A7 7 0 0 0 8.5 1.018zm-6.48 7A6 6 0 0 1 7.5 2.02v.48a.5.5 0 0 0 1 0v-.48a6 6 0 0 1 5.48 5.48h-.48a.5.5 0 0 0 0 1h.48a6 6 0 0 1-5.48 5.48v-.48a.5.5 0 0 0-1 0v.48A6 6 0 0 1 2.02 8.5h.48a.5.5 0 0 0 0-1zM8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4"/>
-                </svg>
-                Auto
-            </button>
-            <div>
-                <label for="customRange1" class="form-label">Focus</label>
-                <input type="range" class="form-range" id="customRange1">
-            </div>
-        </div>
-        {#                                Some placeholder content for the collapse component. This panel is hidden by default but#}
-        {#                                revealed when the user activates the relevant trigger.#}
+<div id="focusOptions" class="position-relative">
+  <div class="card card-body position-relative">
+    <div class="d-flex py-1">
+      <button class="btn btn-outline-primary me-3" hx-post="{{ root }}/command"
+              hx-swap="none" hx-vals='{"command": "start_auto_focus"}'>
+        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30"
+             fill="currentColor" class="bi bi-crosshair" viewBox="0 0 16 16">
+          <path
+            d="M8.5.5a.5.5 0 0 0-1 0v.518A7 7 0 0 0 1.018 7.5H.5a.5.5 0 0 0 0 1h.518A7 7 0 0 0 7.5 14.982v.518a.5.5 0 0 0 1 0v-.518A7 7 0 0 0 14.982 8.5h.518a.5.5 0 0 0 0-1h-.518A7 7 0 0 0 8.5 1.018zm-6.48 7A6 6 0 0 1 7.5 2.02v.48a.5.5 0 0 0 1 0v-.48a6 6 0 0 1 5.48 5.48h-.48a.5.5 0 0 0 0 1h.48a6 6 0 0 1-5.48 5.48v-.48a.5.5 0 0 0-1 0v.48A6 6 0 0 1 2.02 8.5h.48a.5.5 0 0 0 0-1zM8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4"/>
+        </svg>
+        Auto
+      </button>
+
+      <div>
+        <button id="focus-extra-backward" class="btn btn-outline-secondary me-2"
+                hx-post="{{ root }}/live/focus" hx-target="#current-focus-value" hx-vals='{"inc": -50}'>
+          {% include 'partials/svg_extra_backward.html' %}
+        </button>
+
+        <button id="focus-backward" class="btn btn-outline-secondary me-2"
+                hx-post="{{ root }}/live/focus" hx-target="#current-focus-value" hx-vals='{"inc": -10}'>
+          {% include 'partials/svg_backward.html' %}
+        </button>
+
+        <span id="current-focus-value" class="me-2" hx-get="{{ root }}/live/focus" hx-trigger="load" sse-swap="focusMove">
+          Some Focus Value
+        </span>
+
+        <button id="focus-forward" class="btn btn-outline-secondary me-2"
+                hx-post="{{ root }}/live/focus" hx-target="#current-focus-value" hx-vals='{"inc": 10}'>
+          {% include 'partials/svg_forward.html' %}
+        </button>
+
+        <button id="focus-extra-forward" class="btn btn-outline-secondary me-2"
+                hx-post="{{ root }}/live/focus" hx-target="#current-focus-value" hx-vals='{"inc": 50}'>
+          {% include 'partials/svg_extra_forward.html' %}
+        </button>
+      </div>
     </div>
-    <form method="dialog">
-        <button class="btn btn-outline-primary mt-3">Dismiss</button>
-    </form>
-</dialog>
-
-<script>
-    //const focusButton = document.getElementById('focus-options');
-    //const focusDialog = document.getElementById('focusOptionsDialog');
-
-    //function openFocusDialog() {
-    //    focusDialog.showModal();
-    //}
-
-    //focusButton.addEventListener('click', openFocusDialog);
-</script>
+  </div>
+  <div class="position-absolute top-0 start-50 translate-middle">Focus</div>
+</div>

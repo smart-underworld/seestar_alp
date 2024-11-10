@@ -1,96 +1,100 @@
 {% extends 'base.html' %}
 
 {% block content %}
-    <style>
-       .dimmable:hover {
-           opacity: 1.0;
-       }
-       .dimmable {
-           opacity: 0.00;
-       }
-    </style>
+  <style>
+    .dimmable:hover {
+      opacity: 1.0;
+    }
+
+    .dimmable {
+      opacity: 0.00;
+    }
+  </style>
   {% if client_master and online %}
-        <script>
-            let navigating = false;
-            document.body.addEventListener('htmx:sseBeforeMessage', function(evt) {
-                if (navigating) return;
-                //console.log('sse event:', evt.detail.type, evt.detail);
-                switch (evt.detail.type) {
-                    case 'statusUpdate': {
-                        const payload = JSON.parse(evt.detail.data)
-                        let mode = payload.mode;
-                        const stage = payload.stage;
-                        const arr = document.URL.split('/');
-                        let lastSegment = arr[arr.length - 1];
+    <script>
+      let navigating = false;
+      document.body.addEventListener('htmx:sseBeforeMessage', function (evt) {
+        if (navigating) return;
+        //console.log('sse event:', evt.detail.type, evt.detail);
+        switch (evt.detail.type) {
+          case 'statusUpdate': {
+            const payload = JSON.parse(evt.detail.data)
+            let mode = payload.mode;
+            const stage = payload.stage;
+            const arr = document.URL.split('/');
+            let lastSegment = arr[arr.length - 1];
 
-                        //console.log('status update:', lastSegment, mode, stage)
+            //console.log('status update:', lastSegment, mode, stage)
 
-                        if (lastSegment === 'live') {
-                            lastSegment = 'none';
-                        }
-                        if (!mode) {
-                            mode = 'none';
-                        }
+            if (lastSegment === 'live') {
+              lastSegment = 'none';
+            }
+            if (!mode) {
+              mode = 'none';
+            }
 
-                        if (lastSegment !== mode) {
-                            //console.log(`Change mode from ${lastSegment} to ${mode}`)
-                            if (mode === 'none') {
-                                window.location = arr.slice(0, -1).join('/')
-                            } else {
-                                if (document.URL.endsWith('live')) {
-                                    window.location = document.URL + '/' + mode;
-                                } else {
-                                    window.location = arr.slice(0, -1).join('/') + '/' + mode;
-                                }
-                            }
-                            navigating = true;
-                        } else {
-                            updateModeButtons(mode);
-                            updateMovementControls(stage);
-                        }
-                    }
-                    break;
-
-                    case 'liveViewModeChange': {
-                        const payload = JSON.parse(evt.detail.data);
-                        const mode = payload.mode;
-                        // console.log(`liveViewModeChange was triggered! mode=${mode}`);
-                        const img = document.getElementById('liveViewImg');
-                        let currentSrc = "{{ imager_root }}/vid";
-                        // Add a cache-busting parameter
-                        if (currentSrc.indexOf('?') > -1) {
-                            currentSrc = currentSrc.substring(0, currentSrc.indexOf('?'));
-                        }
-                        const newSrc = currentSrc + "?timestamp=" + new Date().getTime();
-
-                        img.src = newSrc;
-
-                        updateModeButtons(mode);
-                    }
-                    break;
-
+            if (lastSegment !== mode) {
+              //console.log(`Change mode from ${lastSegment} to ${mode}`)
+              if (mode === 'none') {
+                window.location = arr.slice(0, -1).join('/')
+              } else {
+                if (document.URL.endsWith('live')) {
+                  window.location = document.URL + '/' + mode;
+                } else {
+                  window.location = arr.slice(0, -1).join('/') + '/' + mode;
                 }
-            });
-        </script>
+              }
+              navigating = true;
+            } else {
+              updateModeButtons(mode);
+              updateMovementControls(stage);
+            }
+          }
+            break;
 
-        {% block live_content %}{% endblock %}
+          case 'liveViewModeChange': {
+            const payload = JSON.parse(evt.detail.data);
+            const mode = payload.mode;
+            // console.log(`liveViewModeChange was triggered! mode=${mode}`);
+            const img = document.getElementById('liveViewImg');
+            let currentSrc = "{{ imager_root }}/vid";
+            // Add a cache-busting parameter
+            if (currentSrc.indexOf('?') > -1) {
+              currentSrc = currentSrc.substring(0, currentSrc.indexOf('?'));
+            }
+            const newSrc = currentSrc + "?timestamp=" + new Date().getTime();
 
-        <footer class="bg-body-tertiary text-center mt-3">
-            Version: {{ version }} | Last updated: {{ now }}
-        </footer>
+            img.src = newSrc;
 
-        <script>
-            new LiveViewJoystick('{{ root }}', 'zone').register();
-        </script>
+            updateModeButtons(mode);
+          }
+            break;
 
-    {% elif not client_master %}
-        <div class="container mt-3">
-          <p>You are currently in guest mode. You can release this in the Advanced->Guest Mode of the SeeStar app.</p>
-          <p>See the <a href="https://github.com/smart-underworld/seestar_alp/wiki/Guest-Mode">Guest Mode</a> wiki page for details</p>
-        </div>
-    {% else %}
-        <div class="container mt-3">
-            <p>You are currently in offline mode</p>
-        </div>
-    {% endif %}
+        }
+      });
+    </script>
+
+    <div hx-ext="sse" sse-connect="{{ imager_root }}/events">
+    {% block live_content %}{% endblock %}
+    </div>
+
+    <footer class="bg-body-tertiary text-center mt-3">
+      Version: {{ version }} | Last updated: {{ now }}
+    </footer>
+
+    <script>
+      new LiveViewJoystick('{{ root }}', 'zone').register();
+    </script>
+
+  {% elif not client_master %}
+    <div class="container mt-3">
+      <p>You are currently in guest mode. You can release this in the Advanced->Guest Mode of the SeeStar app.</p>
+      <p>See the <a href="https://github.com/smart-underworld/seestar_alp/wiki/Guest-Mode">Guest Mode</a> wiki page for
+        details</p>
+    </div>
+  {% else %}
+    <div class="container mt-3">
+      <p>You are currently in offline mode</p>
+    </div>
+  {% endif %}
 {% endblock %}

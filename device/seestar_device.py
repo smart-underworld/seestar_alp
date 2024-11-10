@@ -1829,23 +1829,26 @@ class Seestar:
         while True:
             try:
                 if len(self.event_queue) == 0:
-                    time.sleep(2)
+                    time.sleep(0.1)
                     continue
                 event = self.event_queue.popleft()
                 try:
-                    del event["Timestamp"] # Safety first...
+                    del event["Timestamp"]  # Safety first...
                 except:
                     pass
                 # print(f"Fetched event {self.device_name}")
                 ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-5]
                 frame = (b'data: <pre>' +
-                        ts.encode('utf-8') +
-                        b': ' +
-                        json.dumps(event).encode('utf-8') +
-                        b'</pre>\n\n')
+                         ts.encode('utf-8') +
+                         b': ' +
+                         json.dumps(event).encode('utf-8') +
+                         b'</pre>\n\n')
+                event_name = pydash.get(event, "Event")
+                if event_name == 'FocuserMove':
+                    frame += (b'event: focusMove\ndata: ' + str(event['position']).encode('utf-8') + b'\n\n')
+
                 yield frame
             except GeneratorExit:
                 break
             except:
-                time.sleep(2)
-
+                time.sleep(1)
