@@ -78,7 +78,7 @@ Rename the directory that you are currently using for the code and download and 
     ```
     This will ensure the apps like `git` and `python3` are installed.
     ##### Check python version
-    You need version 3.12 or greater of python
+    You need version 3.12.7 or less. 3.13 or higher is currently not supported.
     ```
     python --version
     ```
