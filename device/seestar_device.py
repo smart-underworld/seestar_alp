@@ -17,7 +17,7 @@ import numpy as np
 
 import tzlocal
 import queue
-
+import pydash
 from device.config import Config
 from device.version import Version # type: ignore
 from device.seestar_util import Util
