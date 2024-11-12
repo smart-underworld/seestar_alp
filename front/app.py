@@ -389,6 +389,7 @@ def do_action_device(action, dev_num, parameters, is_schedule=False):
 
     if is_schedule:
         queue_action(dev_num, payload)
+        ScheduleExportResource.persist_local(dev_num)
 
 
 def do_schedule_action_device(action, parameters, dev_num):
@@ -1742,6 +1743,16 @@ class ScheduleExportResource:
             flash(resp, "No schedule to export")
             redirect(f"/{telescope_id}/schedule")
 
+    @staticmethod
+    def persist_local(telescope_id=1):
+        if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+            sched_file = os.path.abspath(os.path.join(sys._MEIPASS, f"schedule_{telescope_id}.csv"))
+        else:
+            sched_file = os.path.join(os.path.dirname(__file__), f"../data/schedule_{telescope_id}.csv")
+
+        file_content = export_schedule(telescope_id).encode('utf-8')
+        with open(sched_file, "wb+") as f:
+            f.write(file_content)
 
 class ScheduleImportResource:
     @staticmethod
@@ -1753,6 +1764,21 @@ class ScheduleImportResource:
         import_schedule(string_data, telescope_id)
         flash(resp, f"Schedule imported from {filename}.")
         redirect(f"/{telescope_id}/schedule")
+
+    @staticmethod
+    def load_local(telescope_id=1):
+        if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+            sched_file = os.path.abspath(os.path.join(sys._MEIPASS, f"schedule_{telescope_id}.csv"))
+        else:
+            sched_file = os.path.join(os.path.dirname(__file__), f"../data/schedule_{telescope_id}.csv")
+
+        try:
+            with open(sched_file, "rb") as f:
+                dat = f.read().decode('utf-8').splitlines()
+                import_schedule(dat, telescope_id)
+        except FileNotFoundError:
+            print(f"import failed for {telescope_id}")
+            pass
 
 class EventStatus:
     @staticmethod
@@ -2935,6 +2961,10 @@ class FrontMain:
             # Check for internet connection
             global internet_connection
             internet_connection = check_internet_connection()
+
+            # Load persistent data
+            for dev in Config.seestars:
+                ScheduleImportResource.load_local(dev['device_num'])
 
             # Serve until process is killed
             self.httpd.serve_forever()
