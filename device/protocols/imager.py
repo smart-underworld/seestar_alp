@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from io import BytesIO
 from struct import unpack, calcsize
-from time import sleep
+from time import sleep, time
 from typing import Optional, Tuple, List
 
 import cv2
@@ -64,6 +64,10 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
         self.send_message('{"id": 21, "method": "begin_streaming"}' + "\r\n")
 
     def stop_preview(self):
+        with self.lock:
+            self.raw_img = None
+            self.raw_img_size = [None, None]
+
         self.send_message('{"id": 22, "method": "stop_streaming"}' + "\r\n")
 
     def start(self):
@@ -126,7 +130,7 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
             if not self.is_streaming():
                 self._run_receive_message()
             else:
-                sleep(1)
+                sleep(0.25)
 
         self.logger.info("STOPPING image receiving thread")
 
@@ -141,7 +145,7 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
                 # print("Streaming loop")
                 self._run_streaming_loop()
 
-            sleep(1)  # Wait a second before trying to reconnect...
+            sleep(0.25)  # Wait a second before trying to reconnect...
 
         self.logger.info("STOPPING image stream receiving thread")
 
@@ -151,7 +155,10 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
             size, _id, width, height = self.parse_header(header)
             data = None
             if size is not None:
+                # ts = time()
                 data = self.recv_exact(size)
+                # te = time()
+                # print(f'imaging receive took {te - ts:2.4f} seconds')
 
             # This isn't a payload message, so skip it.  xxx: probably header item to indicate this...
             if size < 1000:
@@ -201,6 +208,7 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
                                 self.logger.debug(f"Read {self._received_frame} images {self.is_streaming=}")
                         else:
                             empty_images += 1
+                            sleep(0.1)
 
                     sleep(0.025)
 

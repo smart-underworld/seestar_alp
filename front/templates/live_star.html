@@ -1,31 +1,51 @@
 {% extends 'live_base.html' %}
 
 {% block header %}
-    <h1 class="text-center mb-3">{% block title %}Live View - Star{% endblock %}</h1>
+  <h1 class="text-center mb-3">{% block title %}Live View - Star{% endblock %}</h1>
 {% endblock %}
 
 {% block live_content %}
-    <div class="container">
-        <div class="row justify-content-md-center g-3">
-            <div class="col-md-auto">
-                <img id="liveViewImg" src="{{ imager_root }}/vid" alt="Live view image"
-                     style="max-height: 80vh; max-width: 100%"/>
+  <div class="container">
+    <div class="row justify-content-md-center g-3">
+      <div class="col-md-auto">
+        {#                <div hx-ext="sse" sse-connect="{{ imager_root }}/live/status" class="dimmable position-absolute m-5" style="inset: 0;">#}
+        {#                    <div sse-swap="message"></div>#}
+        {#                    <div sse-swap="statusUpdate" class="d-none"></div>#}
+        {#                    <div sse-swap="liveViewModeChange" class="d-none"></div>#}
+        {#                </div>#}
+        <img id="liveViewImg" src="{{ imager_root }}/vid" alt="Live view image"
+             style="max-height: 80vh; max-width: 100%"/>
+      </div>
+
+      <div class="col-md-auto">
+        {% include 'partials/live_movement_control.html' with context %}
+
+        <div class="card card-body p-3 mb-3">
+          <div class="">
+            <div class="me-3 d-flex mb-3 gap-3">
+              {% include 'partials/live_controls_record.html' with context %}
+              {#              {% include 'partials/live_controls_goto.html' with context %}#}
             </div>
 
-            <div class="col-md-auto">
-                {% include 'partials/live_movement_control.html' with context %}
-
-                {% include 'partials/live_card_controls.html' with context %}
-
-                {% include 'partials/live_card_status.html' with context %}
-
-                <div id="movement-controls" class="mb-3 d-flex flex-column">
-                    {% include 'partials/live_controls_mode_none.html' with context %}
-                </div>
+            <div class="me-3 mb-3 d-flex">
+              {% include 'partials/live_controls_focus.html' with context %}
             </div>
+
+            {# <div class="me-3 d-flex"> #}
+            {# {% include 'partials/live_controls_exposure.html' with context %} #}
+            {# </div> #}
+          </div>
         </div>
-        <div class="row mt-3">
-            {% include 'partials/events.html' with context %}
+
+        {% include 'partials/live_card_status.html' with context %}
+
+        <div id="movement-controls" class="mb-3 d-flex flex-column">
+          {% include 'partials/live_controls_mode_none.html' with context %}
         </div>
+      </div>
     </div>
+    <div class="row mt-3">
+      {% include 'partials/events.html' with context %}
+    </div>
+  </div>
 {% endblock %}

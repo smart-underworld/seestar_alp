@@ -145,7 +145,7 @@ if __name__ == "__main__":
 
         # telescope.telescopes()
 
-        waitress.serve(app, host=Config.ip_address, port=Config.imgport, threads=10, channel_timeout=30)
+        waitress.serve(app, host=Config.ip_address, port=Config.imgport, threads=15, channel_timeout=30)
     else:
         n.notify("READY=1")
         print("Startup Complete")
