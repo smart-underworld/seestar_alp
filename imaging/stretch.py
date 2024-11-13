@@ -3,6 +3,7 @@
 #
 
 import multiprocessing
+from enum import Enum
 
 multiprocessing.freeze_support()
 
@@ -19,15 +20,19 @@ class MTFStretchParameters:
     highlight_clipping: float = 1.0
 
 
+StretchParameter = Enum('StretchParameter',
+                        ["No Stretch", "10% Bg, 3 sigma", "15% Bg, 3 sigma", "20% Bg, 3 sigma", "30% Bg, 2 sigma"])
+
+
 class StretchParameters:
-    stretch_option: str
+    stretch_option: StretchParameter
     bg: float
     sigma: float
     do_stretch: bool = True
     channels_linked: bool = False
     images_linked: bool = False
 
-    def __init__(self, stretch_option: str, channels_linked: bool = False, images_linked: bool = False):
+    def __init__(self, stretch_option: StretchParameter, channels_linked: bool = False, images_linked: bool = False):
         self.stretch_option = stretch_option
         self.channels_linked = channels_linked
         self.images_linked = images_linked
@@ -111,7 +116,7 @@ def calculate_mtf_stretch_parameters_for_channel(stretch_params, channel):
 
 
 def stretch_channel(shm_name, c, mtf_stretch_params, shape, dtype):
-    #logging.info("stretch.stretch_channel started")
+    # logging.info("stretch.stretch_channel started")
     existing_shm = shared_memory.SharedMemory(name=shm_name)
     channels = np.ndarray(shape, dtype, buffer=existing_shm.buf)  # [:,:,channel_idx]
     channel = channels[:, :, c]
@@ -124,7 +129,7 @@ def stretch_channel(shm_name, c, mtf_stretch_params, shape, dtype):
                                      channel < mtf_stretch_params.highlight_clipping)
 
         channel[indx_inside] = (channel[indx_inside] - mtf_stretch_params.shadow_clipping) / (
-                mtf_stretch_params.highlight_clipping - mtf_stretch_params.shadow_clipping)
+            mtf_stretch_params.highlight_clipping - mtf_stretch_params.shadow_clipping)
 
         channel = MTF(channel, mtf_stretch_params.midtone)
     except:
