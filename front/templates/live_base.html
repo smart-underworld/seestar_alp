@@ -36,9 +36,11 @@
                                 }
                             }
                             navigating = true;
-                        } else {
-                            updateModeButtons(mode);
-                            updateMovementControls(stage);
+                        }
+
+                        if (!navigating) {
+                          updateModeButtons(mode);
+                          updateMovementControls(stage);
                         }
                     }
                         break;
