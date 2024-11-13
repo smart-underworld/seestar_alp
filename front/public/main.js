@@ -425,3 +425,31 @@ function handleItemSelection(item) {
     document.getElementById('useLpFilter').checked = false;
     document.getElementById("useJ2000").checked = true;
 }
+
+function addSeestar(){
+    var lastElement = document.getElementById('devicecount');
+    var devicecount = parseInt(document.getElementById('devicecount').value) + 1;
+    
+       
+    var insertBlock = '<label class="form-label"><b>Device number' + devicecount +'</b></label><br>\n';
+    insertBlock += '<label for="name_{' + devicecount + '}" class="form-label">Name: </label> <input name="name" id="name_' + devicecount + '" type="text" value=""><br>\n';
+    insertBlock += '<label for="ip_address_' + devicecount + ' class="form-label">IP Address: </label> <input name="ss_ip" id="ip_address_' + devicecount + '" type="text" value=""><br><br>\n';
+
+    lastElement.insertAdjacentHTML('afterend', insertBlock);
+
+    document.getElementById('devicecount').value = devicecount
+
+}
+
+function delSeestar() {
+    // Get all the checkboxes
+    var elements = document.querySelectorAll('[id^=delete]');
+    var devicecount = parseInt(document.getElementById('devicecount').value);
+    for (const cb of elements) {
+        if (cb.checked == true) {
+            cb.parentNode.remove();
+            document.getElementById('devicecount').value = devicecount -1;
+        }
+    }
+
+}

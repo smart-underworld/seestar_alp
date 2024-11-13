@@ -173,6 +173,22 @@ class _Config:
         """
         Save the config html form into a toml file
         """
+
+        # seestar devices
+        self.seestars = [] # reset array
+        self._dict['seestars'].clear() # reset AOT dictionary
+        deviceCount = req.media['devicecount'] # get the number of current devices
+        for devNum in range(0, int(deviceCount)):
+            if int(deviceCount) > 1:
+                ss_name = req.media[f'name'][devNum]
+                ss_ip = req.media[f'ss_ip'][devNum]
+            else:
+                ss_name = req.media[f'name']
+                ss_ip = req.media[f'ss_ip']
+            self.seestars.append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1}) # add to local config
+            self._dict['seestars'].append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1}) # add to toml config
+                
+
         # network
         self.set_toml('network', 'ip_address', req.media['ip_address'])
         self.set_toml('network', 'port', int(req.media['port']))
@@ -285,14 +301,34 @@ class _Config:
         ret += '</select><br>\n'
         return ret
 
-    def render_config_section(self, title, content):
+    def render_config_section(self, title, content, id=''):
         """
         Render config html config section div
         """
-        return '<div class="card-body border">' + \
-			   f'<h5 class="card-title">{title}</h5>' + \
+        if id != '':
+            divtxt = f'<div class="card-body border" id="{id}">'
+        else:
+            divtxt = f'<div class="card-body border">'
+
+        return divtxt + \
+			   f'<h5 class="card-title">{title}<br></h5>' + \
                content + \
                '</div>\n'
+    def render_seestars(self):
+        """
+        Render list of seestars
+        """
+        ret = '\n'
+        for seestar in self.seestars:
+            ret += f'<div id="device_div_{seestar["device_num"]}">\n'
+            ret += f'<label class="form-label"><b>Device number {seestar["device_num"]}</b></label><br>\n'
+            ret += f'<label for="name_{seestar["device_num"]}" class="form-label">Name: </label> <input name="name" id="name_{seestar["device_num"]}" type="text" value="{seestar["name"]}"><br>\n'
+            ret += f'<label for="ip_address_{seestar["device_num"]}" class="form-label">IP Address: </label> <input name="ss_ip" id="ip_address_{seestar["device_num"]}" type="text" value="{seestar["ip_address"]}"><br>\n'
+            ret += self.render_checkbox('delete',"Delete device",False) + "<br>\n"
+            ret += '</div>\n'
+        ret += f'<input type="hidden" id="devicecount" name="devicecount" value="{len(self.seestars)}">\n'
+        ret += '<button style="margin:5px;" type="button" class="btn btn-primary" id="add_seestar" onclick="addSeestar()">Add Seestar Device</button>  <button style="margin:5px;" type="button" class="btn btn-primary" id="del_Seestar" onclick="delSeestar()">Delete selected Seestar(s)</button>'
+        return ret
 
     def render_config_html(self):
         """
@@ -358,6 +394,7 @@ class _Config:
                 self.render_text('scope_aim_lat', 'Scope aim latitude:', self.scope_aim_lat) + \
                 self.render_text('scope_aim_lon', 'Scope aim longitude:', self.scope_aim_lon) + \
                 self.render_checkbox('is_EQ_mode', 'Scope in EQ Mode:', self.is_EQ_mode)
-            )
+            ) + \
+            self.render_config_section('Seestar Devices',self.render_seestars(),'seestar_devices')
 
 Config = _Config()
