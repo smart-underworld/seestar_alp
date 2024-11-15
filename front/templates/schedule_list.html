@@ -46,6 +46,8 @@
                     <div class="col-2 align-self-start">Set exposure ...</div>
                 {% elif item["action"] == 'shutdown' %}
                     <div class="col-2 align-self-start">Shutdown</div>
+                {% elif item["action"] == 'scope_park' %}
+                    <div class="col-2 align-self-start">Scope Park</div>
                 {% elif item["action"] == 'set_wheel_position' %}
 
 					{% if item["params"] == [2] %}

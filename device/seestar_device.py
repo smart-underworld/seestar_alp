@@ -1708,7 +1708,10 @@ class Seestar:
                     time.sleep(5)
                     self.event_state["scheduler"]["cur_scheduler_item"]["current time"] = f"{local_time.hour:02d}:{local_time.minute:02d}"
             else:
-                request = {'method': action, 'params': cur_schedule_item['params']}
+                if 'params' in cur_schedule_item:
+                    request = {'method': action, 'params': cur_schedule_item['params']}
+                else:
+                    request = {'method': action}
                 self.send_message_param_sync(request)
             index += 1
         self.reset_below_horizon_dec_offset()

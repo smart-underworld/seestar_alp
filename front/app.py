@@ -393,11 +393,13 @@ def do_action_device(action, dev_num, parameters, is_schedule=False):
 
 def do_schedule_action_device(action, parameters, dev_num):
     if parameters:
+        print(f"XXX1 {action} -- {parameters}")
         return do_action_device("add_schedule_item", dev_num, {
             "action": action,
             "params": parameters
         }, True)
     else:
+        print(f"XXX2 {action} -- {parameters}")
         return do_action_device("add_schedule_item", dev_num, {
             "action": action
         }, True)
@@ -1263,6 +1265,8 @@ def import_schedule(input, telescope_id):
                                            "selected_panels": selected_panels}, int(telescope_id))
             case "shutdown":
                 do_schedule_action_device("shutdown", "", telescope_id)
+            case "scope_park":
+                do_schedule_action_device("scope_park", {}, telescope_id)
             case 'set_wheel_position':
                 try:
                     int_nokey = int(nokey[1])
@@ -1619,6 +1623,17 @@ class ScheduleShutdownResource:
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_shutdown.html', 'shutdown', {}, {})
 
+class ScheduleParkResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_park.html', 'scope_park', {}, {})
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        response = do_schedule_action_device("scope_park", {}, telescope_id)
+        if check_api_state(telescope_id):
+            check_response(resp, response)
+        render_schedule_tab(req, resp, telescope_id, 'schedule_park.html', 'scope_park', {}, {})
 
 class ScheduleLpfResource:
     @staticmethod
@@ -2920,6 +2935,7 @@ class FrontMain:
         app.add_route('/schedule/mosaic', ScheduleMosaicResource())
         app.add_route('/schedule/online', ScheduleGoOnlineResource())
         app.add_route('/schedule/shutdown', ScheduleShutdownResource())
+        app.add_route('/schedule/park', ScheduleParkResource())
         app.add_route('/schedule/lpf', ScheduleLpfResource())
         app.add_route('/schedule/dew-heater', ScheduleDewHeaterResource())
         app.add_route('/schedule/state', ScheduleToggleResource())
@@ -2960,6 +2976,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule/mosaic', ScheduleMosaicResource())
         app.add_route('/{telescope_id:int}/schedule/online', ScheduleGoOnlineResource())
         app.add_route('/{telescope_id:int}/schedule/shutdown', ScheduleShutdownResource())
+        app.add_route('/{telescope_id:int}/schedule/park', ScheduleParkResource())
         app.add_route('/{telescope_id:int}/schedule/lpf', ScheduleLpfResource())
         app.add_route('/{telescope_id:int}/schedule/dew-heater', ScheduleDewHeaterResource())
         app.add_route('/{telescope_id:int}/schedule/state', ScheduleToggleResource())
