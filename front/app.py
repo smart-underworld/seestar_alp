@@ -393,13 +393,11 @@ def do_action_device(action, dev_num, parameters, is_schedule=False):
 
 def do_schedule_action_device(action, parameters, dev_num):
     if parameters:
-        print(f"XXX1 {action} -- {parameters}")
         return do_action_device("add_schedule_item", dev_num, {
             "action": action,
             "params": parameters
         }, True)
     else:
-        print(f"XXX2 {action} -- {parameters}")
         return do_action_device("add_schedule_item", dev_num, {
             "action": action
         }, True)
@@ -1183,7 +1181,8 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
 
 
 FIXED_PARAMS_KEYS = ["local_time", "timer_sec", "try_count", "target_name", "is_j2000", "ra", "dec", "is_use_lp_filter",
-                     "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus", "heater", "nokey", "selected_panels"]
+                     "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus", "heater",
+                     "nokey", "selected_panels", "raise_arm", "auto_focus", "3ppa", "dark_frames"]
 
 
 def export_schedule(telescope_id):
@@ -1238,7 +1237,7 @@ def import_schedule(input, telescope_id):
             logger.warn(f"Skipping bad line: Line has {len(fields)} fields, expected {fixed_params_length}")
             continue
 
-        (action, local_time, timer_sec, try_count, target_name, is_j2000, ra, dec, is_use_lp_filter, session_time_sec, ra_num, dec_num, panel_overlap_percent, gain, is_use_autofocus, heater, nokey, selected_panels) = fields
+        (action, local_time, timer_sec, try_count, target_name, is_j2000, ra, dec, is_use_lp_filter, session_time_sec, ra_num, dec_num, panel_overlap_percent, gain, is_use_autofocus, heater, nokey, selected_panels, raise_arm, auto_focus, polar_align, dark_frames) = fields
 
         match action:
             case "action":
@@ -1281,6 +1280,15 @@ def import_schedule(input, telescope_id):
                     logger.warn(f"Skipping bad Line in Schedule: {e}")
             case 'action_set_dew_heater':
                 do_schedule_action_device("action_set_dew_heater", {"heater": int(heater)}, telescope_id)
+            case 'start_up_sequence':
+                do_schedule_action_device("start_up_sequence",
+                                          {
+                                            "raise_arm": raise_arm,
+                                            "auto_focus": auto_focus,
+                                            "3ppa": polar_align,
+                                            "dark_frames": dark_frames
+                                          },
+                                          telescope_id)
             case '_':
                 pass
 
@@ -1502,11 +1510,11 @@ class MosaicResource:
 class ScheduleResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
-        render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
+        render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
 
     @staticmethod
     def on_post(req, resp, telescope_id=0):
-        render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
+        render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
 
 
 class ScheduleListResource:
@@ -1610,6 +1618,24 @@ class ScheduleMosaicResource:
         values, errors = do_create_mosaic(req, resp, True, telescope_id)
         render_schedule_tab(req, resp, telescope_id, 'schedule_mosaic.html', 'mosaic', values, errors)
 
+
+class ScheduleStartupResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        form = req.media
+        raise_arm = form.get("raise_arm") == "on"
+        auto_focus = form.get("auto_focus") == "on"
+        polar_align = form.get("polar_align") == "on"
+        dark_frames = form.get("dark_frames") == "on"
+
+        response = do_schedule_action_device("start_up_sequence", {"auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm},  telescope_id)
+        if check_api_state(telescope_id):
+            check_response(resp, response)
+        render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
 
 class ScheduleShutdownResource:
     @staticmethod
@@ -2934,6 +2960,7 @@ class FrontMain:
         app.add_route('/schedule/list', ScheduleListResource())
         app.add_route('/schedule/mosaic', ScheduleMosaicResource())
         app.add_route('/schedule/online', ScheduleGoOnlineResource())
+        app.add_route('/schedule/startup', ScheduleStartupResource())
         app.add_route('/schedule/shutdown', ScheduleShutdownResource())
         app.add_route('/schedule/park', ScheduleParkResource())
         app.add_route('/schedule/lpf', ScheduleLpfResource())
@@ -2975,6 +3002,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule/list', ScheduleListResource())
         app.add_route('/{telescope_id:int}/schedule/mosaic', ScheduleMosaicResource())
         app.add_route('/{telescope_id:int}/schedule/online', ScheduleGoOnlineResource())
+        app.add_route('/{telescope_id:int}/schedule/startup', ScheduleStartupResource())
         app.add_route('/{telescope_id:int}/schedule/shutdown', ScheduleShutdownResource())
         app.add_route('/{telescope_id:int}/schedule/park', ScheduleParkResource())
         app.add_route('/{telescope_id:int}/schedule/lpf', ScheduleLpfResource())

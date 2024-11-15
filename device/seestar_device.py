@@ -1707,6 +1707,16 @@ class Seestar:
                         break
                     time.sleep(5)
                     self.event_state["scheduler"]["cur_scheduler_item"]["current time"] = f"{local_time.hour:02d}:{local_time.minute:02d}"
+            elif action == 'start_up_sequence':
+                item_state = {"type": "start up", "schedule_item_id": self.schedule['current_item_id'], "action": "start up"}
+                self.update_scheduler_state_obj(item_state)
+                #self.start_up_thread_fn(cur_schedule_item['params'])
+                startup_thread = threading.Thread(name=f"start-up-thread:{self.device_name}", target=lambda: self.start_up_thread_fn(cur_schedule_item['params']))
+                startup_thread.start()
+                time.sleep(2)
+                while startup_thread.is_alive():
+                    update_time()
+                    time.sleep(2)
             else:
                 if 'params' in cur_schedule_item:
                     request = {'method': action, 'params': cur_schedule_item['params']}
