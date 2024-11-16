@@ -273,7 +273,16 @@
         astro_mosaic = AstroMosaicEngine(astro_mosaic_search_text.value, viewer_params, "aladin-div", "day-div", "year-div", "radec-div");
     }
 
-    window.addEventListener("resize", update_astro_mosaic);
+    // Resize debounce
+    let astro_mosaic_resizeTimeout;
+
+    window.addEventListener('resize', () => {
+        clearTimeout(astro_mosaic_resizeTimeout);
+        astro_mosaic_resizeTimeout = setTimeout(() => {
+            console.log("Window resizing finished, updating astro mosaic");
+            update_astro_mosaic();
+        }, 300); // Adjust the delay as needed
+    });
 
     const send_to_schedule_modal = document.getElementById("send_to_schedule_modal");
     const open_send_to_schedule_modal_btn = document.getElementById("open_send_to_schedule_modal_btn");
