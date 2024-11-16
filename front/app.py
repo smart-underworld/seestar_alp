@@ -285,6 +285,14 @@ def get_planning_cards():
     else:
         card_state_file_location = os.path.join(os.path.dirname(__file__), "planning.json")
 
+    # Check to see if there is cached planning.json, if not create it.
+    if not os.path.isfile(card_state_file_location):
+        if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+            card_state_example_file_location = os.path.abspath(os.path.join(sys._MEIPASS, "planning.json.example"))
+        else:
+            card_state_example_file_location = os.path.join(os.path.dirname(__file__), "planning.json.example")
+        shutil.copyfile(card_state_example_file_location, card_state_file_location)
+    
     with open(card_state_file_location, 'r') as card_state_file:
         state_data = json.load(card_state_file)
         return state_data
