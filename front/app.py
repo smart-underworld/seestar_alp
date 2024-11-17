@@ -914,7 +914,7 @@ def do_command(req, resp, telescope_id):
             if not lat or not long:
                 output = do_action_device("action_start_up_sequence", telescope_id, {"auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
             else:
-                output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long, "auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
+                output = do_action_device("action_start_up_sequence", telescope_id, {"lat": float(lat), "lon": float(long), "auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
             return output
         case "adjust_mag_declination":
             adjust_mag_dec = form.get("adjust_mag_dec","False").strip() == "on"
