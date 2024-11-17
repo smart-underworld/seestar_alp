@@ -134,6 +134,7 @@ if __name__ == "__main__":
                             mimetype='text/event-stream')
 
 
+        @cross_origin()
         @app.route('/<dev_num>/vid')
         def vid(dev_num):
             return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(),
@@ -144,7 +145,7 @@ if __name__ == "__main__":
 
         # telescope.telescopes()
 
-        waitress.serve(app, host=Config.ip_address, port=Config.imgport, threads=10, channel_timeout=30)
+        waitress.serve(app, host=Config.ip_address, port=Config.imgport, threads=15, channel_timeout=30)
     else:
         n.notify("READY=1")
         print("Startup Complete")

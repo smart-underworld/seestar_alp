@@ -80,8 +80,8 @@ async function fetchCoordinates() {
                 const elements = data.trim().split(/\s+/);
                 document.getElementById('ra').value = elements[0];
                 document.getElementById('dec').value = elements[1];
-                document.getElementById('useLpFilter').checked = false;
                 document.getElementById("useJ2000").checked = true;
+                document.getElementById('useLpFilter').checked = false;
                 if (elements[2] == 'on') 
                     document.getElementById('useLpFilter').checked = true;
             })
@@ -155,8 +155,8 @@ async function fetchCoordinates() {
                     
                     document.getElementById('ra').value = elements.ra;
                     document.getElementById('dec').value = elements.dec;
-                    document.getElementById('useLpFilter').checked = false;
                     document.getElementById("useJ2000").checked = true;
+                    document.getElementById('useLpFilter').checked = false;
                 };
             });
             break;
@@ -189,18 +189,18 @@ async function fetchCoordinates() {
                     cometData = JSON.parse(data);
                     if (cometData.length > 1) {
                         openItemModal(cometData, 'cometName').then(selectedComet => {
-                        document.getElementById('ra').value = selectedComet.ra;
-                        document.getElementById('dec').value = selectedComet.dec;
-                        document.getElementById('targetName').value = selectedComet.cometName;
-                        document.getElementById('useLpFilter').checked = false;
-                        document.getElementById("useJ2000").checked = true;
+                            document.getElementById('ra').value = selectedComet.ra;
+                            document.getElementById('dec').value = selectedComet.dec;
+                            document.getElementById('targetName').value = selectedComet.cometName;
+                            document.getElementById("useJ2000").checked = true;
+                            document.getElementById('useLpFilter').checked = false;
                         });
                     } else {
                         document.getElementById('ra').value = cometData.ra;
                         document.getElementById('dec').value = cometData.dec;
                         document.getElementById('targetName').value = cometData.cometName;
-                        document.getElementById('useLpFilter').checked = false;
                         document.getElementById("useJ2000").checked = true;
+                        document.getElementById('useLpFilter').checked = false;
                     };
                 
                 };
@@ -235,8 +235,8 @@ async function fetchCoordinates() {
                     starData = JSON.parse(data);
                         document.getElementById('ra').value = starData["ra"];
                         document.getElementById('dec').value = starData["dec"];
-                        document.getElementById('useLpFilter').checked = false;
                         document.getElementById("useJ2000").checked = true;
+                        document.getElementById('useLpFilter').checked = false;
                     };
             });
         break;
@@ -424,4 +424,32 @@ function handleItemSelection(item) {
     document.getElementById('targetName').value = item.name || '';  // Use 'name' or other fields
     document.getElementById('useLpFilter').checked = false;
     document.getElementById("useJ2000").checked = true;
+}
+
+function addSeestar(){
+    var lastElement = document.getElementById('devicecount');
+    var devicecount = parseInt(document.getElementById('devicecount').value) + 1;
+    
+       
+    var insertBlock = '<label class="form-label"><b>Device number' + devicecount +'</b></label><br>\n';
+    insertBlock += '<label for="name_{' + devicecount + '}" class="form-label">Name: </label> <input name="name" id="name_' + devicecount + '" type="text" value=""><br>\n';
+    insertBlock += '<label for="ip_address_' + devicecount + ' class="form-label">IP Address: </label> <input name="ss_ip" id="ip_address_' + devicecount + '" type="text" value=""><br><br>\n';
+
+    lastElement.insertAdjacentHTML('afterend', insertBlock);
+
+    document.getElementById('devicecount').value = devicecount
+
+}
+
+function delSeestar() {
+    // Get all the checkboxes
+    var elements = document.querySelectorAll('[id^=delete]');
+    var devicecount = parseInt(document.getElementById('devicecount').value);
+    for (const cb of elements) {
+        if (cb.checked == true) {
+            cb.parentNode.remove();
+            document.getElementById('devicecount').value = devicecount -1;
+        }
+    }
+
 }

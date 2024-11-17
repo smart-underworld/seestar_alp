@@ -17,7 +17,7 @@ import numpy as np
 
 import tzlocal
 import queue
-
+import pydash
 from device.config import Config
 from device.version import Version # type: ignore
 from device.seestar_util import Util
@@ -1707,8 +1707,21 @@ class Seestar:
                         break
                     time.sleep(5)
                     self.event_state["scheduler"]["cur_scheduler_item"]["current time"] = f"{local_time.hour:02d}:{local_time.minute:02d}"
+            elif action == 'start_up_sequence':
+                item_state = {"type": "start up", "schedule_item_id": self.schedule['current_item_id'], "action": "start up"}
+                self.update_scheduler_state_obj(item_state)
+                #self.start_up_thread_fn(cur_schedule_item['params'])
+                startup_thread = threading.Thread(name=f"start-up-thread:{self.device_name}", target=lambda: self.start_up_thread_fn(cur_schedule_item['params']))
+                startup_thread.start()
+                time.sleep(2)
+                while startup_thread.is_alive():
+                    update_time()
+                    time.sleep(2)
             else:
-                request = {'method': action, 'params': cur_schedule_item['params']}
+                if 'params' in cur_schedule_item:
+                    request = {'method': action, 'params': cur_schedule_item['params']}
+                else:
+                    request = {'method': action}
                 self.send_message_param_sync(request)
             index += 1
         self.reset_below_horizon_dec_offset()
@@ -1829,23 +1842,26 @@ class Seestar:
         while True:
             try:
                 if len(self.event_queue) == 0:
-                    time.sleep(2)
+                    time.sleep(0.1)
                     continue
                 event = self.event_queue.popleft()
                 try:
-                    del event["Timestamp"] # Safety first...
+                    del event["Timestamp"]  # Safety first...
                 except:
                     pass
                 # print(f"Fetched event {self.device_name}")
                 ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-5]
                 frame = (b'data: <pre>' +
-                        ts.encode('utf-8') +
-                        b': ' +
-                        json.dumps(event).encode('utf-8') +
-                        b'</pre>\n\n')
+                         ts.encode('utf-8') +
+                         b': ' +
+                         json.dumps(event).encode('utf-8') +
+                         b'</pre>\n\n')
+                event_name = pydash.get(event, "Event")
+                if event_name == 'FocuserMove':
+                    frame += (b'event: focusMove\ndata: ' + str(event['position']).encode('utf-8') + b'\n\n')
+
                 yield frame
             except GeneratorExit:
                 break
             except:
-                time.sleep(2)
-
+                time.sleep(1)
