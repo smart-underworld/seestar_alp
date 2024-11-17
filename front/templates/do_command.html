@@ -1,4 +1,18 @@
 <div class="container">
+
+	<div class="row">
+		<div class="col-md-12 border border-primary p-3">
+			<h5 class="card-title pb-2">Output</h5>
+			<div id="outputAlert" class="alert alert-primary" role="alert">
+				{% if output %}
+					{{ output }}
+				{% else %}
+					<!-- Output will be placed here if any -->
+				{% endif %}
+			</div>
+		</div>
+	</div>
+
 	<div class="row">
 		<div class="col-md-6 border border-primary p-3">
 			<h5 class="card-title pb-2">Start-Up Sequence</h5>
@@ -49,13 +63,26 @@
 			</form>
 		</div>
 		<div class="col-md-6 border border-primary p-3">
-			<h5 class="card-title pb-2">Output</h5>
-			<div id="outputAlert" class="alert alert-primary" role="alert">
-				{% if output %}
-					{{ output }}
-				{% else %}
-					<!-- Output will be placed here if any -->
-				{% endif %}
+			<h5 class="card-title pb-2">Magnetic Declination Adjustment</h5>
+			<div class="row">
+				<div id="magdecform" class="col-md-6">
+					<form method="post" action="{{ action }}" class="bordered-form">
+						<input type="hidden" name="command" value="adjust_mag_declination">
+						<div class = "col-sm-6 mb-3">
+							<input type="checkbox" name="adjust_mag_dec" id="adjust_mag_dec" class="form-check-input">
+							<label class="form-check-label" for="adjust_mag_dec">Adjust Mag Dec</label>
+						</div>
+						<div class="col-sm-6 mb-3">
+							<label for="fudge_angle" class="form-label font-weight-bold">Add Offset</label>
+							<input type="text" class="form-control form-control-sm" id="fudge_angle" name="fudge_angle">
+						</div>
+						<button type="submit" class="btn btn-primary btn-sm">Execute</button>
+					</form>
+				</div>
+				<div id="magdec" class="col-md-6">
+					<p>Selecting the check box will adjust your magnetic declination to the value appropriate to your current location.  The 'Add Offset' can be used to adjust this further.</p>
+					<p><b>Please note, you should not use this unless you've recently performed a compass calibration at your present location.</b></p>
+				</div>
 			</div>
 		</div>
 	</div>

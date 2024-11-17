@@ -916,6 +916,17 @@ def do_command(req, resp, telescope_id):
             else:
                 output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long, "auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
             return output
+        case "adjust_mag_declination":
+            adjust_mag_dec = form.get("adjust_mag_dec","False").strip() == "on"
+            fudge_angle = form.get("fudge_angle","").strip()
+            if adjust_mag_dec:
+                if fudge_angle:
+                    output = do_action_device("adjust_mag_declination", telescope_id, {"adjust_mag_dec": adjust_mag_dec,"fudge_angle": float(fudge_angle)})
+                else:
+                    output = do_action_device("adjust_mag_declination", telescope_id, {"adjust_mag_dec": adjust_mag_dec})
+            else:
+                output = "Adjust Mag Dec not selected. No action taken."
+            return output
         case "get_event_state":
             output = do_action_device("get_event_state", telescope_id, {})
             return output
