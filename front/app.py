@@ -768,6 +768,8 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
+    num_tries = form.get("num_tries", 1)
+    retry_wait_s = form.get("retry_wait_s", 300)
     errors = {}
     values = {
         "target_name": targetName,
@@ -781,12 +783,16 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
         "panel_overlap_percent": int(panelOverlap),
         "selected_panels": panelSelect,
         "gain": int(gain),
-        "is_use_autofocus": useAutoFocus
+        "is_use_autofocus": useAutoFocus,
+        "num_tries": num_tries,
+        "retry_wait_s": retry_wait_s
     }
+
     if telescope_id == 0:
         splitMosaic = form.get("array_mode")
         if splitMosaic:
             values["array_mode"] = splitMosaic
+
     if not check_ra_value(ra):
         flash(resp, "Invalid RA value")
         errors["ra"] = ra
@@ -823,6 +829,8 @@ def do_create_image(req, resp, schedule, telescope_id):
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
+    num_tries = form.get("num_tries", 1)
+    retry_wait_s = form.get("retry_wait_s", 300)
     errors = {}
     values = {
         "target_name": targetName,
@@ -836,7 +844,9 @@ def do_create_image(req, resp, schedule, telescope_id):
         "panel_overlap_percent": int(panelOverlap),
         "selected_panels": panelSelect,
         "gain": int(gain),
-        "is_use_autofocus": useAutoFocus
+        "is_use_autofocus": useAutoFocus,
+        "num_tries": int(num_tries),
+        "retry_wait_s": int(retry_wait_s)
     }
 
     if not check_ra_value(ra):
