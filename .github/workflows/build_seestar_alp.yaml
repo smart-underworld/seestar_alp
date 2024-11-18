@@ -33,7 +33,7 @@ jobs:
           echo $git_version > ./version.txt
           pyinstaller --name="seestar_alp" `
           --add-data="device/config.toml.example;." --add-data="./version.txt;." --add-data="front/citation;astroquery" --add-data="front/templates;front/templates" --add-data="front/public;front/public" `
-          --add-data="front/planning.json;." --add-data="front/csc_sites.json;." --add-data="data/de440s.bsp;data/de440s.bsp" `
+          --add-data="front/planning.json.example;." --add-data="front/csc_sites.json;." --add-data="data/de440s.bsp;data/de440s.bsp" `
           --paths=./front --paths=./device `
           --collect-all=geomag `
           root_app.py
@@ -85,7 +85,7 @@ jobs:
           echo $git_version > ./version.txt
           pyinstaller --name="seestar_alp" \
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
-          --add-data="front/planning.json:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp" \
+          --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp" \
           --paths=./front --paths=./device \
           --collect-all=geomag \
           root_app.py
@@ -125,13 +125,13 @@ jobs:
 #        uses: actions/setup-python@v3
 #        with:
 #          python-version: 3.12
-#          
+#
 #      - name: Install dependencies
 #        run: |
 #          pip install -r requirements.txt
 #          python -m pip install pyinstaller
-#  
-#          
+#
+#
 #      - name: run pyinstaller for device
 #        id: create_device
 #        run: |
@@ -146,11 +146,11 @@ jobs:
 #          zip -r ../MacOS_seestar_alp.zip  ./seestar_alp/*
 #          echo "device_script_result=MacOS_seestar_alp.zip" >> $GITHUB_ENV
 #        shell: bash
-#  
+#
 #      - name: Display Result
 #        run: echo "The script result is ${{ env.device_script_result }}"
 #        shell: bash
-#        
+#
 #      - name: Upload Result as Asset
 #        uses: actions/upload-release-asset@v1
 #        env:
