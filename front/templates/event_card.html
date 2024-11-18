@@ -41,7 +41,7 @@
 
             {% if event_name == 'DarkLibrary' %}
                 {% if event_status and event_status.percent %}
-                    <strong>% Complete:</strong> {{ event_status.percent }}<br>
+                    <strong>% Complete:</strong> {{ event_status.percent | round(2) }}<br>
                 {% endif %}
             {% endif %}
 
