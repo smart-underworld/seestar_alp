@@ -1,5 +1,14 @@
 <ul class="nav nav-pills mb-3" id="actionTab">
     <li class="nav-item" role="presentation">
+        <a href="{{ root }}/schedule/startup"
+          class="nav-link {% if tab == "startup" %}active{% endif %}"
+          id="startup-tab"
+          type="button"
+          aria-controls="startup"
+          aria-selected="false">Startup
+        </a>
+    </li>
+    <li class="nav-item" role="presentation">
         <a href="{{ root }}/schedule/wait-until"
            class="nav-link {% if tab == "wait-until" %}active{% endif %}"
            id="wait-until-tab"
@@ -25,30 +34,6 @@
         </a>
     </li>
     <li class="nav-item" role="presentation">
-        <a href="{{ root }}/schedule/image"
-           class="nav-link {% if tab == "image" %}active{% endif %}"
-           type="button"
-           aria-controls="image"
-           aria-selected="false">Image
-        </a>
-    </li>
-    <li class="nav-item" role="presentation">
-        <a href="{{ root }}/schedule/mosaic"
-           class="nav-link {% if tab == "mosaic" %}active{% endif %}"
-           type="button"
-           aria-controls="mosaic"
-           aria-selected="false">Mosaic
-        </a>
-    </li>
-    <li class="nav-item" role="presentation">
-        <a href="{{ root }}/schedule/shutdown"
-           class="nav-link {% if tab == "shutdown" %}active{% endif %}"
-           type="button"
-           aria-controls="shutdown"
-           aria-selected="false">Shutdown
-        </a>
-    </li>
-    <li class="nav-item" role="presentation">
         <a href="{{ root }}/schedule/lpf"
            class="nav-link {% if tab == "lpf" %}active{% endif %}"
            type="button"
@@ -64,5 +49,37 @@
            aria-selected="false">Dew Heater
         </a>
     </li>
+    <li class="nav-item" role="presentation">
+      <a href="{{ root }}/schedule/image"
+         class="nav-link {% if tab == "image" %}active{% endif %}"
+         type="button"
+         aria-controls="image"
+         aria-selected="false">Image
+      </a>
+    </li>
+    <li class="nav-item" role="presentation">
+        <a href="{{ root }}/schedule/mosaic"
+          class="nav-link {% if tab == "mosaic" %}active{% endif %}"
+          type="button"
+          aria-controls="mosaic"
+          aria-selected="false">Mosaic
+        </a>
+    </li>
+    <li class="nav-item" role="presentation">
+      <a href="{{ root }}/schedule/park"
+         class="nav-link {% if tab == "park" %}active{% endif %}"
+         type="button"
+         aria-controls="park"
+         aria-selected="false">Park Scope
+      </a>
+    </li>
+    <li class="nav-item" role="presentation">
+      <a href="{{ root }}/schedule/shutdown"
+         class="nav-link {% if tab == "shutdown" %}active{% endif %}"
+         type="button"
+         aria-controls="shutdown"
+         aria-selected="false">Shutdown
+      </a>
+  </li>
 </ul>
 

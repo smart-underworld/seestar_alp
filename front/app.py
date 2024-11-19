@@ -285,6 +285,14 @@ def get_planning_cards():
     else:
         card_state_file_location = os.path.join(os.path.dirname(__file__), "planning.json")
 
+    # Check to see if there is cached planning.json, if not create it.
+    if not os.path.isfile(card_state_file_location):
+        if getattr(sys, "frozen", False):  # frozen means that we are running from a bundled app
+            card_state_example_file_location = os.path.abspath(os.path.join(sys._MEIPASS, "planning.json.example"))
+        else:
+            card_state_example_file_location = os.path.join(os.path.dirname(__file__), "planning.json.example")
+        shutil.copyfile(card_state_example_file_location, card_state_file_location)
+    
     with open(card_state_file_location, 'r') as card_state_file:
         state_data = json.load(card_state_file)
         return state_data
@@ -1181,7 +1189,8 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
 
 
 FIXED_PARAMS_KEYS = ["local_time", "timer_sec", "try_count", "target_name", "is_j2000", "ra", "dec", "is_use_lp_filter",
-                     "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus", "heater", "nokey", "selected_panels"]
+                     "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus", "heater",
+                     "nokey", "selected_panels", "raise_arm", "auto_focus", "3ppa", "dark_frames"]
 
 
 def export_schedule(telescope_id):
@@ -1236,7 +1245,7 @@ def import_schedule(input, telescope_id):
             logger.warn(f"Skipping bad line: Line has {len(fields)} fields, expected {fixed_params_length}")
             continue
 
-        (action, local_time, timer_sec, try_count, target_name, is_j2000, ra, dec, is_use_lp_filter, session_time_sec, ra_num, dec_num, panel_overlap_percent, gain, is_use_autofocus, heater, nokey, selected_panels) = fields
+        (action, local_time, timer_sec, try_count, target_name, is_j2000, ra, dec, is_use_lp_filter, session_time_sec, ra_num, dec_num, panel_overlap_percent, gain, is_use_autofocus, heater, nokey, selected_panels, raise_arm, auto_focus, polar_align, dark_frames) = fields
 
         match action:
             case "action":
@@ -1263,6 +1272,8 @@ def import_schedule(input, telescope_id):
                                            "selected_panels": selected_panels}, int(telescope_id))
             case "shutdown":
                 do_schedule_action_device("shutdown", "", telescope_id)
+            case "scope_park":
+                do_schedule_action_device("scope_park", {}, telescope_id)
             case 'set_wheel_position':
                 try:
                     int_nokey = int(nokey[1])
@@ -1277,6 +1288,15 @@ def import_schedule(input, telescope_id):
                     logger.warn(f"Skipping bad Line in Schedule: {e}")
             case 'action_set_dew_heater':
                 do_schedule_action_device("action_set_dew_heater", {"heater": int(heater)}, telescope_id)
+            case 'start_up_sequence':
+                do_schedule_action_device("start_up_sequence",
+                                          {
+                                            "raise_arm": raise_arm,
+                                            "auto_focus": auto_focus,
+                                            "3ppa": polar_align,
+                                            "dark_frames": dark_frames
+                                          },
+                                          telescope_id)
             case '_':
                 pass
 
@@ -1498,11 +1518,11 @@ class MosaicResource:
 class ScheduleResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
-        render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
+        render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
 
     @staticmethod
     def on_post(req, resp, telescope_id=0):
-        render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
+        render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
 
 
 class ScheduleListResource:
@@ -1607,6 +1627,24 @@ class ScheduleMosaicResource:
         render_schedule_tab(req, resp, telescope_id, 'schedule_mosaic.html', 'mosaic', values, errors)
 
 
+class ScheduleStartupResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        form = req.media
+        raise_arm = form.get("raise_arm") == "on"
+        auto_focus = form.get("auto_focus") == "on"
+        polar_align = form.get("polar_align") == "on"
+        dark_frames = form.get("dark_frames") == "on"
+
+        response = do_schedule_action_device("start_up_sequence", {"auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm},  telescope_id)
+        if check_api_state(telescope_id):
+            check_response(resp, response)
+        render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
+
 class ScheduleShutdownResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
@@ -1619,6 +1657,17 @@ class ScheduleShutdownResource:
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_shutdown.html', 'shutdown', {}, {})
 
+class ScheduleParkResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        render_schedule_tab(req, resp, telescope_id, 'schedule_park.html', 'scope_park', {}, {})
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        response = do_schedule_action_device("scope_park", {}, telescope_id)
+        if check_api_state(telescope_id):
+            check_response(resp, response)
+        render_schedule_tab(req, resp, telescope_id, 'schedule_park.html', 'scope_park', {}, {})
 
 class ScheduleLpfResource:
     @staticmethod
@@ -2919,7 +2968,9 @@ class FrontMain:
         app.add_route('/schedule/list', ScheduleListResource())
         app.add_route('/schedule/mosaic', ScheduleMosaicResource())
         app.add_route('/schedule/online', ScheduleGoOnlineResource())
+        app.add_route('/schedule/startup', ScheduleStartupResource())
         app.add_route('/schedule/shutdown', ScheduleShutdownResource())
+        app.add_route('/schedule/park', ScheduleParkResource())
         app.add_route('/schedule/lpf', ScheduleLpfResource())
         app.add_route('/schedule/dew-heater', ScheduleDewHeaterResource())
         app.add_route('/schedule/state', ScheduleToggleResource())
@@ -2959,7 +3010,9 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule/list', ScheduleListResource())
         app.add_route('/{telescope_id:int}/schedule/mosaic', ScheduleMosaicResource())
         app.add_route('/{telescope_id:int}/schedule/online', ScheduleGoOnlineResource())
+        app.add_route('/{telescope_id:int}/schedule/startup', ScheduleStartupResource())
         app.add_route('/{telescope_id:int}/schedule/shutdown', ScheduleShutdownResource())
+        app.add_route('/{telescope_id:int}/schedule/park', ScheduleParkResource())
         app.add_route('/{telescope_id:int}/schedule/lpf', ScheduleLpfResource())
         app.add_route('/{telescope_id:int}/schedule/dew-heater', ScheduleDewHeaterResource())
         app.add_route('/{telescope_id:int}/schedule/state', ScheduleToggleResource())

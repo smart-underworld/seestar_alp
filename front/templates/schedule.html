@@ -40,7 +40,10 @@
 {#        </ul>#}
 {##}
 {#        <div class="tab-content" id="actionTabContent">#}
-{#            <div class="tab-pane fade show active" id="wait-until" role="tabpanel" aria-labelledby="wait-until-tab">#}
+{#            <div class="tab-pane fade show active" id="park" role="tabpanel" aria-labelledby="startup-tab">#}
+{#                {% include 'schedule_startup.html' with context %}#}
+{#            </div>#}
+{#            <div class="tab-pane fade" id="wait-until" role="tabpanel" aria-labelledby="wait-until-tab">#}
 {#                {% include 'schedule_wait_until.html' with context %}#}
 {#            </div>#}
 {#            <div class="tab-pane fade" id="wait-for" role="tabpanel" aria-labelledby="wait-for-tab">#}
@@ -67,6 +70,9 @@
 {#            </div>#}
 {#            <div class="tab-pane fade" id="dew-heater" role="tabpanel" aria-labelledby="dew-heater-tab">#}
 {#                {% include 'schedule_dew_heater.html' with context %}#}
+{#            </div>#}
+{#            <div class="tab-pane fade" id="park" role="tabpanel" aria-labelledby="park-tab">#}
+{#                {% include 'schedule_park.html' with context %}#}
 {#            </div>#}
 {#        </div>#}
 {#    </div>#}
