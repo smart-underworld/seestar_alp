@@ -292,7 +292,7 @@ def get_planning_cards():
         else:
             card_state_example_file_location = os.path.join(os.path.dirname(__file__), "planning.json.example")
         shutil.copyfile(card_state_example_file_location, card_state_file_location)
-    
+
     with open(card_state_file_location, 'r') as card_state_file:
         state_data = json.load(card_state_file)
         return state_data
@@ -1259,11 +1259,11 @@ def import_schedule(input, telescope_id):
 
     if input_content.startswith("\ufeff"):
         input_content = input_content[1:]
-    
+
     cleaned_input = io.StringIO(input_content)
-    
+
     reader = csv.DictReader(cleaned_input)
-    
+
     for row in reader:
         row = {key: value.strip() for key, value in row.items()}
         action = row.pop('action', None)
@@ -1294,8 +1294,8 @@ def import_schedule(input, telescope_id):
             case "auto_focus":
                 do_schedule_action_device("auto_focus", {"try_count": params.get("try_count", 0)}, telescope_id)
             case "start_mosaic":
-                required_params = ["target_name", "ra", "dec", "is_j2000", "is_use_lp_filter", 
-                                   "is_use_autofocus", "session_time_sec", "ra_num", 
+                required_params = ["target_name", "ra", "dec", "is_j2000", "is_use_lp_filter",
+                                   "is_use_autofocus", "session_time_sec", "ra_num",
                                    "dec_num", "panel_overlap_percent", "gain", "selected_panels","num_tries","retry_wait_s","array_mode"]
                 mosaic_params = {key: value for key, value in params.items() if key in required_params}
                 do_schedule_action_device("start_mosaic", mosaic_params, telescope_id)
@@ -3101,6 +3101,7 @@ class FrontMain:
     def reload(self):
         global logger
         logger = get_logger()
+        Config.load_toml()
         logger.debug("FrontMain got reload")
 
 
