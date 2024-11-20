@@ -4,6 +4,7 @@ import tzlocal
 
 import falcon
 from falcon import HTTPTemporaryRedirect, HTTPFound
+from falcon import CORSMiddleware
 from astroquery.simbad import Simbad
 from jinja2 import Template, Environment, FileSystemLoader
 from wsgiref.simple_server import WSGIRequestHandler, make_server
@@ -2978,7 +2979,7 @@ class FrontMain:
     def start(self):
         """ Application startup"""
 
-        app = falcon.App()
+        app = falcon.App(middleware=falcon.CORSMiddleware(allow_origins='*', allow_credentials='*'))
         app.add_route('/', HomeResource())
         app.add_route('/command', CommandResource())
         app.add_route('/goto', GotoResource())
