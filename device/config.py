@@ -279,7 +279,7 @@ class _Config:
     #
     # HTML config rendering
     #
-    def render_text(self, name, label, value, description = ''):
+    def render_text(self, name, label, value, description='', required=False):
         """
         Render config html form text input
         """
@@ -288,12 +288,17 @@ class _Config:
         else:
             strType = 'text'
 
+        if required: 
+            valRequired = 'required'
+        else:
+            valRequired = ''
+        
         ret = f'''<div class="row mb-3 align-items-center"> <!-- Row -->
                             <div class="col-sm-4 text-end"> <!-- Col -->
                                 <label for="{name}" class="form-label">{label}</label>
                             </div> <!-- Close Col -->
                             <div class="col-sm-8 col-md-6"> <!-- Col -->
-                                <input id="{name}" name="{name}" type="{strType}" class="form-control" title="{description}" value="{value}">
+                                <input id="{name}" name="{name}" type="{strType}" class="form-control" title="{description}" value="{value}" {valRequired}>
                             </div> <!-- Close Col -->
                         </div> <!-- Close Row -->
                     '''
@@ -385,8 +390,8 @@ class _Config:
                                     <b>Device number {seestar["device_num"]}</b>
                                     </label>
                                 </div>
-                                {self.render_text('ss_name', "Name", seestar["name"])}
-                                {self.render_text('ss_ip_address', "IP Address", seestar["ip_address"])}
+                                {self.render_text('ss_name', "Name", seestar["name"], required=True)}
+                                {self.render_text('ss_ip_address', "IP Address", seestar["ip_address"], required=True)}
                                 {self.render_checkbox(f'delete_{seestar["device_num"]}',"Delete device",False)}
                             </div>
                                 
@@ -423,9 +428,9 @@ class _Config:
         return \
             self.render_config_section(
                 'Networking',
-                self.render_text('ip_address', 'IP address:', self.ip_address, 'IP address to open for communication, use 127.0.0.1 if running on one machine\n or use 0.0.0.0 to acess from all adresses') + \
-                self.render_text('port', 'Port:', self.port, 'Port that alpaca will run on (this should not need to be changed except in extreme cases) default 5555') + \
-                self.render_text('imgport', 'IMG Port:', self.imgport, 'Imaging API port (this should not need to be changed except in extreme cases) default 7556') + \
+                self.render_text('ip_address', 'IP address:', self.ip_address, 'IP address to open for communication, use 127.0.0.1 if running on one machine\n or use 0.0.0.0 to acess from all adresses', required=True) + \
+                self.render_text('port', 'Port:', self.port, 'Port that alpaca will run on (this should not need to be changed except in extreme cases) default 5555', required=True) + \
+                self.render_text('imgport', 'IMG Port:', self.imgport, 'Imaging API port (this should not need to be changed except in extreme cases) default 7556', required=True) + \
                 self.render_text('sthost', 'Stellarium host:', self.sthost, 'IP address of the machine running stellarium (127.0.0.1 if on same machine as ALP)') + \
                 self.render_text('stport', 'Stellarium port:', self.stport, 'Port to connect to stellarium on (default 8090)' ) + \
                 self.render_text('timeout', 'Timeout:', self.timeout, 'General socket timeout (this should not need to be changed except in extreme cases) default 5') + \
@@ -433,7 +438,7 @@ class _Config:
             ) + \
             self.render_config_section(
                 'Web UI',
-                self.render_text('uiport', 'UI port:', self.uiport,'Port to use for connecting to the frontend (SSC) default 5432') + \
+                self.render_text('uiport', 'UI port:', self.uiport,'Port to use for connecting to the frontend (SSC) default 5432', required=True) + \
                 self.render_select('uitheme', 'UI theme:', [ "dark", "light"], self.uitheme, 'Theme to use for the frontend') + \
                 self.render_checkbox('twilighttimes', 'Twilight times:', self.twilighttimes, 'Show twighlight times on schedule page') + \
                 self.render_checkbox('experimental', 'Experimental:', self.experimental, 'Show experimental features (Only recommeded for experienced users)') + \

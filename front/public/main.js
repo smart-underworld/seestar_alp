@@ -430,7 +430,7 @@ function addSeestar(){
     var devicecount = document.getElementsByName('ss_name').length + 1; //parseInt(document.getElementById('devicecount') + 1);
     var lastElement = document.getElementById(`device_div_${devicecount - 1}`);
        
-    var insertBlock = `\n<div id="device_div_${devicecount}">
+    var insertBlock = `<div id="device_div_${devicecount}">
                             <div class="col-sm-4 text-end">
                                 <label class="form-label"><b>Device number ${devicecount}</b></label>
                             </div>
@@ -439,7 +439,7 @@ function addSeestar(){
                                 <label for="ss_name" class="form-label">Name: </label>
                             </div>
                             <div class="col-sm-8 col-md-6">
-                                <input id="ss_name" name="ss_name" type="text" class="form-control" value="">
+                                <input id="ss_name" name="ss_name" type="text" class="form-control" value="" required>
                             </div>
                         </div>
                         <div class="row mb-3 align-items-center">
@@ -447,7 +447,7 @@ function addSeestar(){
                                 <label for="ss_ip_address" class="form-label">IP Address: </label>
                             </div>
                             <div class="col-sm-8 col-md-6">
-                                <input name="ss_ip_address" id="ss_ip_address" type="text" class="form-control" value="">
+                                <input name="ss_ip_address" id="ss_ip_address" type="text" class="form-control" value="" required>
                             </div>
                         </div>
                         <div class="row mb-3 align-items-center"> <!-- Checkbox Row -->
@@ -459,9 +459,7 @@ function addSeestar(){
                             <div class="col-sm-8 col-md-6"> <!-- Checkbox -->
                                 <input id="delete_${devicecount}" name="delete_${devicecount}" class="form-check-input" type="checkbox">
                             </div> <!--Close checkbox -->
-                        </div> <!-- Close checkbox row -->
-                        
-                        `;
+                        </div> <!-- Close checkbox row -->`;
 
     lastElement.insertAdjacentHTML('afterend', insertBlock);
     document.getElementById('devicecount').value = devicecount
