@@ -215,8 +215,8 @@ class _Config:
         self.set_toml('webui_settings', 'experimental', 'experimental' in req.media)
         self.set_toml('webui_settings', 'confirm', 'confirm' in req.media)
         self.set_toml('webui_settings', 'save_frames', 'save_frames' in req.media)
-        self.set_toml('webui_settings', 'save_frames_dir', 'save_frames_dir' in req.media)
-        self.set_toml('webui_settings', 'loading_gif', 'loading_gif' in req.media)
+        self.set_toml('webui_settings', 'save_frames_dir', 'save_frames_dir')
+        self.set_toml('webui_settings', 'loading_gif', 'loading_gif')
 
         # server
         self.set_toml('server', 'location', req.media['location'])
@@ -288,11 +288,11 @@ class _Config:
         else:
             strType = 'text'
 
-        if required: 
+        if required:
             valRequired = 'required'
         else:
             valRequired = ''
-        
+
         ret = f'''<div class="row mb-3 align-items-center"> <!-- Row -->
                             <div class="col-sm-4 text-end"> <!-- Col -->
                                 <label for="{name}" class="form-label">{label}</label>
@@ -313,7 +313,7 @@ class _Config:
             c="checked"
         else:
             c=""
-        
+
         ret = f'''<div class="row mb-3 align-items-center"> <!-- Checkbox Row -->
                             <div class="col-sm-4 text-end"> <!-- Checkbox label -->
                                 <label for="{name}" class="form-label">
@@ -364,7 +364,7 @@ class _Config:
             needID = f'id="{id}">'
         else:
             needID = '>'
-        
+
         divtxt += f'''<div class="card border-primary mb-3"> <!-- Card Border -->
                             <div class="card-header"> <!-- Card header -->
                                 <h3>{title}</h3>
@@ -377,7 +377,7 @@ class _Config:
                      </div> <!-- Close card border -->
                    '''
         return divtxt
-    
+
     def render_seestars(self):
         """
         Render list of seestars
@@ -394,9 +394,9 @@ class _Config:
                                 {self.render_text('ss_ip_address', "IP Address", seestar["ip_address"], required=True)}
                                 {self.render_checkbox(f'delete_{seestar["device_num"]}',"Delete device",False)}
                             </div>
-                                
+
                         '''
-            
+
         ret = f'''
                 <div class="row mb-3 align-items-center">
                     {ssHTML}
