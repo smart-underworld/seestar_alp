@@ -221,8 +221,8 @@ class _Config:
         self.set_toml('webui_settings', 'experimental', 'experimental' in req.media)
         self.set_toml('webui_settings', 'confirm', 'confirm' in req.media)
         self.set_toml('webui_settings', 'save_frames', 'save_frames' in req.media)
-        self.set_toml('webui_settings', 'save_frames_dir', 'save_frames_dir')
-        self.set_toml('webui_settings', 'loading_gif', 'loading_gif')
+        self.set_toml('webui_settings', 'save_frames_dir', req.media['save_frames_dir'])
+        self.set_toml('webui_settings', 'loading_gif', req.media['loading_gif'])
 
         # server
         self.set_toml('server', 'location', req.media['location'])
