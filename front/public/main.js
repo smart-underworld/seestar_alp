@@ -427,28 +427,52 @@ function handleItemSelection(item) {
 }
 
 function addSeestar(){
-    var lastElement = document.getElementById('devicecount');
-    var devicecount = parseInt(document.getElementById('devicecount').value) + 1;
-    
+    var devicecount = document.getElementsByName('ss_name').length + 1; //parseInt(document.getElementById('devicecount') + 1);
+    var lastElement = document.getElementById(`device_div_${devicecount - 1}`);
        
-    var insertBlock = '<label class="form-label"><b>Device number' + devicecount +'</b></label><br>\n';
-    insertBlock += '<label for="name_{' + devicecount + '}" class="form-label">Name: </label> <input name="name" id="name_' + devicecount + '" type="text" value=""><br>\n';
-    insertBlock += '<label for="ip_address_' + devicecount + ' class="form-label">IP Address: </label> <input name="ss_ip" id="ip_address_' + devicecount + '" type="text" value=""><br><br>\n';
+    var insertBlock = `<div id="device_div_${devicecount}">
+                            <div class="col-sm-4 text-end">
+                                <label class="form-label"><b>Device number ${devicecount}</b></label>
+                            </div>
+                            <div class="row mb-3 align-items-center">
+                            <div class="col-sm-4 text-end">
+                                <label for="ss_name" class="form-label">Name: </label>
+                            </div>
+                            <div class="col-sm-8 col-md-6">
+                                <input id="ss_name" name="ss_name" type="text" class="form-control" value="" required>
+                            </div>
+                        </div>
+                        <div class="row mb-3 align-items-center">
+                            <div class="col-sm-4 text-end">
+                                <label for="ss_ip_address" class="form-label">IP Address: </label>
+                            </div>
+                            <div class="col-sm-8 col-md-6">
+                                <input name="ss_ip_address" id="ss_ip_address" type="text" class="form-control" value="" required>
+                            </div>
+                        </div>
+                        <div class="row mb-3 align-items-center"> <!-- Checkbox Row -->
+                            <div class="col-sm-4 text-end"> <!-- Checkbox label -->
+                                <label for="delete_${devicecount}" class="form-label">
+                                    Delete device
+                                </label>
+                            </div> <!-- Close checkbox label -->
+                            <div class="col-sm-8 col-md-6"> <!-- Checkbox -->
+                                <input id="delete_${devicecount}" name="delete_${devicecount}" class="form-check-input" type="checkbox">
+                            </div> <!--Close checkbox -->
+                        </div> <!-- Close checkbox row -->`;
 
     lastElement.insertAdjacentHTML('afterend', insertBlock);
-
     document.getElementById('devicecount').value = devicecount
-
 }
 
 function delSeestar() {
     // Get all the checkboxes
-    var elements = document.querySelectorAll('[id^=delete]');
-    var devicecount = parseInt(document.getElementById('devicecount').value);
+    var elements = document.querySelectorAll('[id^=delete_]');
     for (const cb of elements) {
         if (cb.checked == true) {
-            cb.parentNode.remove();
-            document.getElementById('devicecount').value = devicecount -1;
+            var number = cb.name.split('_')[1];
+            var deviceDiv = document.getElementById('device_div_' + number);
+            deviceDiv.remove(deviceDiv);
         }
     }
 
