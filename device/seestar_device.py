@@ -1011,6 +1011,7 @@ class Seestar:
                 if "error" in response:
                     msg = "Failed to park scope. Need to restart Seestar and try again."
                     self.logger.error(msg)
+                    self.schedule['state'] == "stopping"
                     return msg
 
                 result = self.wait_end_op("ScopeHome")
@@ -1089,6 +1090,7 @@ class Seestar:
                 result = self.try_auto_focus(2)
                 if result == False:
                     self.logger.warn("Start-up sequence stopped and was unsuccessful.")
+                    self.schedule['state'] == "stopping"
                     return
 
             if self.schedule["state"] != "working":
@@ -1101,6 +1103,7 @@ class Seestar:
                 result = self.try_3PPA(1)
                 if result == False:
                     self.logger.warn("Start-up sequence stopped and was unsuccessful.")
+                    self.schedule['state'] == "stopping"
                     return
 
             if self.schedule["state"] != "working":
@@ -1114,6 +1117,7 @@ class Seestar:
                 result = self.try_dark_frame()
                 if result == False:
                     self.logger.warn("Start-up sequence stopped and was unsuccessful.")
+                    self.schedule['state'] == "stopping"
                     return
 
             if self.schedule["state"] != "working":
@@ -1133,7 +1137,12 @@ class Seestar:
                 self.logger.info(f"Goto operation finished with result code: {result}")
 
             self.logger.info(f"Start-up sequence result: {result}")
-            self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
+            
+            if result:
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
+            else:
+                self.schedule['state'] == "stopping"
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"]="stopping"
         finally:
             if self.schedule['state'] == "stopping":
                 self.schedule['state'] = "stopped"
