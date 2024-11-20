@@ -922,7 +922,7 @@ class Seestar:
     #                               "item_elapsed_time_s":123, "item_remaining_time":-1}
     #       }
 
-    def start_up_thread_fn(self, params):
+    def start_up_thread_fn(self, params, is_from_schedule = False):
         try:
             self.schedule['state'] = "working"
             self.logger.info("start up sequence begins ...")
@@ -1137,9 +1137,10 @@ class Seestar:
         finally:
             if self.schedule['state'] == "stopping":
                 self.schedule['state'] = "stopped"
-            else:
+                self.play_sound(82)
+            elif not is_from_schedule:
                 self.schedule['state'] = "complete"
-            self.play_sound(82)
+                self.play_sound(82)
 
     def action_set_dew_heater(self, params):
         return self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
@@ -1148,7 +1149,7 @@ class Seestar:
         if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete" :
             return self.json_result("start_up_sequence", -1, "Device is busy. Try later.")
 
-        move_up_dec_thread = threading.Thread(name=f"start-up-thread:{self.device_name}", target=lambda: self.start_up_thread_fn(params))
+        move_up_dec_thread = threading.Thread(name=f"start-up-thread:{self.device_name}", target=lambda: self.start_up_thread_fn(params, False))
         move_up_dec_thread.start()
         return self.json_result("start_up_sequence", 0, "Sequence started.")
 
@@ -1711,7 +1712,7 @@ class Seestar:
                 item_state = {"type": "start up", "schedule_item_id": self.schedule['current_item_id'], "action": "start up"}
                 self.update_scheduler_state_obj(item_state)
                 #self.start_up_thread_fn(cur_schedule_item['params'])
-                startup_thread = threading.Thread(name=f"start-up-thread:{self.device_name}", target=lambda: self.start_up_thread_fn(cur_schedule_item['params']))
+                startup_thread = threading.Thread(name=f"start-up-thread:{self.device_name}", target=lambda: self.start_up_thread_fn(cur_schedule_item['params'], True))
                 startup_thread.start()
                 time.sleep(2)
                 while startup_thread.is_alive():
