@@ -303,7 +303,8 @@ class DeviceMain:
             self.httpd.shutdown()
 
     def reload(self):
-        log.logger.debug("DeviceMain got reload; noop")
+        log.logger.debug("DeviceMain got reload")
+        Config.load_toml()
 
     def get_imager(self, device_num):
         return telescope.get_seestar_imager(device_num)
