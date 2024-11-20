@@ -72,6 +72,7 @@ class Seestar:
         self.mosaic_thread = None
         self.scheduler_thread = None
         self.schedule = {}
+        self.schedule['version'] = 1.0
         self.schedule['schedule_id'] = str(uuid.uuid4())
         self.schedule['list'] = collections.deque()
         self.schedule['state'] = "stopped"
@@ -1603,6 +1604,27 @@ class Seestar:
                 break
             index += 1
         return self.schedule
+
+    def export_schedule(self, params):
+        filepath = params["filepath"]
+        with open(filepath, 'w') as fp:
+            json.dump(self.schedule, fp, indent=4)
+        return 0
+
+    def import_schedule(self, params):
+        if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete":
+            return self.json_result("import_schedule", -1, "An existing scheduler is active. Returned with no action.")
+        filepath = params["filepath"]
+        is_retain_state = params["is_retain_state"]
+        with open(filepath, 'r') as f:
+            self.schedule = json.load(f)
+        
+        if not is_retain_state:
+            self.schedule['schedule_id'] = str(uuid.uuid4())
+            for item in self.schedule['list']:
+                item['id'] = str(uuid.uuid4())
+            self.schedule['state'] = "stopped"
+        return 0
 
     # shortcut to start a new scheduler with only a mosaic request
     def start_mosaic(self, params):
