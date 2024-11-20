@@ -449,7 +449,19 @@ function addSeestar(){
                             <div class="col-sm-8 col-md-6">
                                 <input name="ss_ip_address" id="ss_ip_address" type="text" class="form-control" value="">
                             </div>
-                        </div>`;
+                        </div>
+                        <div class="row mb-3 align-items-center"> <!-- Checkbox Row -->
+                            <div class="col-sm-4 text-end"> <!-- Checkbox label -->
+                                <label for="delete_${devicecount}" class="form-label">
+                                    Delete device
+                                </label>
+                            </div> <!-- Close checkbox label -->
+                            <div class="col-sm-8 col-md-6"> <!-- Checkbox -->
+                                <input id="delete_${devicecount}" name="delete_${devicecount}" class="form-check-input" type="checkbox">
+                            </div> <!--Close checkbox -->
+                        </div> <!-- Close checkbox row -->
+                        
+                        `;
 
     lastElement.insertAdjacentHTML('afterend', insertBlock);
     document.getElementById('devicecount').value = devicecount

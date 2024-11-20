@@ -198,9 +198,6 @@ class _Config:
             # Add to toml config
             self._dict['seestars'].append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1})
 
-        return
-
-                
 
         # network
         self.set_toml('network', 'ip_address', req.media['ip_address'])
@@ -417,24 +414,6 @@ class _Config:
         for seestar in seestars:
             ret.append(seestar)
         return ret
-    
-    # def get_settings(self):
-    #     """
-    #     TO add a new section from the config.toml to the settings page, add a single line in the format
-        
-    #     ret['<name of section>'] = self._dict['<section identifier>]
-        
-    #     input type is determined in the jinja code.
-    #     """
-    #     ret = {}
-    #     ret['Networking'] = self._dict['network']
-    #     ret['Web UI']  = self._dict['webui_settings']
-    #     ret['Server'] = self._dict['server']
-    #     ret['Device'] =  self._dict['device']
-    #     ret['Seestar Initialzation'] = self._dict['seestar_initialization']
-    #     ret['Logging'] = self._dict['logging']
-    #     ret['Seestar Devices'] = self.convert_AOT(self._dict)
-    #     return ret
 
     def render_config_html(self):
         """
