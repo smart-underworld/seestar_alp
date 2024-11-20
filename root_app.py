@@ -109,44 +109,39 @@ if __name__ == "__main__":
 
     time.sleep(1)
 
-    if Config.experimental:
-        logger.info("Setting up imaging web server")
-        app = Flask(__name__)
-        CORS(app, supports_credentials=True)
+    logger.info("Setting up imaging web server")
+    app = Flask(__name__)
+    CORS(app, supports_credentials=True)
 
 
-        @cross_origin()
-        @app.route("/<dev_num>/vid/status")
-        def vid_status(dev_num):
-            return Response(telescope.get_seestar_imager(int(dev_num)).get_video_status(),
-                            mimetype='text/event-stream')
+    @cross_origin()
+    @app.route("/<dev_num>/vid/status")
+    def vid_status(dev_num):
+        return Response(telescope.get_seestar_imager(int(dev_num)).get_video_status(),
+                        mimetype='text/event-stream')
 
-        @cross_origin()
-        @app.route("/<dev_num>/live/status")
-        def live_status(dev_num):
-            return Response(get_live_status(int(dev_num)), mimetype='text/event-stream')
-
-
-        @cross_origin()
-        @app.route("/<dev_num>/events")
-        def live_events(dev_num):
-            return Response(telescope.get_seestar_device(int(dev_num)).get_events(),
-                            mimetype='text/event-stream')
+    @cross_origin()
+    @app.route("/<dev_num>/live/status")
+    def live_status(dev_num):
+        return Response(get_live_status(int(dev_num)), mimetype='text/event-stream')
 
 
-        @cross_origin()
-        @app.route('/<dev_num>/vid')
-        def vid(dev_num):
-            return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(),
-                            mimetype='multipart/x-mixed-replace; boundary=frame')
+    @cross_origin()
+    @app.route("/<dev_num>/events")
+    def live_events(dev_num):
+        return Response(telescope.get_seestar_device(int(dev_num)).get_events(),
+                        mimetype='text/event-stream')
 
-        n.notify("READY=1")
-        print("Startup Complete")
 
-        # telescope.telescopes()
+    @cross_origin()
+    @app.route('/<dev_num>/vid')
+    def vid(dev_num):
+        return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(),
+                        mimetype='multipart/x-mixed-replace; boundary=frame')
 
-        waitress.serve(app, host=Config.ip_address, port=Config.imgport, threads=15, channel_timeout=30)
-    else:
-        n.notify("READY=1")
-        print("Startup Complete")
-        front.join()
+    n.notify("READY=1")
+    print("Startup Complete")
+
+    # telescope.telescopes()
+
+    waitress.serve(app, host=Config.ip_address, port=Config.imgport, threads=15, channel_timeout=30)
