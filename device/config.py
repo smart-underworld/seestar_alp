@@ -187,7 +187,7 @@ class _Config:
                 ss_ip = req.media[f'ss_ip']
             self.seestars.append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1}) # add to local config
             self._dict['seestars'].append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1}) # add to toml config
-                
+
 
         # network
         self.set_toml('network', 'ip_address', req.media['ip_address'])
@@ -205,8 +205,8 @@ class _Config:
         self.set_toml('webui_settings', 'experimental', 'experimental' in req.media)
         self.set_toml('webui_settings', 'confirm', 'confirm' in req.media)
         self.set_toml('webui_settings', 'save_frames', 'save_frames' in req.media)
-        self.set_toml('webui_settings', 'save_frames_dir', 'save_frames_dir' in req.media)
-        self.set_toml('webui_settings', 'loading_gif', 'loading_gif' in req.media)
+        self.set_toml('webui_settings', 'save_frames_dir', 'save_frames_dir')
+        self.set_toml('webui_settings', 'loading_gif', 'loading_gif')
 
         # server
         self.set_toml('server', 'location', req.media['location'])
