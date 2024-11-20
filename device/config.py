@@ -114,6 +114,12 @@ class _Config:
         self.save_frames_dir: str = self.get_toml('webui_settings', 'save_frames_dir', '.')
         self.loading_gif: str = self.get_toml('webui_settings', 'loading_gif', 'loading.gif')
 
+        # Fixup bad configs
+        if f"{self.save_frames_dir}" == "True" or f"{self.save_frames_dir}" == "False":
+            self.save_frames_dir = '.'
+        if f"{self.loading_gif}" == "True" or f"{self.loading_gif}" == "False":
+            self.loading_gif = 'loading.gif'
+
         # --------------
         # Server Section
         # --------------
