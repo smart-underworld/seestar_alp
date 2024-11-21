@@ -10,6 +10,7 @@ from time import sleep
 import collections
 from typing import Optional, Any
 
+import pydash
 from blinker import signal
 import geomag
 
@@ -35,14 +36,14 @@ class FixedSizeOrderedDict(OrderedDict):
         super().__setitem__(key, value)
 
 
-
 class Seestar:
     def __new__(cls, *args, **kwargs):
         # print("Create a new instance of Seestar.")
         return super().__new__(cls)
 
     # <ip_address> <port> <device name> <device num>
-    def __init__(self, logger, host, port, device_name, device_num, is_EQ_mode, is_debug=False):
+    def __init__(self, logger, host: str, port: int, device_name: str, device_num: int, is_EQ_mode: bool,
+                 is_debug=False):
         logger.info(
             f"Initialize the new instance of Seestar: {host}:{port}, name:{device_name}, num:{device_num}, is_EQ_mode:{is_EQ_mode}, is_debug:{is_debug}")
 
@@ -50,52 +51,53 @@ class Seestar:
         self.port = port
         self.device_name = device_name
         self.device_num = device_num
-        self.cmdid = 10000
-        self.site_latitude = Config.init_lat
-        self.site_longitude = Config.init_long
-        self.site_elevation = 0
-        self.ra = 0.0
-        self.dec = 0.0
-        self.is_watch_events = False  # Tracks if device has been started even if it never connected
-        self.s = None
-        self.get_msg_thread = None
-        self.heartbeat_msg_thread = None
-        self.is_debug = is_debug
-        self.response_dict = FixedSizeOrderedDict(max=100)
+        self.cmdid: int = 10000
+        self.site_latitude: float = Config.init_lat
+        self.site_longitude: float = Config.init_long
+        self.site_elevation: float = 0
+        self.ra: float = 0.0
+        self.dec: float = 0.0
+        self.is_watch_events: bool = False  # Tracks if device has been started even if it never connected
+        self.s: Optional[socket.socket] = None
+        self.get_msg_thread: Optional[threading.Thread] = None
+        self.heartbeat_msg_thread: Optional[threading.Thread] = None
+        self.is_debug: bool = is_debug
+        self.response_dict: OrderedDict[int, dict] = FixedSizeOrderedDict(max=100)
         self.logger = logger
-        self.is_connected = False
-        self.is_slewing = False
-        self.target_dec = 0
-        self.target_ra = 0
+        self.is_connected: bool = False
+        self.is_slewing: bool = False
+        self.target_dec: float = 0
+        self.target_ra: float = 0
         self.utcdate = time.time()
 
-        self.mosaic_thread = None
-        self.scheduler_thread = None
-        self.schedule = {}
+        self.mosaic_thread: Optional[threading.Thread] = None
+        self.scheduler_thread: Optional[threading.Thread] = None
+        self.schedule: dict = {}
         self.schedule['version'] = 1.0
         self.schedule['schedule_id'] = str(uuid.uuid4())
         self.schedule['list'] = collections.deque()
         self.schedule['state'] = "stopped"
-        self.schedule['current_item_id'] = ""       # uuid of the current/active item in the schedule list
-        self.schedule["item_number"] = 0             # order number of the schedule_item in the schedule list
-        self.is_cur_scheduler_item_working = False
-        self.is_below_horizon_goto_method = False
+        self.schedule['current_item_id'] = ""  # uuid of the current/active item in the schedule list
+        self.schedule["item_number"] = 0  # order number of the schedule_item in the schedule list
+        self.is_cur_scheduler_item_working: bool = False
+        self.is_below_horizon_goto_method: bool = False
 
-        self.event_state = {}
+        self.event_state: dict = {}
         self.update_scheduler_state_obj({}, result=0)
 
-        self.cur_solve_RA = -9999.0  #
-        self.cur_solve_Dec = -9999.0
-        self.connect_count = 0
-        self.below_horizon_dec_offset = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
-        self.safe_dec_for_offset = 10.0     # declination angle in degrees as the lower limit for dec values before below_horizon logic kicks in
-        self.custom_goto_state = "stopped" # for custom goto logic used by below_horizon, using auto centering algorithm
-        self.view_state = {}
+        self.cur_solve_RA: float = -9999.0  #
+        self.cur_solve_Dec: float = -9999.0
+        self.connect_count: int = 0
+        self.below_horizon_dec_offset: float = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
+        self.safe_dec_for_offset: float = 10.0  # declination angle in degrees as the lower limit for dec values before below_horizon logic kicks in
+        self.custom_goto_state = "stopped"  # for custom goto logic used by below_horizon, using auto centering algorithm
+        self.view_state: dict = {}
 
         # self.event_queue = queue.Queue()
         self.event_queue = collections.deque(maxlen=20)
         self.eventbus = signal(f'{self.device_name}.eventbus')
-        self.is_EQ_mode = is_EQ_mode
+        self.is_EQ_mode: bool = is_EQ_mode
+        # self.trace = MessageTrace(self.device_num, self.port)
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
     #       "result":0, "error":"dummy error",
@@ -303,10 +305,10 @@ class Seestar:
             self.logger.debug(f'sending: {json_data}')
         self.send_message(json_data + "\r\n")
 
-    def send_message_param(self, data):
+    def send_message_param(self, data) -> int:
         cur_cmdid = data.get('id') or self.cmdid
         data['id'] = cur_cmdid
-        self.cmdid += 1 # can this overflow?  not in JSON...
+        self.cmdid += 1  # can this overflow?  not in JSON...
         json_data = json.dumps(data)
         if 'method' in data and data['method'] == 'scope_get_equ_coord':
             self.logger.debug(f'sending: {json_data}')

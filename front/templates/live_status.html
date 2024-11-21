@@ -54,16 +54,16 @@
     {#    {% endif %}#}
     <div class="row border-bottom py-1 text-start">
         <div class="col fw-bold">RA</div>
-        <div class="col">{{ state.ra }}</div>
+        <div class="col">{{ state.ra | round(4) }}</div>
     </div>
     <div class="row border-bottom py-1 text-start">
         <div class="col fw-bold">Dec</div>
-        <div class="col">{{ state.dec }}</div>
+        <div class="col">{{ state.dec | round(4) }}</div>
     </div>
     {% if state.snr %}
     <div class="row border-bottom py-1 text-start">
         <div class="col fw-bold">SNR</div>
-        <div class="col">{{ state.snr }}</div>
+        <div class="col">{{ state.snr | round(2) }}</div>
     </div>
     {% endif %}
     {% if state.stats %}

@@ -5,16 +5,12 @@ from flask import Flask, Response
 from flask_cors import CORS, cross_origin
 import threading
 import time
-import sys
-import os
 import waitress
 import sdnotify
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 from front.app import FrontMain, get_live_status
-
-# sys.path.append(os.path.join(os.path.dirname(__file__), "device"))
 
 from device.app import DeviceMain     # type: ignore
 from device.config import Config      # type: ignore
@@ -36,20 +32,6 @@ class AppRunner:
         self.thread = threading.Thread(target=self.runner, args=(1,), daemon=True)
         self.thread.name = f"{self.name}MainThread"
         self.thread.start()
-
-    # def on_get_start(self, req, resp):
-    #     self.start()
-    #     resp.status = falcon.HTTP_200
-    #     resp.content_type = 'application/text'
-    #     resp.text = 'Started, yo!'
-    #
-    # def on_get_stop(self, req, resp):
-    #     self.logger.info(f"Stopping {self.name}")
-    #     self.app_main.stop()
-    #     self.thread.join()
-    #     resp.status = falcon.HTTP_200
-    #     resp.content_type = 'application/text'
-    #     resp.text = 'Stopped'
 
     def get_imager(self, device_num: int):
         return self.app_main.get_imager(device_num)
