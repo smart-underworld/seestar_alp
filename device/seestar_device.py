@@ -1140,7 +1140,7 @@ class Seestar:
                 self.logger.info(f"Goto operation finished with result code: {result}")
 
             self.logger.info(f"Start-up sequence result: {result}")
-            
+
             if result:
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
             else:
@@ -1620,7 +1620,7 @@ class Seestar:
         is_retain_state = params["is_retain_state"]
         with open(filepath, 'r') as f:
             self.schedule = json.load(f)
-        
+
         if not is_retain_state:
             self.schedule['schedule_id'] = str(uuid.uuid4())
             for item in self.schedule['list']:
@@ -1830,6 +1830,16 @@ class Seestar:
 
         return dec_decimal
 
+    def guest_mode_init(self):
+        self.logger.info(f'guest_mode_init')
+        # Indiscriminately try to grab the master cli
+        self.send_message_param_sync({"method":"set_setting", "params":{"master_cli": True}})
+        # Set the cli name to the hostname of the machine
+        host=socket.gethostname()
+        if not host:
+            host="SSC"
+        self.send_message_param_sync({"method":"set_setting", "params":{"cli_name": f"{host}"}})
+
     def start_watch_thread(self):
         # only bail if is_watch_events is true
         if self.is_watch_events:
@@ -1849,6 +1859,8 @@ class Seestar:
                     f'Could not establish connection to Seestar. Starting in offline mode')
 
             try:
+                self.guest_mode_init()
+
                 # Start up heartbeat and receive threads
 
                 self.get_msg_thread = threading.Thread(target=self.receive_message_thread_fn, daemon=True)
