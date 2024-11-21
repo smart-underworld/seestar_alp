@@ -106,8 +106,6 @@ class _Config:
         # --------------
         self.uiport: int = self.get_toml('webui_settings', 'uiport', 5432)
         self.uitheme: str = self.get_toml('webui_settings', 'uitheme', 'dark')
-        self.twilighttimes: bool = self.get_toml('webui_settings', 'twilighttimes', False)
-        self.cleardarksky: bool = self.get_toml('webui_settings', 'cleardarksky', False)
         self.experimental: bool = self.get_toml('webui_settings', 'experimental', False)
         self.confirm: bool = self.get_toml('webui_settings', 'confirm', True)
         self.save_frames: bool = self.get_toml('webui_settings', 'save_frames', False)
@@ -229,7 +227,6 @@ class _Config:
         # webUI
         self.set_toml('webui_settings', 'uiport', int(req.media['uiport']))
         self.set_toml('webui_settings', 'uitheme', req.media['uitheme'])
-        self.set_toml('webui_settings', 'twilighttimes', 'twilighttimes' in req.media)
         self.set_toml('webui_settings', 'experimental', 'experimental' in req.media)
         self.set_toml('webui_settings', 'confirm', 'confirm' in req.media)
         self.set_toml('webui_settings', 'save_frames', 'save_frames' in req.media)
@@ -458,7 +455,6 @@ class _Config:
                 'Web UI',
                 self.render_text('uiport', 'UI port:', self.uiport,'Port to use for connecting to the frontend (SSC) default 5432', required=True) + \
                 self.render_select('uitheme', 'UI theme:', [ "dark", "light"], self.uitheme, 'Theme to use for the frontend') + \
-                self.render_checkbox('twilighttimes', 'Twilight times:', self.twilighttimes, 'Show twighlight times on schedule page') + \
                 self.render_checkbox('experimental', 'Experimental:', self.experimental, 'Show experimental features (Only recommeded for experienced users)') + \
                 self.render_checkbox('confirm', 'Commands Confirmation Dialog:', self.confirm, 'Enable/Disable the Commands page confirmation dialog') + \
                 self.render_checkbox('save_frames', 'Save star preview frames locally:', self.save_frames, 'Save frames received on live page when in preview mode') + \
