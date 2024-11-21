@@ -13,8 +13,6 @@ rtsp_udp = true
 uiport = 5432
 # light/dark theme
 uitheme = "dark" #all lower case
-twilighttimes = false #true/false
-cleardarksky = false #true/false
 #experimental = true
 confirm = true	# Enable/Disable the Commands page confirmation dialog
 # save_frames = false
