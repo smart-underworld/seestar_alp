@@ -142,6 +142,18 @@ class _Config:
                 'device_num': 1
             }
             ]
+        
+        # For the rare situation of manually edited toml where the highest 
+        # device_num is higher than the number of devices, we rewrite the device_num
+        # sequentially.
+
+        for seestar in self.seestars:
+            if int(seestar['device_num']) > len(self.seestars):
+                counter = 1
+                for ss in self.seestars:
+                    ss['device_num'] = counter
+                    counter += 1
+
 
         # ---------------
         # Logging Section
