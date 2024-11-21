@@ -492,6 +492,7 @@ def get_device_state(telescope_id):
         stacked = ""
         failed = ""
         client_master = True
+        client_list = ""
         if status is not None:
             view_info = status.get("View", {})
             view_state = view_info.get("state", "Idle")
@@ -521,6 +522,10 @@ def get_device_state(telescope_id):
 
                 if device.get("firmware_ver_int", 0) > 2300:
                     client_master = result.get("client", { "is_master": False }).get("is_master", False)
+                    clients = result.get("client", {"connected": []}).get("connected", [])
+                    master_idx = result.get("client", { "master_index": 0 }).get("master_index", 0)
+                    clients[master_idx] = "master:" + clients[master_idx]
+                    client_list = "<br>".join(clients)
 
             if wifi_status is not None:
                 if wifi_status.get("server", False) and client_master:  # sig_lev is only there while in station mode.
@@ -549,8 +554,12 @@ def get_device_state(telescope_id):
                 "Successful Frames": stacked,
                 "Failed Frames": failed,
                 "Wi-Fi Signal": wifi_signal,
-                "Master client": client_master,
             }
+
+            if device.get("firmware_ver_int", 0) > 2300:
+                stats["Master client"] = client_master
+                stats["Client list"] = client_list
+
         else:
             logger.info(f"Stats: Unable to get data.")
             stats = {"Info": "Unable to get stats."}  # Display information for the stats page VS blank page.
