@@ -5,16 +5,12 @@ from flask import Flask, Response
 from flask_cors import CORS, cross_origin
 import threading
 import time
-import sys
-import os
 import waitress
 import sdnotify
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 from front.app import FrontMain, get_live_status
-
-# sys.path.append(os.path.join(os.path.dirname(__file__), "device"))
 
 from device.app import DeviceMain     # type: ignore
 from device.config import Config      # type: ignore
@@ -36,20 +32,6 @@ class AppRunner:
         self.thread = threading.Thread(target=self.runner, args=(1,), daemon=True)
         self.thread.name = f"{self.name}MainThread"
         self.thread.start()
-
-    # def on_get_start(self, req, resp):
-    #     self.start()
-    #     resp.status = falcon.HTTP_200
-    #     resp.content_type = 'application/text'
-    #     resp.text = 'Started, yo!'
-    #
-    # def on_get_stop(self, req, resp):
-    #     self.logger.info(f"Stopping {self.name}")
-    #     self.app_main.stop()
-    #     self.thread.join()
-    #     resp.status = falcon.HTTP_200
-    #     resp.content_type = 'application/text'
-    #     resp.text = 'Stopped'
 
     def get_imager(self, device_num: int):
         return self.app_main.get_imager(device_num)
@@ -109,44 +91,39 @@ if __name__ == "__main__":
 
     time.sleep(1)
 
-    if Config.experimental:
-        logger.info("Setting up imaging web server")
-        app = Flask(__name__)
-        CORS(app, supports_credentials=True)
+    logger.info("Setting up imaging web server")
+    app = Flask(__name__)
+    CORS(app, supports_credentials=True)
 
 
-        @cross_origin()
-        @app.route("/<dev_num>/vid/status")
-        def vid_status(dev_num):
-            return Response(telescope.get_seestar_imager(int(dev_num)).get_video_status(),
-                            mimetype='text/event-stream')
+    @cross_origin()
+    @app.route("/<dev_num>/vid/status")
+    def vid_status(dev_num):
+        return Response(telescope.get_seestar_imager(int(dev_num)).get_video_status(),
+                        mimetype='text/event-stream')
 
-        @cross_origin()
-        @app.route("/<dev_num>/live/status")
-        def live_status(dev_num):
-            return Response(get_live_status(int(dev_num)), mimetype='text/event-stream')
-
-
-        @cross_origin()
-        @app.route("/<dev_num>/events")
-        def live_events(dev_num):
-            return Response(telescope.get_seestar_device(int(dev_num)).get_events(),
-                            mimetype='text/event-stream')
+    @cross_origin()
+    @app.route("/<dev_num>/live/status")
+    def live_status(dev_num):
+        return Response(get_live_status(int(dev_num)), mimetype='text/event-stream')
 
 
-        @cross_origin()
-        @app.route('/<dev_num>/vid')
-        def vid(dev_num):
-            return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(),
-                            mimetype='multipart/x-mixed-replace; boundary=frame')
+    @cross_origin()
+    @app.route("/<dev_num>/events")
+    def live_events(dev_num):
+        return Response(telescope.get_seestar_device(int(dev_num)).get_events(),
+                        mimetype='text/event-stream')
 
-        n.notify("READY=1")
-        print("Startup Complete")
 
-        # telescope.telescopes()
+    @cross_origin()
+    @app.route('/<dev_num>/vid')
+    def vid(dev_num):
+        return Response(telescope.get_seestar_imager(int(dev_num)).get_frame(),
+                        mimetype='multipart/x-mixed-replace; boundary=frame')
 
-        waitress.serve(app, host=Config.ip_address, port=Config.imgport, threads=15, channel_timeout=30)
-    else:
-        n.notify("READY=1")
-        print("Startup Complete")
-        front.join()
+    n.notify("READY=1")
+    print("Startup Complete")
+
+    # telescope.telescopes()
+
+    waitress.serve(app, host=Config.ip_address, port=Config.imgport, threads=15, channel_timeout=30)

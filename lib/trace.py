@@ -25,7 +25,7 @@ class MessageTrace:
                         "CREATE TABLE messages (telescope_id INTEGER, port INTEGER, timestamp TEXT, type TEXT, data BLOB)")
         except:
             # we just ignore create table for now...
-            print("table already exists")
+            #print("table already exists")
             pass
 
     def save_message(self, message, direction):

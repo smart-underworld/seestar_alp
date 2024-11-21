@@ -10,6 +10,7 @@ from time import sleep
 import collections
 from typing import Optional, Any
 
+import pydash
 from blinker import signal
 import geomag
 
@@ -35,14 +36,14 @@ class FixedSizeOrderedDict(OrderedDict):
         super().__setitem__(key, value)
 
 
-
 class Seestar:
     def __new__(cls, *args, **kwargs):
         # print("Create a new instance of Seestar.")
         return super().__new__(cls)
 
     # <ip_address> <port> <device name> <device num>
-    def __init__(self, logger, host, port, device_name, device_num, is_EQ_mode, is_debug=False):
+    def __init__(self, logger, host: str, port: int, device_name: str, device_num: int, is_EQ_mode: bool,
+                 is_debug=False):
         logger.info(
             f"Initialize the new instance of Seestar: {host}:{port}, name:{device_name}, num:{device_num}, is_EQ_mode:{is_EQ_mode}, is_debug:{is_debug}")
 
@@ -50,51 +51,53 @@ class Seestar:
         self.port = port
         self.device_name = device_name
         self.device_num = device_num
-        self.cmdid = 10000
-        self.site_latitude = Config.init_lat
-        self.site_longitude = Config.init_long
-        self.site_elevation = 0
-        self.ra = 0.0
-        self.dec = 0.0
-        self.is_watch_events = False  # Tracks if device has been started even if it never connected
-        self.s = None
-        self.get_msg_thread = None
-        self.heartbeat_msg_thread = None
-        self.is_debug = is_debug
-        self.response_dict = FixedSizeOrderedDict(max=100)
+        self.cmdid: int = 10000
+        self.site_latitude: float = Config.init_lat
+        self.site_longitude: float = Config.init_long
+        self.site_elevation: float = 0
+        self.ra: float = 0.0
+        self.dec: float = 0.0
+        self.is_watch_events: bool = False  # Tracks if device has been started even if it never connected
+        self.s: Optional[socket.socket] = None
+        self.get_msg_thread: Optional[threading.Thread] = None
+        self.heartbeat_msg_thread: Optional[threading.Thread] = None
+        self.is_debug: bool = is_debug
+        self.response_dict: OrderedDict[int, dict] = FixedSizeOrderedDict(max=100)
         self.logger = logger
-        self.is_connected = False
-        self.is_slewing = False
-        self.target_dec = 0
-        self.target_ra = 0
+        self.is_connected: bool = False
+        self.is_slewing: bool = False
+        self.target_dec: float = 0
+        self.target_ra: float = 0
         self.utcdate = time.time()
 
-        self.mosaic_thread = None
-        self.scheduler_thread = None
-        self.schedule = {}
+        self.mosaic_thread: Optional[threading.Thread] = None
+        self.scheduler_thread: Optional[threading.Thread] = None
+        self.schedule: dict = {}
+        self.schedule['version'] = 1.0
         self.schedule['schedule_id'] = str(uuid.uuid4())
         self.schedule['list'] = collections.deque()
         self.schedule['state'] = "stopped"
-        self.schedule['current_item_id'] = ""       # uuid of the current/active item in the schedule list
-        self.schedule["item_number"] = 0             # order number of the schedule_item in the schedule list
-        self.is_cur_scheduler_item_working = False
-        self.is_below_horizon_goto_method = False
+        self.schedule['current_item_id'] = ""  # uuid of the current/active item in the schedule list
+        self.schedule["item_number"] = 0  # order number of the schedule_item in the schedule list
+        self.is_cur_scheduler_item_working: bool = False
+        self.is_below_horizon_goto_method: bool = False
 
-        self.event_state = {}
+        self.event_state: dict = {}
         self.update_scheduler_state_obj({}, result=0)
 
-        self.cur_solve_RA = -9999.0  #
-        self.cur_solve_Dec = -9999.0
-        self.connect_count = 0
-        self.below_horizon_dec_offset = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
-        self.safe_dec_for_offset = 10.0     # declination angle in degrees as the lower limit for dec values before below_horizon logic kicks in
-        self.custom_goto_state = "stopped" # for custom goto logic used by below_horizon, using auto centering algorithm
-        self.view_state = {}
+        self.cur_solve_RA: float = -9999.0  #
+        self.cur_solve_Dec: float = -9999.0
+        self.connect_count: int = 0
+        self.below_horizon_dec_offset: float = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
+        self.safe_dec_for_offset: float = 10.0  # declination angle in degrees as the lower limit for dec values before below_horizon logic kicks in
+        self.custom_goto_state = "stopped"  # for custom goto logic used by below_horizon, using auto centering algorithm
+        self.view_state: dict = {}
 
         # self.event_queue = queue.Queue()
         self.event_queue = collections.deque(maxlen=20)
         self.eventbus = signal(f'{self.device_name}.eventbus')
-        self.is_EQ_mode = is_EQ_mode
+        self.is_EQ_mode: bool = is_EQ_mode
+        # self.trace = MessageTrace(self.device_num, self.port)
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
     #       "result":0, "error":"dummy error",
@@ -302,10 +305,10 @@ class Seestar:
             self.logger.debug(f'sending: {json_data}')
         self.send_message(json_data + "\r\n")
 
-    def send_message_param(self, data):
+    def send_message_param(self, data) -> int:
         cur_cmdid = data.get('id') or self.cmdid
         data['id'] = cur_cmdid
-        self.cmdid += 1 # can this overflow?  not in JSON...
+        self.cmdid += 1  # can this overflow?  not in JSON...
         json_data = json.dumps(data)
         if 'method' in data and data['method'] == 'scope_get_equ_coord':
             self.logger.debug(f'sending: {json_data}')
@@ -922,7 +925,7 @@ class Seestar:
     #                               "item_elapsed_time_s":123, "item_remaining_time":-1}
     #       }
 
-    def start_up_thread_fn(self, params):
+    def start_up_thread_fn(self, params, is_from_schedule = False):
         try:
             self.schedule['state'] = "working"
             self.logger.info("start up sequence begins ...")
@@ -1011,6 +1014,7 @@ class Seestar:
                 if "error" in response:
                     msg = "Failed to park scope. Need to restart Seestar and try again."
                     self.logger.error(msg)
+                    self.schedule['state'] == "stopping"
                     return msg
 
                 result = self.wait_end_op("ScopeHome")
@@ -1089,6 +1093,7 @@ class Seestar:
                 result = self.try_auto_focus(2)
                 if result == False:
                     self.logger.warn("Start-up sequence stopped and was unsuccessful.")
+                    self.schedule['state'] == "stopping"
                     return
 
             if self.schedule["state"] != "working":
@@ -1101,6 +1106,7 @@ class Seestar:
                 result = self.try_3PPA(1)
                 if result == False:
                     self.logger.warn("Start-up sequence stopped and was unsuccessful.")
+                    self.schedule['state'] == "stopping"
                     return
 
             if self.schedule["state"] != "working":
@@ -1114,6 +1120,7 @@ class Seestar:
                 result = self.try_dark_frame()
                 if result == False:
                     self.logger.warn("Start-up sequence stopped and was unsuccessful.")
+                    self.schedule['state'] == "stopping"
                     return
 
             if self.schedule["state"] != "working":
@@ -1133,13 +1140,19 @@ class Seestar:
                 self.logger.info(f"Goto operation finished with result code: {result}")
 
             self.logger.info(f"Start-up sequence result: {result}")
-            self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
+
+            if result:
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
+            else:
+                self.schedule['state'] == "stopping"
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"]="stopping"
         finally:
             if self.schedule['state'] == "stopping":
                 self.schedule['state'] = "stopped"
-            else:
+                self.play_sound(82)
+            elif not is_from_schedule:
                 self.schedule['state'] = "complete"
-            self.play_sound(82)
+                self.play_sound(82)
 
     def action_set_dew_heater(self, params):
         return self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
@@ -1148,7 +1161,7 @@ class Seestar:
         if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete" :
             return self.json_result("start_up_sequence", -1, "Device is busy. Try later.")
 
-        move_up_dec_thread = threading.Thread(name=f"start-up-thread:{self.device_name}", target=lambda: self.start_up_thread_fn(params))
+        move_up_dec_thread = threading.Thread(name=f"start-up-thread:{self.device_name}", target=lambda: self.start_up_thread_fn(params, False))
         move_up_dec_thread.start()
         return self.json_result("start_up_sequence", 0, "Sequence started.")
 
@@ -1594,6 +1607,27 @@ class Seestar:
             index += 1
         return self.schedule
 
+    def export_schedule(self, params):
+        filepath = params["filepath"]
+        with open(filepath, 'w') as fp:
+            json.dump(self.schedule, fp, indent=4)
+        return 0
+
+    def import_schedule(self, params):
+        if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete":
+            return self.json_result("import_schedule", -1, "An existing scheduler is active. Returned with no action.")
+        filepath = params["filepath"]
+        is_retain_state = params["is_retain_state"]
+        with open(filepath, 'r') as f:
+            self.schedule = json.load(f)
+
+        if not is_retain_state:
+            self.schedule['schedule_id'] = str(uuid.uuid4())
+            for item in self.schedule['list']:
+                item['id'] = str(uuid.uuid4())
+            self.schedule['state'] = "stopped"
+        return 0
+
     # shortcut to start a new scheduler with only a mosaic request
     def start_mosaic(self, params):
         if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete":
@@ -1711,7 +1745,7 @@ class Seestar:
                 item_state = {"type": "start up", "schedule_item_id": self.schedule['current_item_id'], "action": "start up"}
                 self.update_scheduler_state_obj(item_state)
                 #self.start_up_thread_fn(cur_schedule_item['params'])
-                startup_thread = threading.Thread(name=f"start-up-thread:{self.device_name}", target=lambda: self.start_up_thread_fn(cur_schedule_item['params']))
+                startup_thread = threading.Thread(name=f"start-up-thread:{self.device_name}", target=lambda: self.start_up_thread_fn(cur_schedule_item['params'], True))
                 startup_thread.start()
                 time.sleep(2)
                 while startup_thread.is_alive():
@@ -1796,6 +1830,16 @@ class Seestar:
 
         return dec_decimal
 
+    def guest_mode_init(self):
+        self.logger.info(f'guest_mode_init')
+        # Indiscriminately try to grab the master cli
+        self.send_message_param_sync({"method":"set_setting", "params":{"master_cli": True}})
+        # Set the cli name to the hostname of the machine
+        host=socket.gethostname()
+        if not host:
+            host="SSC"
+        self.send_message_param_sync({"method":"set_setting", "params":{"cli_name": f"{host}"}})
+
     def start_watch_thread(self):
         # only bail if is_watch_events is true
         if self.is_watch_events:
@@ -1815,6 +1859,8 @@ class Seestar:
                     f'Could not establish connection to Seestar. Starting in offline mode')
 
             try:
+                self.guest_mode_init()
+
                 # Start up heartbeat and receive threads
 
                 self.get_msg_thread = threading.Thread(target=self.receive_message_thread_fn, daemon=True)

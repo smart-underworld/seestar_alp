@@ -188,7 +188,31 @@
             </div>
 
         </div>
+
     </div>
+
+	<p>
+		<h5 class="card-title">Retry Settings</h5>
+	</p>
+	<div class="card border-primary mb-3">
+		<div class="card-body">
+			<div class="row">
+				<div class="col-sm-6 mb-3">
+					<label for="num_tries" class="form-label">Number of Retries</label>
+					<input type="text" id="num_tries" name="num_tries" class="form-control"
+					       aria-describedby="num_triesHelp" value="{{ values.num_tries }}">
+					<div id="num_triesHelp" class="form-text">Number of times to retry a failed GoTo (Default 1)</div>
+				</div>
+				<div class="col-sm-6 mb-3">
+					<label for="retry_wait_s" class="form-label">Delay between retries in seconds</label>
+					<input type="text" id="retry_wait_s" name="retry_wait_s" class="form-control"
+					       aria-describedby="retry_wait_sHelp" value="{{ values.retry_wait_s }}">
+					<div id="retry_wait_sHelp" class="form-text">Delay between retry attempts (Default 300)</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
     <button type="submit" class="btn btn-primary">Submit</button>
 </form>
 <!-- Modal structure -->

@@ -4,10 +4,11 @@ import tzlocal
 
 import falcon
 from falcon import HTTPTemporaryRedirect, HTTPFound
+from falcon import CORSMiddleware
 from astroquery.simbad import Simbad
 from jinja2 import Template, Environment, FileSystemLoader
 from wsgiref.simple_server import WSGIRequestHandler, make_server
-from collections import OrderedDict
+from collections import defaultdict
 from pathlib import Path
 import requests
 import humanize
@@ -292,7 +293,7 @@ def get_planning_cards():
         else:
             card_state_example_file_location = os.path.join(os.path.dirname(__file__), "planning.json.example")
         shutil.copyfile(card_state_example_file_location, card_state_file_location)
-    
+
     with open(card_state_file_location, 'r') as card_state_file:
         state_data = json.load(card_state_file)
         return state_data
@@ -491,6 +492,7 @@ def get_device_state(telescope_id):
         stacked = ""
         failed = ""
         client_master = True
+        client_list = ""
         if status is not None:
             view_info = status.get("View", {})
             view_state = view_info.get("state", "Idle")
@@ -520,6 +522,10 @@ def get_device_state(telescope_id):
 
                 if device.get("firmware_ver_int", 0) > 2300:
                     client_master = result.get("client", { "is_master": False }).get("is_master", False)
+                    clients = result.get("client", {"connected": []}).get("connected", [])
+                    master_idx = result.get("client", { "master_index": 0 }).get("master_index", 0)
+                    clients[master_idx] = "master:" + clients[master_idx]
+                    client_list = "<br>".join(clients)
 
             if wifi_status is not None:
                 if wifi_status.get("server", False) and client_master:  # sig_lev is only there while in station mode.
@@ -548,8 +554,12 @@ def get_device_state(telescope_id):
                 "Successful Frames": stacked,
                 "Failed Frames": failed,
                 "Wi-Fi Signal": wifi_signal,
-                "Master client": client_master,
             }
+
+            if device.get("firmware_ver_int", 0) > 2300:
+                stats["Master client"] = client_master
+                stats["Client list"] = client_list
+
         else:
             logger.info(f"Stats: Unable to get data.")
             stats = {"Info": "Unable to get stats."}  # Display information for the stats page VS blank page.
@@ -776,6 +786,8 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
+    num_tries = form.get("num_tries")
+    retry_wait_s = form.get("retry_wait_s")
     errors = {}
     values = {
         "target_name": targetName,
@@ -789,12 +801,16 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
         "panel_overlap_percent": int(panelOverlap),
         "selected_panels": panelSelect,
         "gain": int(gain),
-        "is_use_autofocus": useAutoFocus
+        "is_use_autofocus": useAutoFocus,
+        "num_tries": int(num_tries) if num_tries else 1,
+        "retry_wait_s": int(retry_wait_s) if retry_wait_s else 300
     }
+
     if telescope_id == 0:
         splitMosaic = form.get("array_mode")
         if splitMosaic:
             values["array_mode"] = splitMosaic
+
     if not check_ra_value(ra):
         flash(resp, "Invalid RA value")
         errors["ra"] = ra
@@ -831,6 +847,8 @@ def do_create_image(req, resp, schedule, telescope_id):
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
+    num_tries = form.get("num_tries")
+    retry_wait_s = form.get("retry_wait_s")
     errors = {}
     values = {
         "target_name": targetName,
@@ -844,7 +862,9 @@ def do_create_image(req, resp, schedule, telescope_id):
         "panel_overlap_percent": int(panelOverlap),
         "selected_panels": panelSelect,
         "gain": int(gain),
-        "is_use_autofocus": useAutoFocus
+        "is_use_autofocus": useAutoFocus,
+        "num_tries": int(num_tries) if num_tries else 1,
+        "retry_wait_s": int(retry_wait_s) if retry_wait_s else 300
     }
 
     if not check_ra_value(ra):
@@ -922,7 +942,18 @@ def do_command(req, resp, telescope_id):
             if not lat or not long:
                 output = do_action_device("action_start_up_sequence", telescope_id, {"auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
             else:
-                output = do_action_device("action_start_up_sequence", telescope_id, {"lat": lat, "lon": long, "auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
+                output = do_action_device("action_start_up_sequence", telescope_id, {"lat": float(lat), "lon": float(long), "auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
+            return output
+        case "adjust_mag_declination":
+            adjust_mag_dec = form.get("adjust_mag_dec","False").strip() == "on"
+            fudge_angle = form.get("fudge_angle","").strip()
+            if adjust_mag_dec:
+                if fudge_angle:
+                    output = do_action_device("adjust_mag_declination", telescope_id, {"adjust_mag_dec": adjust_mag_dec,"fudge_angle": float(fudge_angle)})
+                else:
+                    output = do_action_device("adjust_mag_declination", telescope_id, {"adjust_mag_dec": adjust_mag_dec})
+            else:
+                output = "Adjust Mag Dec not selected. No action taken."
             return output
         case "get_event_state":
             output = do_action_device("get_event_state", telescope_id, {})
@@ -1187,12 +1218,6 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
                     twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes, cleardarksky_enabled=Config.cleardarksky, clear_sky_href=nearest_csc["href"], clear_sky_img_src=nearest_csc["full_img"],
                     **context)
 
-
-FIXED_PARAMS_KEYS = ["local_time", "timer_sec", "try_count", "target_name", "is_j2000", "ra", "dec", "is_use_lp_filter",
-                     "session_time_sec", "ra_num", "dec_num", "panel_overlap_percent", "gain", "is_use_autofocus", "heater",
-                     "nokey", "selected_panels", "raise_arm", "auto_focus", "3ppa", "dark_frames"]
-
-
 def export_schedule(telescope_id):
     if check_api_state(telescope_id):
         current = do_action_device("get_schedule", telescope_id, {})
@@ -1200,105 +1225,120 @@ def export_schedule(telescope_id):
     else:
         schedule = get_queue(telescope_id)
 
-    # Parse the JSON data
-    list_to_json = json.dumps(schedule)
-    data = json.loads(list_to_json)
+    all_keys = set()
+    for entry in schedule:
+        if 'params' in entry and isinstance(entry['params'], (dict, list)):
+            if isinstance(entry['params'], dict):
+                all_keys.update(entry['params'].keys())
+            elif isinstance(entry['params'], list):
+                all_keys.add('params')  # Add 'params' as a single field if it's a list
 
-    # Define the fieldnames (column names)
-    fieldnames = ['action'] + FIXED_PARAMS_KEYS
+    fieldnames = ['action'] + sorted(all_keys)
 
-    # use an in-memory file-like object
     output = io.StringIO()
-
-    # create writer object
     writer = csv.DictWriter(output, fieldnames=fieldnames)
-
-    # Write the header
     writer.writeheader()
 
-    # Write the rows
-    for entry in data:
-        row = OrderedDict({'action': entry['action']})
-        if 'params' in entry and isinstance(entry['params'], dict):
-            for key in FIXED_PARAMS_KEYS:
-                row[key] = entry['params'].get(key, '')
-        else:
-            # If 'params' key is missing, ensure all fixed params are empty
-            row['nokey'] = entry.get('params', '')
+    for entry in schedule:
+        row = defaultdict(str, {'action': entry['action']})
+
+        if 'params' in entry:
+            params = entry['params']
+            if isinstance(params, list):
+                row['params'] = ','.join(map(str, params))  # Serialize lists as comma-separated values
+            elif isinstance(params, dict):
+                for key, value in params.items():
+                    row[key] = value  # Add dictionary items as individual columns
+
         writer.writerow(row)
 
     output.seek(0)
     return output.getvalue()
 
-
 def str2bool(v):
     return str(v).lower() in ("yes", "y", "true", "t", "1")
 
-
 def import_schedule(input, telescope_id):
-    for line in input:
-        fields = line.split(',')
 
-        fixed_params_length = len(FIXED_PARAMS_KEYS) + 1
-        # Check if the line has the expected number of fields
-        if len(fields) != fixed_params_length:
-            logger.warn(f"Skipping bad line: Line has {len(fields)} fields, expected {fixed_params_length}")
+    if isinstance(input, list):
+        input_content = '\n'.join(input)
+        input = io.StringIO(input_content)
+
+    input.seek(0)
+    input_content = input.read()
+
+    if input_content.startswith("\ufeff"):
+        input_content = input_content[1:]
+
+    cleaned_input = io.StringIO(input_content)
+
+    reader = csv.DictReader(cleaned_input)
+
+    for row in reader:
+        row = {key: value.strip() for key, value in row.items()}
+        action = row.pop('action', None)
+
+        if not action:
+            logger.warn("Skipping row without an action.")
             continue
 
-        (action, local_time, timer_sec, try_count, target_name, is_j2000, ra, dec, is_use_lp_filter, session_time_sec, ra_num, dec_num, panel_overlap_percent, gain, is_use_autofocus, heater, nokey, selected_panels, raise_arm, auto_focus, polar_align, dark_frames) = fields
+        params = {key: value for key, value in row.items() if value.strip()}
+
+        for key, value in params.items():
+            if ',' in value:
+                params[key] = list(map(int, value.split(',')))
+            elif value.lower() in {"true", "false"}:
+                params[key] = value.lower() == "true"
+            elif value.isdigit():
+                params[key] = int(value)
+
+        if action == "start_up_sequence":
+            if "3ppa" in params:
+                params["polar_align"] = params.pop("3ppa")
 
         match action:
-            case "action":
-                pass
             case "wait_until":
-                do_schedule_action_device("wait_until", {"local_time": local_time}, telescope_id)
+                do_schedule_action_device("wait_until", {"local_time": params.get("local_time")}, telescope_id)
             case "wait_for":
-                do_schedule_action_device("wait_for", {"timer_sec": int(timer_sec)}, telescope_id)
+                do_schedule_action_device("wait_for", {"timer_sec": params.get("timer_sec", 0)}, telescope_id)
             case "auto_focus":
-                do_schedule_action_device("auto_focus", {"try_count": int(try_count)}, telescope_id)
+                do_schedule_action_device("auto_focus", {"try_count": params.get("try_count", 0)}, telescope_id)
             case "start_mosaic":
-                do_schedule_action_device("start_mosaic",
-                                          {"target_name": target_name,
-                                           "ra": ra,
-                                           "dec": dec,
-                                           "is_j2000": str2bool(is_j2000),
-                                           "is_use_lp_filter": str2bool(is_use_lp_filter),
-                                           "is_use_autofocus": str2bool(is_use_autofocus),
-                                           "session_time_sec": int(session_time_sec),
-                                           "ra_num": int(ra_num),
-                                           "dec_num": int(dec_num),
-                                           "panel_overlap_percent": int(panel_overlap_percent),
-                                           "gain": int(gain),
-                                           "selected_panels": selected_panels}, int(telescope_id))
+                required_params = ["target_name", "ra", "dec", "is_j2000", "is_use_lp_filter",
+                                   "is_use_autofocus", "session_time_sec", "ra_num",
+                                   "dec_num", "panel_overlap_percent", "gain", "selected_panels","num_tries","retry_wait_s","array_mode"]
+                mosaic_params = {key: value for key, value in params.items() if key in required_params}
+                do_schedule_action_device("start_mosaic", mosaic_params, telescope_id)
             case "shutdown":
                 do_schedule_action_device("shutdown", "", telescope_id)
             case "scope_park":
                 do_schedule_action_device("scope_park", {}, telescope_id)
-            case 'set_wheel_position':
-                try:
-                    int_nokey = int(nokey[1])
-                    if int_nokey == 2:
-                        cmd_vals = [2]
-                    else:
-                        cmd_vals = [1]
-
-                    do_schedule_action_device("set_wheel_position", cmd_vals, telescope_id)
-
-                except (IndexError, ValueError) as e:
-                    logger.warn(f"Skipping bad Line in Schedule: {e}")
-            case 'action_set_dew_heater':
-                do_schedule_action_device("action_set_dew_heater", {"heater": int(heater)}, telescope_id)
-            case 'start_up_sequence':
-                do_schedule_action_device("start_up_sequence",
-                                          {
-                                            "raise_arm": raise_arm,
-                                            "auto_focus": auto_focus,
-                                            "3ppa": polar_align,
-                                            "dark_frames": dark_frames
-                                          },
-                                          telescope_id)
-            case '_':
-                pass
+            case "set_wheel_position":
+                wheel_positions = params.get("params")
+                if wheel_positions:
+                    if not isinstance(wheel_positions, list):
+                        wheel_positions = [wheel_positions]
+                    for position in wheel_positions:
+                        try:
+                            position = int(position)
+                            do_schedule_action_device("set_wheel_position", [position], telescope_id)
+                        except ValueError:
+                            logging.warning(f"Invalid wheel position value: {position}. Skipping.")
+                else:
+                    logging.warning("Missing 'params' for set_wheel_position.")
+            case "action_set_dew_heater":
+                heater_value = int(params.get("heater", 0))
+                do_schedule_action_device("action_set_dew_heater", {"heater": heater_value}, telescope_id)
+            case "start_up_sequence":
+                startup_params = {
+                    "raise_arm": params.get("raise_arm"),
+                    "auto_focus": params.get("auto_focus"),
+                    "3ppa": params.get("polar_align"),
+                    "dark_frames": params.get("dark_frames")
+                }
+                do_schedule_action_device("start_up_sequence", startup_params, telescope_id)
+            case "_":
+                logging.warning(f"Unknown action '{action}' encountered; skipping.")
 
 def get_live_status(telescope_id: int):
     dev = telescope.get_seestar_device(telescope_id)
@@ -2948,7 +2988,7 @@ class FrontMain:
     def start(self):
         """ Application startup"""
 
-        app = falcon.App()
+        app = falcon.App(middleware=falcon.CORSMiddleware(allow_origins='*', allow_credentials='*'))
         app.add_route('/', HomeResource())
         app.add_route('/command', CommandResource())
         app.add_route('/goto', GotoResource())
@@ -3071,6 +3111,7 @@ class FrontMain:
     def reload(self):
         global logger
         logger = get_logger()
+        Config.load_toml()
         logger.debug("FrontMain got reload")
 
 
