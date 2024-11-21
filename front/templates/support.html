@@ -7,19 +7,70 @@
 {% endblock %}
 
 {% block content %}
+  <div class="card border-primary mb-3">
+    <div class="card-header">
+      <h3>Documentation</h3>
+    </div>
+    <div class="card-body border-primary mb-3">
+      Seestar_alp documentation can be found on:
+      <ul>
+        <li>The github <a href="https://github.com/smart-underworld/seestar_alp/blob/main/README.md">README.md</a> file</li>
+        <li>The <a href="https://github.com/smart-underworld/seestar_alp/wiki">github wiki</a></li>
+      </ul>
+      <p>
+      Wiki contributors are always welcome, to improve our docs!
+    </div>
+  </div>
 
-	<form method="post" action="/gensupportbundle">
-		<label for="desc" class="form-label">Generate a support bundle</label>
-		<textarea class="form-control" id="desc" name="desc" rows="10"
-			aria-describedby="descHelp" value="" required>
-Please describe your problem here in as much detail as you are able to provide.
+  <div class="card border-primary mb-3">
+    <div class="card-header">
+      <h3>Collaboration</h3>
+    </div>
+    <div class="card-body border-primary mb-3">
+      Seestar_alp developers use Discord as the primary means of collaboration.<p>
+      The discord server can be found via <a href="https://discord.gg/B3zDCAMP4V">this link</a><p>
+      Some channels to find help/advice might be:
+      <ul>
+        <li>#seestar_alp-user-channel</li>
+        <li>#seestar_alp-ask-developers</li>
+      </ul>
+    </div>
+  </div>
 
-Reproduction steps, and times it occurred are all helpful details.</textarea>
-		<input class="form-check-input" type="checkbox" id="getSeestarLogs" name="getSeestarLogs">
-		<label class="form-check-label" for="getSeestarLogs">Collect SeeStar logs</label>
-		<br><br>
-		<button type="submit" class="btn btn-primary">Download Bundle</button>
-	</form>
+  <div class="card border-primary mb-3">
+    <div class="card-header">
+      <h3>Feature Request / Bug Reporting</h3>
+    </div>
+    <div class="card-body border-primary mb-3">
+      Seestar_alp developers use github "issues" as a means of tracking bugs, and feature requests.<p>
+      Please search the existing bugs and features <a href="https://github.com/smart-underworld/seestar_alp/issues">here</a> and "thumbs-up" or comment
+      on issues that you would like to see worked on.<p>
+      <p>
+      If you need to create a new issue, please use the "new issue" button, or <a href="https://github.com/smart-underworld/seestar_alp/issues/new">this link</a> to do so.<p>
+      Optionally, you can collect a support bundle to attach to this issue, for better developer debugging (see below)
+    </div>
+  </div>
+
+	<div class="card border-primary mb-3">
+    <div class="card-header">
+		  <h3>Support Bundle</h3>
+    </div>
+    <div class="card-body border-primary mb-3">
+      <form method="post" action="/gensupportbundle">
+        <label for="desc" class="form-label">Generate a support bundle (zip file) for debugging, or sharing with developers</label>
+        <textarea class="form-control" id="desc" name="desc" rows="10"
+          aria-describedby="descHelp" value="" required>
+    Please describe your problem here in as much detail as you are able to provide.
+
+    Reproduction steps, and times it occurred are all helpful details.</textarea>
+        <input class="form-check-input" type="checkbox" id="getSeestarLogs" name="getSeestarLogs">
+        <label class="form-check-label" for="getSeestarLogs">Collect embedded logs from SeeStar</label>
+        <br><br>
+        <button type="submit" class="btn btn-primary">Download Bundle</button>
+      </form>
+    </div>
+  </div>
+
 
 	<footer class="bg-body-tertiary text-center mt-3">
 		Version: {{ version }}
