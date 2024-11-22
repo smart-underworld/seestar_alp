@@ -524,7 +524,8 @@ def get_device_state(telescope_id):
                     client_master = result.get("client", { "is_master": False }).get("is_master", False)
                     clients = result.get("client", {"connected": []}).get("connected", [])
                     master_idx = result.get("client", { "master_index": 0 }).get("master_index", 0)
-                    clients[master_idx] = "master:" + clients[master_idx]
+                    if master_idx >= 0:
+                        clients[master_idx] = "master:" + clients[master_idx]
                     client_list = "<br>".join(clients)
 
             if wifi_status is not None:
