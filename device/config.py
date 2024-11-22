@@ -142,8 +142,8 @@ class _Config:
                 'device_num': 1
             }
             ]
-        
-        # For the rare situation of manually edited toml where the highest 
+
+        # For the rare situation of manually edited toml where the highest
         # device_num is higher than the number of devices, we rewrite the device_num
         # sequentially.
 
@@ -188,6 +188,9 @@ class _Config:
         self.is_EQ_mode: bool = self.get_toml(section, 'is_EQ_mode', False)
 
     def load_from_form(self, req):
+        def str2bool(v):
+            return v.lower() in ("yes", "true", "t", "1")
+
         """
         Save the config html form into a toml file
         """
@@ -204,6 +207,7 @@ class _Config:
 
         # Iterate through the devices and add them to the lists
         for devNum in range(deviceCount):
+
             if deviceCount > 1:
                 ss_name = req.media['ss_name'][devNum]
                 ss_ip = req.media['ss_ip_address'][devNum]
@@ -211,10 +215,22 @@ class _Config:
                 ss_name = req.media['ss_name']
                 ss_ip = req.media['ss_ip_address']
 
+            ss_dict = {'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1}
+
+            if f"scope_aim_lat_{devNum+1}" in req.media:
+                ss_dict['scope_aim_lat'] = req.media[f"scope_aim_lat_{devNum+1}"]
+            if f"scope_aim_lat_{devNum+1}" in req.media:
+                ss_dict['scope_aim_lon'] = req.media[f"scope_aim_lon_{devNum+1}"]
+            if f"is_EQ_mode_{devNum+1}" in req.media:
+                ss_dict['is_EQ_mode'] = str2bool(req.media[f"is_EQ_mode_{devNum+1}"])
+
+            print(f"XXX {ss_dict}")
+
             # Add to local config
-            self.seestars.append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1})
+            self.seestars.append(ss_dict)
+
             # Add to toml config
-            self._dict['seestars'].append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1})
+            self._dict['seestars'].append(ss_dict)
 
 
         # network
@@ -297,7 +313,7 @@ class _Config:
     #
     # HTML config rendering
     #
-    def render_text(self, name, label, value, description='', required=False):
+    def render_text(self, name, label, value, description='', required=False, hidden = False):
         """
         Render config html form text input
         """
@@ -311,7 +327,12 @@ class _Config:
         else:
             valRequired = ''
 
-        ret = f'''<div class="row mb-3 align-items-center"> <!-- Row -->
+        if hidden:
+            rowstyle=' style="display: none;"'
+        else:
+            rowstyle=''
+
+        ret = f'''<div class="row mb-3 align-items-center"{rowstyle}> <!-- Row -->
                             <div class="col-sm-4 text-end"> <!-- Col -->
                                 <label for="{name}" class="form-label">{label}</label>
                             </div> <!-- Close Col -->
@@ -402,6 +423,7 @@ class _Config:
         """
         ssHTML = ''
         for seestar in self.seestars:
+            dev_id = seestar["device_num"]
             ssHTML += f'''<div id="device_div_{seestar["device_num"]}">
                                 <div class="col-sm-4 text-end">
                                     <label class="form-label">
@@ -411,6 +433,14 @@ class _Config:
                                 {self.render_text('ss_name', "Name", seestar["name"], required=True)}
                                 {self.render_text('ss_ip_address', "IP Address", seestar["ip_address"], required=True)}
                                 {self.render_checkbox(f'delete_{seestar["device_num"]}',"Delete device",False)}
+                        '''
+            if "scope_aim_lat" in seestar:
+                ssHTML += self.render_text(f'scope_aim_lat_{dev_id}', "Scope specific aim_lat", seestar["scope_aim_lat"], required=True, hidden=True)
+            if "scope_aim_lon" in seestar:
+                ssHTML += self.render_text(f'scope_aim_lon_{dev_id}', "Scope specific aim_lon", seestar["scope_aim_lon"], required=True, hidden=True)
+            if "is_EQ_mode" in seestar:
+                ssHTML += self.render_text(f'is_EQ_mode_{dev_id}', "Scope specific is_EQ_mode", seestar["is_EQ_mode"], required=True, hidden=True)
+            ssHTML += '''
                             </div>
 
                         '''
