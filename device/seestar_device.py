@@ -69,6 +69,7 @@ class Seestar:
         self.target_dec: float = 0
         self.target_ra: float = 0
         self.utcdate = time.time()
+        self.firmware_ver_int: int = 0
 
         self.mosaic_thread: Optional[threading.Thread] = None
         self.scheduler_thread: Optional[threading.Thread] = None
@@ -1832,9 +1833,7 @@ class Seestar:
 
     def guest_mode_init(self):
         self.logger.info(f'guest_mode_init')
-        response = self.send_message_param_sync({ "method": "get_device_state",  "params": {"keys":["device"]}})
-        ver = response["result"]["device"]["firmware_ver_int"]
-        if ver > 2300:
+        if self.firmware_ver_int > 2300:
             # Indiscriminately try to grab the master cli
             self.send_message_param_sync({"method":"set_setting", "params":{"master_cli": True}})
             # Set the cli name to the hostname of the machine
@@ -1871,6 +1870,9 @@ class Seestar:
                 self.heartbeat_msg_thread = threading.Thread(target=self.heartbeat_message_thread_fn, daemon=True)
                 self.heartbeat_msg_thread.name = f"HeartbeatMsgThread:{self.device_name}"
                 self.heartbeat_msg_thread.start()
+
+                response = self.send_message_param_sync({ "method": "get_device_state",  "params": {"keys":["device"]}})
+                self.firmware_ver_int = response["result"]["device"]["firmware_ver_int"]
 
                 self.guest_mode_init()
 
