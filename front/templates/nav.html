@@ -17,6 +17,9 @@
 						<li>
 							<a class="dropdown-item" href="{{ root }}/command">Commands</a>
 						</li>
+            <li>
+							<a class="dropdown-item" href="{{ root }}/guestmode">Guest Mode</a>
+						</li>
 						<li>
 							<a class="dropdown-item" href="{{ root }}/goto">Goto</a>
 						</li>
@@ -88,10 +91,10 @@
     document.addEventListener("DOMContentLoaded", function () {
       // Get all nav-link elements
       const navLinks = document.querySelectorAll('.nav-link');
-      
+
       // Get the current URL path
       const currentPath = window.location.pathname;
-  
+
       // Set active class for the current page link
       navLinks.forEach(link => {
         if (link.getAttribute('href') === currentPath) {

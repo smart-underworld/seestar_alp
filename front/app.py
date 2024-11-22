@@ -473,6 +473,21 @@ def get_client_master(telescope_id):
 
     return client_master
 
+def get_guestmode_state(telescope_id):
+    if check_api_state(telescope_id):
+        result = method_sync("get_device_state", telescope_id)
+        device = result.get("device",{})
+        state = {
+            "firmware_ver_int": device.get("firmware_ver_int", 0),
+            "client_master" : result.get("client", { "is_master": False }).get("is_master", False),
+            "master_index": result.get("client", { "master_index": -1}).get("master_index", -1),
+            "client_list" : result.get("client", {"connected": []}).get("connected", [])
+        }
+    else:
+        state = {}
+
+    return state
+
 def get_device_state(telescope_id):
     if check_api_state(telescope_id):
         # print("Device is online", telescope_id)
@@ -2337,6 +2352,22 @@ class StatsResource:
 
         render_template(req, resp, 'stats.html', stats=stats, now=now, **context)
 
+class GuestModeResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        if telescope_id == 0:
+            state = {}
+        else:
+            state = get_guestmode_state(telescope_id)
+        now = datetime.now()
+        context = get_context(telescope_id, req)
+
+        render_template(req, resp, 'guestmode.html', state=state, now=now, action=f"/{telescope_id}/guestmode", **context)
+
+    def on_post(self, req, resp, telescope_id=0):
+        print(f"XXX {req}")
+        output = do_command(req, resp, telescope_id)
+        self.on_get(req, resp, telescope_id)
 
 class SupportResource:
     @staticmethod
@@ -3018,6 +3049,7 @@ class FrontMain:
         app.add_route('/schedule/wait-until', ScheduleWaitUntilResource())
         app.add_route('/schedule/wait-for', ScheduleWaitForResource())
         app.add_route('/stats', StatsResource())
+        app.add_route('/guestmode', GuestModeResource())
         app.add_route('/support', SupportResource())
         app.add_route('/eventstatus', EventStatus())
         app.add_route('/reload', ReloadResource())
@@ -3061,6 +3093,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule/wait-for', ScheduleWaitForResource())
         app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
         app.add_route('/{telescope_id:int}/stats', StatsResource())
+        app.add_route('/{telescope_id:int}/guestmode', GuestModeResource())
         app.add_route('/{telescope_id:int}/support', SupportResource())
         app.add_route('/{telescope_id:int}/system', SystemResource())
         app.add_route('/{telescope_id:int}/eventstatus', EventStatus())
