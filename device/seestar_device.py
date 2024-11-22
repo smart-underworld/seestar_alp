@@ -1862,8 +1862,6 @@ class Seestar:
                     f'Could not establish connection to Seestar. Starting in offline mode')
 
             try:
-                self.guest_mode_init()
-
                 # Start up heartbeat and receive threads
 
                 self.get_msg_thread = threading.Thread(target=self.receive_message_thread_fn, daemon=True)
@@ -1873,6 +1871,9 @@ class Seestar:
                 self.heartbeat_msg_thread = threading.Thread(target=self.heartbeat_message_thread_fn, daemon=True)
                 self.heartbeat_msg_thread.name = f"HeartbeatMsgThread:{self.device_name}"
                 self.heartbeat_msg_thread.start()
+
+                self.guest_mode_init()
+
             except Exception as ex:
                 # todo : Disconnect socket and set is_watch_events false
                 pass
