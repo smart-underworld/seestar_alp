@@ -523,7 +523,7 @@ def get_device_state(telescope_id):
                 if device.get("firmware_ver_int", 0) > 2300:
                     client_master = result.get("client", { "is_master": False }).get("is_master", False)
                     clients = result.get("client", {"connected": []}).get("connected", [])
-                    master_idx = result.get("client", { "master_index": 0 }).get("master_index", 0)
+                    master_idx = result.get("client", { "master_index": -1 }).get("master_index", -1)
                     if master_idx >= 0:
                         clients[master_idx] = "master:" + clients[master_idx]
                     client_list = "<br>".join(clients)
