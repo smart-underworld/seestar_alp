@@ -207,7 +207,6 @@ class _Config:
 
         # Iterate through the devices and add them to the lists
         for devNum in range(deviceCount):
-
             if deviceCount > 1:
                 ss_name = req.media['ss_name'][devNum]
                 ss_ip = req.media['ss_ip_address'][devNum]
@@ -223,8 +222,6 @@ class _Config:
                 ss_dict['scope_aim_lon'] = req.media[f"scope_aim_lon_{devNum+1}"]
             if f"is_EQ_mode_{devNum+1}" in req.media:
                 ss_dict['is_EQ_mode'] = str2bool(req.media[f"is_EQ_mode_{devNum+1}"])
-
-            print(f"XXX {ss_dict}")
 
             # Add to local config
             self.seestars.append(ss_dict)
