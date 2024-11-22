@@ -1832,13 +1832,16 @@ class Seestar:
 
     def guest_mode_init(self):
         self.logger.info(f'guest_mode_init')
-        # Indiscriminately try to grab the master cli
-        self.send_message_param_sync({"method":"set_setting", "params":{"master_cli": True}})
-        # Set the cli name to the hostname of the machine
-        host=socket.gethostname()
-        if not host:
-            host="SSC"
-        self.send_message_param_sync({"method":"set_setting", "params":{"cli_name": f"{host}"}})
+        response = self.send_message_param_sync({ "method": "get_device_state",  "params": {"keys":["device"]}})
+        ver = response["result"]["device"]["firmware_ver_int"]
+        if ver > 2300:
+            # Indiscriminately try to grab the master cli
+            self.send_message_param_sync({"method":"set_setting", "params":{"master_cli": True}})
+            # Set the cli name to the hostname of the machine
+            host=socket.gethostname()
+            if not host:
+                host="SSC"
+            self.send_message_param_sync({"method":"set_setting", "params":{"cli_name": f"{host}"}})
 
     def start_watch_thread(self):
         # only bail if is_watch_events is true
