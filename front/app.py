@@ -1313,7 +1313,7 @@ def import_schedule(input, telescope_id):
                             position = int(position)
                             do_schedule_action_device("set_wheel_position", [position], telescope_id)
                         except ValueError:
-                            logging.warning(f"Invalid wheel position value: {position}. Skipping.")
+                            logger.warn(f"Invalid wheel position value: {position}. Skipping.")
                 else:
                     logging.warning("Missing 'params' for set_wheel_position.")
             case "action_set_dew_heater":
