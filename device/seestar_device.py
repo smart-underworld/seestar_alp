@@ -1851,14 +1851,14 @@ class Seestar:
 
             for i in range(3, 0, -1):
                 if self.reconnect():
-                    self.logger.info(f'Connected')
+                    self.logger.info(f'{self.device_name} Connected')
                     break
                 else:
-                    self.logger.info(f'Connection Failed, is Seestar turned on?')
+                    self.logger.info(f'{self.device_name} Connection Failed, is Seestar turned on?')
                     time.sleep(1)
             else:
                 self.logger.info(
-                    f'Could not establish connection to Seestar. Starting in offline mode')
+                    f'{self.device_name}: Could not establish connection to Seestar. Starting in offline mode')
 
             try:
                 # Start up heartbeat and receive threads
