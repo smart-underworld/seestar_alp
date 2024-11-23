@@ -1219,20 +1219,13 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
     else:
         schedule = {"list": get_queue(telescope_id)}
 
-    if (Config.twilighttimes):
-        twilight_times = get_twilight_times()
-    else:
-        twilight_times = {}
-
     nearest_csc = get_nearest_csc()
     if nearest_csc["status_msg"] != "SUCCESS":
         nearest_csc["href"] = ""
         nearest_csc["full_img"] = ""
 
     context = get_context(telescope_id, req)
-    render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values,
-                    twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes, cleardarksky_enabled=Config.cleardarksky, clear_sky_href=nearest_csc["href"], clear_sky_img_src=nearest_csc["full_img"],
-                    **context)
+    render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values, **context)
 
 def export_schedule(telescope_id):
     if check_api_state(telescope_id):
@@ -1339,7 +1332,7 @@ def import_schedule(input, telescope_id):
                             position = int(position)
                             do_schedule_action_device("set_wheel_position", [position], telescope_id)
                         except ValueError:
-                            logging.warning(f"Invalid wheel position value: {position}. Skipping.")
+                            logger.warn(f"Invalid wheel position value: {position}. Skipping.")
                 else:
                     logging.warning("Missing 'params' for set_wheel_position.")
             case "action_set_dew_heater":
@@ -2317,11 +2310,7 @@ class PlanningResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
         context = get_context(telescope_id, req)
-        if (Config.twilighttimes):
-            twilight_times = get_twilight_times()
-        else:
-            twilight_times = {}
-
+        twilight_times = get_twilight_times()
         nearest_csc = get_nearest_csc()
         if nearest_csc["status_msg"] != "SUCCESS":
             nearest_csc["href"] = ""
@@ -2335,9 +2324,9 @@ class PlanningResource:
 
         config_lat = round(Config.init_lat, 2) # Some of the 3rd party api's/embeds want rounded down.
         config_long = round(Config.init_long, 2) # Some of the 3rd party api's/embeds want rounded down.
-        render_template(req, resp, 'planning.html', twilight_times=twilight_times, twilight_times_enabled=Config.twilighttimes,
-                        config_lat=config_lat, config_long=config_long, clear_sky_href=nearest_csc["href"], clear_sky_img_src=nearest_csc["full_img"],
-                        planning_cards = planning_cards, utc_offset = utc_offset, **context)
+        render_template(req, resp, 'planning.html', twilight_times=twilight_times, config_lat=config_lat, config_long=config_long,
+                        clear_sky_href=nearest_csc["href"], clear_sky_img_src=nearest_csc["full_img"], planning_cards = planning_cards,
+                        utc_offset = utc_offset, **context)
 
 
 class StatsResource:
