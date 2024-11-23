@@ -19,6 +19,8 @@ alpyca.log*
 docker/config.toml
 docker/getopts_long
 front/twilight_times.json
+front/planning.json
 
 Seestar Alpaca API.json:Zone.Identifier
 CometEls.txt
+messages*.db

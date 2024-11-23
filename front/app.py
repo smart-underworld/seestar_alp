@@ -4,6 +4,7 @@ import tzlocal
 
 import falcon
 from falcon import HTTPTemporaryRedirect, HTTPFound
+from falcon import CORSMiddleware
 from astroquery.simbad import Simbad
 from jinja2 import Template, Environment, FileSystemLoader
 from wsgiref.simple_server import WSGIRequestHandler, make_server
@@ -292,7 +293,7 @@ def get_planning_cards():
         else:
             card_state_example_file_location = os.path.join(os.path.dirname(__file__), "planning.json.example")
         shutil.copyfile(card_state_example_file_location, card_state_file_location)
-    
+
     with open(card_state_file_location, 'r') as card_state_file:
         state_data = json.load(card_state_file)
         return state_data
@@ -472,6 +473,21 @@ def get_client_master(telescope_id):
 
     return client_master
 
+def get_guestmode_state(telescope_id):
+    if check_api_state(telescope_id):
+        result = method_sync("get_device_state", telescope_id)
+        device = result.get("device",{})
+        state = {
+            "firmware_ver_int": device.get("firmware_ver_int", 0),
+            "client_master" : result.get("client", { "is_master": False }).get("is_master", False),
+            "master_index": result.get("client", { "master_index": -1}).get("master_index", -1),
+            "client_list" : result.get("client", {"connected": []}).get("connected", [])
+        }
+    else:
+        state = {}
+
+    return state
+
 def get_device_state(telescope_id):
     if check_api_state(telescope_id):
         # print("Device is online", telescope_id)
@@ -491,6 +507,7 @@ def get_device_state(telescope_id):
         stacked = ""
         failed = ""
         client_master = True
+        client_list = ""
         if status is not None:
             view_info = status.get("View", {})
             view_state = view_info.get("state", "Idle")
@@ -520,6 +537,11 @@ def get_device_state(telescope_id):
 
                 if device.get("firmware_ver_int", 0) > 2300:
                     client_master = result.get("client", { "is_master": False }).get("is_master", False)
+                    clients = result.get("client", {"connected": []}).get("connected", [])
+                    master_idx = result.get("client", { "master_index": -1 }).get("master_index", -1)
+                    if master_idx >= 0:
+                        clients[master_idx] = "master:" + clients[master_idx]
+                    client_list = "<br>".join(clients)
 
             if wifi_status is not None:
                 if wifi_status.get("server", False) and client_master:  # sig_lev is only there while in station mode.
@@ -548,8 +570,12 @@ def get_device_state(telescope_id):
                 "Successful Frames": stacked,
                 "Failed Frames": failed,
                 "Wi-Fi Signal": wifi_signal,
-                "Master client": client_master,
             }
+
+            if device.get("firmware_ver_int", 0) > 2300:
+                stats["Master client"] = client_master
+                stats["Client list"] = client_list
+
         else:
             logger.info(f"Stats: Unable to get data.")
             stats = {"Info": "Unable to get stats."}  # Display information for the stats page VS blank page.
@@ -1259,11 +1285,11 @@ def import_schedule(input, telescope_id):
 
     if input_content.startswith("\ufeff"):
         input_content = input_content[1:]
-    
+
     cleaned_input = io.StringIO(input_content)
-    
+
     reader = csv.DictReader(cleaned_input)
-    
+
     for row in reader:
         row = {key: value.strip() for key, value in row.items()}
         action = row.pop('action', None)
@@ -1294,8 +1320,8 @@ def import_schedule(input, telescope_id):
             case "auto_focus":
                 do_schedule_action_device("auto_focus", {"try_count": params.get("try_count", 0)}, telescope_id)
             case "start_mosaic":
-                required_params = ["target_name", "ra", "dec", "is_j2000", "is_use_lp_filter", 
-                                   "is_use_autofocus", "session_time_sec", "ra_num", 
+                required_params = ["target_name", "ra", "dec", "is_j2000", "is_use_lp_filter",
+                                   "is_use_autofocus", "session_time_sec", "ra_num",
                                    "dec_num", "panel_overlap_percent", "gain", "selected_panels","num_tries","retry_wait_s","array_mode"]
                 mosaic_params = {key: value for key, value in params.items() if key in required_params}
                 do_schedule_action_device("start_mosaic", mosaic_params, telescope_id)
@@ -2326,6 +2352,22 @@ class StatsResource:
 
         render_template(req, resp, 'stats.html', stats=stats, now=now, **context)
 
+class GuestModeResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        if telescope_id == 0:
+            state = {}
+        else:
+            state = get_guestmode_state(telescope_id)
+        now = datetime.now()
+        context = get_context(telescope_id, req)
+
+        render_template(req, resp, 'guestmode.html', state=state, now=now, action=f"/{telescope_id}/guestmode", **context)
+
+    def on_post(self, req, resp, telescope_id=0):
+        print(f"XXX {req}")
+        output = do_command(req, resp, telescope_id)
+        self.on_get(req, resp, telescope_id)
 
 class SupportResource:
     @staticmethod
@@ -2978,7 +3020,7 @@ class FrontMain:
     def start(self):
         """ Application startup"""
 
-        app = falcon.App()
+        app = falcon.App(middleware=falcon.CORSMiddleware(allow_origins='*', allow_credentials='*'))
         app.add_route('/', HomeResource())
         app.add_route('/command', CommandResource())
         app.add_route('/goto', GotoResource())
@@ -3007,6 +3049,7 @@ class FrontMain:
         app.add_route('/schedule/wait-until', ScheduleWaitUntilResource())
         app.add_route('/schedule/wait-for', ScheduleWaitForResource())
         app.add_route('/stats', StatsResource())
+        app.add_route('/guestmode', GuestModeResource())
         app.add_route('/support', SupportResource())
         app.add_route('/eventstatus', EventStatus())
         app.add_route('/reload', ReloadResource())
@@ -3050,6 +3093,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule/wait-for', ScheduleWaitForResource())
         app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
         app.add_route('/{telescope_id:int}/stats', StatsResource())
+        app.add_route('/{telescope_id:int}/guestmode', GuestModeResource())
         app.add_route('/{telescope_id:int}/support', SupportResource())
         app.add_route('/{telescope_id:int}/system', SystemResource())
         app.add_route('/{telescope_id:int}/eventstatus', EventStatus())
@@ -3101,6 +3145,7 @@ class FrontMain:
     def reload(self):
         global logger
         logger = get_logger()
+        Config.load_toml()
         logger.debug("FrontMain got reload")
 
 

@@ -1,28 +1,33 @@
 {% extends 'base.html' %}
 
 {% block header %}
-	<div class="container mt-3">
-		<p class="h1">{% block title %}SSC Config{% endblock %}</p>
-	</div>
+<div class="container mt-3">
+	<p class="h1">{% block title %}SSC Config{% endblock %}</p>
+</div>
 {% endblock %}
 
 {% block content %}
-	<div class="container mt-3">
-		<p>The following settings represent the settings in config.toml - NOTE that some settings only take effect upon restarting SSC</p>
+<script>
+	window.onload = function() { localStorage.removeItem('devicecount'); };
+</script>
+<div class="container mt-3">
+	<p>The following settings represent the settings in config.toml - NOTE that
+		some settings only take effect upon restarting SSC<br>
+		<small class="form-text text-muted">
+			Hover mouse over input sections to get descriptions of what the setting is
+			for and default values.
+		</small>
+	</p>
+</div>
+
+<form method="post" action="/config" class="bordered-form">
+	{{ config.render_config_html() }}
+	<div class="card-body border">
+		<button type="submit" class="btn btn-primary">Save</button>
 	</div>
+</form>
 
-	<div class="card border-primary mb-3">
-		<form method="post" action="/config" class="bordered-form">
-
-		{{ config.render_config_html() }}
-
-		<div class="card-body border">
-			<button type="submit" class="btn btn-primary">Save</button>
-		</div>
-		</form>
-	</div>
-
-	<footer class="bg-body-tertiary text-center mt-3">
-		Version: {{ version }}
-	</footer>
+<footer class="bg-body-tertiary text-center mt-3">
+	Version: {{ version }}
+</footer>
 {% endblock %}

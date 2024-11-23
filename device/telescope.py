@@ -201,6 +201,12 @@ class action:
             elif action_name == "stop_scheduler":
                 result = cur_dev.stop_scheduler(params)
                 resp.text = MethodResponse(req, value = result).json
+            elif action_name == "export_schedule":
+                result = cur_dev.export_schedule(params)
+                resp.text = MethodResponse(req, value = result).json
+            elif action_name == "import_schedule":
+                result = cur_dev.import_schedule(params)
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "action_start_up_sequence":
                 result = cur_dev.action_start_up_sequence(params)
                 resp.text = MethodResponse(req, value = result).json

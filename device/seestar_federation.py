@@ -2,6 +2,7 @@ import threading
 import uuid
 from time import sleep
 from seestar_util import Util
+import json
 
 class Seestar_Federation:
     def __new__(cls, *args, **kwargs):
@@ -15,6 +16,7 @@ class Seestar_Federation:
         self.logger = logger
         self.seestar_devices = seestar_devices
         self.schedule = {}
+        self.schedule['version'] = 1.0
         self.schedule['list'] = []
         self.schedule['state'] = "stopped"
         self.schedule['schedule_id'] = str(uuid.uuid4())
@@ -181,6 +183,27 @@ class Seestar_Federation:
         params['id'] = str(uuid.uuid4())
         self.schedule['list'].append(params)
         return self.schedule
+
+    def export_schedule(self, params):
+        filepath = params["filepath"]
+        with open(filepath, 'w') as fp:
+            json.dump(self.schedule, fp, indent=4)
+        return 0
+
+    def import_schedule(self, params):
+        if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete":
+            return self.json_result("import_schedule", -1, "An existing scheduler is active. Returned with no action.")
+        filepath = params["filepath"]
+        is_retain_state = params["is_retain_state"]
+        with open(filepath, 'r') as f:
+            self.schedule = json.load(f)
+        
+        if not is_retain_state:
+            self.schedule['schedule_id'] = str(uuid.uuid4())
+            for item in self.schedule['list']:
+                item['id'] = str(uuid.uuid4())
+            self.schedule['state'] = "stopped"
+        return 0
 
     # cur_params['selected_panels'] cur_params['ra_num'], cur_params['dec_num']
     # split selected panels into multiple sections. Given num_devices > 1 and num ra and dec is > 1
