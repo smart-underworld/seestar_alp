@@ -2354,8 +2354,7 @@ class GuestModeResource:
         render_template(req, resp, 'guestmode.html', state=state, now=now, action=f"/{telescope_id}/guestmode", **context)
 
     def on_post(self, req, resp, telescope_id=0):
-        print(f"XXX {req}")
-        output = do_command(req, resp, telescope_id)
+        do_command(req, resp, telescope_id)
         self.on_get(req, resp, telescope_id)
 
 class SupportResource:

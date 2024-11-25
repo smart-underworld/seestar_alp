@@ -99,7 +99,6 @@ def init_logging():
     return logger
 
 def reinit_logging():
-    print(f"XXX REINIT LOGGER")
     global logger
     logger.setLevel(Config.log_level)
     for handler in logger.handlers:
