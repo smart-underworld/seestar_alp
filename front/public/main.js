@@ -432,38 +432,117 @@ function addSeestar(){
        
     var insertBlock = `<div id="device_div_${devicecount}">
                             <div class="col-sm-4 text-end">
-                                <label class="form-label"><b>Device number ${devicecount}</b></label>
+                                <label class="form-label">
+                                    <h3>Device number ${devicecount}</h3>
+                                </label>
                             </div>
                             <div class="row mb-3 align-items-center">
-                            <div class="col-sm-4 text-end">
-                                <label for="ss_name" class="form-label">Name: </label>
+                                <!-- Row -->
+                                <div class="col-sm-4 text-end">
+                                    <!-- Col -->
+                                    <label for="ss_name" class="form-label">Name</label>
+                                </div>
+                                <!-- Close Col -->
+                                <div class="col-sm-8 col-md-6">
+                                    <!-- Col -->
+                                    <input id="ss_name" name="ss_name" type="text" class="form-control" title="" value="" required>
+                                </div>
+                                <!-- Close Col -->
                             </div>
-                            <div class="col-sm-8 col-md-6">
-                                <input id="ss_name" name="ss_name" type="text" class="form-control" value="" required>
+                            <!-- Close Row -->
+                            <div class="row mb-3 align-items-center">
+                                <!-- Row -->
+                                <div class="col-sm-4 text-end">
+                                    <!-- Col -->
+                                    <label for="ss_ip_address" class="form-label">IP Address</label>
+                                </div>
+                                <!-- Close Col -->
+                                <div class="col-sm-8 col-md-6">
+                                    <!-- Col -->
+                                    <input id="ss_ip_address" name="ss_ip_address" type="text" class="form-control" title="" value="" required>
+                                </div>
+                                <!-- Close Col -->
                             </div>
-                        </div>
-                        <div class="row mb-3 align-items-center">
-                            <div class="col-sm-4 text-end">
-                                <label for="ss_ip_address" class="form-label">IP Address: </label>
+                            <!-- Close Row -->
+                            <div class="row mb-3 align-items-center">
+                                <!-- Row -->
+                                <div class="col-sm-4 text-end">
+                                    <!-- Col -->
+                                    <label for="ss_scope_aim_lat" class="form-label">
+                                    Aim Lat
+                                    </label>
+                                </div>
+                                <!-- Close Col -->
+                                <div class="col-sm-8 col-md-6">
+                                    <!-- Col -->
+                                    <input id="ss_scope_aim_lat" name="ss_scope_aim_lat" type="number" class="form-control" title="start up latitude in degrees -90 to 80" value="60.0" >
+                                </div>
+                                <!-- Close Col -->
                             </div>
-                            <div class="col-sm-8 col-md-6">
-                                <input name="ss_ip_address" id="ss_ip_address" type="text" class="form-control" value="" required>
+                            <!-- Close Row -->
+                            <div class="row mb-3 align-items-center">
+                                <!-- Row -->
+                                <div class="col-sm-4 text-end">
+                                    <!-- Col -->
+                                    <label for="ss_scope_aim_lon" class="form-label">
+                                    Aim Long
+                                    </label>
+                                </div>
+                                <!-- Close Col -->
+                                <div class="col-sm-8 col-md-6">
+                                    <!-- Col -->
+                                    <input id="ss_scope_aim_lon" name="ss_scope_aim_lon" type="number" class="form-control" title="start up longitude in degrees 0 to 360" value="20.0" >
+                                </div>
+                                <!-- Close Col -->
                             </div>
-                        </div>
-                        <div class="row mb-3 align-items-center"> <!-- Checkbox Row -->
-                            <div class="col-sm-4 text-end"> <!-- Checkbox label -->
-                                <label for="delete_${devicecount}" class="form-label">
+                            <!-- Close Row -->
+                            <input id="ss_is_EQ_mode_hidden_${devicecount}" name="ss_is_EQ_mode" type="hidden" value="False">
+                            <div class="row mb-3 align-items-center">
+                                <!-- Checkbox Row -->
+                                <div class="col-sm-4 text-end">
+                                    <!-- Checkbox label -->
+                                    <label for="ss_is_EQ_mode_${devicecount}" class="form-label">
+                                    Is device in EQ mode
+                                    </label>
+                                </div>
+                                <!-- Close checkbox label -->
+                                <div class="col-sm-8 col-md-6">
+                                    <!-- Checkbox -->
+                                    <input id="ss_is_EQ_mode_${devicecount}" class="form-check-input" title="Is device in EQ mode" type="checkbox" onclick="NewCheckboxChange('ss_is_EQ_mode_hidden_${devicecount}')">
+                                </div>
+                                <!--Close checkbox -->
+                            </div>
+                            <!-- Close checkbox row -->
+                            <div class="row mb-3 align-items-center">
+                                <!-- Checkbox Row -->
+                                <div class="col-sm-4 text-end">
+                                    <!-- Checkbox label -->
+                                    <label for="delete_${devicecount}" class="form-label">
                                     Delete device
-                                </label>
-                            </div> <!-- Close checkbox label -->
-                            <div class="col-sm-8 col-md-6"> <!-- Checkbox -->
-                                <input id="delete_${devicecount}" name="delete_${devicecount}" class="form-check-input" type="checkbox">
-                            </div> <!--Close checkbox -->
-                        </div> <!-- Close checkbox row -->`;
-
+                                    </label>
+                                </div>
+                                <!-- Close checkbox label -->
+                                <div class="col-sm-8 col-md-6">
+                                    <!-- Checkbox -->
+                                    <input id="delete_${devicecount}" name="delete_${devicecount}" class="form-check-input" title="" type="checkbox" >
+                                </div>
+                                <!--Close checkbox -->
+                            </div>
+                            <!-- Close checkbox row -->                        
+                        </div>
+                            `;
     lastElement.insertAdjacentHTML('afterend', insertBlock);
-    document.getElementById('devicecount').value = devicecount
 }
+
+
+function NewCheckboxChange(element) {
+    hidden = document.getElementById(element);
+    if (hidden.value == "True") { 
+        hidden.value = "False";
+    } else {
+        hidden.value = "True";
+     }
+};
 
 function delSeestar() {
     // Get all the checkboxes
@@ -477,3 +556,20 @@ function delSeestar() {
     }
 
 }
+
+// Create event listener to monitor the seestar checkboxes.  Upon change of the checkbox state,
+// update the associated hidden checkbox with True / False so we have somthing to send back upon unchecked.
+
+document.querySelectorAll('[id^=ss_is_EQ_mode_]:not([id^=is_EQ_mode_hidden_])').forEach(function(element) { 
+    element.addEventListener('change', function(event) {
+        // Directly access the changed element
+        var changedElement = event.target;
+        var elementNumber = changedElement.id.split("_").pop();
+        var hiddenInput = document.getElementById('ss_is_EQ_mode_hidden_' + elementNumber);
+
+        // Correctly update the hidden input value
+        hiddenInput.value = changedElement.checked ? 'True' : 'False';
+    });
+});
+
+
