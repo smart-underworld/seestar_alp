@@ -322,8 +322,10 @@ class _Config:
         """
         if type(value) is tomlkit.items.Integer or type(value) is tomlkit.items.Float:
             strType = 'number'
+            step = 'step="any"'
         else:
             strType = 'text'
+            step= ''
 
         if required:
             valRequired = 'required'
@@ -335,7 +337,7 @@ class _Config:
                                 <label for="{name}" class="form-label">{label}</label>
                             </div> <!-- Close Col -->
                             <div class="col-sm-8 col-md-6"> <!-- Col -->
-                                <input id="{name}" name="{name}" type="{strType}" class="form-control" title="{description}" value="{value}" {valRequired}>
+                                <input id="{name}" name="{name}" type="{strType}" class="form-control" title="{description}" {step} value="{value}" {valRequired}>
                             </div> <!-- Close Col -->
                         </div> <!-- Close Row -->
                     '''
