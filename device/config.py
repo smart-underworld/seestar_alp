@@ -443,14 +443,15 @@ class _Config:
                 lon = self.render_text('ss_scope_aim_lon','Aim Long',seestar['scope_aim_lon'],'start up longitude in degrees 0 to 360')
             else:
                 lon = self.render_text('ss_scope_aim_lon','Aim Long',20,'start up longitude in degrees 0 to 360')
+
             
+            c = ""
+            h = "False"
+
             if 'is_EQ_mode' in seestar:
                 if self.strToBool(seestar['is_EQ_mode']):
                     c = "checked"
                     h = "True"
-                else:
-                    c = ""
-                    h = "False"
 
             
             ssHTML += f'''<div id="device_div_{seestar["device_num"]}">
