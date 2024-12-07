@@ -67,6 +67,13 @@ class _Config:
             shutil.copy(path_to_ex, self.path_to_dat)
 
         self.load_toml(self.path_to_dat)
+    
+    @staticmethod
+    def strToBool(inputString: str):
+        if inputString in ["True", "true", "on"] or inputString == True:
+            return True
+        else:
+            return False
 
     def get_toml(self, sect: str, item: str, default : typing.Any):
         """
@@ -137,6 +144,9 @@ class _Config:
             {
                 'name': 'Seestar Alpha',
                 'ip_address': 'seestar.local',
+                'scope_aim_lat':  60.0,
+                'scope_aim_lon':  20.0,
+                'is_EQ_mode':  False,
                 'device_num': 1
             }
             ]
@@ -190,6 +200,9 @@ class _Config:
         Save the config html form into a toml file
         """
 
+        form_data = req.get_media()
+
+
         # Reset arrays
         self.seestars = []
         self._dict['seestars'].clear()
@@ -205,14 +218,21 @@ class _Config:
             if deviceCount > 1:
                 ss_name = req.media['ss_name'][devNum]
                 ss_ip = req.media['ss_ip_address'][devNum]
+                ss_lat = req.media['ss_scope_aim_lat'][devNum]
+                ss_lon = req.media['ss_scope_aim_lon'][devNum]
+                ss_eq = self.strToBool(req.media['ss_is_EQ_mode'][devNum])
+                print (f'Device {devNum} EQ is : {ss_eq}')
             else:
                 ss_name = req.media['ss_name']
                 ss_ip = req.media['ss_ip_address']
+                ss_lat = req.media['ss_scope_aim_lat']
+                ss_lon = req.media['ss_scope_aim_lon']
+                ss_eq = self.strToBool(req.media['ss_is_EQ_mode'])
 
             # Add to local config
-            self.seestars.append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1})
+            self.seestars.append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1, 'scope_aim_lat': float(ss_lat), 'scope_aim_lon': float(ss_lon), 'is_EQ_mode': ss_eq})
             # Add to toml config
-            self._dict['seestars'].append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1})
+            self._dict['seestars'].append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1, 'scope_aim_lat': float(ss_lat), 'scope_aim_lon': float(ss_lon), 'is_EQ_mode': ss_eq})
 
 
         # network
@@ -300,8 +320,10 @@ class _Config:
         """
         if type(value) is tomlkit.items.Integer or type(value) is tomlkit.items.Float:
             strType = 'number'
+            step = 'step="any"'
         else:
             strType = 'text'
+            step= ''
 
         if required:
             valRequired = 'required'
@@ -313,13 +335,13 @@ class _Config:
                                 <label for="{name}" class="form-label">{label}</label>
                             </div> <!-- Close Col -->
                             <div class="col-sm-8 col-md-6"> <!-- Col -->
-                                <input id="{name}" name="{name}" type="{strType}" class="form-control" title="{description}" value="{value}" {valRequired}>
+                                <input id="{name}" name="{name}" type="{strType}" class="form-control" title="{description}" {step} value="{value}" {valRequired}>
                             </div> <!-- Close Col -->
                         </div> <!-- Close Row -->
                     '''
         return ret
 
-    def render_checkbox(self, name, label, checked, description = ''):
+    def render_checkbox(self, name, label, checked, description = '',  hidden = False):
         """
         Render config html form boolean checkbox
         """
@@ -329,17 +351,30 @@ class _Config:
         else:
             c=""
 
-        ret = f'''<div class="row mb-3 align-items-center"> <!-- Checkbox Row -->
-                            <div class="col-sm-4 text-end"> <!-- Checkbox label -->
-                                <label for="{name}" class="form-label">
-                                    {label}
-                                </label>
-                            </div> <!-- Close checkbox label -->
-                            <div class="col-sm-8 col-md-6"> <!-- Checkbox -->
-                                <input id="{name}" name="{name}" class="form-check-input" title="{description}" type="checkbox" {c}>
-                            </div> <!--Close checkbox -->
-                        </div> <!-- Close checkbox row -->
-                    '''
+
+        if hidden:
+            t = "hidden"
+            v = 'value=""'
+        
+            ret= f'''<div class="col-sm-8 col-md-6"> <!-- Checkbox -->
+                                <input id="{name}_hidden" name="{name}" class="form-check-input" title="{description}" type="{t}" {v} {c}>
+                            </div> <!--Close checkbox -->'''
+        
+        else:
+            t = "checkbox"
+            v = ''
+
+            ret = f'''<div class="row mb-3 align-items-center"> <!-- Checkbox Row -->
+                                <div class="col-sm-4 text-end"> <!-- Checkbox label -->
+                                    <label for="{name}" class="form-label">
+                                        {label}
+                                    </label>
+                                </div> <!-- Close checkbox label -->
+                                <div class="col-sm-8 col-md-6"> <!-- Checkbox -->
+                                    <input id="{name}" name="{name}" class="form-check-input" title="{description}" type="{t}" {c}>
+                                </div> <!--Close checkbox -->
+                            </div> <!-- Close checkbox row -->
+                        '''
         return ret
 
     def render_select(self, name, label, options, default, description = ''):
@@ -399,15 +434,50 @@ class _Config:
         """
         ssHTML = ''
         for seestar in self.seestars:
+            if 'scope_aim_lat' in seestar:
+                lat = self.render_text('ss_scope_aim_lat','Aim Lat',seestar['scope_aim_lat'],'start up latitude in degrees -90 to 80')
+            else:
+                lat = self.render_text('ss_scope_aim_lat','Aim Lat',60,'start up latitude in degrees -90 to 80')
+
+            if 'scope_aim_lon' in seestar:
+                lon = self.render_text('ss_scope_aim_lon','Aim Long',seestar['scope_aim_lon'],'start up longitude in degrees 0 to 360')
+            else:
+                lon = self.render_text('ss_scope_aim_lon','Aim Long',20,'start up longitude in degrees 0 to 360')
+
+            
+            c = ""
+            h = "False"
+
+            if 'is_EQ_mode' in seestar:
+                if self.strToBool(seestar['is_EQ_mode']):
+                    c = "checked"
+                    h = "True"
+
+            
             ssHTML += f'''<div id="device_div_{seestar["device_num"]}">
                                 <div class="col-sm-4 text-end">
                                     <label class="form-label">
-                                    <b>Device number {seestar["device_num"]}</b>
+                                    <h3>Device number {seestar["device_num"]}</h3>
                                     </label>
                                 </div>
                                 {self.render_text('ss_name', "Name", seestar["name"], required=True)}
                                 {self.render_text('ss_ip_address', "IP Address", seestar["ip_address"], required=True)}
+                                {lat}
+                                {lon}   
+                                <input id="ss_is_EQ_mode_hidden_{seestar["device_num"]}" name="ss_is_EQ_mode" type="hidden" value="{h}">
+
+                                <div class="row mb-3 align-items-center"> <!-- Checkbox Row -->
+                                    <div class="col-sm-4 text-end"> <!-- Checkbox label -->
+                                        <label for="ss_is_EQ_mode_{seestar["device_num"]}" class="form-label">
+                                            Is device in EQ mode
+                                        </label>
+                                    </div> <!-- Close checkbox label -->
+                                    <div class="col-sm-8 col-md-6"> <!-- Checkbox -->
+                                        <input id="ss_is_EQ_mode_{seestar["device_num"]}" class="form-check-input" title="Is device in EQ mode" type="checkbox" {c}>
+                                    </div> <!--Close checkbox -->
+                                </div> <!-- Close checkbox row -->
                                 {self.render_checkbox(f'delete_{seestar["device_num"]}',"Delete device",False)}
+
                             </div>
 
                         '''
@@ -416,7 +486,6 @@ class _Config:
                 <div class="row mb-3 align-items-center">
                     {ssHTML}
                 </div>
-                <input type="hidden" id="devicecount" name="devicecount" value="{len(self.seestars)}">
                 <div class="align-items-center">
                     <button style="margin:5px;" type="button" class="btn btn-primary" id="add_seestar" onclick="addSeestar()">
                         Add Seestar Device
