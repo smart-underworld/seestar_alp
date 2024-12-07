@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block header %}
+<div class="container mt-3">
+	<p class="h1">{% block title %}Blind Polar Alignment{% endblock %}</p>
+</div>
+<style>
+  .garden {
+    position: relative;
+    width: 80%;
+    border: 2px solid #ccc;
+    border-radius: 10px;
+    aspect-ratio : 1 / 1;
+  }
+  .crosshair-h {
+    position: absolute;
+    top: 50%;
+    left: 0%;
+    width: 100%;
+    height: 0px;
+    border: 1px solid #ccc;
+    z-index: 5;
+  }
+  .crosshair-v {
+    position: absolute;
+    top: 0%;
+    left: 50%;
+    width: 0px;
+    height: 100%;
+    border: 1px solid #ccc;
+    z-index: 5;
+  }
+  .ball {
+    position: absolute;
+    width: 15px;
+    background: red;
+    border: 0px;
+    padding: 0px;
+    border-radius: 100%;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio : 1 / 1;
+  }
+  .circle_inner {
+    position: absolute;
+    z-index: 5;
+    border: 2px solid #ccc;
+    border-radius: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio : 1 / 1;
+    margin: 0
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div id="pa_target_div">
+  <div id="pa_garden" class="garden">
+    <div class="cow d-flex justify-content-center align-items-center" style="margin: unset; height: 100%">
+      <div class="row d-flex justify-content-center align-items-center" style="margin: unset; width: 100%">
+        <div id="pa_circle_inner" class="circle_inner" style="width: 10%"></div>
+        <div id="pa_circle_inner" class="circle_inner" style="width: 30%"></div>
+        <div id="pa_circle_inner" class="circle_inner" style="width: 80%"></div>
+        <div id="ball" class="ball" style="width: 3%"></div>
+      </div>
+    </div>
+    <div id="pa_target_h" class="crosshair-h"></div>
+    <div id="pa_target_v" class="crosshair-v"></div>
+  </div>
+  <pre class="output"></pre>
+  <button id="testBtn" type="reset">Test Alignment</button>
+</div>
+<script>
+  const testButton = document.getElementById("testBtn");
+  function update_alignment(x,y) {
+    const ball = document.getElementById("ball");
+    ball.style.top = `${y}px`
+    ball.style.left = `${x}px`
+  }
+  async function showAlignment() {
+    try {
+      var szElement = document.getElementById("pa_garden")
+      var baseURL =
+      `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
+      get_blind_pa_URL = baseURL + '/blind_pa';
+      const response = await fetch(get_blind_pa_URL, {
+        method: "POST",
+        body: JSON.stringify({
+          width: szElement.clientWidth,
+          height: szElement.clientHeight
+        }),
+        headers: {
+          "Content-type": "application/json; charset=UTF-8"
+        }
+      })
+      const data = await response.json();
+      update_alignment(data["x"], data["y"]);
+      console.log(data);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
+  }
+  testButton.addEventListener("click", showAlignment);
+</script>
+<footer class="bg-body-tertiary text-center mt-3">
+	Version: {{ version }}
+</footer>
+{% endblock %}

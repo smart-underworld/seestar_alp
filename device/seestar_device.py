@@ -89,8 +89,12 @@ class Seestar:
 
         self.cur_equ_offset = None  # from 3ppa
 
+        self.plate_solve_state = "fail"
         self.cur_solve_RA: float = -9999.0  #
         self.cur_solve_Dec: float = -9999.0
+        self.first_plate_solve_RA = None    # for blind plate solve logic
+        self.first_plate_solve_Dec = None
+
         self.connect_count: int = 0
         self.below_horizon_dec_offset: float = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
         self.safe_dec_for_offset: float = 10.0  # declination angle in degrees as the lower limit for dec values before below_horizon logic kicks in
@@ -289,10 +293,15 @@ class Seestar:
                                 self.cur_solve_RA = parsed_data['result']['ra_dec'][0]
                                 self.cur_solve_Dec = parsed_data['result']['ra_dec'][1]
                                 self.logger.info(f"Current plate solve position: {self.cur_solve_RA}, {self.cur_solve_Dec}")
+                                # record first good plate solve for blind polar alignment logic
+                                if self.plate_solve_state == "working":
+                                    self.first_plate_solve_RA = self.cur_solve_RA
+                                    self.first_plate_solve_Dec = self.cur_solve_Dec
+                                self.plate_solve_state = "complete"
                             elif parsed_data['state'] == 'fail':
+                                self.plate_solve_state = "fail"
                                 self.logger.info("Plate Solve Failed")
-                                self.cur_solve_RA = 0
-                                self.cur_solve_Dec = 0
+
                         #else:
                         #    self.logger.debug(f"Received event {event_name} : {data}")
 
@@ -370,10 +379,16 @@ class Seestar:
             result = self.event_state
         return self.json_result("get_event_state", 0, result)
 
-    def _start_plate_solve_worker(self):
+    def _plate_solve_worker(self):
+        self.plate_solve_state = "working"
+        self.first_plate_solve_RA = None 
+        self.first_plate_solve_Dec = None
         while self.schedule['state'] == "working":
             tmp = self.send_message_param_sync({"method":"start_solve"})
-            time.sleep(10)
+            result = self.get_pa_error({"max_range":5.0})
+            self.logger.info(result)
+            # todo: any better way to repeat plate solve without sleep?
+            time.sleep(4)
         self.logger.info("stopped plate solve loop")
         self.schedule['state'] = "stopped"
 
@@ -381,15 +396,28 @@ class Seestar:
         if self.schedule['state'] == "stopped" or self.schedule['state'] == 'complete':
             self.schedule['state'] = "working"
             self.logger.info("start plate solve loop")
-            threading.Thread(name=f"plate_solve-thread:{self.device_name}", target=lambda: self._start_plate_solve_worker()).start()
-            return("started plate slove loop")
+            threading.Thread(name=f"plate_solve-thread:{self.device_name}", target=lambda: self._plate_solve_worker()).start()
+            return("started plate solve loop")
         else:
             self.logger.warn("scheduler state is running, cannot start plate solve loop")
             return("scheduler state was running. Canno start loop")
 
-
-
-
+    def get_pa_error(self, param):
+        if self.plate_solve_state == "working":
+            self.logger.warn("Warning: Alignment logic is still trying to platesolve. Data is not ready.")
+            return{"error":"Alignment logic is still trying to platesolve, data is not ready."}
+        elif self.cur_equ_offset == None:
+            self.logger.warn("Warning: Polar alignment has not been completed yet. Data is not ready.")
+            return{"error":"Polar alignment has not been completed yet. Data is not ready."}
+        
+        max_error = param["max_range"]
+        expected_max_error = 5.0
+        error_ra = self.cur_equ_offset[0] - (self.cur_solve_RA - self.first_plate_solve_RA)*15.0  # 15.0 = 360 degrees / 24 hours
+        error_dec = self.cur_equ_offset[1]  - (self.cur_solve_Dec - self.first_plate_solve_Dec)
+        self.logger.info(f"cur_ra: {self.cur_solve_RA}, first_ra: {self.first_plate_solve_RA}")
+        self.logger.info(f"cur_dec: {self.cur_solve_Dec}, first_dec: {self.first_plate_solve_Dec}")
+        self.logger.info(f"EQ error: {error_ra}, {error_dec}")
+        return({"pa_error_ra" : error_ra * max_error / expected_max_error, "pa_error_dec" : error_dec * max_error / expected_max_error})
 
 
     def set_setting(self, x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, auto_af=False, stack_after_goto=False):
@@ -714,6 +742,8 @@ class Seestar:
                                 if "equ_offset" in event_state:
                                     result = True
                                     self.cur_equ_offset = event_state["equ_offset"]
+                                    if self.firmware_ver_int < 2368:
+                                        self.cur_equ_offset[1] -= 90.0 - self.site_latitude
                                     self.logger.info(f"3PPA equ offset: {self.cur_equ_offset}")
                                 else:
                                     result = True
@@ -869,19 +899,18 @@ class Seestar:
     # after we goto_ra_dec, we can do a platesolve and refine until we are close enough
     def auto_center_thread(self, target_ra, target_dec):
         self.logger.info("In auto center logic...")
-        self.cur_solve_RA = -9999.0
-        self.cur_solve_Dec = -9999.0
         self.custom_goto_state = "working"
         search_count = 0
         while self.schedule['state'] != "stopping" and self.custom_goto_state == "working":
             # wait a bit to ensure we have preview image data
             time.sleep(1)
-            self.send_message_param({"method": "start_solve"})
-            # reset it immediately so the other wather thread can update the solved position
             self.cur_solve_RA = -9999.0
             self.cur_solve_Dec = -9999.0
+            self.plate_solve_state = "working"
+            self.send_message_param({"method": "start_solve"})
+
             # if we have not platesolve yet, then repeat
-            while self.cur_solve_RA < -1000:
+            while self.plate_solve_state == "working":
                 if self.schedule['state'] == "stopping" or self.custom_goto_state != "working":
                     self.logger.info("auto center thread stopped because the scheduler was requested to stop")
                     self.custom_goto_state = "stopped"
@@ -889,7 +918,7 @@ class Seestar:
                 time.sleep(1)
 
             # if we failed platesolve:
-            if self.cur_solve_RA == 0 and self.cur_solve_Dec == 0:
+            if self.plate_solve_state == "fail":
                 if search_count > 5:
                     self.custom_goto_state = "fail"
                     self.logger.warn(f"auto center failed after {search_count} tries.")

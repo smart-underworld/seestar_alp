@@ -6,6 +6,7 @@
 __pycache__
 device/__pycache__
 device/config.toml
+device/config.toml.kai
 dist
 build
 seestar_alp.spec
@@ -24,3 +25,4 @@ front/planning.json
 Seestar Alpaca API.json:Zone.Identifier
 CometEls.txt
 messages*.db
+

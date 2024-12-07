@@ -231,6 +231,9 @@ class action:
             elif action_name == "start_plate_solve_loop":
                 result = cur_dev.start_plate_solve_loop()
                 resp.text = MethodResponse(req, value = result).json
+            elif action_name == "get_pa_error":
+                result = cur_dev.get_pa_error(params)
+                resp.text = MethodResponse(req, value = result).json
         except Exception as ex:
             resp.text = MethodResponse(req,
                             DevDriverException(0x500, '\n'.join(ex.args), ex)).json

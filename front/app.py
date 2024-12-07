@@ -31,6 +31,8 @@ import signal
 import math
 import numpy as np
 import sqlite3
+import random
+
 
 from skyfield.api import Loader
 from skyfield.data import mpc
@@ -2763,6 +2765,30 @@ class ConfigResource:
 
         render_template(req, resp, 'config.html', now=now, config=Config, **context)  # pylint: disable=repeated-keyword
 
+class BlindPolarAlignResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        now = datetime.now()
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'blind_pa.html', now=now, **context)  # pylint: disable=repeated-keyword
+    @staticmethod
+    def on_post(req, resp):
+        referer = req.get_header('Referer')
+        PostedForm = req.media
+        width = PostedForm["width"]  # TODO: This should have some type of input check
+        height = PostedForm["height"]  # TODO: This should have some type of input check
+        # XXX here is where we will call into Kai's code
+        # For now, fudge values
+        rnd_x = random.randint(-50, 50)
+        rnd_y = random.randint(-50, 50)
+        blind_pa_data = {
+            "x": int((width/2)+rnd_x),
+            "y": int((height/2)+rnd_y),
+        }
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'application/json'
+        resp.text = json.dumps(blind_pa_data)
+
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
@@ -3089,6 +3115,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/eventstatus', EventStatus())
         app.add_route('/{telescope_id:int}/gensupportbundle', GenSupportBundleResource())
         app.add_route('/{telescope_id:int}/config', ConfigResource())
+        app.add_route('/{telescope_id:int}/blind_pa', BlindPolarAlignResource())
         app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
         app.add_route('/simbad', SimbadResource())
         app.add_route('/stellarium', StellariumResource())
@@ -3104,6 +3131,7 @@ class FrontMain:
         app.add_route('/getminorplanetcoordinates', GetMinorPlanetCoordinates())
         app.add_route('/getaavsocoordinates', GetAAVSOSearch())
         app.add_route('/config', ConfigResource())
+        app.add_route('/blind_pa', BlindPolarAlignResource())
 
         try:
             self.httpd = make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler)
