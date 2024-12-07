@@ -136,9 +136,18 @@ class action:
         else:
             cur_dev = seestar_dev[devnum]
 
-
         try:
             params = json.loads(parameters)
+
+            if action_name == "method_sync" and params["method"] in ["scope_get_equ_coord", "get_view_state"]:
+                cur_dev.logger.debug(f"request: {action_name} for device {devnum} with param {parameters}")
+            elif action_name in ["get_event_state"]:
+                cur_dev.logger.debug(f"request: {action_name} for device {devnum} with param {parameters}")
+            else:
+                cur_dev.logger.info(f"request: {action_name} for device {devnum} with param {parameters}")
+
+
+
             # print(f'Received request: Action {action_name} with params {params}')
             if action_name == "get_event_state":
                 result = cur_dev.get_event_state(params)
@@ -218,6 +227,9 @@ class action:
                 resp.text = MethodResponse(req, value = redirect_url).json  
             elif action_name == "adjust_mag_declination":
                 result = cur_dev.adjust_mag_declination(params) 
+                resp.text = MethodResponse(req, value = result).json
+            elif action_name == "start_plate_solve_loop":
+                result = cur_dev.start_plate_solve_loop()
                 resp.text = MethodResponse(req, value = result).json
         except Exception as ex:
             resp.text = MethodResponse(req,

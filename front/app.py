@@ -452,7 +452,9 @@ def method_sync(method, telescope_id=1, **kwargs):
                     if results[devnum]["status"] == "success" and results[devnum]["result"] != 0:
                         results[devnum] = results[devnum]["result"]
         else:
-            results = err_extractor(value) if value else "Offline"
+            if not value:
+                return "Offline"
+            results = err_extractor(value)
             if results.get("status",{}) == "error":
                 return results
             if results.get("result",{}) == 0:
