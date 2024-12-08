@@ -422,7 +422,7 @@ class Seestar:
             return{"error":"Polar alignment has not been completed yet. Data is not ready."}
         
         max_error = param["max_range"]
-        expected_max_error = 5.0
+
         cur_solve_altaz = self.get_altaz_from_eq(self.cur_solve_RA, self.cur_solve_Dec)
         # note seestar returns equ offset as [az, alt], bad convention!
         error_alt = self.cur_equ_offset_alt - (cur_solve_altaz[0] - self.first_plate_solve_altaz[0])
@@ -435,7 +435,13 @@ class Seestar:
         self.logger.info(f"pa error    : {error_alt:3.4f}, {error_az:3.4f}")
         self.logger.info("")
 
-        return({"pa_error_alt" : error_alt * max_error / expected_max_error, "pa_error_az" : error_az * max_error / expected_max_error})
+        if error_alt > max_error:
+            error_alt = max_error
+
+        if error_az > max_error:
+            error_az = max_error
+
+        return({"pa_error_alt" : error_alt, "pa_error_az" : error_az})
 
 
     def set_setting(self, x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, auto_af=False, stack_after_goto=False):
