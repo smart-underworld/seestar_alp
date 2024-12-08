@@ -25,6 +25,10 @@ from device.seestar_util import Util
 
 from collections import OrderedDict
 
+from astropy.coordinates import SkyCoord, EarthLocation, AltAz
+from astropy.time import Time
+import astropy.units as u
+
 class FixedSizeOrderedDict(OrderedDict):
     def __init__(self, *args, maxsize=None, **kwargs):
         self.maxsize = maxsize
@@ -87,13 +91,15 @@ class Seestar:
         self.update_scheduler_state_obj({}, result=0)
 
 
-        self.cur_equ_offset = None  # from 3ppa
+        self.cur_equ_offset_alt = None  # from 3ppa
+        self.cur_equ_offset_az = None  # from 3ppa
 
         self.plate_solve_state = "fail"
         self.cur_solve_RA: float = -9999.0  #
         self.cur_solve_Dec: float = -9999.0
-        self.first_plate_solve_RA = None    # for blind plate solve logic
-        self.first_plate_solve_Dec = None
+        self.first_plate_solve_altaz = None    # for blind plate solve logic
+
+        self.site_altaz_frame = None
 
         self.connect_count: int = 0
         self.below_horizon_dec_offset: float = 0  # we will use this to work around below horizon. This value will ve used to fool Seestar's star map
@@ -295,8 +301,7 @@ class Seestar:
                                 self.logger.info(f"Current plate solve position: {self.cur_solve_RA}, {self.cur_solve_Dec}")
                                 # record first good plate solve for blind polar alignment logic
                                 if self.plate_solve_state == "working":
-                                    self.first_plate_solve_RA = self.cur_solve_RA
-                                    self.first_plate_solve_Dec = self.cur_solve_Dec
+                                    self.first_plate_solve_altaz = self.get_altaz_from_eq(self.cur_solve_RA, self.cur_solve_Dec)
                                 self.plate_solve_state = "complete"
                             elif parsed_data['state'] == 'fail':
                                 self.plate_solve_state = "fail"
@@ -381,8 +386,7 @@ class Seestar:
 
     def _plate_solve_worker(self):
         self.plate_solve_state = "working"
-        self.first_plate_solve_RA = None 
-        self.first_plate_solve_Dec = None
+        self.first_plate_solve_altaz = None 
         while self.schedule['state'] == "working":
             tmp = self.send_message_param_sync({"method":"start_solve"})
             result = self.get_pa_error({"max_range":5.0})
@@ -402,22 +406,36 @@ class Seestar:
             self.logger.warn("scheduler state is running, cannot start plate solve loop")
             return("scheduler state was running. Canno start loop")
 
+    def get_altaz_from_eq(self, in_ra, in_dec):
+        radec = Util.parse_coordinate(is_j2000=False, in_ra=in_ra, in_dec=in_dec)
+        # Convert RA/Dec to Alt/Az
+        altaz = radec.transform_to(AltAz(obstime=Time.now(), location=self.site_altaz_frame))
+        self.logger.info("coord in az-alt: {altaz.az.deg}, {altaz.alt.deg}")
+        return [altaz.alt.deg, altaz.az.deg]
+
     def get_pa_error(self, param):
         if self.plate_solve_state == "working":
             self.logger.warn("Warning: Alignment logic is still trying to platesolve. Data is not ready.")
             return{"error":"Alignment logic is still trying to platesolve, data is not ready."}
-        elif self.cur_equ_offset == None:
+        elif self.cur_equ_offset_alt == None:
             self.logger.warn("Warning: Polar alignment has not been completed yet. Data is not ready.")
             return{"error":"Polar alignment has not been completed yet. Data is not ready."}
         
         max_error = param["max_range"]
         expected_max_error = 5.0
-        error_ra = self.cur_equ_offset[0] - (self.cur_solve_RA - self.first_plate_solve_RA)*15.0  # 15.0 = 360 degrees / 24 hours
-        error_dec = self.cur_equ_offset[1]  - (self.cur_solve_Dec - self.first_plate_solve_Dec)
-        self.logger.info(f"cur_ra: {self.cur_solve_RA}, first_ra: {self.first_plate_solve_RA}")
-        self.logger.info(f"cur_dec: {self.cur_solve_Dec}, first_dec: {self.first_plate_solve_Dec}")
-        self.logger.info(f"EQ error: {error_ra}, {error_dec}")
-        return({"pa_error_ra" : error_ra * max_error / expected_max_error, "pa_error_dec" : error_dec * max_error / expected_max_error})
+        cur_solve_altaz = self.get_altaz_from_eq(self.cur_solve_RA, self.cur_solve_Dec)
+        # note seestar returns equ offset as [az, alt], bad convention!
+        error_alt = self.cur_equ_offset_alt - (cur_solve_altaz[0] - self.first_plate_solve_altaz[0])
+        error_az = self.cur_equ_offset_az  - (cur_solve_altaz[1] - self.first_plate_solve_altaz[1])
+
+        self.logger.info(f"before: az:{self.first_plate_solve_altaz[0]:3.4f}, alt:{self.first_plate_solve_altaz[1]:3.4f}")
+        self.logger.info(f"after : az:{cur_solve_altaz[0]:3.4f}, alt:{cur_solve_altaz[1]:3.4f}")
+
+        self.logger.info(f"PA eq_offset: {self.cur_equ_offset_alt:3.4f}, {self.cur_equ_offset_az:3.4f}")
+        self.logger.info(f"pa error    : {error_alt:3.4f}, {error_az:3.4f}")
+        self.logger.info("")
+
+        return({"pa_error_alt" : error_alt * max_error / expected_max_error, "pa_error_az" : error_az * max_error / expected_max_error})
 
 
     def set_setting(self, x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, auto_af=False, stack_after_goto=False):
@@ -741,13 +759,16 @@ class Seestar:
                             if event_state["percent"] >= 90.0 or event_state["state"] == "complete":
                                 if "equ_offset" in event_state:
                                     result = True
-                                    self.cur_equ_offset = event_state["equ_offset"]
+                                    # bad ZWO. It returns [az, alt] for alt-az error
+                                    self.cur_equ_offset_az = event_state["equ_offset"][0]
+                                    self.cur_equ_offset_alt = event_state["equ_offset"][1]
                                     if self.firmware_ver_int < 2368:
-                                        self.cur_equ_offset[1] -= 90.0 - self.site_latitude
-                                    self.logger.info(f"3PPA equ offset: {self.cur_equ_offset}")
+                                        self.cur_equ_offset_alt -= 90.0 - self.site_latitude
+                                    self.logger.info(f"3PPA equ offset-- alt:{self.cur_equ_offset_alt}, az:{self.cur_equ_offset_az}")
                                 else:
                                     result = True
-                                    self.cur_equ_offset = None
+                                    self.cur_equ_offset_alt = None
+                                    self.cur_equ_offset_az = None
                                 self.logger.info("3PPA finished 3rd pt. Will stop return to origin now.")
                                 if is_3PPA:
                                     response = self.send_message_param_sync({"method":"stop_polar_align"})
@@ -1033,6 +1054,9 @@ class Seestar:
                 Config.init_lat = params['lat']
                 Config.init_long = params['lon']
 
+            # reset the site location frame for refining polar alignments
+            self.site_altaz_frame = EarthLocation(lat=Config.init_lat*u.deg, lon=Config.init_long*u.deg, height=10*u.m)
+
             loc_param['lat'] = Config.init_lat
             loc_param['lon'] = Config.init_long
             loc_param['force'] = True
@@ -1146,6 +1170,10 @@ class Seestar:
 
                 if self.schedule["state"] != "working":
                     return
+
+            # need to make sure we are in star mode
+            result = self.send_message_param_sync({"method": "iscope_start_view", "params": {"mode": "star"}})
+            self.logger.info(f"start star mode: {result}")
 
             if do_AF:
                 msg = f"auto focus"

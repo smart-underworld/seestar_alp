@@ -1,9 +1,11 @@
 import geocoder
 from datetime import datetime
-from astropy.coordinates import FK4,FK5, SkyCoord
+from astropy.coordinates import FK5, SkyCoord, AltAz
 from astropy.time import Time
 import astropy.units as u
 import math
+import numpy as np
+
 
 class Util:
     @staticmethod
@@ -70,3 +72,26 @@ class Util:
                 # print(float_seconds)
                 out = "{}{:.1f}s".format(test_str[:index+1], float_seconds)
         return out
+    
+
+    @staticmethod
+    def get_JNow(ra: float, dec: float) -> SkyCoord:
+        coord = SkyCoord(ra=ra, dec=dec, frame='fk5', unit="deg", equinox="JNow")
+        return coord
+
+    @staticmethod
+    def get_altaz(self, ra: float, dec: float, coord_frame:AltAz) -> SkyCoord:
+        coord = self.get_JNow(ra, dec)
+        return coord.transform_to(coord_frame)
+
+    @staticmethod
+    def get_altaz_deg(self, ra: float, dec: float, coord_frame: AltAz) -> np.ndarray:
+        coord = self.get_altaz(ra, dec, coord_frame)
+        return np.asarray([coord.alt.deg, coord.az.deg])
+
+    @staticmethod
+    def get_altaz_frame(self, site_ra: float, site_dec: float) -> AltAz:
+        site = self.get_JNow(site_ra, site_dec)
+        altaz_frame = AltAz(location=site)
+        return altaz_frame
+
