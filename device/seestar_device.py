@@ -420,19 +420,18 @@ class Seestar:
     def get_pa_error(self, param):
         max_error = 9999.9
   
-        #todo mock data only
-        if self.cur_equ_offset_alt == None:
-            self.cur_equ_offset_alt = 0.0
-        else:
-            self.cur_equ_offset_alt += (2*random.random() - 1) * 0.3
-        if self.cur_equ_offset_az == None:
-            self.cur_equ_offset_az = 0.0
-        else:
-            self.cur_equ_offset_az += (2*random.random() - 1) * 0.3
-
-        
-        return({"pa_error_alt" : self.cur_equ_offset_alt, 
-                "pa_error_az" : self.cur_equ_offset_az})
+#todo mock data only
+#        if self.cur_equ_offset_alt == None:
+#            self.cur_equ_offset_alt = 0.0
+#        else:
+#            self.cur_equ_offset_alt += (2*random.random() - 1) * 0.3
+#        if self.cur_equ_offset_az == None:
+#            self.cur_equ_offset_az = 0.0
+#        else:
+#            self.cur_equ_offset_az += (2*random.random() - 1) * 0.3
+    
+#        return({"pa_error_alt" : self.cur_equ_offset_alt, 
+#                "pa_error_az" : self.cur_equ_offset_az})
 
         if self.first_plate_solve_altaz == None:
             return({"pa_error_alt" : max_error, "pa_error_az" : max_error})
