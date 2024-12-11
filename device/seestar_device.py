@@ -438,10 +438,10 @@ class Seestar:
       
         if self.plate_solve_state == "working":
             self.logger.warn("Warning: Alignment logic is still trying to platesolve. Data is not ready.")
-            return{"error":"Alignment logic is still trying to platesolve, data is not ready."}
+            return({"pa_error_alt" : max_error, "pa_error_az" : max_error})
         elif self.cur_equ_offset_alt == None:
             self.logger.warn("Warning: Polar alignment has not been completed yet. Data is not ready.")
-            return{"error":"Polar alignment has not been completed yet. Data is not ready."}
+            return({"pa_error_alt" : max_error, "pa_error_az" : max_error})
         
 
         cur_solve_altaz = self.get_altaz_from_eq(self.cur_solve_RA, self.cur_solve_Dec)
