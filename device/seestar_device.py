@@ -418,7 +418,7 @@ class Seestar:
         return [altaz.alt.deg, altaz.az.deg]
 
     def get_pa_error(self, param):
-        max_error = param["max_range"]
+        max_error = 9999.9
   
         #todo mock data only
         if self.cur_equ_offset_alt == None:

@@ -5,6 +5,11 @@
   <p id="alt_err">alt error (deg): </p>
   <p id="az_err">az  error (deg): </p>
 </div>
+
+<div class="slidecontainer">
+  <p>max error (degrees): <input type="range" min="1" max="100" value="50" class="slider" id="error_slider"> <span id="error_range"></span> </p>
+</div>
+
 <style>
   .garden {
     position: relative;
@@ -55,6 +60,50 @@
     aspect-ratio : 1 / 1;
     margin: 0
   }
+
+
+  .slidecontainer {
+    width: 80%; /* Width of the outside container */
+  }
+
+  /* The slider itself */
+  .slider {
+    -webkit-appearance: none;  /* Override default CSS styles */
+    appearance: none;
+    width: 50%; /* Full-width */
+    height: 15px;
+    border: 2px;
+    border-radius: 5px;  
+    background: #d3d3d3; /* Grey background */
+    outline: none; /* Remove outline */
+    opacity: 0.7; /* Set transparency (for mouse-over effects on hover) */
+    -webkit-transition: .2s; /* 0.2 seconds transition on hover */
+    transition: opacity .2s;
+  }
+
+  /* Mouse-over effects */
+  .slider:hover {
+    opacity: 1; /* Fully shown on mouse-over */
+  }
+
+  /* The slider handle (use -webkit- (Chrome, Opera, Safari, Edge) and -moz- (Firefox) to override default look) */
+  .slider::-webkit-slider-thumb {
+    -webkit-appearance: none; /* Override default look */
+    appearance: none;
+    width: 25px; /* Set a specific slider handle width */
+    height: 25px;
+    border-radius: 50%; 
+    background: #04AA6D; /* Green background */
+    cursor: pointer; /* Cursor on hover */
+  }
+
+  .slider::-moz-range-thumb {
+    width: 25px; /* Set a specific slider handle width */
+    height: 25px;
+    border-radius: 50%;
+    background: #04AA6D; /* Green background */
+    cursor: pointer; /* Cursor on hover */
+  }
 </style>
 {% endblock %}
 {% block content %}
@@ -76,6 +125,15 @@
   
 </div>
 <script>
+
+  var err_slider = document.getElementById("error_slider");
+  var err_output = document.getElementById("error_range");
+  err_output.innerHTML = err_slider.value*0.1;
+
+  err_slider.oninput = function() {
+    err_output.innerHTML = (this.value*0.1).toFixed(3);
+  }
+
   const startStopButton = document.getElementById("start_stop_btn");
   const alt_err = document.getElementById("alt_err")
   const az_err = document.getElementById("az_err")
@@ -87,9 +145,24 @@
     const ball = document.getElementById("ball");
     const width = szElement.clientWidth;
     const height = szElement.clientHeight;
-    x = Math.round(width/2 * (1 + error_az / max))
-    y = Math.round(height/2 * (1 - error_alt / max))
-
+    if (error_az > max) {
+      x = width
+    }
+    else if (error_az < -max) {
+      x = 0
+    }
+    else {
+      x = Math.round(width/2 * (1 + error_az / max))
+    }
+    if (error_alt > max) {
+      y = 0
+    }
+    else if (error_alt < -max) {
+      y = height
+    }
+    else {
+      y = Math.round(height/2 * (1 - error_alt / max))
+    }
     ball.style.top = `${y}px`
     ball.style.left = `${x}px`
 
@@ -108,8 +181,7 @@
           }
         })
         data = await response.json();
-        update_alignment(data["error_alt"], data["error_az"], data["error_max"], );
-        console.log(data);
+        update_alignment(data["error_alt"], data["error_az"], err_slider.value*0.1 );
   }
 
   async function startAlignment() {

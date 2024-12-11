@@ -2788,12 +2788,11 @@ class BlindPolarAlignResource:
             resp.content_type = 'application/json'
         elif action == "data":
             max_err_degrees = 3.0
-            result = do_action_device("get_pa_error", telescope_id, {"max_range":max_err_degrees})
+            result = do_action_device("get_pa_error", telescope_id, {})
             value = result.get("Value", {})
             blind_pa_data = {
                 "error_az": value["pa_error_az"],
-                "error_alt": value["pa_error_alt"],
-                "error_max": max_err_degrees
+                "error_alt": value["pa_error_alt"]
             }
             resp.status = falcon.HTTP_200
             resp.content_type = 'application/json'
