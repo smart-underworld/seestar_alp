@@ -137,12 +137,16 @@ class action:
             cur_dev = seestar_dev[devnum]
 
         try:
+            result = ""
+            
             params = json.loads(parameters)
-
+            log_debug = False
             if action_name == "method_sync" and params["method"] in ["scope_get_equ_coord", "get_view_state"]:
                 cur_dev.logger.debug(f"request: {action_name} for device {devnum} with param {parameters}")
-            elif action_name in ["get_event_state"]:
+                log_debug = True
+            elif action_name in ["get_event_state", "get_view_state"]:
                 cur_dev.logger.debug(f"request: {action_name} for device {devnum} with param {parameters}")
+                log_debug = True
             else:
                 cur_dev.logger.info(f"request: {action_name} for device {devnum} with param {parameters}")
 
@@ -234,9 +238,14 @@ class action:
             elif action_name == "get_pa_error":
                 result = cur_dev.get_pa_error(params)
                 resp.text = MethodResponse(req, value = result).json
+            if log_debug:
+                cur_dev.logger.debug(f"response: {result}")
+            else:
+                cur_dev.logger.info(f"response: {result}")
         except Exception as ex:
             resp.text = MethodResponse(req,
                             DevDriverException(0x500, '\n'.join(ex.args), ex)).json
+            cur_dev.logger.warn("Error making request: {ex}")
 
 
 @before(PreProcessRequest(maxdev))

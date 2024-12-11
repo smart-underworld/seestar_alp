@@ -15,6 +15,7 @@ from blinker import signal
 import geomag
 
 import numpy as np
+import random
 
 import tzlocal
 import queue
@@ -94,6 +95,7 @@ class Seestar:
         self.cur_equ_offset_alt = None  # from 3ppa
         self.cur_equ_offset_az = None  # from 3ppa
 
+        self.is_in_plate_solve_loop = False
         self.plate_solve_state = "fail"
         self.cur_solve_RA: float = -9999.0  #
         self.cur_solve_Dec: float = -9999.0
@@ -300,9 +302,13 @@ class Seestar:
                                 self.cur_solve_Dec = parsed_data['result']['ra_dec'][1]
                                 self.logger.info(f"Current plate solve position: {self.cur_solve_RA}, {self.cur_solve_Dec}")
                                 # record first good plate solve for blind polar alignment logic
-                                if self.plate_solve_state == "working":
+                                if self.first_plate_solve_altaz == None:
                                     self.first_plate_solve_altaz = self.get_altaz_from_eq(self.cur_solve_RA, self.cur_solve_Dec)
                                 self.plate_solve_state = "complete"
+                                # repeat plate solve if we are in PA refinement loop
+                                if self.is_in_plate_solve_loop:
+                                    tmp = self.send_message_param_sync({"method":"start_solve"})
+
                             elif parsed_data['state'] == 'fail':
                                 self.plate_solve_state = "fail"
                                 self.logger.info("Plate Solve Failed")
@@ -384,28 +390,26 @@ class Seestar:
             result = self.event_state
         return self.json_result("get_event_state", 0, result)
 
-    def _plate_solve_worker(self):
-        self.plate_solve_state = "working"
-        self.first_plate_solve_altaz = None 
-        while self.schedule['state'] == "working":
-            tmp = self.send_message_param_sync({"method":"start_solve"})
-            result = self.get_pa_error({"max_range":5.0})
-            self.logger.info(result)
-            # todo: any better way to repeat plate solve without sleep?
-            time.sleep(4)
-        self.logger.info("stopped plate solve loop")
-        self.schedule['state'] = "stopped"
-
     def start_plate_solve_loop(self):
         if self.schedule['state'] == "stopped" or self.schedule['state'] == 'complete':
             self.schedule['state'] = "working"
+            self.first_plate_solve_altaz = None
+            self.is_in_plate_solve_loop = True
+            tmp = self.send_message_param_sync({"method":"start_solve"})
             self.logger.info("start plate solve loop")
-            threading.Thread(name=f"plate_solve-thread:{self.device_name}", target=lambda: self._plate_solve_worker()).start()
             return("started plate solve loop")
         else:
+            self.is_in_plate_solve_loop = False
             self.logger.warn("scheduler state is running, cannot start plate solve loop")
             return("scheduler state was running. Canno start loop")
 
+    def stop_plate_solve_loop(self):
+        if self.schedule['state'] != "working":
+            return("Error: there is no active plate solve loop to stop.")
+        self.is_in_plate_solve_loop = False
+        self.schedule['state'] = "stopped"
+        return("Stopped plate solve loop")
+    
     def get_altaz_from_eq(self, in_ra, in_dec):
         radec = Util.parse_coordinate(is_j2000=False, in_ra=in_ra, in_dec=in_dec)
         # Convert RA/Dec to Alt/Az
@@ -414,6 +418,25 @@ class Seestar:
         return [altaz.alt.deg, altaz.az.deg]
 
     def get_pa_error(self, param):
+        max_error = param["max_range"]
+  
+        #todo mock data only
+        if self.cur_equ_offset_alt == None:
+            self.cur_equ_offset_alt = 0.0
+        else:
+            self.cur_equ_offset_alt += (2*random.random() - 1) * 0.3
+        if self.cur_equ_offset_az == None:
+            self.cur_equ_offset_az = 0.0
+        else:
+            self.cur_equ_offset_az += (2*random.random() - 1) * 0.3
+
+        
+        return({"pa_error_alt" : self.cur_equ_offset_alt, 
+                "pa_error_az" : self.cur_equ_offset_az})
+
+        if self.first_plate_solve_altaz == None:
+            return({"pa_error_alt" : max_error, "pa_error_az" : max_error})
+      
         if self.plate_solve_state == "working":
             self.logger.warn("Warning: Alignment logic is still trying to platesolve. Data is not ready.")
             return{"error":"Alignment logic is still trying to platesolve, data is not ready."}
@@ -421,7 +444,6 @@ class Seestar:
             self.logger.warn("Warning: Polar alignment has not been completed yet. Data is not ready.")
             return{"error":"Polar alignment has not been completed yet. Data is not ready."}
         
-        max_error = param["max_range"]
 
         cur_solve_altaz = self.get_altaz_from_eq(self.cur_solve_RA, self.cur_solve_Dec)
         # note seestar returns equ offset as [az, alt], bad convention!

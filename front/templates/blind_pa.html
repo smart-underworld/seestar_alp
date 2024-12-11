@@ -2,6 +2,8 @@
 {% block header %}
 <div class="container mt-3">
 	<p class="h1">{% block title %}Blind Polar Alignment{% endblock %}</p>
+  <p id="alt_err">alt error (deg): </p>
+  <p id="az_err">az  error (deg): </p>
 </div>
 <style>
   .garden {
@@ -70,39 +72,106 @@
     <div id="pa_target_v" class="crosshair-v"></div>
   </div>
   <pre class="output"></pre>
-  <button id="testBtn" type="reset">Test Alignment</button>
+  <button id="start_stop_btn" type="reset">Start</button>
+  
 </div>
 <script>
-  const testButton = document.getElementById("testBtn");
-  function update_alignment(x,y) {
+  const startStopButton = document.getElementById("start_stop_btn");
+  const alt_err = document.getElementById("alt_err")
+  const az_err = document.getElementById("az_err")
+  startStopButton.textContent = "Start"
+  var pa_interval
+
+  function update_alignment(error_alt, error_az, max) {
+    var szElement = document.getElementById("pa_garden");
     const ball = document.getElementById("ball");
+    const width = szElement.clientWidth;
+    const height = szElement.clientHeight;
+    x = Math.round(width/2 * (1 + error_az / max))
+    y = Math.round(height/2 * (1 - error_alt / max))
+
     ball.style.top = `${y}px`
     ball.style.left = `${x}px`
+
+    alt_err.textContent = `alt error (deg): ${error_alt.toFixed(3)}`
+    az_err.textContent =  `az  error (deg): ${error_az.toFixed(3)}`
   }
-  async function showAlignment() {
+
+  async function update_pa_error() {
+    response = await fetch(get_blind_pa_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            action: "data"
+          }),
+          headers: {
+            "Content-type": "application/json; charset=UTF-8"
+          }
+        })
+        data = await response.json();
+        update_alignment(data["error_alt"], data["error_az"], data["error_max"], );
+        console.log(data);
+  }
+
+  async function startAlignment() {
     try {
-      var szElement = document.getElementById("pa_garden")
       var baseURL =
       `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
       get_blind_pa_URL = baseURL + '/blind_pa';
-      const response = await fetch(get_blind_pa_URL, {
+
+      var response = await fetch(get_blind_pa_URL, {
         method: "POST",
         body: JSON.stringify({
-          width: szElement.clientWidth,
-          height: szElement.clientHeight
+          action: "start"
         }),
         headers: {
           "Content-type": "application/json; charset=UTF-8"
         }
       })
-      const data = await response.json();
-      update_alignment(data["x"], data["y"]);
-      console.log(data);
+      var data = await response;
+      console.info('started alignment:', data)
+      pa_interval = setInterval(update_pa_error, 1000)
+
     } catch (error) {
       console.error('Error fetching data:', error);
     }
   }
-  testButton.addEventListener("click", showAlignment);
+
+  async function stopAlignment() {
+    clearInterval(pa_interval);
+    try {
+      var baseURL =
+      `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
+      get_blind_pa_URL = baseURL + '/blind_pa';
+
+      var response = await fetch(get_blind_pa_URL, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "stop"
+        }),
+        headers: {
+          "Content-type": "application/json; charset=UTF-8"
+        }
+      })
+      var data = await response;
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
+  }
+
+  function toggleStateAlignment(){
+
+    if (startStopButton.textContent == "Start") {
+      startAlignment()
+      startStopButton.textContent = "Stop";
+    }
+    else {
+      stopAlignment()
+      startStopButton.textContent = "Start";  
+    }
+  }
+
+
+  startStopButton.addEventListener("click", toggleStateAlignment);
 </script>
 <footer class="bg-body-tertiary text-center mt-3">
 	Version: {{ version }}

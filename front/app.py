@@ -2774,21 +2774,30 @@ class BlindPolarAlignResource:
     @staticmethod
     def on_post(req, resp):
         referer = req.get_header('Referer')
+        referersplit = referer.split("/")[-2:]
+        telescope_id = int(referersplit[0])
         PostedForm = req.media
-        width = PostedForm["width"]  # TODO: This should have some type of input check
-        height = PostedForm["height"]  # TODO: This should have some type of input check
-        # XXX here is where we will call into Kai's code
-        # For now, fudge values
-        rnd_x = random.randint(-50, 50)
-        rnd_y = random.randint(-50, 50)
-        blind_pa_data = {
-            "x": int((width/2)+rnd_x),
-            "y": int((height/2)+rnd_y),
-        }
-        resp.status = falcon.HTTP_200
-        resp.content_type = 'application/json'
-        resp.text = json.dumps(blind_pa_data)
-
+        action = PostedForm["action"]
+        if action == "start":
+            result = do_action_device("start_plate_solve_loop", telescope_id, {})
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'application/json'
+        elif action == "stop":
+            result = do_action_device("stop_plate_solve_loop", telescope_id, {})
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'application/json'
+        elif action == "data":
+            max_err_degrees = 3.0
+            result = do_action_device("get_pa_error", telescope_id, {"max_range":max_err_degrees})
+            value = result.get("Value", {})
+            blind_pa_data = {
+                "error_az": value["pa_error_az"],
+                "error_alt": value["pa_error_alt"],
+                "error_max": max_err_degrees
+            }
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'application/json'
+            resp.text = json.dumps(blind_pa_data)
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
