@@ -792,6 +792,14 @@ class Seestar:
                                     if self.firmware_ver_int < 2368:
                                         self.cur_equ_offset_alt -= 90.0 - self.site_latitude
                                     self.logger.info(f"3PPA equ offset-- alt:{self.cur_equ_offset_alt}, az:{self.cur_equ_offset_az}")
+                                elif "offset" in event_state:
+                                    result = True
+                                    # bad ZWO. It returns [az, alt] for alt-az error
+                                    self.cur_equ_offset_az = event_state["offset"][0]
+                                    self.cur_equ_offset_alt = event_state["offset"][1]
+                                    if self.firmware_ver_int < 2368:
+                                        self.cur_equ_offset_alt -= 90.0 - self.site_latitude
+                                    self.logger.info(f"3PPA equ offset-- alt:{self.cur_equ_offset_alt}, az:{self.cur_equ_offset_az}")
                                 else:
                                     result = True
                                     self.cur_equ_offset_alt = None
