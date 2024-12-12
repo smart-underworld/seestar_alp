@@ -138,7 +138,7 @@ class action:
 
         try:
             result = ""
-            
+
             params = json.loads(parameters)
             log_debug = False
             if action_name == "method_sync" and params["method"] in ["scope_get_equ_coord", "get_view_state"]:
@@ -234,6 +234,9 @@ class action:
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "start_plate_solve_loop":
                 result = cur_dev.start_plate_solve_loop()
+                resp.text = MethodResponse(req, value = result).json
+            elif action_name == "stop_plate_solve_loop":
+                result = cur_dev.stop_plate_solve_loop()
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "get_pa_error":
                 result = cur_dev.get_pa_error(params)
