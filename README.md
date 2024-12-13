@@ -66,30 +66,7 @@ Rename the directory that you are currently using for the code and download and 
 
 -  ##### Mac
 
-    Because of code signing issues the Mac can't use the one folder solution described for windows/linux, instead you will need to run from source code.
-
-    ##### Ensure xcode command line tools are installed:
-    ```
-    xcode-select -p
-    ```
-    If the above prints an error, rather than an install path - you need to install `XCode command line tools` via:
-    ```
-    xcode-select --install
-    ```
-    This will ensure the apps like `git` and `python3` are installed.
-    ##### Check python version
-    You need version 3.12.7 or less. 3.13 or higher is currently not supported.
-    ```
-    python --version
-    ```
-
-    ##### Create an alias from `python3` to `python` (optional)
-
-    This tutorial references the `python` executable, rather than `python3`. To avoid confusion, you can create an alias (and equivalent `pip` alias):
-    ```
-    echo "alias python='python3'" >> ~/.zprofile
-    echo "alias pip='pip3'" >> ~/.zprofile
-    ```
+    Please see the [Running from source: Mac](https://github.com/smart-underworld/seestar_alp/wiki/Running-from-source:-Mac) page for the most up-to-date details on running SSC on a Mac
 
 - ##### Windows
     - Install Python on your system. (Get version 3.12 or above)    <https://www.python.org/downloads/>
