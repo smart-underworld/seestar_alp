@@ -802,7 +802,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
     panelOverlap = form["panelOverlap"]
     panelSelect = form["panelSelect"]
     useJ2000 = form.get("useJ2000") == "on"
-    sessionTime = hms_to_sec(form["sessionTime"])
+    panelTime = hms_to_sec(form["panelTime"])
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
@@ -815,7 +815,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
         "ra": ra,
         "dec": dec,
         "is_use_lp_filter": useLpfilter,
-        "session_time_sec": int(sessionTime),
+        "panel_time_sec": int(panelTime),
         "ra_num": int(raPanels),
         "dec_num": int(decPanels),
         "panel_overlap_percent": int(panelOverlap),
@@ -863,7 +863,7 @@ def do_create_image(req, resp, schedule, telescope_id):
     panelOverlap = 100
     panelSelect = ""
     useJ2000 = form.get("useJ2000") == "on"
-    sessionTime = hms_to_sec(form["sessionTime"])
+    panelTime = hms_to_sec(form["panelTime"])
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
@@ -876,7 +876,7 @@ def do_create_image(req, resp, schedule, telescope_id):
         "ra": ra,
         "dec": dec,
         "is_use_lp_filter": useLpfilter,
-        "session_time_sec": int(sessionTime),
+        "panel_time_sec": int(panelTime),
         "ra_num": int(raPanels),
         "dec_num": int(decPanels),
         "panel_overlap_percent": int(panelOverlap),
@@ -1318,7 +1318,7 @@ def import_schedule(input, telescope_id):
                 do_schedule_action_device("auto_focus", {"try_count": params.get("try_count", 0)}, telescope_id)
             case "start_mosaic":
                 required_params = ["target_name", "ra", "dec", "is_j2000", "is_use_lp_filter",
-                                   "is_use_autofocus", "session_time_sec", "ra_num",
+                                   "is_use_autofocus", "panel_time_sec", "ra_num",
                                    "dec_num", "panel_overlap_percent", "gain", "selected_panels","num_tries","retry_wait_s","array_mode"]
                 mosaic_params = {key: value for key, value in params.items() if key in required_params}
                 do_schedule_action_device("start_mosaic", mosaic_params, telescope_id)

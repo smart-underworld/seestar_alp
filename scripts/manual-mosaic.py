@@ -74,7 +74,7 @@ class ManualMosaic:
 
     def print_schedule(self):
         # Print panels in order specified
-        print("action,local_time,timer_sec,try_count,target_name,is_j2000,ra,dec,is_use_lp_filter,session_time_sec,ra_num,dec_num,panel_overlap_percent,gain,is_use_autofocus,heater,nokey,selected_panels")
+        print("action,local_time,timer_sec,try_count,target_name,is_j2000,ra,dec,is_use_lp_filter,panel_time_sec,ra_num,dec_num,panel_overlap_percent,gain,is_use_autofocus,heater,nokey,selected_panels")
         if self.tunables.panel_order:
             for p in self.tunables.panel_order.split(";"):
                 print(self.lines[p])

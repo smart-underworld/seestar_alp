@@ -13,7 +13,7 @@
 <style>
   .garden {
     position: relative;
-    width: 80%;
+    width: 55%;
     border: 2px solid #ccc;
     border-radius: 10px;
     aspect-ratio : 1 / 1;
@@ -70,7 +70,7 @@
   .slider {
     -webkit-appearance: none;  /* Override default CSS styles */
     appearance: none;
-    width: 50%; /* Full-width */
+    width: 55%; /* Full-width */
     height: 15px;
     border: 2px;
     border-radius: 5px;  
@@ -238,7 +238,8 @@
     }
     else {
       stopAlignment()
-      startStopButton.textContent = "Start";  
+      startStopButton.textContent = "Start"; 
+      alert("Make sure you re-run polar alignment in start-up sequence."); 
     }
   }
 

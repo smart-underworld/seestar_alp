@@ -3,7 +3,16 @@ import uuid
 from time import sleep
 from seestar_util import Util
 import json
+import random
+import collections
+from json import JSONEncoder
 
+class DequeEncoder(JSONEncoder):
+    def default(self, obj):
+       if isinstance(obj, collections.deque):
+          return list(obj)
+       return JSONEncoder.default(self, obj)
+    
 class Seestar_Federation:
     def __new__(cls, *args, **kwargs):
         # print("Create a new instance of Seestar.")
@@ -17,7 +26,7 @@ class Seestar_Federation:
         self.seestar_devices = seestar_devices
         self.schedule = {}
         self.schedule['version'] = 1.0
-        self.schedule['list'] = []
+        self.schedule['list'] = collections.deque()
         self.schedule['state'] = "stopped"
         self.schedule['schedule_id'] = str(uuid.uuid4())
 
@@ -161,14 +170,15 @@ class Seestar_Federation:
 
     def create_schedule(self, params):
         self.schedule = {}
-        self.schedule['list'] = []
+        self.schedule['list'].clear()
         self.schedule['state'] = "stopped"
         self.schedule['schedule_id'] = str(uuid.uuid4())
         return self.schedule
 
     def add_schedule_item(self, params):
-        if params['action'] == 'start_mosaic':
-            mosaic_params = params['params']
+        item = params.copy()
+        if item['action'] == 'start_mosaic':
+            mosaic_params = item['params']
             if isinstance(mosaic_params['ra'], str):
                 # try to trim the seconds to 1 decimal
                 mosaic_params['ra'] = Util.trim_seconds(mosaic_params['ra'])
@@ -179,16 +189,14 @@ class Seestar_Federation:
                     raise Exception( "Failed. Must specify an proper coordinate for a federated schedule.")
                 mosaic_params['ra'] = round(mosaic_params['ra'], 4)
                 mosaic_params['dec'] = round(mosaic_params['dec'], 4)                
-                
-        params['id'] = str(uuid.uuid4())
-        self.schedule['list'].append(params)
+        self.schedule['list'].append(item)
         return self.schedule
 
     def export_schedule(self, params):
         filepath = params["filepath"]
         with open(filepath, 'w') as fp:
-            json.dump(self.schedule, fp, indent=4)
-        return 0
+            json.dump(self.schedule, fp, indent=4, cls=DequeEncoder)
+        return self.schedule
 
     def import_schedule(self, params):
         if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete":
@@ -197,13 +205,14 @@ class Seestar_Federation:
         is_retain_state = params["is_retain_state"]
         with open(filepath, 'r') as f:
             self.schedule = json.load(f)
-        
+        self.schedule['list'] = collections.deque(self.schedule['list'])
+
         if not is_retain_state:
             self.schedule['schedule_id'] = str(uuid.uuid4())
             for item in self.schedule['list']:
-                item['id'] = str(uuid.uuid4())
+                item['schedule_item_id'] = str(uuid.uuid4())
             self.schedule['state'] = "stopped"
-        return 0
+        return self.schedule
 
     # cur_params['selected_panels'] cur_params['ra_num'], cur_params['dec_num']
     # split selected panels into multiple sections. Given num_devices > 1 and num ra and dec is > 1
@@ -265,6 +274,7 @@ class Seestar_Federation:
         
         root_schedule = self.get_schedule(params)
         available_devices = root_schedule["available_device_list"]
+        random.shuffle(available_devices)
 
         if 'max_devices' in params:
             available_devices = available_devices[:params['max_devices']]
@@ -273,36 +283,31 @@ class Seestar_Federation:
         if num_devices < 1:
             return{"error": "Failed: No available devices found to execute a schedule."}
 
-        
         for key in available_devices:
             cur_device = self.seestar_devices[key]
             cur_device.create_schedule(params)
 
-
         for schedule_item in self.schedule['list']:
-            if schedule_item['action'] == "start_mosaic":
-                cur_params = schedule_item['params']
-                if num_devices  == 1 or 'array_mode' not in cur_params or cur_params['array_mode'] != 'split' or (cur_params['ra_num']==1 and cur_params['dec_num']==1):
-                    for key in available_devices:
-                        cur_device = self.seestar_devices[key]
-                        new_item = {}
-                        new_item['action'] = "start_mosaic"
-                        cur_params = schedule_item['params'].copy()
-                        new_item['params'] = cur_params
-                        new_item['id'] = str(uuid.uuid4())
-                        cur_device.add_schedule_item(new_item)
-                else:
+            cur_params = schedule_item['params'].copy()
+
+            if schedule_item['action'] == "start_mosaic":                
+                # federation_mode : duplicate, by_panels or by_time
+                if 'federation_mode' not in cur_params or num_devices == 1:
+                    cur_params["federation_mode"] = "duplicate"
+                elif cur_params["federation_mode"] == "by_time":
+                    cur_params["panel_time_sec"] = round(cur_params["panel_time_sec"]/num_devices)
+                elif cur_params["federation_mode"] == "by_panels":
                     section_dict = self.get_section_array_for_mosaic(available_devices, cur_params)
                     for key in section_dict:
-                        cur_device = self.seestar_devices[key]
-                        new_item = {}
-                        new_item['action'] = "start_mosaic"
-                        cur_params = schedule_item['params'].copy()
                         cur_params['selected_panels'] = section_dict[key]
-                        new_item['params'] = cur_params
-                        new_item['id'] = str(uuid.uuid4())
-                        cur_device.add_schedule_item(new_item)
 
+                for key in available_devices:
+                    cur_device = self.seestar_devices[key]
+                    new_item = {}
+                    new_item['action'] = "start_mosaic"
+                    new_item['params'] = cur_params
+                    cur_device.add_schedule_item(new_item)
+            
             else:
                 for key in available_devices:
                     cur_device = self.seestar_devices[key]
@@ -310,7 +315,6 @@ class Seestar_Federation:
                     new_item['action'] = schedule_item['action']
                     cur_params = schedule_item['params'].copy()
                     new_item['params'] = cur_params
-                    new_item['id'] = str(uuid.uuid4())
                     cur_device.add_schedule_item(new_item)
         
         for key in available_devices:

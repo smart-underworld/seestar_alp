@@ -16,6 +16,8 @@ import geomag
 
 import numpy as np
 import random
+from json import JSONEncoder
+
 
 import tzlocal
 import queue
@@ -40,7 +42,12 @@ class FixedSizeOrderedDict(OrderedDict):
             self.popitem(last=False)  # Remove the oldest item
         super().__setitem__(key, value)
 
-
+class DequeEncoder(JSONEncoder):
+    def default(self, obj):
+       if isinstance(obj, collections.deque):
+          return list(obj)
+       return JSONEncoder.default(self, obj)
+    
 class Seestar:
     def __new__(cls, *args, **kwargs):
         # print("Create a new instance of Seestar.")
@@ -760,9 +767,10 @@ class Seestar:
 #            response = response["result"]
 #            if "3PPA" not in response or ("3PPA" in response and response["3PPA"]["state"] == "fail"):
             response = self.send_message_param_sync({"method":"get_device_state"})
-            self.logger.info(f"get 3PPA state to determine how to proceede: {response}")
+            self.logger.info(f"get 3PPA state to determine how to proceeed: {response}")
 
             response = response["result"]["setting"]
+
             is_3PPA = True
             if "offset_deg_3ppa" not in response:
                 result = self.start_stack({"restart":True, "gain": Config.init_gain})
@@ -791,7 +799,7 @@ class Seestar:
                                     self.cur_equ_offset_alt = event_state["equ_offset"][1]
                                     if self.firmware_ver_int < 2368:
                                         self.cur_equ_offset_alt -= 90.0 - self.site_latitude
-                                    self.logger.info(f"3PPA equ offset-- alt:{self.cur_equ_offset_alt}, az:{self.cur_equ_offset_az}")
+                                    self.logger.info(f"3PPA equ offset-- firmware:{self.firmware_ver_int}, alt:{self.cur_equ_offset_alt}, az:{self.cur_equ_offset_az}")
                                 elif "offset" in event_state:
                                     result = True
                                     # bad ZWO. It returns [az, alt] for alt-az error
@@ -799,7 +807,7 @@ class Seestar:
                                     self.cur_equ_offset_alt = event_state["offset"][1]
                                     if self.firmware_ver_int < 2368:
                                         self.cur_equ_offset_alt -= 90.0 - self.site_latitude
-                                    self.logger.info(f"3PPA equ offset-- alt:{self.cur_equ_offset_alt}, az:{self.cur_equ_offset_az}")
+                                    self.logger.info(f"3PPA equ offset-- firmware:{self.firmware_ver_int}, alt:{self.cur_equ_offset_alt}, az:{self.cur_equ_offset_az}")
                                 else:
                                     result = True
                                     self.cur_equ_offset_alt = None
@@ -1122,6 +1130,11 @@ class Seestar:
 
             # save frames setting
             self.send_message_param_sync({"method":"set_stack_setting", "params":{"save_discrete_ok_frame":Config.init_save_good_frames, "save_discrete_frame":Config.init_save_all_frames}})
+
+            response = self.send_message_param_sync({"method":"get_device_state"})
+            # make sure we have the right firmware version here
+            self.firmware_ver_int = response["result"]["device"]["firmware_ver_int"]
+            self.logger.info(f"Firmware version: {self.firmware_ver_int}")
 
             result = True
 
@@ -1532,6 +1545,8 @@ class Seestar:
                         continue
 
                     panel_remaining_time_s = sleep_time_per_panel
+                    self.event_state["scheduler"]["cur_scheduler_item"]["panel_remaining_time_s"] = panel_remaining_time_s
+                    self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = item_remaining_time_s
                     for i in range(round(sleep_time_per_panel/5)):
                         threading.current_thread().last_run = datetime.now()
 
@@ -1540,13 +1555,14 @@ class Seestar:
                             self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "Scheduler was requested to stop. Stopping at current mosaic."
                             self.stop_stack()
                             self.schedule['state'] = "stopped"
+                            self.event_state["scheduler"]["cur_scheduler_item"]["panel_remaining_time_s"] = 0
+                            self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = 0
                             return
 
                         time.sleep(5)
                         panel_remaining_time_s -= 5
                         item_remaining_time_s -= 5
-                        self.event_state["scheduler"]["cur_scheduler_item"]["panel_remaining_time_s"] = panel_remaining_time_s
-                        self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = item_remaining_time_s
+                    self.event_state["scheduler"]["cur_scheduler_item"]["panel_remaining_time_s"] = 0
                     self.stop_stack()
                     msg = "Stacking operation finished " + save_target_name
                     self.logger.info(msg)
@@ -1657,8 +1673,9 @@ class Seestar:
         return self.schedule
 
     def construct_schedule_item(self, params):
-        if params['action'] == 'start_mosaic':
-            mosaic_params = params['params']
+        item = params.copy()
+        if item['action'] == 'start_mosaic':
+            mosaic_params = item['params']
             if isinstance(mosaic_params['ra'], str):
                 # try to trim the seconds to 1 decimal
                 mosaic_params['ra'] = Util.trim_seconds(mosaic_params['ra'])
@@ -1670,8 +1687,8 @@ class Seestar:
                     mosaic_params['is_j2000'] = False
                 mosaic_params['ra'] = round(mosaic_params['ra'], 4)
                 mosaic_params['dec'] = round(mosaic_params['dec'], 4)
-        params['schedule_item_id'] = str(uuid.uuid4())
-        return params
+        item['schedule_item_id'] = str(uuid.uuid4())
+        return item
 
     def add_schedule_item(self, params):
         new_item = self.construct_schedule_item(params)
@@ -1752,8 +1769,8 @@ class Seestar:
     def export_schedule(self, params):
         filepath = params["filepath"]
         with open(filepath, 'w') as fp:
-            json.dump(self.schedule, fp, indent=4)
-        return 0
+            json.dump(self.schedule, fp, indent=4, cls=DequeEncoder)
+        return self.schedule
 
     def import_schedule(self, params):
         if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete":
@@ -1762,13 +1779,14 @@ class Seestar:
         is_retain_state = params["is_retain_state"]
         with open(filepath, 'r') as f:
             self.schedule = json.load(f)
+        self.schedule['list'] = collections.deque(self.schedule['list'])
 
         if not is_retain_state:
             self.schedule['schedule_id'] = str(uuid.uuid4())
             for item in self.schedule['list']:
-                item['id'] = str(uuid.uuid4())
+                item['schedule_item_id'] = str(uuid.uuid4())
             self.schedule['state'] = "stopped"
-        return 0
+        return self.schedule
 
     # shortcut to start a new scheduler with only a mosaic request
     def start_mosaic(self, params):
@@ -2012,9 +2030,6 @@ class Seestar:
                 self.heartbeat_msg_thread.name = f"HeartbeatMsgThread:{self.device_name}"
                 self.heartbeat_msg_thread.start()
 
-                response = self.send_message_param_sync({ "method": "get_device_state",  "params": {"keys":["device"]}})
-                self.firmware_ver_int = response["result"]["device"]["firmware_ver_int"]
-                self.logger.info(f"Firmware version: {self.firmware_ver_int}")
                 self.guest_mode_init()
 
             except Exception as ex:

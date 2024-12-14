@@ -151,11 +151,10 @@
            
 
             <div class="mb-3">
-                <label for="sessionTime" class="form-label">Total Session Time</label>
-                <input type="text" class="form-control" id="sessionTime" name="sessionTime"
-                       aria-describedby="sessionTimeHelp" value="{{ values.session_time_sec }}" required>
-                <div id="sessionTimeHelp" class="form-text">Total elapsed session time (ex: 1h 30m or 5400). Rejected frames
-                    count.
+                <label for="panelTime" class="form-label">Panel Acquisition Time</label>
+                <input type="text" class="form-control" id="panelTime" name="panelTime"
+                       aria-describedby="panelTimeHelp" value="{{ values.panel_time_sec }}" required>
+                <div id="panelTimeHelp" class="form-text">How much acquisition time for each panel (ex: 1h 30m or 5400).
                 </div>
             </div>
 
