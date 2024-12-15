@@ -157,7 +157,7 @@ class Seestar_Federation:
 
         for key in self.seestar_devices:
             cur_device = self.seestar_devices[key]
-            if cur_device.is_connected:
+            if cur_device.is_connected and cur_device.is_client_master():
                 device_schedule = cur_device.get_schedule(params)
                 if 'state' not in device_schedule:
                     continue
@@ -296,18 +296,20 @@ class Seestar_Federation:
                     cur_params["federation_mode"] = "duplicate"
                 elif cur_params["federation_mode"] == "by_time":
                     cur_params["panel_time_sec"] = round(cur_params["panel_time_sec"]/num_devices)
-                elif cur_params["federation_mode"] == "by_panels":
+
+                if cur_params["federation_mode"] == "by_panels":
                     section_dict = self.get_section_array_for_mosaic(available_devices, cur_params)
-                    for key in section_dict:
-                        cur_params['selected_panels'] = section_dict[key]
+                    self.logger.info(f"federation mode split ->  {section_dict}")
 
                 for key in available_devices:
                     cur_device = self.seestar_devices[key]
                     new_item = {}
                     new_item['action'] = "start_mosaic"
-                    new_item['params'] = cur_params
+                    new_item['params'] = cur_params.copy()
+                    if cur_params["federation_mode"] == "by_panels" and key in section_dict:
+                        new_item['params']['selected_panels'] = section_dict[key]
+                        self.logger.info(f"federation mode by panels ->   key: {key}; panel: {new_item['params']['selected_panels']}")
                     cur_device.add_schedule_item(new_item)
-            
             else:
                 for key in available_devices:
                     cur_device = self.seestar_devices[key]

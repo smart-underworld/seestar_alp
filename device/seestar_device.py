@@ -397,7 +397,17 @@ class Seestar:
             result = self.event_state
         return self.json_result("get_event_state", 0, result)
 
+    # return if this device can control as master
+    def is_client_master(self):
+        client_master = True # Assume master for older firmware
+        if 'Client' in self.event_state:
+            client_master = self.event_state['Client'].get('is_master', True)
+        return client_master
+
     def start_plate_solve_loop(self):
+        if not self.is_client_master():
+            return ("Alp is not the device controller. Grab control first.")
+
         if self.schedule['state'] == "stopped" or self.schedule['state'] == 'complete':
             self.schedule['state'] = "working"
             self.first_plate_solve_altaz = None
@@ -1302,7 +1312,9 @@ class Seestar:
     def action_start_up_sequence(self, params):
         if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete" :
             return self.json_result("start_up_sequence", -1, "Device is busy. Try later.")
-
+        elif not self.is_client_master():
+            return self.json_result("start_up_sequence", -1, "Alp is not the device controller. Grab control first.")
+        
         move_up_dec_thread = threading.Thread(name=f"start-up-thread:{self.device_name}", target=lambda: self.start_up_thread_fn(params, False))
         move_up_dec_thread.start()
         return self.json_result("start_up_sequence", 0, "Sequence started.")
@@ -1821,8 +1833,11 @@ class Seestar:
     def start_scheduler(self, params):
         if "schedule_id" in params and params['schedule_id'] != self.schedule['schedule_id']:
             return self.json_result("start_scheduler", 0, f"Schedule with id {params['schedule_id']} did not match this device's schedule. Returned with no action.")
+        if not self.is_client_master():
+            return self.json_result("start_scheduler", -1, "This device cannot be controlled. Grab the control first.")
         if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete":
             return self.json_result("start_scheduler", -1, "An existing scheduler is active. Returned with no action.")
+        
         self.scheduler_thread = threading.Thread(target=lambda: self.scheduler_thread_fn(), daemon=True)
         self.scheduler_thread.name = f"SchedulerThread:{self.device_name}"
         self.scheduler_thread.start()
