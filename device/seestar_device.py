@@ -310,7 +310,7 @@ class Seestar:
                         # {'Event': 'PlateSolve', 'Timestamp': '21778.539366227', 'state': 'fail', 'error': 'solve failed', 'code': 251, 'lapse_ms': 30985, 'route': []}
 
                         if event_name == 'PlateSolve':
-                            if 'result' in parsed_data and 'ra_dec' in parsed_data['result']:
+                            if 'result' in parsed_data and parsed_data['state'] == 'complete' and 'ra_dec' in parsed_data['result']:
                                 self.cur_solve_RA = parsed_data['result']['ra_dec'][0]
                                 self.cur_solve_Dec = parsed_data['result']['ra_dec'][1]
                                 self.logger.info(f"Current plate solve position: {self.cur_solve_RA}, {self.cur_solve_Dec}")
