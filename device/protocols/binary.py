@@ -3,6 +3,7 @@
 #
 import threading
 import socket
+import errno
 from struct import calcsize, unpack
 
 from networkx.algorithms.components import is_connected
@@ -58,6 +59,11 @@ class SeestarBinaryProtocol(SocketBase):
            except socket.timeout:
                print("sending timeout")
                return False
+           except IOError as e:
+               if e.errno == errno.EPIPE:
+                   self.disconnect()
+                   if self.reconnect():
+                       return self.send_message(data)
            except socket.error as e:
                self.logger.error(f"Send Socket error: {e}")
                #self.disconnect()
