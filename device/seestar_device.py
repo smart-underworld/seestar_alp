@@ -255,6 +255,12 @@ class Seestar:
             self.heartbeat()
             time.sleep(3)
 
+    def request_plate_solve_for_BPA(self):
+        # wait 1s before making the request to ease congestion
+        time.sleep(1)
+        tmp = self.send_message_param_sync({"method":"start_solve"})
+        self.logger.info(f"requested plate solve for BPA: {tmp}")
+
     def receive_message_thread_fn(self):
         msg_remainder = ""
         while self.is_watch_events:
@@ -314,8 +320,7 @@ class Seestar:
                                 self.plate_solve_state = "complete"
                                 # repeat plate solve if we are in PA refinement loop
                                 if self.is_in_plate_solve_loop:
-                                    tmp = self.send_message_param_sync({"method":"start_solve"})
-
+                                    threading.Thread(name=f"plate_solve:{self.device_name}", target=lambda: self.request_plate_solve_for_BPA()).start()
                             elif parsed_data['state'] == 'fail':
                                 self.plate_solve_state = "fail"
                                 self.logger.info("Plate Solve Failed")
@@ -431,7 +436,7 @@ class Seestar:
         radec = Util.parse_coordinate(is_j2000=False, in_ra=in_ra, in_dec=in_dec)
         # Convert RA/Dec to Alt/Az
         altaz = radec.transform_to(AltAz(obstime=Time.now(), location=self.site_altaz_frame))
-        self.logger.info("coord in az-alt: {altaz.az.deg}, {altaz.alt.deg}")
+        self.logger.info(f"coord in az-alt: {altaz.az.deg}, {altaz.alt.deg}")
         return [altaz.alt.deg, altaz.az.deg]
 
     def get_pa_error(self, param):
@@ -777,7 +782,7 @@ class Seestar:
 #            response = response["result"]
 #            if "3PPA" not in response or ("3PPA" in response and response["3PPA"]["state"] == "fail"):
             response = self.send_message_param_sync({"method":"get_device_state"})
-            self.logger.info(f"get 3PPA state to determine how to proceeed: {response}")
+            self.logger.info(f"get 3PPA state to determine how to proceed: {response}")
 
             response = response["result"]["setting"]
 
