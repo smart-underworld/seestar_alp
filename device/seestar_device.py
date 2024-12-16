@@ -1092,9 +1092,10 @@ class Seestar:
 
             loc_data = {}
             loc_param = {}
-            # special loc for south pole: (-90, 0)
-            if ('lat' not in params or 'lon' not in params) or (params['lat'] == 0 and params['lon'] == 0):  # special case of (0,0,) will use the ip address to estimate the location
-                if (params['lat'] == 0 and params['lon'] == 0) or (Config.init_lat == 0 and Config.init_long == 0):
+            # special case of (0,0) will use the ip address to estimate the location
+            has_latlon = 'lat' in params and 'lon' in params
+            if not has_latlon or (params['lat'] == 0 and params['lon'] == 0): 
+                if (has_latlon and params['lat'] == 0 and params['lon'] == 0) or (Config.init_lat == 0 and Config.init_long == 0):
                     coordinates = Util.get_current_gps_coordinates()
                     if coordinates is not None:
                         latitude, longitude = coordinates
@@ -1190,7 +1191,10 @@ class Seestar:
                     lat = 80
 
                 cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
-
+                if isinstance(cur_latlon, str):
+                    self.logger.error(f"Failed to get aiming position: {cur_latlon}")
+                    return
+                
                 msg = f"moving scope's aim toward a clear patch of sky for HC, from lat-lon {cur_latlon[0]}, {cur_latlon[1]} to {lat}, {lon}"
                 self.logger.info(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
