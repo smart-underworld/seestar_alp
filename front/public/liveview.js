@@ -98,7 +98,8 @@ class LiveViewJoystick {
             console.log('response:', body)
             //this.positionEl.innerHTML = body;
             this.sending = false;
-          });
+          })
+          .catch(() => this.sending = false);
     }
   }
 
