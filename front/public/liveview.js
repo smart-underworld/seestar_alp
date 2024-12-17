@@ -78,23 +78,28 @@ class LiveViewJoystick {
     this.timer = -1;
     this.vector = this.zero_vector;
     this.positionEl = document.getElementById('position');
+    this.sending = false;
   }
 
-  #sendMove() {
+  #sendMove(force = false) {
     // console.log(`${new Date().toISOString()} sending move ${JSON.stringify(this.vector)}`);
     // xxx this keeps running for too long!
-    fetch(this.rootPath + '/position', {
-      method: 'POST',
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(this.vector)
-    })
-      .then(response => response.text())
-      .then(body => {
-        console.log('response:', body)
-        //this.positionEl.innerHTML = body;
-      });
+    if (!this.sending || force) {
+      this.sending = true
+      fetch(this.rootPath + '/position', {
+          method: 'POST',
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(this.vector)
+        })
+          .then(response => response.text())
+          .then(body => {
+            console.log('response:', body)
+            //this.positionEl.innerHTML = body;
+            this.sending = false;
+          });
+    }
   }
 
   register() {
@@ -116,7 +121,7 @@ class LiveViewJoystick {
 
       self.timer = -1;
       self.vector = self.zero_vector;
-      self.#sendMove();
+      self.#sendMove(true);
     });
   }
 }
