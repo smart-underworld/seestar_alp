@@ -32,6 +32,7 @@ import math
 import numpy as np
 import sqlite3
 import platform
+import subprocess
 
 from skyfield.api import Loader
 from skyfield.data import mpc
@@ -2785,6 +2786,24 @@ class ConfigResource:
 
         render_template(req, resp, 'config.html', now=now, config=Config, **context)  # pylint: disable=repeated-keyword
 
+class PlatformRpiResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        now = datetime.now()
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'platform_rpi.html', now=now, config=Config, **context)  # pylint: disable=repeated-keyword
+
+    def on_post(req, resp, telescope_id=1):
+        form = req.media
+        value = form.get("command","").strip()
+        match value:
+            case "reboot_rpi":
+                subprocess.run(["sudo", "reboot"], capture_output=False, text=True)
+                self.on_get(req, resp, telescope_id)
+
+            case "shutdown_rpi":
+                subprocess.run(["sudo", "shutdown", "-h", "now"], capture_output=False, text=True)
+                self.on_get(req, resp, telescope_id)
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
@@ -3111,6 +3130,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/eventstatus', EventStatus())
         app.add_route('/{telescope_id:int}/gensupportbundle', GenSupportBundleResource())
         app.add_route('/{telescope_id:int}/config', ConfigResource())
+        app.add_route('/{telescope_id:int}/platform-rpi', PlatformRpiResource())
         app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
         app.add_route('/simbad', SimbadResource())
         app.add_route('/stellarium', StellariumResource())

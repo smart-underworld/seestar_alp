@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+
+{% block header %}
+  <div class="container mt-3">
+    <p class="h1">{% block title %}Raspberry Pi System{% endblock %}</p>
+  </div>
+{% endblock %}
+
+{% block content %}
+  {% if platform != "raspberry_pi" %}
+    <div class="container mt-3">
+      <p>This page is not available for your platform</p>
+    </div>
+  {% else %}
+  <div class="row">
+    <div class="col">
+      <form method="post" action="{{ action }}">
+        <input type="hidden" name="command" value="reboot_rpi">
+        <button type="submit" class="btn btn-primary"{{claimbtnstate}}>Reboot Rpi</button>
+      </form>
+      <form method="post" action="{{ action }}">
+        <input type="hidden" name="command" value="shutdown_rpi">
+        <button type="submit" class="btn btn-primary"{{claimbtnstate}}>Shutdown Rpi</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <footer class="bg-body-tertiary text-center mt-3">
+    Version: {{ version }} | Last updated: {{ now }}
+  </footer>
+
+{% endblock %}
