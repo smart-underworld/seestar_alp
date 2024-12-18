@@ -2797,6 +2797,8 @@ class PlatformRpiResource:
     def on_post(req, resp, telescope_id=1):
         form = req.media
         value = form.get("command","").strip()
+        now = datetime.now()
+        context = get_context(telescope_id, req)
         match value:
             case "reboot_rpi":
                 render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = "System rebooting.", **context)
