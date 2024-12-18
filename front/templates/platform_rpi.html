@@ -11,6 +11,10 @@
     <div class="container mt-3">
       <p>This page is not available for your platform</p>
     </div>
+  {% elif display != None %}
+  <div class="container mt-3">
+    <p>{{ display }}</p>
+  </div>
   {% else %}
   <div class="row">
     <div class="col">

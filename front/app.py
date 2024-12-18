@@ -2791,19 +2791,20 @@ class PlatformRpiResource:
     def on_get(req, resp, telescope_id=1):
         now = datetime.now()
         context = get_context(telescope_id, req)
-        render_template(req, resp, 'platform_rpi.html', now=now, config=Config, **context)  # pylint: disable=repeated-keyword
+        render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = None, **context)  # pylint: disable=repeated-keyword
 
+    @staticmethod
     def on_post(req, resp, telescope_id=1):
         form = req.media
         value = form.get("command","").strip()
         match value:
             case "reboot_rpi":
+                render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = "System rebooting.", **context)
                 subprocess.run(["sudo", "reboot"], capture_output=False, text=True)
-                self.on_get(req, resp, telescope_id)
 
             case "shutdown_rpi":
+                render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = "System shutting down.", **context)
                 subprocess.run(["sudo", "shutdown", "-h", "now"], capture_output=False, text=True)
-                self.on_get(req, resp, telescope_id)
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
