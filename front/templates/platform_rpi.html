@@ -16,15 +16,18 @@
     <p>{{ display }}</p>
   </div>
   {% else %}
-  <div class="row">
-    <div class="col">
+  <div class="col">
+    <div class="row">
       <form method="post" action="{{ action }}">
         <input type="hidden" name="command" value="reboot_rpi">
-        <button type="submit" class="btn btn-primary"{{claimbtnstate}}>Reboot Rpi</button>
+        <button type="submit" class="btn btn-primary" style="width:250px">Reboot Rpi</button>
       </form>
+    </div>
+    <p>
+    <div class="row">  
       <form method="post" action="{{ action }}">
         <input type="hidden" name="command" value="shutdown_rpi">
-        <button type="submit" class="btn btn-primary"{{claimbtnstate}}>Shutdown Rpi</button>
+        <button type="submit" class="btn btn-primary" style="width:250px">Shutdown Rpi</button>
       </form>
     </div>
   </div>
