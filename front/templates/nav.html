@@ -49,6 +49,11 @@
 						<li>
 							<a class="dropdown-item" href="{{ root }}/stats">Stats</a>
 						</li>
+            {% if platform == "raspberry_pi" %}
+            <li>
+              <a class="dropdown-item" href="{{ root }}/plat_rpi">System</a>
+            </li>
+            {% endif %}
 					</ul>
 				</li>
                 <li class="nav-item">
