@@ -2801,11 +2801,19 @@ class PlatformRpiResource:
         context = get_context(telescope_id, req)
 
         def background_run(args):
-            time.sleep(3)
+            time.sleep(2)
             subprocess.run(args, capture_output=False, text=True)
 
 
         match value:
+            case "restart_alp":
+                render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = "SSC/Alp service restarting.", **context)
+                threading.Thread(target=lambda: background_run(["sudo", "systemctl", "restart", "seestar.service"])).start()
+
+            case "restart_indi":
+                render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = "INDI service restarting.", **context)
+                threading.Thread(target=lambda: background_run(["sudo", "systemctl", "restart", "INDI.service"])).start()
+
             case "reboot_rpi":
                 render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = "System rebooting.", **context)
                 threading.Thread(target=lambda: background_run(["sudo", "reboot"])).start()

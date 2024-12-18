@@ -19,12 +19,26 @@
   <div class="col">
     <div class="row">
       <form method="post" action="{{ action }}">
+        <input type="hidden" name="command" value="restart_alp">
+        <button type="submit" class="btn btn-primary" style="width:250px">Restart SSC/Alp service</button>
+      </form>
+    </div>
+    <p>
+    <div class="row">
+      <form method="post" action="{{ action }}">
+        <input type="hidden" name="command" value="restart_indi">
+        <button type="submit" class="btn btn-primary" style="width:250px">Restart INDI service</button>
+      </form>
+    </div>
+    <p>
+    <div class="row">
+      <form method="post" action="{{ action }}">
         <input type="hidden" name="command" value="reboot_rpi">
         <button type="submit" class="btn btn-primary" style="width:250px">Reboot Rpi</button>
       </form>
     </div>
     <p>
-    <div class="row">  
+    <div class="row">
       <form method="post" action="{{ action }}">
         <input type="hidden" name="command" value="shutdown_rpi">
         <button type="submit" class="btn btn-primary" style="width:250px">Shutdown Rpi</button>
