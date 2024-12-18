@@ -1305,7 +1305,13 @@ class Seestar:
                 result = self.wait_end_op("goto_target")
                 self.logger.info(f"Goto operation finished with result code: {result}")
 
+                # i have seen instance where seestar automatically starts stacking, even though my param stack_after_goto is false
+                # so I will explicit tell seestar to stop stack just in case
+                time.sleep(2)
+                ignore = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"Stack"}})
+
             self.logger.info(f"Start-up sequence result: {result}")
+
 
             if result:
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
