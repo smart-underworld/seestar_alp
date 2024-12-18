@@ -106,7 +106,7 @@ class Seestar:
         self.plate_solve_state = "fail"
         self.cur_solve_RA: float = -9999.0  #
         self.cur_solve_Dec: float = -9999.0
-        self.first_plate_solve_altaz = None    # for blind plate solve logic
+        self.first_plate_solve_eq = None    # for blind plate solve logic
 
         self.site_altaz_frame = None
 
@@ -315,8 +315,8 @@ class Seestar:
                                 self.cur_solve_Dec = parsed_data['result']['ra_dec'][1]
                                 self.logger.info(f"Current plate solve position: {self.cur_solve_RA}, {self.cur_solve_Dec}")
                                 # record first good plate solve for blind polar alignment logic
-                                if self.first_plate_solve_altaz == None:
-                                    self.first_plate_solve_altaz = self.get_altaz_from_eq(self.cur_solve_RA, self.cur_solve_Dec)
+                                if self.first_plate_solve_eq == None:
+                                    self.first_plate_solve_eq = [self.cur_solve_RA, self.cur_solve_Dec]
                                 self.plate_solve_state = "complete"
                                 # repeat plate solve if we are in PA refinement loop
                                 if self.is_in_plate_solve_loop:
@@ -324,6 +324,8 @@ class Seestar:
                             elif parsed_data['state'] == 'fail':
                                 self.plate_solve_state = "fail"
                                 self.logger.info("Plate Solve Failed")
+                                if self.is_in_plate_solve_loop:
+                                    threading.Thread(name=f"plate_solve:{self.device_name}", target=lambda: self.request_plate_solve_for_BPA()).start()
 
                         #else:
                         #    self.logger.debug(f"Received event {event_name} : {data}")
@@ -415,7 +417,7 @@ class Seestar:
 
         if self.schedule['state'] == "stopped" or self.schedule['state'] == 'complete':
             self.schedule['state'] = "working"
-            self.first_plate_solve_altaz = None
+            self.first_plate_solve_eq = None
             self.is_in_plate_solve_loop = True
             tmp = self.send_message_param_sync({"method":"start_solve"})
             self.logger.info("start plate solve loop")
@@ -455,7 +457,7 @@ class Seestar:
 #        return({"pa_error_alt" : self.cur_equ_offset_alt, 
 #                "pa_error_az" : self.cur_equ_offset_az})
 
-        if self.first_plate_solve_altaz == None:
+        if self.first_plate_solve_eq == None:
             return({"pa_error_alt" : max_error, "pa_error_az" : max_error})
       
         if self.plate_solve_state == "working":
@@ -467,11 +469,12 @@ class Seestar:
         
 
         cur_solve_altaz = self.get_altaz_from_eq(self.cur_solve_RA, self.cur_solve_Dec)
+        first_plate_solve_altaz = self.get_altaz_from_eq(self.first_plate_solve_eq[0], self.first_plate_solve_eq[1])
         # note seestar returns equ offset as [az, alt], bad convention!
-        error_alt = self.cur_equ_offset_alt - (cur_solve_altaz[0] - self.first_plate_solve_altaz[0])
-        error_az = self.cur_equ_offset_az  - (cur_solve_altaz[1] - self.first_plate_solve_altaz[1])
+        error_alt = self.cur_equ_offset_alt - (cur_solve_altaz[0] - first_plate_solve_altaz[0])
+        error_az = self.cur_equ_offset_az  - (cur_solve_altaz[1] - first_plate_solve_altaz[1])
 
-        self.logger.info(f"before: az:{self.first_plate_solve_altaz[0]:3.4f}, alt:{self.first_plate_solve_altaz[1]:3.4f}")
+        self.logger.info(f"before: az:{first_plate_solve_altaz[0]:3.4f}, alt:{first_plate_solve_altaz[1]:3.4f}")
         self.logger.info(f"after : az:{cur_solve_altaz[0]:3.4f}, alt:{cur_solve_altaz[1]:3.4f}")
 
         self.logger.info(f"PA eq_offset: {self.cur_equ_offset_alt:3.4f}, {self.cur_equ_offset_az:3.4f}")
@@ -1215,7 +1218,9 @@ class Seestar:
                     if self.move_scope(direction, 1000, 10) == False:
                         break
                     time.sleep(0.1)
-                    cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+                    tmp = self.send_message_param_sync({"method":"scope_get_horiz_coord"})
+                    if 'result' in tmp:
+                        cur_latlon = tmp["result"]
                 self.move_scope(0, 0, 0)
 
                 while True:
