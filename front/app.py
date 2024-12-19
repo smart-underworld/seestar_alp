@@ -31,7 +31,6 @@ import signal
 import math
 import numpy as np
 import sqlite3
-import platform
 import subprocess
 
 from skyfield.api import Loader
@@ -101,7 +100,7 @@ messages = []
 online = None
 client_master = True
 queue = {}
-platform = get_platform()
+os_platform = get_platform()
 
 #
 # Globally turned off IPv6 on requests.  This was causing incredible slowness
@@ -189,7 +188,7 @@ def get_context(telescope_id, req):
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
             "online": online, "imager_root": imager_root, "experimental": experimental, "confirm": confirm,
             "uitheme": uitheme, "client_master": client_master, "current_item": current_item,
-            "platform": platform
+            "platform": os_platform
             }
 
 
