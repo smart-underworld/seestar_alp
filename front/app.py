@@ -1162,7 +1162,7 @@ def do_support_bundle(req, telescope_id = 1):
         zip_file.writestr("OS_name.txt", os_name)
 
         if os_name == "Linux":
-            cmd_result = subprocess.check_output(['journalctl', '-u', 'seestar'])
+            cmd_result = subprocess.check_output(['journalctl', '-b', '-u', 'seestar'])
             zip_file.writestr("seestar_service_journal.txt", cmd_result)
             cmd_result = subprocess.check_output(['journalctl', '-u', 'INDI'])
             zip_file.writestr("INDI_service_journal.txt", cmd_result)
