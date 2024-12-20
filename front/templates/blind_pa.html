@@ -199,17 +199,24 @@
           "Content-type": "application/json; charset=UTF-8"
         }
       })
-      var data = await response;
-      console.info('started alignment:', data)
-      pa_interval = setInterval(update_pa_error, 1000)
+      data = await response.json();
+      console.info('started alignment:', data);
+
+      if (data["ok"]) {
+        pa_interval = setInterval(update_pa_error, 1000);
+        startStopButton.textContent = "Stop";
+      }
+      else {
+        alert(data["error"])
+      }
 
     } catch (error) {
       console.error('Error fetching data:', error);
+      alert('Error fetching data:', error)
     }
   }
 
   async function stopAlignment() {
-    clearInterval(pa_interval);
     try {
       var baseURL =
       `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
@@ -224,22 +231,31 @@
           "Content-type": "application/json; charset=UTF-8"
         }
       })
-      var data = await response;
+      var data = await response.json();
+      console.info('stop alignment:', data); 
+      if (!data["ok"]) {
+        alert(data["error"])
+      }
+      // no matter what, stop it anyway
+      startStopButton.textContent = "Start"; 
+      clearInterval(pa_interval);
+      alert("Make sure you re-run polar alignment in start-up sequence."); 
+
     } catch (error) {
+      startStopButton.textContent = "Start"; 
       console.error('Error fetching data:', error);
+      clearInterval(pa_interval);
+      alert('Error fetching data:', error)
     }
   }
 
   function toggleStateAlignment(){
 
     if (startStopButton.textContent == "Start") {
-      startAlignment()
-      startStopButton.textContent = "Stop";
+      startAlignment();
     }
     else {
-      stopAlignment()
-      startStopButton.textContent = "Start"; 
-      alert("Make sure you re-run polar alignment in start-up sequence."); 
+      stopAlignment();
     }
   }
 
