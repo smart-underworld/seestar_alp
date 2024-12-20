@@ -72,6 +72,28 @@ def get_listening_ip():
         ip_address = Config.ip_address
     return ip_address
 
+def get_platform():
+    plat = platform.system()
+    if plat == "Linux":
+        try:
+            with open("/proc/cpuinfo", "r") as cpuinfo_file:
+                cpuinfo = cpuinfo_file.read()
+                if "Raspberry Pi" in cpuinfo or "BCM" in cpuinfo:
+                    plat = "raspberry_pi"
+        except FileNotFoundError:
+            pass
+
+        # Check for Raspberry Pi-specific files
+        if os.path.exists("/sys/firmware/devicetree/base/model"):
+            try:
+                with open("/sys/firmware/devicetree/base/model", "r") as model_file:
+                    model_info = model_file.read().lower()
+                    if "raspberry pi" in model_info:
+                        plat = "raspberry_pi"
+            except FileNotFoundError:
+                pass
+
+    return plat
 
 base_url = "http://" + get_listening_ip() + ":" + str(Config.port)
 simbad_url = 'https://simbad.cds.unistra.fr/simbad/sim-id?output.format=ASCII&obj.bibsel=off&Ident='
@@ -79,6 +101,7 @@ messages = []
 online = None
 client_master = True
 queue = {}
+os_platform = get_platform()
 
 #
 # Globally turned off IPv6 on requests.  This was causing incredible slowness
@@ -138,7 +161,6 @@ def get_imager_root(telescope_id):
             return root
     return ""
 
-
 def get_context(telescope_id, req):
     # probably a better way of doing this...
     telescopes = get_telescopes()
@@ -166,7 +188,8 @@ def get_context(telescope_id, req):
     do_action_device("get_event_state", telescope_id, {})
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
             "online": online, "imager_root": imager_root, "experimental": experimental, "confirm": confirm,
-            "uitheme": uitheme, "client_master": client_master, "current_item": current_item
+            "uitheme": uitheme, "client_master": client_master, "current_item": current_item,
+            "platform": os_platform
             }
 
 
@@ -1141,9 +1164,9 @@ def do_support_bundle(req, telescope_id = 1):
         zip_file.writestr("OS_name.txt", os_name)
 
         if os_name == "Linux":
-            cmd_result = subprocess.check_output(['journalctl', '-u', 'seestar'])
+            cmd_result = subprocess.check_output(['journalctl', '-b', '-u', 'seestar'])
             zip_file.writestr("seestar_service_journal.txt", cmd_result)
-            cmd_result = subprocess.check_output(['journalctl', '-u', 'INDI'])
+            cmd_result = subprocess.check_output(['journalctl', '-b', '-u', 'INDI'])
             zip_file.writestr("INDI_service_journal.txt", cmd_result)
         #if os.path.isdir('.git'):
         #    cmd_result = subprocess.check_output(['git', 'log', '-n', '1'])
@@ -2765,11 +2788,16 @@ class ConfigResource:
 
         render_template(req, resp, 'config.html', now=now, config=Config, **context)  # pylint: disable=repeated-keyword
 
+<<<<<<< HEAD
 class BlindPolarAlignResource:
+=======
+class PlatformRpiResource:
+>>>>>>> origin/main
     @staticmethod
     def on_get(req, resp, telescope_id=1):
         now = datetime.now()
         context = get_context(telescope_id, req)
+<<<<<<< HEAD
         render_template(req, resp, 'blind_pa.html', now=now, **context)  # pylint: disable=repeated-keyword
     @staticmethod
     def on_post(req, resp):
@@ -2800,6 +2828,38 @@ class BlindPolarAlignResource:
             resp.status = falcon.HTTP_200
             resp.content_type = 'application/json'
             resp.text = json.dumps(blind_pa_data)
+=======
+        render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = None, **context)  # pylint: disable=repeated-keyword
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        form = req.media
+        value = form.get("command","").strip()
+        now = datetime.now()
+        context = get_context(telescope_id, req)
+
+        def background_run(args):
+            time.sleep(2)
+            subprocess.run(args, capture_output=False, text=True)
+
+
+        match value:
+            case "restart_alp":
+                render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = "SSC/Alp service restarting.", **context)
+                threading.Thread(target=lambda: background_run(["sudo", "systemctl", "restart", "seestar.service"])).start()
+
+            case "restart_indi":
+                render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = "INDI service restarting.", **context)
+                threading.Thread(target=lambda: background_run(["sudo", "systemctl", "restart", "INDI.service"])).start()
+
+            case "reboot_rpi":
+                render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = "System rebooting.", **context)
+                threading.Thread(target=lambda: background_run(["sudo", "reboot"])).start()
+
+            case "shutdown_rpi":
+                render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = "System shutting down.", **context)
+                threading.Thread(target=lambda: background_run(["sudo", "shutdown", "-h", "now"])).start()
+>>>>>>> origin/main
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
@@ -3126,7 +3186,11 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/eventstatus', EventStatus())
         app.add_route('/{telescope_id:int}/gensupportbundle', GenSupportBundleResource())
         app.add_route('/{telescope_id:int}/config', ConfigResource())
+<<<<<<< HEAD
         app.add_route('/{telescope_id:int}/blind_pa', BlindPolarAlignResource())
+=======
+        app.add_route('/{telescope_id:int}/platform-rpi', PlatformRpiResource())
+>>>>>>> origin/main
         app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
         app.add_route('/simbad', SimbadResource())
         app.add_route('/stellarium', StellariumResource())

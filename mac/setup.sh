@@ -26,7 +26,7 @@ function python_virtualenv_setup {
     if [ "$SHELL" = "/bin/bash" ]; then
       shellfile=~/.bashrc
     else
-      shellfile=~/.zprofile
+      shellfile=~/.zshrc
     fi
 
     cat <<_EOF >> ${shellfile}
