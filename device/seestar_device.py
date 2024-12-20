@@ -106,8 +106,8 @@ class Seestar:
         self.plate_solve_state = "fail"
         self.cur_solve_RA: float = -9999.0  #
         self.cur_solve_Dec: float = -9999.0
-        self.first_plate_solve_eq = None    # for blind plate solve logic
-
+        self.first_plate_solve_altaz = None    # for blind plate solve logic
+        self.first_obs_time = None
         self.site_altaz_frame = None
 
         self.connect_count: int = 0
@@ -315,8 +315,10 @@ class Seestar:
                                 self.cur_solve_Dec = parsed_data['result']['ra_dec'][1]
                                 self.logger.info(f"Current plate solve position: {self.cur_solve_RA}, {self.cur_solve_Dec}")
                                 # record first good plate solve for blind polar alignment logic
-                                if self.first_plate_solve_eq == None:
-                                    self.first_plate_solve_eq = [self.cur_solve_RA, self.cur_solve_Dec]
+                                if self.first_plate_solve_altaz == None and self.site_altaz_frame is not None:
+                                    self.first_obs_time = Time.now()
+                                    self.first_plate_solve_altaz = self.get_altaz_from_eq(self.cur_solve_RA, self.cur_solve_Dec, self.first_obs_time)
+                                    self.logger.info(f"set first plate solve position: {self.cur_solve_RA}, {self.cur_solve_Dec}")
                                 self.plate_solve_state = "complete"
                                 # repeat plate solve if we are in PA refinement loop
                                 if self.is_in_plate_solve_loop:
@@ -413,31 +415,39 @@ class Seestar:
 
     def start_plate_solve_loop(self):
         if not self.is_client_master():
-            return ("Alp is not the device controller. Grab control first.")
+            return ({"ok":False, "error":"Alp is not the device controller. Grab control first."})
 
-        if self.schedule['state'] == "stopped" or self.schedule['state'] == 'complete':
+        elif self.cur_equ_offset_alt == None:
+            return ({"ok":False, "error":"Need to perform 3 point polar alignment in start up sequence first."})
+        
+        elif self.schedule['state'] == "stopped" or self.schedule['state'] == 'complete':
             self.schedule['state'] = "working"
-            self.first_plate_solve_eq = None
+            self.first_plate_solve_altaz = None
             self.is_in_plate_solve_loop = True
             tmp = self.send_message_param_sync({"method":"start_solve"})
             self.logger.info("start plate solve loop")
-            return("started plate solve loop")
+            return({"ok":True, "error":""})
         else:
             self.is_in_plate_solve_loop = False
             self.logger.warn("scheduler state is running, cannot start plate solve loop")
-            return("scheduler state was running. Canno start loop")
+            return({"ok":False, "error":"scheduler state is running, cannot start plate solve loop"})
 
     def stop_plate_solve_loop(self):
         if self.schedule['state'] != "working":
-            return("Error: there is no active plate solve loop to stop.")
+            self.logger.warn("Error: there is no active plate solve loop to stop.")
+            return({"ok":False, "error":"there is no active plate solve loop to stop."})
         self.is_in_plate_solve_loop = False
         self.schedule['state'] = "stopped"
-        return("Stopped plate solve loop")
+        self.logger.info("Stopped plate solve loop")
+        return({"ok":True, "error":""})
     
-    def get_altaz_from_eq(self, in_ra, in_dec):
+    def get_altaz_from_eq(self, in_ra, in_dec, obs_time):
+        if self.site_altaz_frame == None:
+            self.logger.warn("SCC has a rouge thread trying to call BPA error!")
+            return [9999.9, 9999.9]
         radec = Util.parse_coordinate(is_j2000=False, in_ra=in_ra, in_dec=in_dec)
         # Convert RA/Dec to Alt/Az
-        altaz = radec.transform_to(AltAz(obstime=Time.now(), location=self.site_altaz_frame))
+        altaz = radec.transform_to(AltAz(obstime=obs_time, location=self.site_altaz_frame))
         self.logger.info(f"coord in az-alt: {altaz.az.deg}, {altaz.alt.deg}")
         return [altaz.alt.deg, altaz.az.deg]
 
@@ -457,7 +467,7 @@ class Seestar:
 #        return({"pa_error_alt" : self.cur_equ_offset_alt, 
 #                "pa_error_az" : self.cur_equ_offset_az})
 
-        if self.first_plate_solve_eq == None:
+        if self.first_plate_solve_altaz == None:
             return({"pa_error_alt" : max_error, "pa_error_az" : max_error})
       
         if self.plate_solve_state == "working":
@@ -468,13 +478,13 @@ class Seestar:
             return({"pa_error_alt" : max_error, "pa_error_az" : max_error})
         
 
-        cur_solve_altaz = self.get_altaz_from_eq(self.cur_solve_RA, self.cur_solve_Dec)
-        first_plate_solve_altaz = self.get_altaz_from_eq(self.first_plate_solve_eq[0], self.first_plate_solve_eq[1])
+        cur_solve_altaz = self.get_altaz_from_eq(self.cur_solve_RA, self.cur_solve_Dec, self.first_obs_time)
+        
         # note seestar returns equ offset as [az, alt], bad convention!
-        error_alt = self.cur_equ_offset_alt - (cur_solve_altaz[0] - first_plate_solve_altaz[0])
-        error_az = self.cur_equ_offset_az  - (cur_solve_altaz[1] - first_plate_solve_altaz[1])
+        error_alt = self.cur_equ_offset_alt - (cur_solve_altaz[0] - self.first_plate_solve_altaz[0])
+        error_az = self.cur_equ_offset_az  - (cur_solve_altaz[1] - self.first_plate_solve_altaz[1])
 
-        self.logger.info(f"before: az:{first_plate_solve_altaz[0]:3.4f}, alt:{first_plate_solve_altaz[1]:3.4f}")
+        self.logger.info(f"before: az:{self.first_plate_solve_altaz[0]:3.4f}, alt:{self.first_plate_solve_altaz[1]:3.4f}")
         self.logger.info(f"after : az:{cur_solve_altaz[0]:3.4f}, alt:{cur_solve_altaz[1]:3.4f}")
 
         self.logger.info(f"PA eq_offset: {self.cur_equ_offset_alt:3.4f}, {self.cur_equ_offset_az:3.4f}")
@@ -591,6 +601,7 @@ class Seestar:
                 return
 
         if self.below_horizon_dec_offset == 0:
+            self.logger.info(f"going to target with normal logic: {self.below_horizon_dec_offset }")
             self.is_below_horizon_goto_method = False
             data = {}
             data['method'] = 'iscope_start_view'
@@ -604,6 +615,7 @@ class Seestar:
             self.send_message_param_sync(data)
             return
         else:
+            self.logger.info(f"going to target with below horizon logic: {self.below_horizon_dec_offset }")
             # do the same, but when trying to center on target, need to implement ourselves to platesolve correctly to compensate for the dec offset
             self.goto_target_with_dec_offset_async(target_name, in_ra, in_dec)
             return
@@ -1003,6 +1015,7 @@ class Seestar:
             if self.plate_solve_state == "fail":
                 if search_count > 5:
                     self.custom_goto_state = "fail"
+                    search_count = 0
                     self.logger.warn(f"auto center failed after {search_count} tries.")
                     return
                 else:

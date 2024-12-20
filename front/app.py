@@ -2780,14 +2780,17 @@ class BlindPolarAlignResource:
         action = PostedForm["action"]
         if action == "start":
             result = do_action_device("start_plate_solve_loop", telescope_id, {})
+            value = result.get("Value", {})
             resp.status = falcon.HTTP_200
             resp.content_type = 'application/json'
+            resp.text = json.dumps(value)
         elif action == "stop":
             result = do_action_device("stop_plate_solve_loop", telescope_id, {})
+            value = result.get("Value", {})
             resp.status = falcon.HTTP_200
             resp.content_type = 'application/json'
+            resp.text = json.dumps(value)
         elif action == "data":
-            max_err_degrees = 3.0
             result = do_action_device("get_pa_error", telescope_id, {})
             value = result.get("Value", {})
             blind_pa_data = {
