@@ -823,25 +823,32 @@ class Seestar:
                         elif "percent" in event_state:
                             if event_state["percent"] >= 90.0 or event_state["state"] == "complete":
                                 if "equ_offset" in event_state:
+                                    self.logger.info(f"calculating error using equ_offset and firmware version {self.firmware_ver_int}")
                                     result = True
                                     # bad ZWO. It returns [az, alt] for alt-az error
                                     self.cur_equ_offset_az = event_state["equ_offset"][0]
                                     self.cur_equ_offset_alt = event_state["equ_offset"][1]
                                     if self.firmware_ver_int < 2368:
                                         self.cur_equ_offset_alt -= 90.0 - self.site_latitude
+                                        self.cur_equ_offset_alt = -self.cur_equ_offset_alt
+                                        self.cur_equ_offset_az = -self.cur_equ_offset_az
                                     self.logger.info(f"3PPA equ offset-- firmware:{self.firmware_ver_int}, alt:{self.cur_equ_offset_alt}, az:{self.cur_equ_offset_az}")
                                 elif "offset" in event_state:
+                                    self.logger.info(f"calculating error using offset and firmware version {self.firmware_ver_int}")
                                     result = True
                                     # bad ZWO. It returns [az, alt] for alt-az error
                                     self.cur_equ_offset_az = event_state["offset"][0]
                                     self.cur_equ_offset_alt = event_state["offset"][1]
                                     if self.firmware_ver_int < 2368:
                                         self.cur_equ_offset_alt -= 90.0 - self.site_latitude
+                                        self.cur_equ_offset_alt = -self.cur_equ_offset_alt
+                                        self.cur_equ_offset_az = -self.cur_equ_offset_az
                                     self.logger.info(f"3PPA equ offset-- firmware:{self.firmware_ver_int}, alt:{self.cur_equ_offset_alt}, az:{self.cur_equ_offset_az}")
                                 else:
                                     result = True
                                     self.cur_equ_offset_alt = None
                                     self.cur_equ_offset_az = None
+                                    self.logger.warn(f"did not find eq offset data: {event_state}")
                                 self.logger.info("3PPA finished 3rd pt. Will stop return to origin now.")
                                 if is_3PPA:
                                     response = self.send_message_param_sync({"method":"stop_polar_align"})
