@@ -2788,16 +2788,11 @@ class ConfigResource:
 
         render_template(req, resp, 'config.html', now=now, config=Config, **context)  # pylint: disable=repeated-keyword
 
-<<<<<<< HEAD
 class BlindPolarAlignResource:
-=======
-class PlatformRpiResource:
->>>>>>> origin/main
     @staticmethod
     def on_get(req, resp, telescope_id=1):
         now = datetime.now()
         context = get_context(telescope_id, req)
-<<<<<<< HEAD
         render_template(req, resp, 'blind_pa.html', now=now, **context)  # pylint: disable=repeated-keyword
     @staticmethod
     def on_post(req, resp):
@@ -2828,9 +2823,13 @@ class PlatformRpiResource:
             resp.status = falcon.HTTP_200
             resp.content_type = 'application/json'
             resp.text = json.dumps(blind_pa_data)
-=======
-        render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = None, **context)  # pylint: disable=repeated-keyword
-
+            
+class PlatformRpiResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        now = datetime.now()
+        context = get_context(telescope_id, req)
+        render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = None, **context)
     @staticmethod
     def on_post(req, resp, telescope_id=1):
         form = req.media
@@ -2841,7 +2840,6 @@ class PlatformRpiResource:
         def background_run(args):
             time.sleep(2)
             subprocess.run(args, capture_output=False, text=True)
-
 
         match value:
             case "restart_alp":
@@ -2859,7 +2857,6 @@ class PlatformRpiResource:
             case "shutdown_rpi":
                 render_template(req, resp, 'platform_rpi.html', now=now, config=Config, display = "System shutting down.", **context)
                 threading.Thread(target=lambda: background_run(["sudo", "shutdown", "-h", "now"])).start()
->>>>>>> origin/main
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
@@ -3186,11 +3183,8 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/eventstatus', EventStatus())
         app.add_route('/{telescope_id:int}/gensupportbundle', GenSupportBundleResource())
         app.add_route('/{telescope_id:int}/config', ConfigResource())
-<<<<<<< HEAD
         app.add_route('/{telescope_id:int}/blind_pa', BlindPolarAlignResource())
-=======
         app.add_route('/{telescope_id:int}/platform-rpi', PlatformRpiResource())
->>>>>>> origin/main
         app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
         app.add_route('/simbad', SimbadResource())
         app.add_route('/stellarium', StellariumResource())
