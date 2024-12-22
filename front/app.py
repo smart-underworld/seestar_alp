@@ -850,9 +850,12 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
     }
 
     if telescope_id == 0:
-        splitMosaic = form.get("array_mode")
-        if splitMosaic:
-            values["array_mode"] = splitMosaic
+        fedMode = form.get("federation_mode")
+        if fedMode:
+            values["federation_mode"] = fedMode
+        maxDev = form.get("max_devices")
+        if maxDev:
+                values["max_devices"] = maxDev
 
     if not check_ra_value(ra):
         flash(resp, "Invalid RA value")
