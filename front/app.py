@@ -913,6 +913,14 @@ def do_create_image(req, resp, schedule, telescope_id):
         "retry_wait_s": int(retry_wait_s) if retry_wait_s else 300
     }
 
+    if telescope_id == 0:
+        fedMode = form.get("federation_mode")
+        if fedMode:
+            values["federation_mode"] = fedMode
+        maxDev = form.get("max_devices")
+        if maxDev:
+                values["max_devices"] = maxDev
+
     if not check_ra_value(ra):
         flash(resp, "Invalid RA value")
         errors["ra"] = ra
