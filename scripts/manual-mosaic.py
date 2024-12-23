@@ -16,7 +16,7 @@ from device.seestar_util import Util
 # Tunables
 #
 class Tunables:
-    def __init__(self, tn,ij,nra,ndec,cra,cdec,ov,th,lp,af,dh,g,po) -> None:
+    def __init__(self, tn,ij,nra,ndec,cra,cdec,ov,th,lp,af,dh,g,po,nr,rws) -> None:
         self.target_name=tn
         self.is_j2000=ij
         self.nRA = nra
@@ -30,6 +30,8 @@ class Tunables:
         self.use_heater = dh
         self.gain = g
         self.panel_order = po
+        self.num_tries = nr
+        self.retry_wait_s = rws
 
 class ManualMosaic:
     def __init__(self, tunables) -> None:
@@ -65,7 +67,7 @@ class ManualMosaic:
             for index_ra in range(self.tunables.nRA):
                 panel_string = str(index_ra + 1) + str(index_dec + 1)
 
-                panel_line=f"start_mosaic,,,,{self.tunables.target_name}_{panel_string},{self.tunables.is_j2000},{cur_ra},{cur_dec},{self.tunables.use_LPF},{secs_per_panel},1,1,100,{self.tunables.gain},{self.tunables.use_AF},{self.tunables.use_heater},,"
+                panel_line=f"start_mosaic,{self.tunables.center_Dec},{self.tunables.nDec},{self.tunables.gain},{self.tunables.use_heater},{self.tunables.is_j2000},{self.tunables.use_AF},{self.tunables.use_LPF},{self.tunables.num_tries},{self.tunables.overlap_percent},{self.tunables.center_RA},{self.tunables.nRA},{self.tunables.retry_wait_s},{secs_per_panel},{self.tunables.target_name}_{panel_string}"
                 self.lines[panel_string] = panel_line
                 self.llines.append(panel_line)
 
@@ -74,7 +76,7 @@ class ManualMosaic:
 
     def print_schedule(self):
         # Print panels in order specified
-        print("action,local_time,timer_sec,try_count,target_name,is_j2000,ra,dec,is_use_lp_filter,session_time_sec,ra_num,dec_num,panel_overlap_percent,gain,is_use_autofocus,heater,nokey,selected_panels")
+        print("action,dec,dec_num,gain,heater,is_j2000,is_use_autofocus,is_use_lp_filter,num_tries,panel_overlap_percent,ra,ra_num,retry_wait_s,session_time_sec,target_name")
         if self.tunables.panel_order:
             for p in self.tunables.panel_order.split(";"):
                 print(self.lines[p])
@@ -98,6 +100,8 @@ if __name__ == '__main__':
     parser.add_argument('--use_heater', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--gain', type=int, default=80)
     parser.add_argument('--panel_order', default=None)
+    parser.add_argument('--num_tries', default=1)
+    parser.add_argument('--retry_wait_s', default=300)
 
     args = parser.parse_args()
 
@@ -129,7 +133,9 @@ if __name__ == '__main__':
         args.use_AF,
         args.use_heater,
         args.gain,
-        args.panel_order
+        args.panel_order,
+        args.num_tries,
+        args.retry_wait_s
     )
     mm = ManualMosaic(t)
     mm.calculate()
