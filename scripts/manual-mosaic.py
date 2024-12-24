@@ -67,7 +67,7 @@ class ManualMosaic:
             for index_ra in range(self.tunables.nRA):
                 panel_string = str(index_ra + 1) + str(index_dec + 1)
 
-                panel_line=f"start_mosaic,{cur_dec},{self.tunables.nDec},{self.tunables.gain},{self.tunables.use_heater},{self.tunables.is_j2000},{self.tunables.use_AF},{self.tunables.use_LPF},{self.tunables.num_tries},{self.tunables.overlap_percent},{cur_ra},{self.tunables.nRA},{self.tunables.retry_wait_s},{secs_per_panel},{self.tunables.target_name}_{panel_string}"
+                panel_line=f"start_mosaic,{cur_dec},1,{self.tunables.gain},{self.tunables.use_heater},{self.tunables.is_j2000},{self.tunables.use_AF},{self.tunables.use_LPF},{self.tunables.num_tries},{self.tunables.overlap_percent},{cur_ra},1,{self.tunables.retry_wait_s},{secs_per_panel},{self.tunables.target_name}_{panel_string}"
                 self.lines[panel_string] = panel_line
                 self.llines.append(panel_line)
 
