@@ -108,21 +108,57 @@
 {% endblock %}
 {% block content %}
 <div id="pa_target_div">
-  <div id="pa_garden" class="garden">
-    <div class="cow d-flex justify-content-center align-items-center" style="margin: unset; height: 100%">
-      <div class="row d-flex justify-content-center align-items-center" style="margin: unset; width: 100%">
-        <div id="pa_circle_inner" class="circle_inner" style="width: 10%"></div>
-        <div id="pa_circle_inner" class="circle_inner" style="width: 30%"></div>
-        <div id="pa_circle_inner" class="circle_inner" style="width: 80%"></div>
-        <div id="ball" class="ball" style="width: 3%"></div>
-      </div>
-    </div>
-    <div id="pa_target_h" class="crosshair-h"></div>
+	<div id="pa_garden" class="garden">
+		<div class="cow d-flex justify-content-center align-items-center" style="margin: unset; height: 100%">
+			<div class="row d-flex justify-content-center align-items-center" style="margin: unset; width: 100%">
+				<div id="pa_circle_inner" class="circle_inner" style="width: 10%"></div>
+				<div id="pa_circle_inner" class="circle_inner" style="width: 30%"></div>
+				<div id="pa_circle_inner" class="circle_inner" style="width: 80%"></div>
+				<div id="ball" class="ball" style="width: 3%"></div>
+			</div>
+		</div>
+	<div id="pa_target_h" class="crosshair-h"></div>
     <div id="pa_target_v" class="crosshair-v"></div>
-  </div>
-  <pre class="output"></pre>
-  <button id="start_stop_btn" type="reset">Start</button>
-  
+</div>
+<pre class="output"></pre>
+<form method="post" action="{{ action }}" class="d-inline">
+<div class="form-group row g-2 align-items-center">
+	<div class="col-auto">
+		<button id="start_stop_btn" class="btn btn-primary btn-sm" type="reset">Start</button>
+	</div>
+	<div class="col-3"></div>
+	<div class="col-auto">
+		<div class="form-check">
+			<input class="form-check-input" type="checkbox" id="raise_arm" name="raise_arm">
+			<label class="form-check-label" for="raise_arm">Raise Arm</label>
+		</div>
+	</div>
+	<div class="col-auto">
+		<div class="form-check">
+			<input class="form-check-input" type="checkbox" id="polar_align" name="polar_align" checked>
+			<label class="form-check-label" for="polar_align">Polar Align</label>
+		</div>
+	</div>
+	<input type="hidden" name="action" value="runpa">
+	<div class="col-auto">
+		<button type="submit" class="btn btn-primary btn-sm">Re-run PA</button>
+	</div>
+</div>
+</form>
+
+<div class="card border-primary mt-3 w-50">
+	<div class="card-body">
+		Instructions:<br>
+		<ol>
+			<li>Press the Start Button</li>
+			<li>Adjust Zoom to best fit your current alt/az error</li>
+			<li>Adjust your alt/az on your wedge gradually<br>
+				Wait for the dot to move between adjustments</li>
+			<li>Once you're happy with the offset values, press the stop button</li>
+			<li>Press the Re-run PA button to run another Polar alignment<br>
+				NOTE: If you have issues with the PA completing due to obstructions, check the 'Raise Arm' checkbox and then press the Re-run PA button</li>
+		</ol>
+	</div>
 </div>
 <script>
 

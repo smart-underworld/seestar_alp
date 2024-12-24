@@ -1249,7 +1249,8 @@ def render_template(req, resp, template_name, **context):
 
 
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
-    if check_api_state(telescope_id):
+    context = get_context(telescope_id, req)
+    if context.get(online):
         get_schedule = do_action_device("get_schedule", telescope_id, {})
         if get_schedule == None:
             return
@@ -1262,7 +1263,6 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
         nearest_csc["href"] = ""
         nearest_csc["full_img"] = ""
 
-    context = get_context(telescope_id, req)
     render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values, **context)
 
 def export_schedule(telescope_id):
@@ -1505,14 +1505,15 @@ class ImageResource:
 
     @staticmethod
     def image(req, resp, values, errors, telescope_id):
-        if check_api_state(telescope_id):
+        context = get_context(telescope_id, req)
+
+        if context.get(online):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
             schedule = current["Value"]
         else:
             state = "stopped"
             schedule = {"list": get_queue(telescope_id)}
-        context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors,
                         action=f"/{telescope_id}/image", **context)
@@ -1530,12 +1531,12 @@ class GotoResource:
     @staticmethod
     def goto(req, resp, values, errors, telescope_id):
         schedule = {}
-        if check_api_state(telescope_id):
+        context = get_context(telescope_id, req)
+        if context.get(online):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
         else:
             state = "stopped"
-        context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'goto.html', state=state, schedule=schedule, values=values, errors=errors, action=f"/{telescope_id}/goto", **context)
 
@@ -1550,7 +1551,8 @@ class CommandResource:
 
     @staticmethod
     def command(req, resp, telescope_id, output):
-        if check_api_state(telescope_id):
+        context = get_context(telescope_id, req)
+        if context.get(online):
             current = do_action_device("get_schedule", telescope_id, {})
             if current is None:
                 return
@@ -1560,8 +1562,6 @@ class CommandResource:
         else:
             schedule = {"list": get_queue(telescope_id)}
             state = "stopped"
-
-        context = get_context(telescope_id, req)
 
         render_template(req, resp, 'command.html', state=state, schedule=schedule, action=f"/{telescope_id}/command",
                         output=output, **context)
@@ -1589,14 +1589,14 @@ class MosaicResource:
 
     @staticmethod
     def mosaic(req, resp, values, errors, telescope_id):
-        if check_api_state(telescope_id):
+        context = get_context(telescope_id, req)
+        if context.get(online):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
             schedule = current["Value"]
         else:
             state = "stopped"
             schedule = {"list": get_queue(telescope_id)}
-        context = get_context(telescope_id, req)
         # remove values=values to stop remembering values
         render_template(req, resp, 'mosaic.html', state=state, schedule=schedule, values=values, errors=errors,
                         action=f"/{telescope_id}/mosaic", **context)
@@ -1615,7 +1615,8 @@ class ScheduleResource:
 class ScheduleListResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
-        if check_api_state(telescope_id):
+        context = get_context(telescope_id, req)
+        if context.get(online):
             get_schedule = do_action_device("get_schedule", telescope_id, {})
             current_queue_list = get_queue(telescope_id)
             if get_schedule == None:
@@ -1634,7 +1635,6 @@ class ScheduleListResource:
         else:
             schedule = {"list": get_queue(telescope_id)}
 
-        context = get_context(telescope_id, req)
         render_template(req, resp, 'schedule_list.html', schedule=schedule, **context)
 
 
@@ -1802,12 +1802,12 @@ class ScheduleToggleResource:
 
     @staticmethod
     def display_state(req, resp, telescope_id):
-        if check_api_state(telescope_id):
+        context = get_context(telescope_id, req)
+        if context.get(online):
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
         else:
             state = "stopped"
-        context = get_context(telescope_id, req)
         render_template(req, resp, 'partials/schedule_state.html', state=state, **context)
 
 
@@ -2288,7 +2288,7 @@ class SettingsResource:
                     settings = get_device_settings(tel_id)
                     break
         else:
-            if check_api_state(telescope_id):
+            if context.get(online):
                 settings = get_device_settings(telescope_id)
         # Maybe we can store this better?
         settings_friendly_names = {
@@ -2806,7 +2806,9 @@ class BlindPolarAlignResource:
         context = get_context(telescope_id, req)
         render_template(req, resp, 'blind_pa.html', now=now, **context)  # pylint: disable=repeated-keyword
     @staticmethod
-    def on_post(req, resp):
+    def on_post(req, resp, telescope_id=1):
+        now = datetime.now()
+        context = get_context(telescope_id, req)
         referer = req.get_header('Referer')
         referersplit = referer.split("/")[-2:]
         telescope_id = int(referersplit[0])
@@ -2834,6 +2836,11 @@ class BlindPolarAlignResource:
             resp.status = falcon.HTTP_200
             resp.content_type = 'application/json'
             resp.text = json.dumps(blind_pa_data)
+        elif action == 'runpa':
+            polar_align = PostedForm.get("polar_align","False").strip() == "on"
+            raise_arm = PostedForm.get("raise_arm","False").strip() == "on"
+            do_action_device("action_start_up_sequence", telescope_id, {"3ppa": polar_align, "raise_arm": raise_arm})   
+            render_template(req, resp, 'blind_pa.html', **context)            
             
 class PlatformRpiResource:
     @staticmethod
