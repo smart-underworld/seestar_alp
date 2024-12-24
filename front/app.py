@@ -48,7 +48,10 @@ import pydash
 
 logger = init_logging()
 load = Loader('data/')
-
+_last_context_get_time = {}
+_context_cached = {}
+_last_api_state_get_time = {}
+_api_state_cached = {}
 
 def get_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -161,7 +164,7 @@ def get_imager_root(telescope_id):
             return root
     return ""
 
-def get_context(telescope_id, req):
+def _get_context_real(telescope_id, req):
     # probably a better way of doing this...
     telescopes = get_telescopes()
     root = get_root(telescope_id)
@@ -191,6 +194,12 @@ def get_context(telescope_id, req):
             "uitheme": uitheme, "client_master": client_master, "current_item": current_item,
             "platform": os_platform
             }
+
+def get_context(telescope_id, req):
+    if telescope_id not in _context_cached or time.time() - _last_context_get_time[telescope_id] > 1.0:
+        _last_context_get_time[telescope_id] = time.time()
+        _context_cached[telescope_id] =  _get_context_real(telescope_id, req)
+    return _context_cached[telescope_id]
 
 
 def get_flash_cookie(req, resp):
@@ -361,8 +370,7 @@ def update_planning_card_state(card_name, var, value):
     with open(planning_state_file_location, 'w') as planning_state_file:
         json.dump(state_data, planning_state_file, indent=4)
 
-
-def check_api_state(telescope_id):
+def _check_api_state_cached(telescope_id):
     if telescope_id == 0:
         return True
     url = f"{base_url}/api/v1/telescope/{telescope_id}/connected?ClientID=1&ClientTransactionID=999"
@@ -383,6 +391,11 @@ def check_api_state(telescope_id):
         logger.debug(f"Telescope {telescope_id} API is online.")
         return True
 
+def check_api_state(telescope_id):
+    if telescope_id not in _api_state_cached or time.time() - _last_api_state_get_time[telescope_id] > 1.0:
+        _last_api_state_get_time[telescope_id] = time.time()
+        _api_state_cached[telescope_id] = _check_api_state_cached(telescope_id)
+    return _api_state_cached[telescope_id]
 
 def check_internet_connection():
     try:
