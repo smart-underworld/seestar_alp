@@ -1,0 +1,115 @@
+{
+    "version": 1.0,
+    "schedule_id": "7f2d8a86-bc63-436b-b82c-1d9363a4f9ee",
+    "list": [
+        {
+            "action": "start_up_sequence",
+            "params": {
+                "raise_arm": true,
+                "auto_focus": true,
+                "3ppa": true,
+                "dark_frames": true
+            },
+            "schedule_item_id": "1d0fdecc-f0a8-41e1-9748-9b457576d6cc"
+        },
+        {
+            "action": "wait_until",
+            "params": {
+                "local_time": "23:00"
+            },
+            "schedule_item_id": "7c0bb7df-3957-460e-ab86-338eeb52a8c5"
+        },
+        {
+            "action": "wait_for",
+            "params": {
+                "timer_sec": 60
+            },
+            "schedule_item_id": "7527014c-3f4d-45d3-9b38-b47e393da5d7"
+        },
+        {
+            "action": "auto_focus",
+            "params": {
+                "try_count": 1
+            },
+            "schedule_item_id": "6c728748-c573-4f66-b3fe-14ff85cfa058"
+        },
+        {
+            "action": "set_wheel_position",
+            "params": [
+                2
+            ],
+            "schedule_item_id": "a9b8dcd5-b9d4-4a88-9083-5eaf90b8aa7c"
+        },
+        {
+            "action": "set_wheel_position",
+            "params": [
+                1
+            ],
+            "schedule_item_id": "65faf107-44ea-4d63-85dd-c1adb5075722"
+        },
+        {
+            "action": "action_set_dew_heater",
+            "params": {
+                "heater": 90
+            },
+            "schedule_item_id": "c5c1af41-f569-408f-968d-c2ddf2897e15"
+        },
+        {
+            "action": "action_set_dew_heater",
+            "params": {
+                "heater": 0
+            },
+            "schedule_item_id": "2d7d2a49-e064-487e-8022-7d9b4e694009"
+        },
+        {
+            "action": "start_mosaic",
+            "params": {
+                "dec": "-05d23m15.0s",
+                "dec_num": 1,
+                "gain": 110,
+                "is_j2000": true,
+                "is_use_autofocus": true,
+                "is_use_lp_filter": true,
+                "num_tries": 1,
+                "panel_overlap_percent": 100,
+                "panel_time_sec": 3600,
+                "ra": "05h35m16.8s",
+                "ra_num": 1,
+                "retry_wait_s": 300,
+                "target_name": "M42"
+            },
+            "schedule_item_id": "1a99afd7-8190-42c7-a2b1-eb6346619d2f"
+        },
+        {
+            "action": "start_mosaic",
+            "params": {
+                "dec": "+41d16m7.5s",
+                "dec_num": 2,
+                "gain": 110,
+                "is_j2000": true,
+                "is_use_autofocus": true,
+                "is_use_lp_filter": false,
+                "num_tries": 3,
+                "panel_overlap_percent": 20,
+                "panel_time_sec": 3600,
+                "ra": "00h42m44.3s",
+                "ra_num": 3,
+                "retry_wait_s": 600,
+                "selected_panels": "12;22;32",
+                "target_name": "M31"
+            },
+            "schedule_item_id": "7aecdc7c-8600-4b89-af72-6e62e9e00613"
+        },
+        {
+            "action": "scope_park",
+            "schedule_item_id": "f5d591cf-8bd4-4157-9c25-678b636b6291"
+        },
+        {
+            "action": "shutdown",
+            "schedule_item_id": "5bd57abb-276c-47af-ab9d-671cb0514dd0"
+        }
+    ],
+    "state": "stopped",
+    "current_item_id": "",
+    "item_number": 0
+}
