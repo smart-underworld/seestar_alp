@@ -67,7 +67,7 @@ class _Config:
             shutil.copy(path_to_ex, self.path_to_dat)
 
         self.load_toml(self.path_to_dat)
-    
+
     @staticmethod
     def strToBool(inputString: str):
         if inputString in ["True", "true", "on"] or inputString == True:
@@ -150,8 +150,8 @@ class _Config:
                 'device_num': 1
             }
             ]
-        
-        # For the rare situation of manually edited toml where the highest 
+
+        # For the rare situation of manually edited toml where the highest
         # device_num is higher than the number of devices, we rewrite the device_num
         # sequentially.
 
@@ -191,9 +191,11 @@ class _Config:
         self.init_dither_frequency: int = self.get_toml(section, 'dither_frequency', 10)
         self.init_activate_LP_filter: bool = self.get_toml(section, 'activate_LP_filter', False)
         self.init_dew_heater_power: int = self.get_toml(section, 'dew_heater_power', 0)
+        self.init_guest_mode: bool = self.get_toml(section, 'guest_mode_init', True)
         self.scope_aim_lat: float = self.get_toml(section, 'scope_aim_lat', 60.0)
         self.scope_aim_lon: float = self.get_toml(section, 'scope_aim_lon', 20.0)
         self.is_EQ_mode: bool = self.get_toml(section, 'is_EQ_mode', False)
+
 
     def load_from_form(self, req):
         """
@@ -286,6 +288,7 @@ class _Config:
         self.set_toml('seestar_initialization', 'scope_aim_lat', float(req.media['scope_aim_lat']))
         self.set_toml('seestar_initialization', 'scope_aim_lon', float(req.media['scope_aim_lon']))
         self.set_toml('seestar_initialization', 'is_EQ_mode', 'is_EQ_mode' in req.media)
+        self.set_toml('seestar_initialization', 'guest_mode_init', 'init_guest_mode' in req.media)
 
     def load_toml(self, load_name = None):
         """
@@ -355,11 +358,11 @@ class _Config:
         if hidden:
             t = "hidden"
             v = 'value=""'
-        
+
             ret= f'''<div class="col-sm-8 col-md-6"> <!-- Checkbox -->
                                 <input id="{name}_hidden" name="{name}" class="form-check-input" title="{description}" type="{t}" {v} {c}>
                             </div> <!--Close checkbox -->'''
-        
+
         else:
             t = "checkbox"
             v = ''
@@ -444,7 +447,7 @@ class _Config:
             else:
                 lon = self.render_text('ss_scope_aim_lon','Aim Long',20,'start up longitude in degrees 0 to 360')
 
-            
+
             c = ""
             h = "False"
 
@@ -453,7 +456,7 @@ class _Config:
                     c = "checked"
                     h = "True"
 
-            
+
             ssHTML += f'''<div id="device_div_{seestar["device_num"]}">
                                 <div class="col-sm-4 text-end">
                                     <label class="form-label">
@@ -463,7 +466,7 @@ class _Config:
                                 {self.render_text('ss_name', "Name", seestar["name"], required=True)}
                                 {self.render_text('ss_ip_address', "IP Address", seestar["ip_address"], required=True)}
                                 {lat}
-                                {lon}   
+                                {lon}
                                 <input id="ss_is_EQ_mode_hidden_{seestar["device_num"]}" name="ss_is_EQ_mode" type="hidden" value="{h}">
 
                                 <div class="row mb-3 align-items-center"> <!-- Checkbox Row -->
@@ -566,7 +569,8 @@ class _Config:
                 self.render_text('init_dew_heater_power', 'Dew heater power:', self.init_dew_heater_power, 'Dew heater power level, 0 - 100') + \
                 self.render_text('scope_aim_lat', 'Scope aim latitude:', self.scope_aim_lat, 'Latitude to move the scope to for the startup sequence') + \
                 self.render_text('scope_aim_lon', 'Scope aim longitude:', self.scope_aim_lon, 'Longitude to move thescope to for the startup sequence') + \
-                self.render_checkbox('is_EQ_mode', 'Scope in EQ Mode:', self.is_EQ_mode, 'Is the scope in equitorial mode')
+                self.render_checkbox('is_EQ_mode', 'Scope in EQ Mode:', self.is_EQ_mode, 'Is the scope in equitorial mode') + \
+                self.render_checkbox('init_guest_mode', 'Claim guest mode control:', self.init_guest_mode, 'Claim guest mode on init')
             ) + \
             self.render_config_section('Seestar Devices',self.render_seestars(),'seestar_devices')
         return self._dict
