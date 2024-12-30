@@ -1260,8 +1260,13 @@ def render_template(req, resp, template_name, **context):
                                 version=version,
                                 **context)
 
-
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
+    directory = os.path.join(os.getcwd(), "schedule")
+    files = [
+        f for f in os.listdir(directory)
+        if os.path.isfile(os.path.join(directory, f))
+    ]
+
     context = get_context(telescope_id, req)
     if context.get(online):
         get_schedule = do_action_device("get_schedule", telescope_id, {})
@@ -1276,49 +1281,12 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
         nearest_csc["href"] = ""
         nearest_csc["full_img"] = ""
 
-    render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values, **context)
-
-def export_schedule(telescope_id):
-    if check_api_state(telescope_id):
-        current = do_action_device("get_schedule", telescope_id, {})
-        schedule = current["Value"]["list"]
-    else:
-        schedule = get_queue(telescope_id)
-
-    all_keys = set()
-    for entry in schedule:
-        if 'params' in entry and isinstance(entry['params'], (dict, list)):
-            if isinstance(entry['params'], dict):
-                all_keys.update(entry['params'].keys())
-            elif isinstance(entry['params'], list):
-                all_keys.add('params')  # Add 'params' as a single field if it's a list
-
-    fieldnames = ['action'] + sorted(all_keys)
-
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=fieldnames)
-    writer.writeheader()
-
-    for entry in schedule:
-        row = defaultdict(str, {'action': entry['action']})
-
-        if 'params' in entry:
-            params = entry['params']
-            if isinstance(params, list):
-                row['params'] = ','.join(map(str, params))  # Serialize lists as comma-separated values
-            elif isinstance(params, dict):
-                for key, value in params.items():
-                    row[key] = value  # Add dictionary items as individual columns
-
-        writer.writerow(row)
-
-    output.seek(0)
-    return output.getvalue()
+    render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values, files=files, **context)
 
 def str2bool(v):
     return str(v).lower() in ("yes", "y", "true", "t", "1")
 
-def import_schedule(input, telescope_id):
+def import_csv_schedule(input, telescope_id):
 
     if isinstance(input, list):
         input_content = '\n'.join(input)
@@ -1745,6 +1713,7 @@ class ScheduleStartupResource:
             check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
 
+
 class ScheduleShutdownResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
@@ -1849,32 +1818,43 @@ class ScheduleClearResource:
 class ScheduleExportResource:
     @staticmethod
     def on_post(req, resp, telescope_id=0):
-        filename = req.media["filename"]
-        if filename[-3:] != 'csv':
-            filename = f'{filename}.csv'
-        file_content = export_schedule(telescope_id)
 
-        if file_content:
-            resp.content_type = 'application/octet-stream'
-            resp.append_header('Content-Disposition', f'attachment; filename="{filename}"')
-            resp.data = file_content.encode('utf-8')
-            resp.status = falcon.HTTP_200
-        else:
-            flash(resp, "No schedule to export")
-            redirect(f"/{telescope_id}/schedule")
+        filename = req.media["filename"]
+        directory = os.path.join(os.getcwd(), "schedule")
+        file_path = os.path.join(directory, filename)
+
+        do_action_device("export_schedule", telescope_id, {"filepath":file_path})
+        redirect(f"/{telescope_id}/schedule")
 
 
 class ScheduleImportResource:
     @staticmethod
     def on_post(req, resp, telescope_id=0):
-        data = req.get_media()
-        for part in data:
-            string_data = part.data.decode('utf-8').splitlines()
-            filename = part.filename
-        import_schedule(string_data, telescope_id)
-        flash(resp, f"Schedule imported from {filename}.")
-        redirect(f"/{telescope_id}/schedule")
 
+        form = req.media
+        selected_file = form.get('schedule_file')
+        file_type = form.get('file_type')
+        
+        if not selected_file:
+            raise falcon.HTTPBadRequest("Missing Parameter", "No file selected")
+        
+        directory = os.path.join(os.getcwd(), "schedule")
+        file_path = os.path.join(directory, selected_file)
+
+        data = req.get_param('schedule_file')
+        if not selected_file:
+            raise falcon.HTTPBadRequest("Missing Parameter", "No file selected")
+
+        if file_type == "CSV":
+            with open(file_path, 'r', encoding='utf-8') as file:
+                string_data = file.read().splitlines()
+            import_csv_schedule(string_data, telescope_id)
+
+        if file_type == "JSON":
+            do_action_device("import_schedule", telescope_id, {"filepath":file_path, "is_retain_state":False})
+
+        flash(resp, f"Schedule imported from {selected_file}.")
+        redirect(f"/{telescope_id}/schedule")
 
 class EventStatus:
     @staticmethod

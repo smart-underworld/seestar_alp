@@ -8,11 +8,24 @@
 		</div>
 
 		<div class="col-auto">
-			<form action="{{ root }}/schedule/import" method="post" enctype="multipart/form-data">
+			<form action="{{ root }}/schedule/import" method="post">
 				<div class="input-group">
-					<button type="submit" class="btn btn-primary">Import Schedule</button>
-                    <input type="file" class="form-control me-2" name="schedule_file" accept=".csv" required>
+					<select class="form-select" name="schedule_file" id="fileSelector" required>
+						<option value="" disabled selected>Select a File</option>
+							{% for file in files %}
+								<option value="{{ file }}">{{ file }}</option>
+							{% endfor %}
+					</select>
 				</div>
+				<div class="form-check form-check-inline">
+					<input class="form-check-input" type="radio" name="file_type" id="fileTypeCsv" value="CSV" required>
+					<label class="form-check-label" for="fileTypeCsv">CSV</label>
+				</div>
+				<div class="form-check form-check-inline">
+					<input class="form-check-input" type="radio" name="file_type" id="fileTypeJson" value="JSON" required checked>
+					<label class="form-check-label" for="fileTypeJson">JSON</label>
+				</div>
+				<button type="submit" class="btn btn-primary">Import Schedule</button>
 			</form>
 		</div>
 
@@ -20,7 +33,7 @@
 			<form action="{{ root }}/schedule/export" method="post">
 				<div class="input-group">
 					<button type="submit" class="btn btn-primary me-2">Export Schedule</button>
-                    <input type="text" class="form-control me-2" name="filename" placeholder="Filename.csv" required>
+                    <input type="text" class="form-control me-2" name="filename" placeholder="Filename" required>
 				</div>
 			</form>
 		</div>
