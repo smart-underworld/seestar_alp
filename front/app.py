@@ -1247,6 +1247,7 @@ def render_template(req, resp, template_name, **context):
                                 version=version,
                                 **context)
 
+
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
     directory = os.path.join(os.getcwd(), "schedule")
     files = [
@@ -1255,7 +1256,7 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
     ]
 
     context = get_context(telescope_id, req)
-    if context.get(online):
+    if context["online"]:
         get_schedule = do_action_device("get_schedule", telescope_id, {})
         if get_schedule == None:
             return
@@ -1270,8 +1271,10 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
 
     render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values, files=files, **context)
 
+
 def str2bool(v):
     return str(v).lower() in ("yes", "y", "true", "t", "1")
+
 
 def import_csv_schedule(input, telescope_id):
 
@@ -1354,6 +1357,7 @@ def import_csv_schedule(input, telescope_id):
                 do_schedule_action_device("start_up_sequence", startup_params, telescope_id)
             case "_":
                 logging.warning(f"Unknown action '{action}' encountered; skipping.")
+
 
 def get_live_status(telescope_id: int):
     dev = telescope.get_seestar_device(telescope_id)
@@ -1475,7 +1479,7 @@ class ImageResource:
     def image(req, resp, values, errors, telescope_id):
         context = get_context(telescope_id, req)
 
-        if context.get(online):
+        if context["online"]:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
             schedule = current["Value"]
@@ -1500,7 +1504,7 @@ class GotoResource:
     def goto(req, resp, values, errors, telescope_id):
         schedule = {}
         context = get_context(telescope_id, req)
-        if context.get(online):
+        if context["online"]:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
         else:
@@ -1520,7 +1524,7 @@ class CommandResource:
     @staticmethod
     def command(req, resp, telescope_id, output):
         context = get_context(telescope_id, req)
-        if context.get(online):
+        if context["online"]:
             current = do_action_device("get_schedule", telescope_id, {})
             if current is None:
                 return
@@ -1558,7 +1562,7 @@ class MosaicResource:
     @staticmethod
     def mosaic(req, resp, values, errors, telescope_id):
         context = get_context(telescope_id, req)
-        if context.get(online):
+        if context["online"]:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
             schedule = current["Value"]
@@ -1584,7 +1588,8 @@ class ScheduleListResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
         context = get_context(telescope_id, req)
-        if context.get(online):
+        print(f"{json.dumps(context, indent=2)}")
+        if context["online"]:
             get_schedule = do_action_device("get_schedule", telescope_id, {})
             current_queue_list = get_queue(telescope_id)
             if get_schedule == None:
@@ -1772,7 +1777,7 @@ class ScheduleToggleResource:
     @staticmethod
     def display_state(req, resp, telescope_id):
         context = get_context(telescope_id, req)
-        if context.get(online):
+        if context["online"]:
             current = do_action_device("get_schedule", telescope_id, {})
             state = current["Value"]["state"]
         else:
@@ -2268,7 +2273,7 @@ class SettingsResource:
                     settings = get_device_settings(tel_id)
                     break
         else:
-            if context.get(online):
+            if context["online"]:
                 settings = get_device_settings(telescope_id)
         # Maybe we can store this better?
         settings_friendly_names = {
