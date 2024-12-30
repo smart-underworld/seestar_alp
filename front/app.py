@@ -1588,7 +1588,6 @@ class ScheduleListResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
         context = get_context(telescope_id, req)
-        print(f"{json.dumps(context, indent=2)}")
         if context["online"]:
             get_schedule = do_action_device("get_schedule", telescope_id, {})
             current_queue_list = get_queue(telescope_id)
