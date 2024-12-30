@@ -33,7 +33,6 @@ import numpy as np
 import sqlite3
 import random
 
-
 from skyfield.api import Loader
 from skyfield.data import mpc
 from skyfield.constants import GM_SUN_Pitjeva_2005_km3_s2 as GM_SUN
@@ -1262,6 +1261,7 @@ def render_template(req, resp, template_name, **context):
 
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
     directory = os.path.join(os.getcwd(), "schedule")
+    Path(directory).mkdir(parents=True, exist_ok=True)
     files = [
         f for f in os.listdir(directory)
         if os.path.isfile(os.path.join(directory, f))

@@ -1281,6 +1281,7 @@ class Seestar:
                 return
 
             if do_3PPA:
+                result = self.send_message_param_sync({"method":"set_setting","params":{"auto_3ppa_calib":True}})
                 msg = f"3 point polar alignment"
                 self.logger.info(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
@@ -1308,6 +1309,25 @@ class Seestar:
                 return
 
             if do_3PPA:
+                time.sleep(1.0)
+                # move 15% back to the starting point, to be ready for anothr 3PPA after a BPA
+                response = self.send_message_param_sync({"method":"scope_move_left_by_angle", "params":[-15]})
+                result = self.wait_end_op("MoveByAngle")
+                self.logger.info(f"result to move back to starting point for 3PPA: {result}")
+
+                # ensure we are in star gazing mode again
+                tmp = self.send_message_param_sync({"method": "iscope_start_view", "params": {"mode": "star"}})
+                time.sleep(1)
+
+                response = self.send_message_param_sync({"method":"start_solve"})
+                result = self.wait_end_op("PlateSolve")
+                if result == True:
+                    self.logger.info(f"starting point platesolved to {self.cur_solve_RA}, {self.cur_solve_Dec}")
+                else:
+                    self.logger.warn("Failed to plate solve after moving back to starting point in 3PPA")
+
+            if False:
+            #if do_3PPA:
                 msg = "perform a quick goto routine to confirm and add to the sky model"
                 self.logger.info(msg)
                 response = self.send_message_param_sync({"method":"get_last_solve_result"})
