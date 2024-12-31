@@ -1806,6 +1806,36 @@ class ScheduleClearResource:
         redirect(f"/{telescope_id}/schedule")
 
 
+class ScheduleDownloadSchedule:
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        print("Download schedule")
+        filename = req.media.get("filename")
+        if not filename:
+            raise HTTPInternalServerError(description="Filename is required.")
+
+        directory = os.path.join(os.getcwd(), "schedule")
+        file_path = os.path.join(directory, filename)
+
+        # Ensure the file is created
+        do_action_device("export_schedule", telescope_id, {"filepath": file_path})
+
+        # Check if the file exists
+        if not os.path.isfile(file_path):
+            raise HTTPNotFound(description="Schedule file not found.")
+
+        try:
+            resp.content_type = "application/json"
+            resp.downloadable_as = filename
+            with open(file_path, 'r', encoding='utf-8') as file:
+                resp.text = file.read()
+        except Exception as e:
+            raise HTTPInternalServerError(description="Error reading file.") from e
+        finally:
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+
+
 class ScheduleExportResource:
     @staticmethod
     def on_post(req, resp, telescope_id=0):
@@ -1824,7 +1854,6 @@ class ScheduleImportResource:
 
         form = req.media
         selected_file = form.get('schedule_file')
-        file_type = form.get('file_type')
         
         if not selected_file:
             raise falcon.HTTPBadRequest("Missing Parameter", "No file selected")
@@ -1836,16 +1865,61 @@ class ScheduleImportResource:
         if not selected_file:
             raise falcon.HTTPBadRequest("Missing Parameter", "No file selected")
 
-        if file_type == "CSV":
+        if selected_file.endswith('.csv'):
             with open(file_path, 'r', encoding='utf-8') as file:
                 string_data = file.read().splitlines()
             import_csv_schedule(string_data, telescope_id)
 
-        if file_type == "JSON":
+        elif selected_file.endswith('.json'):
             do_action_device("import_schedule", telescope_id, {"filepath":file_path, "is_retain_state":False})
+
+        else:
+            flash(resp, f"Invalid file type for {selected_file}. Only .csv or .json are allowed")
+            return redirect(f"/{telescope_id}/schedule")
 
         flash(resp, f"Schedule imported from {selected_file}.")
         redirect(f"/{telescope_id}/schedule")
+
+
+class ScheduleUploadResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+
+        directory = os.path.join(os.getcwd(), "schedule")
+
+        data = req.get_media()
+        part = None
+        for part in data:
+            filename = part.filename
+            file_path = os.path.join(directory, filename)
+
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(part.data.decode('utf-8'))
+
+                if filename.endswith('.csv'):
+                    with open(file_path, 'r', encoding='utf-8') as file:
+                        string_data = file.read().splitlines()
+                    import_csv_schedule(string_data, telescope_id)
+
+                elif filename.endswith('.json'):
+                    do_action_device("import_schedule", telescope_id, {"filepath":file_path, "is_retain_state":False})
+
+                else:
+                    flash(resp, f"Invalid file type for {filename}. Only .csv or .json are allowed")
+                    return redirect(f"/{telescope_id}/schedule")
+
+                flash(resp, f"Schedule imported from {filename}.")
+
+            except Exception as e:
+                flash(resp, f"An error occured while saving the file: {str(e)}.")
+
+            finally:
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+
+        redirect(f"/{telescope_id}/schedule")
+
 
 class EventStatus:
     @staticmethod
@@ -3120,6 +3194,7 @@ class FrontMain:
         app.add_route('/schedule', ScheduleResource())
         app.add_route('/schedule/auto-focus', ScheduleAutoFocusResource())
         app.add_route('/schedule/clear', ScheduleClearResource())
+        app.add_route('/schedule/download', ScheduleDownloadSchedule())
         app.add_route('/schedule/export', ScheduleExportResource())
         app.add_route('/schedule/image', ScheduleImageResource())
         app.add_route('/schedule/import', ScheduleImportResource())
@@ -3134,6 +3209,7 @@ class FrontMain:
         app.add_route('/schedule/state', ScheduleToggleResource())
         app.add_route('/schedule/wait-until', ScheduleWaitUntilResource())
         app.add_route('/schedule/wait-for', ScheduleWaitForResource())
+        app.add_route('/schedule/upload', ScheduleUploadResource())
         app.add_route('/stats', StatsResource())
         app.add_route('/guestmode', GuestModeResource())
         app.add_route('/support', SupportResource())
@@ -3163,6 +3239,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
         app.add_route('/{telescope_id:int}/schedule/auto-focus', ScheduleAutoFocusResource())
         app.add_route('/{telescope_id:int}/schedule/clear', ScheduleClearResource())
+        app.add_route('/{telescope_id:int}/schedule/download', ScheduleDownloadSchedule())
         app.add_route('/{telescope_id:int}/schedule/export', ScheduleExportResource())
         app.add_route('/{telescope_id:int}/schedule/image', ScheduleImageResource())
         app.add_route('/{telescope_id:int}/schedule/import', ScheduleImportResource())
@@ -3177,6 +3254,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule/state', ScheduleToggleResource())
         app.add_route('/{telescope_id:int}/schedule/wait-until', ScheduleWaitUntilResource())
         app.add_route('/{telescope_id:int}/schedule/wait-for', ScheduleWaitForResource())
+        app.add_route('/{telescope_id:int}/schedule/upload', ScheduleUploadResource())
         app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
         app.add_route('/{telescope_id:int}/stats', StatsResource())
         app.add_route('/{telescope_id:int}/guestmode', GuestModeResource())
