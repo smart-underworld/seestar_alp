@@ -1,13 +1,13 @@
 <div class="container mt-3">
-	<div class="row d-flex justify-content-between">
+	<div class="row d-flex">
 
-		<div class="col-auto">
+		<div class="col">
 			<form action="{{ root }}/schedule/clear" method="post">
-				<button type="submit" class="btn btn-primary me-2">Clear Schedule</button>
+				<button type="submit" class="btn btn-danger me-2">Clear Schedule</button>
 			</form>
 		</div>
 
-		<div class="col-auto">
+		<div class="col">
 			<form action="{{ root }}/schedule/import" method="post">
 				<div class="input-group">
 					<select class="form-select" name="schedule_file" id="fileSelector" required>
@@ -17,24 +17,28 @@
 							{% endfor %}
 					</select>
 				</div>
-				<div class="form-check form-check-inline">
-					<input class="form-check-input" type="radio" name="file_type" id="fileTypeCsv" value="CSV" required>
-					<label class="form-check-label" for="fileTypeCsv">CSV</label>
-				</div>
-				<div class="form-check form-check-inline">
-					<input class="form-check-input" type="radio" name="file_type" id="fileTypeJson" value="JSON" required checked>
-					<label class="form-check-label" for="fileTypeJson">JSON</label>
-				</div>
-				<button type="submit" class="btn btn-primary">Import Schedule</button>
+				<button type="submit" class="btn btn-primary">Import</button>
 			</form>
 		</div>
 
-		<div class="col-auto">
-			<form action="{{ root }}/schedule/export" method="post">
-				<div class="input-group">
-					<button type="submit" class="btn btn-primary me-2">Export Schedule</button>
-                    <input type="text" class="form-control me-2" name="filename" placeholder="Filename" required>
+		<div class="col">
+			<form action="{{root}}/schedule/upload" method="post" enctype="multipart/form-data">
+				<div class="d-flex align-items-center">
+					<input type="file" class="form-control me-2" name="schedule_file" accept=".csv,.json" required>
 				</div>
+				<button type="submit" class="btn btn-secondary">Upload</button>
+			</form>
+		</div>
+
+		<div class="col">
+			<form action="{{ root }}/schedule/export" method="post">
+					<div class="input-group">
+						<input type="text" class="form-control me-2" name="filename" placeholder="Filename" required>
+					</div>
+					<div>
+						<button type="submit" class="btn btn-primary">Export</button>
+						<button type="submit" class="btn btn-secondary" formaction="{{ root }}/schedule/download">Download</button>
+					</div>
 			</form>
 		</div>
 
