@@ -13,7 +13,7 @@ SEESTAR_ALP_IMAGE_FULL=${SEESTAR_ALP_REGISTRY}/${SEESTAR_ALP_IMAGE_NAME}:${SEEST
 DOCKER_BUILD_IMAGE="false"
 ASTRO_PLATFORM="ALPACA"
 
-# Set local time zone - choose from TZ identifier listed at 
+# Set local time zone - choose from TZ identifier listed at
 # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 if [ -z "${TIME_ZONE}" ]; then TIME_ZONE="America/Vancouver"; fi
 
@@ -90,12 +90,13 @@ main() {
         echo "TIME_ZONE has not been set - see arguments in run.sh"
         return 1
     fi
-    
+
     read -d '' DOCKER_RUN_OPTIONS <<EOM
         --mount type=bind,source="${SCRIPT_DIR}/config.toml",target="/home/seestar/seestar_alp/device/config.toml" \
         -p 5432:5432 \
         -p 5555:5555 \
-        -p 7624:7624
+        -p 7624:7624 \
+        -p 7556:7556
 EOM
 
     docker_run \

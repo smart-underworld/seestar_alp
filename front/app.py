@@ -148,7 +148,7 @@ def get_root(telescope_id):
     return ""
 
 
-def get_imager_root(telescope_id):
+def get_imager_root(telescope_id, req):
     if telescope_id > 0:
         telescopes = get_telescopes()
         # if len(telescopes) == 1:
@@ -156,7 +156,7 @@ def get_imager_root(telescope_id):
 
         telescope = list(filter(lambda tel: tel['device_num'] == telescope_id, telescopes))[0]
         if telescope:
-            root = f"http://{get_listening_ip()}:{Config.imgport}/{telescope['device_num']}"
+            root = f"http://{req.host}:{Config.imgport}/{telescope['device_num']}"
             return root
     return ""
 
@@ -164,7 +164,7 @@ def get_context(telescope_id, req):
     # probably a better way of doing this...
     telescopes = get_telescopes()
     root = get_root(telescope_id)
-    imager_root = get_imager_root(telescope_id)
+    imager_root = get_imager_root(telescope_id, req)
     online = check_api_state(telescope_id)
     client_master = get_client_master(telescope_id)
     segments = req.relative_uri.lstrip("/").split("/", 1)
