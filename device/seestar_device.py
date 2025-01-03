@@ -832,6 +832,8 @@ class Seestar:
                                         self.cur_equ_offset_alt -= 90.0 - self.site_latitude
                                         self.cur_equ_offset_alt = -self.cur_equ_offset_alt
                                         self.cur_equ_offset_az = -self.cur_equ_offset_az
+                                    event_state["eq_offset_alt"] = self.cur_equ_offset_alt
+                                    event_state["eq_offset_az"] = self.cur_equ_offset_az
                                     self.logger.info(f"3PPA equ offset-- firmware:{self.firmware_ver_int}, alt:{self.cur_equ_offset_alt}, az:{self.cur_equ_offset_az}")
                                 elif "offset" in event_state:
                                     self.logger.info(f"calculating error using offset and firmware version {self.firmware_ver_int}")
@@ -1207,8 +1209,16 @@ class Seestar:
                 lat = Config.scope_aim_lat
                 lon = Config.scope_aim_lon
 
-                lat = device.get('scope_aim_lat', lat)
-                lon = device.get('scope_aim_lon', lon)
+                if 'scope_aim_lat' in params:
+                    lat = params['scope_aim_lat']
+                else:
+                    lat = device.get('scope_aim_lat', lat)
+                
+                if 'scope_aim_lon' in params:
+                    lon = params['scope_aim_lon']
+                else:
+                    lon = device.get('scope_aim_lon', lon)
+                    
                 self.below_horizon_dec_offset = 0
 
                 if lon < 0:
@@ -1308,7 +1318,7 @@ class Seestar:
             if self.schedule["state"] != "working":
                 return
 
-            if do_3PPA:
+            if False:
                 time.sleep(1.0)
                 # move 15% back to the starting point, to be ready for anothr 3PPA after a BPA
                 response = self.send_message_param_sync({"method":"scope_move_left_by_angle", "params":[-15]})
@@ -1326,10 +1336,10 @@ class Seestar:
                 else:
                     self.logger.warn("Failed to plate solve after moving back to starting point in 3PPA")
 
-            if False:
-            #if do_3PPA:
-                msg = "perform a quick goto routine to confirm and add to the sky model"
+            if do_3PPA:
+                msg = "perform a quick goto routine to go back to start of 3ppa to confirm and add to the sky model"
                 self.logger.info(msg)
+                time.sleep(1.0)
                 response = self.send_message_param_sync({"method":"get_last_solve_result"})
                 last_pos = response["result"]["ra_dec"]
 
@@ -1339,7 +1349,7 @@ class Seestar:
 
                 self.logger.info(f"move from {last_pos[0]}, {last_pos[1]}")
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
-                goto_params = {'is_j2000':False, 'ra': last_pos[0]+0.1, 'dec': last_pos[1]}
+                goto_params = {'is_j2000':False, 'ra': last_pos[0]-1.4, 'dec': last_pos[1]}
                 result = self.goto_target(goto_params)
                 self.logger.info(f"result from goto request: {result}")
                 result = self.wait_end_op("goto_target")
