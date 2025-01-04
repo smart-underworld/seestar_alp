@@ -396,6 +396,9 @@ class Seestar:
 
     def get_event_state(self, params=None):
         self.event_state["scheduler"]["state"] = self.schedule["state"]
+        if "3PPA" in self.event_state:
+            self.event_state["3PPA"]["eq_offset_alt"] = self.cur_equ_offset_alt
+            self.event_state["3PPA"]["eq_offset_az"] = self.cur_equ_offset_az
         if params is not None and 'event_name' in params:
             event_name = params['event_name']
             if event_name in self.event_state:
@@ -832,8 +835,6 @@ class Seestar:
                                         self.cur_equ_offset_alt -= 90.0 - self.site_latitude
                                         self.cur_equ_offset_alt = -self.cur_equ_offset_alt
                                         self.cur_equ_offset_az = -self.cur_equ_offset_az
-                                    event_state["eq_offset_alt"] = self.cur_equ_offset_alt
-                                    event_state["eq_offset_az"] = self.cur_equ_offset_az
                                     self.logger.info(f"3PPA equ offset-- firmware:{self.firmware_ver_int}, alt:{self.cur_equ_offset_alt}, az:{self.cur_equ_offset_az}")
                                 elif "offset" in event_state:
                                     self.logger.info(f"calculating error using offset and firmware version {self.firmware_ver_int}")
@@ -1218,7 +1219,7 @@ class Seestar:
                     lon = params['scope_aim_lon']
                 else:
                     lon = device.get('scope_aim_lon', lon)
-                    
+
                 self.below_horizon_dec_offset = 0
 
                 if lon < 0:
