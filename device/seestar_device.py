@@ -1619,6 +1619,9 @@ class Seestar:
                     self.logger.info(msg)
                     self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
 
+                    # be sure we are using the right target name before we stack
+                    self.set_target_name(save_target_name)
+
                     if not self.start_stack({"gain": gain, "restart": True}):
                         msg = "Failed to start stacking."
                         self.logger.warn(msg)
@@ -1628,9 +1631,9 @@ class Seestar:
                         continue
 
                     panel_remaining_time_s = sleep_time_per_panel
-                    self.event_state["scheduler"]["cur_scheduler_item"]["panel_remaining_time_s"] = panel_remaining_time_s
-                    self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = item_remaining_time_s
                     for i in range(round(sleep_time_per_panel/5)):
+                        self.event_state["scheduler"]["cur_scheduler_item"]["panel_remaining_time_s"] = panel_remaining_time_s
+                        self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = item_remaining_time_s
                         threading.current_thread().last_run = datetime.now()
 
                         if self.schedule['state'] != "working":
