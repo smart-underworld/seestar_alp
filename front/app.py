@@ -175,6 +175,7 @@ def _get_context_real(telescope_id, req):
     experimental = Config.experimental
     confirm = Config.confirm
     uitheme = Config.uitheme
+    defgain = Config.init_gain
     if telescope_id > 0:
         telescope = get_telescope(telescope_id)
     else:
@@ -191,7 +192,7 @@ def _get_context_real(telescope_id, req):
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
             "online": online, "imager_root": imager_root, "experimental": experimental, "confirm": confirm,
             "uitheme": uitheme, "client_master": client_master, "current_item": current_item,
-            "platform": os_platform
+            "platform": os_platform, "defgain": defgain
             }
 
 def get_context(telescope_id, req):
@@ -445,7 +446,8 @@ def do_schedule_action_device(action, parameters, dev_num):
         }, True)
     else:
         return do_action_device("add_schedule_item", dev_num, {
-            "action": action
+            "action": action,
+            "params": {}
         }, True)
 
 
