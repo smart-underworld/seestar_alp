@@ -170,7 +170,7 @@ class Seestar_Federation:
 
     def create_schedule(self, params):
         self.schedule = {}
-        self.schedule['list'].clear()
+        self.schedule['list'] = collections.deque()
         self.schedule['state'] = "stopped"
         self.schedule['schedule_id'] = str(uuid.uuid4())
         return self.schedule
