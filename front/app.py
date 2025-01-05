@@ -449,17 +449,6 @@ def do_schedule_action_device(action, parameters, dev_num):
         }, True)
 
 
-def check_response(resp, response):
-    v = response["Value"]
-    if isinstance(v, str):
-        flash(resp, v)
-    elif response["ErrorMessage"] != '':
-        flash(resp, response["ErrorMessage"])
-        # flash("Schedule item added successfully", "success")
-    else:
-        flash(resp, "Item scheduled successfully")
-
-
 def method_sync(method, telescope_id=1, **kwargs):
     out = do_action_device("method_sync", telescope_id, {"method": method, **kwargs})
     # print(f"method_sync {out=}")
@@ -884,8 +873,6 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
     if schedule:
         response = do_schedule_action_device("start_mosaic", values, telescope_id)
         logger.info("POST scheduled request %s %s", values, response)
-        if online:
-            check_response(resp, response)
     else:
         response = do_action_device("start_mosaic", telescope_id, values, False)
         logger.info("POST immediate request %s %s", values, response)
@@ -949,8 +936,6 @@ def do_create_image(req, resp, schedule, telescope_id):
     if schedule:
         response = do_schedule_action_device("start_mosaic", values, telescope_id)
         logger.info("POST scheduled request %s %s", values, response)
-        if online:
-            check_response(resp, response)
     else:
         response = do_action_device("start_mosaic", telescope_id, values, False)
         logger.info("POST immediate request %s %s", values, response)
@@ -1275,7 +1260,10 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
             return
         schedule = get_schedule["Value"]
     else:
-        schedule = {"list": get_queue(telescope_id)}
+        get_schedule = do_action_device("get_schedule", 0, {})
+        if get_schedule == None:
+            return
+        schedule = get_schedule["Value"]
 
     nearest_csc = get_nearest_csc()
     if nearest_csc["status_msg"] != "SUCCESS":
@@ -1492,13 +1480,15 @@ class ImageResource:
     def image(req, resp, values, errors, telescope_id):
         context = get_context(telescope_id, req)
 
-        if context["online"]:
-            current = do_action_device("get_schedule", telescope_id, {})
-            state = current["Value"]["state"]
-            schedule = current["Value"]
-        else:
-            state = "stopped"
-            schedule = {"list": get_queue(telescope_id)}
+        if not context["online"]:
+            telescope_id = 0
+
+        current = do_action_device("get_schedule", telescope_id, {})
+        if current is None:
+            return
+        state = current["Value"]["state"]
+        schedule = current["Value"]
+
         # remove values=values to stop remembering values
         render_template(req, resp, 'image.html', state=state, schedule=schedule, values=values, errors=errors,
                         action=f"/{telescope_id}/image", **context)
@@ -1517,11 +1507,15 @@ class GotoResource:
     def goto(req, resp, values, errors, telescope_id):
         schedule = {}
         context = get_context(telescope_id, req)
-        if context["online"]:
-            current = do_action_device("get_schedule", telescope_id, {})
-            state = current["Value"]["state"]
-        else:
-            state = "stopped"
+
+        if not context["online"]:
+            telescope_id = 0
+
+        current = do_action_device("get_schedule", telescope_id, {})
+        if current is None:
+            return
+        state = current["Value"]["state"]
+
         # remove values=values to stop remembering values
         render_template(req, resp, 'goto.html', state=state, schedule=schedule, values=values, errors=errors, action=f"/{telescope_id}/goto", **context)
 
@@ -1537,16 +1531,14 @@ class CommandResource:
     @staticmethod
     def command(req, resp, telescope_id, output):
         context = get_context(telescope_id, req)
-        if context["online"]:
-            current = do_action_device("get_schedule", telescope_id, {})
-            if current is None:
-                return
-            schedule = current["Value"]
-            state = schedule["state"]
+        if not context["online"]:
+            telescope_id = 0
 
-        else:
-            schedule = {"list": get_queue(telescope_id)}
-            state = "stopped"
+        current = do_action_device("get_schedule", telescope_id, {})
+        if current is None:
+            return
+        schedule = current["Value"]
+        state = schedule["state"]
 
         render_template(req, resp, 'command.html', state=state, schedule=schedule, action=f"/{telescope_id}/command",
                         output=output, **context)
@@ -1575,13 +1567,15 @@ class MosaicResource:
     @staticmethod
     def mosaic(req, resp, values, errors, telescope_id):
         context = get_context(telescope_id, req)
-        if context["online"]:
-            current = do_action_device("get_schedule", telescope_id, {})
-            state = current["Value"]["state"]
-            schedule = current["Value"]
-        else:
-            state = "stopped"
-            schedule = {"list": get_queue(telescope_id)}
+        if not context["online"]:
+            telescope_id = 0
+
+        current = do_action_device("get_schedule", telescope_id, {})
+        if current is None:
+            return
+        state = current["Value"]["state"]
+        schedule = current["Value"]
+
         # remove values=values to stop remembering values
         render_template(req, resp, 'mosaic.html', state=state, schedule=schedule, values=values, errors=errors,
                         action=f"/{telescope_id}/mosaic", **context)
@@ -1590,10 +1584,16 @@ class MosaicResource:
 class ScheduleResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
 
     @staticmethod
     def on_post(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
 
 
@@ -1601,24 +1601,13 @@ class ScheduleListResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
         context = get_context(telescope_id, req)
-        if context["online"]:
-            get_schedule = do_action_device("get_schedule", telescope_id, {})
-            current_queue_list = get_queue(telescope_id)
-            if get_schedule == None:
-                #todo seems like SSC tries to connect to daemon before it is ready for the Federation device, and thus raise exception here.
-                # will return without any action for now
-                return
-            else:
-                current_schedule_list = get_schedule["Value"]["list"]
-            # Check to see if there are missing items on the schedule
-            if len(current_queue_list) > 0 and len(current_schedule_list) == 0:
-                logger.info(f"Telescope {telescope_id}: Queue has items but schedule does not, processing queue.")
-                # Process missing items from schedule
-                process_queue(resp, telescope_id)
-                get_schedule = do_action_device("get_schedule", telescope_id, {})
-            schedule = get_schedule["Value"]
-        else:
-            schedule = {"list": get_queue(telescope_id)}
+        if not context["online"]:
+            telescope_id = 0
+
+        get_schedule = do_action_device("get_schedule", telescope_id, {})
+        if get_schedule == None:
+            return
+        schedule = get_schedule["Value"]
 
         render_template(req, resp, 'schedule_list.html', schedule=schedule, **context)
 
@@ -1626,64 +1615,73 @@ class ScheduleListResource:
 class ScheduleWaitUntilResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
 
     @staticmethod
     def on_post(req, resp, telescope_id=0):
         waitUntil = req.media["waitUntil"]
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         response = do_schedule_action_device("wait_until", {"local_time": waitUntil}, telescope_id)
         logger.info("POST scheduled request %s", response)
-        if check_api_state(telescope_id):
-            check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_until.html', 'wait-until', {}, {})
 
 
 class ScheduleWaitForResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_for.html', 'wait-for', {}, {})
 
     @staticmethod
     def on_post(req, resp, telescope_id=0):
         waitFor = req.media["waitFor"]
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         response = do_schedule_action_device("wait_for", {"timer_sec": int(waitFor)}, telescope_id)
         logger.info("POST scheduled request %s", response)
-        if check_api_state(telescope_id):
-            check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_wait_for.html', 'wait-for', {}, {})
 
 
 class ScheduleAutoFocusResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telecope_id = 0
         render_schedule_tab(req, resp, telescope_id, 'schedule_auto_focus.html', 'auto-focus', {}, {})
 
     @staticmethod
     def on_post(req, resp, telescope_id=0):
         autoFocus = req.media["autoFocus"]
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         response = do_schedule_action_device("auto_focus", {"try_count": int(autoFocus)}, telescope_id)
         logger.info("POST scheduled request %s", response)
-        if check_api_state(telescope_id):
-            check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_auto_focus.html', 'auto-focus', {}, {})
-
-
-class ScheduleGoOnlineResource:
-    @staticmethod
-    def on_post(req, resp, telescope_id=0):
-        referer = req.get_header('Referer')
-        logger.info(f"Referer: {referer}")
-        process_queue(resp, telescope_id)
-        redirect(f"{referer}")
 
 
 class ScheduleImageResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         render_schedule_tab(req, resp, telescope_id, 'schedule_image.html', 'image', {}, {})
 
     @staticmethod
     def on_post(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         values, errors = do_create_image(req, resp, True, telescope_id)
         render_schedule_tab(req, resp, telescope_id, 'schedule_image.html', 'image', values, errors)
 
@@ -1691,17 +1689,26 @@ class ScheduleImageResource:
 class ScheduleMosaicResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         render_schedule_tab(req, resp, telescope_id, 'schedule_mosaic.html', 'mosaic', {}, {})
 
     @staticmethod
     def on_post(req, resp, telescope_id=0):
         values, errors = do_create_mosaic(req, resp, True, telescope_id)
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         render_schedule_tab(req, resp, telescope_id, 'schedule_mosaic.html', 'mosaic', values, errors)
 
 
 class ScheduleStartupResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
 
     @staticmethod
@@ -1711,40 +1718,51 @@ class ScheduleStartupResource:
         auto_focus = form.get("auto_focus") == "on"
         polar_align = form.get("polar_align") == "on"
         dark_frames = form.get("dark_frames") == "on"
-
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         response = do_schedule_action_device("start_up_sequence", {"auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm},  telescope_id)
-        if check_api_state(telescope_id):
-            check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
 
 
 class ScheduleShutdownResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         render_schedule_tab(req, resp, telescope_id, 'schedule_shutdown.html', 'shutdown', {}, {})
 
     @staticmethod
     def on_post(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         response = do_schedule_action_device("shutdown", "", telescope_id)
-        if check_api_state(telescope_id):
-            check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_shutdown.html', 'shutdown', {}, {})
 
 class ScheduleParkResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         render_schedule_tab(req, resp, telescope_id, 'schedule_park.html', 'scope_park', {}, {})
 
     @staticmethod
     def on_post(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         response = do_schedule_action_device("scope_park", {}, telescope_id)
-        if check_api_state(telescope_id):
-            check_response(resp, response)
         render_schedule_tab(req, resp, telescope_id, 'schedule_park.html', 'scope_park', {}, {})
 
 class ScheduleLpfResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         render_schedule_tab(req, resp, telescope_id, 'schedule_lpf.html', 'lpf', {}, {})
 
     @staticmethod
@@ -1755,6 +1773,9 @@ class ScheduleLpfResource:
             cmd_vals = [2]
         else:
             cmd_vals = [1]
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         response = do_schedule_action_device("set_wheel_position", cmd_vals, telescope_id)
         render_schedule_tab(req, resp, telescope_id, 'schedule_lpf.html', 'lpf', {}, {})
 
@@ -1762,13 +1783,18 @@ class ScheduleLpfResource:
 class ScheduleDewHeaterResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', {}, {})
 
     @staticmethod
     def on_post(req, resp, telescope_id=0):
         form = req.media
         dewHeaterValue = form.get("dewHeaterValue")
-
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
         response = do_schedule_action_device("action_set_dew_heater", {"heater": int(dewHeaterValue)}, telescope_id)
         render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', {}, {})
 
@@ -1812,8 +1838,11 @@ class ScheduleClearResource:
             flash(resp, "Created New Schedule")
             redirect(f"/{telescope_id}/schedule")
         else:
-            global queue
-            queue = {}
+            #global queue
+            #queue = {}
+            do_action_device("create_schedule", 0, {})
+            flash(resp, "Created New Schedule")
+            redirect(f"/0/schedule")
 
         flash(resp, "Created New Schedule")
         redirect(f"/{telescope_id}/schedule")
@@ -3213,7 +3242,6 @@ class FrontMain:
         app.add_route('/schedule/import', ScheduleImportResource())
         app.add_route('/schedule/list', ScheduleListResource())
         app.add_route('/schedule/mosaic', ScheduleMosaicResource())
-        app.add_route('/schedule/online', ScheduleGoOnlineResource())
         app.add_route('/schedule/startup', ScheduleStartupResource())
         app.add_route('/schedule/shutdown', ScheduleShutdownResource())
         app.add_route('/schedule/park', ScheduleParkResource())
@@ -3258,7 +3286,6 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/schedule/import', ScheduleImportResource())
         app.add_route('/{telescope_id:int}/schedule/list', ScheduleListResource())
         app.add_route('/{telescope_id:int}/schedule/mosaic', ScheduleMosaicResource())
-        app.add_route('/{telescope_id:int}/schedule/online', ScheduleGoOnlineResource())
         app.add_route('/{telescope_id:int}/schedule/startup', ScheduleStartupResource())
         app.add_route('/{telescope_id:int}/schedule/shutdown', ScheduleShutdownResource())
         app.add_route('/{telescope_id:int}/schedule/park', ScheduleParkResource())
