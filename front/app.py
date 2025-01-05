@@ -2013,6 +2013,9 @@ class LivePage:
     @staticmethod
     def on_get(req, resp, telescope_id=1, mode=None):
         status = method_sync('get_view_state', telescope_id)
+        if status is None:
+            return
+        
         logger.info(status)
         context = get_context(telescope_id, req)
         now = datetime.now()

@@ -288,7 +288,10 @@ class Seestar_Federation:
             cur_device.create_schedule(params)
 
         for schedule_item in self.schedule['list']:
-            cur_params = schedule_item['params'].copy()
+            if 'params' not in schedule_item:
+                cur_params = {}
+            else:
+                cur_params = schedule_item['params'].copy()
 
             if schedule_item['action'] == "start_mosaic":                
                 # federation_mode : duplicate, by_panels or by_time
