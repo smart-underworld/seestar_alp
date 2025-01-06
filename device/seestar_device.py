@@ -2083,7 +2083,7 @@ class Seestar:
         self.logger.info(f'guest_mode_init')
         if self.firmware_ver_int > 2300:
             # Indiscriminately try to grab the master cli
-            self.send_message_param_sync({"method":"set_setting", "params":{"master_cli": True}})
+            self.send_message_param_sync({"method":"set_setting", "params":{"master_cli": Config.init_guest_mode}})
             # Set the cli name to the hostname of the machine
             host=socket.gethostname()
             if not host:
