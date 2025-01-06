@@ -31,6 +31,10 @@
                 {% if event_status and event_status.percent %}
                     <strong>% Complete:</strong> {{ event_status.percent }}<br>
                 {% endif %}
+				{% if event_status and event_status.eq_offset_alt and event_status.eq_offset_az %}
+					<strong>EQ Alt Offset:</strong> {{ event_status.eq_offset_alt | round(3) }}<br>
+					<strong>EQ Az Offset:</strong> {{ event_status.eq_offset_az | round(3) }}<br>
+				{% endif %}
             {% endif %}
 
             {% if event_name == 'AutoFocus' %}
