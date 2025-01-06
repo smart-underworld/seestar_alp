@@ -98,15 +98,6 @@
                 </div>
             </div>
      
-            <!-- Checkbox for Seestar split mode (Conditional rendering) -->
-            {% if telescope["device_num"] == 0 %}
-                <div class="mb-3">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="array_mode" name="array_mode" value="split">
-                        <label class="form-check-label" for="array_mode">Split Mosaic Across Multiple Seestar?</label>
-                    </div>
-                </div>
-            {% endif %}
 
             <!-- Buttons for importing coordinates from other sources -->
             <div class="mb-3 row justify-content-center">
@@ -143,19 +134,37 @@
         </div>
     </div>
     
-    <p>
-        <h5 class="card-title">Exposure Settings</h5>
-    </p>
+    {% if telescope["device_num"] == 0 %}
+	<h5 class="card-title mb-2">Federation Settings</h5>
+	<div class="card border-primary mb-3">
+		<div class="card-body">
+			<div class="form-group row g-2">
+				<div class="col-md-3 col-sm-3">
+					<label for="federation_mode" class="form-label">Mode</label>
+					<select id="federation_mode" name="federation_mode" class="dropdown-toggle">
+						<option value="by_time">Split By Time</option>
+						<option value="by_panel">Split By Panel</option>
+					</select>
+				</div>
+				<div class="col-md-3 col-sm-3">
+					<label for="max_devices" class="form-label">Max Devices</label>
+					<input type="number" id="max_devices" name="max_devices" min="1" value="1" required>
+				</div>
+			</div>
+		</div>
+	</div>
+    {% endif %}
+
+    <h5 class="card-title mb-2">Exposure Settings</h5>
     <div class="card border-primary mb-3">
         <div class="card-body">
            
 
             <div class="mb-3">
-                <label for="sessionTime" class="form-label">Total Session Time</label>
-                <input type="text" class="form-control" id="sessionTime" name="sessionTime"
-                       aria-describedby="sessionTimeHelp" value="{{ values.session_time_sec }}" required>
-                <div id="sessionTimeHelp" class="form-text">Total elapsed session time (ex: 1h 30m or 5400). Rejected frames
-                    count.
+                <label for="panelTime" class="form-label">Panel Acquisition Time</label>
+                <input type="text" class="form-control" id="panelTime" name="panelTime"
+                       aria-describedby="panelTimeHelp" value="{{ values.panel_time_sec }}" required>
+                <div id="panelTimeHelp" class="form-text">How much acquisition time for each panel (ex: 1h 30m or 5400).
                 </div>
             </div>
 
@@ -165,7 +174,7 @@
                         value="{{ values.gain }}" required>
                 {% else %}
                     <input type="text" class="form-control" id="gain" name="gain" aria-describedby="gainHelp"
-                        value="80" required>
+                        value="{{ defgain }}" required>
                 {% endif %}
                 <div id="gainHelp" class="form-text">Gain. (ex: 80)</div>
             </div>
@@ -191,9 +200,7 @@
 
     </div>
 
-	<p>
-		<h5 class="card-title">Retry Settings</h5>
-	</p>
+	<h5 class="card-title mb-2">Retry Settings</h5>
 	<div class="card border-primary mb-3">
 		<div class="card-body">
 			<div class="row">

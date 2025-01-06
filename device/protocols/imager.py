@@ -252,6 +252,9 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
                 self.raw_img = contents['raw_data']
                 self.raw_img_size = [width, height]
                 self.latest_image = self.convert_star_image(self.raw_img, width, height)
+                if self.latest_image == None:
+                    self.raw_img = None
+                    self.raw_img_size = [None, None]                    
 
             # xxx Temp hack: just disconnect for now...
             # xxx Ideally we listen for an event that stack count has increased, or we track the stack
@@ -268,13 +271,18 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
         # if self.exposure_mode == "stack" or len(self.raw_img) == 1920 * 1080 * 6:
         w = width or 1080
         h = height or 1920
-        if len(raw_image) == w * h * 6:
+        raw_image_len = len(raw_image)
+        if raw_image_len == w * h * 6:
              # print("raw buffer size:", len(self.raw_img))
              img = np.frombuffer(raw_image, dtype=np.uint16).reshape(h, w, 3)
              img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-
              return img
 
-        img = np.frombuffer(raw_image, np.uint16).reshape(h, w)
-        img = cv2.cvtColor(img, cv2.COLOR_BAYER_GRBG2BGR)
-        return img
+        elif raw_image_len == w * h * 2:
+            img = np.frombuffer(raw_image, np.uint16).reshape(h, w)
+            img = cv2.cvtColor(img, cv2.COLOR_BAYER_GRBG2BGR)
+            return img
+        else:
+            self.logger.error(f"Unexpected raw image length: {raw_image_len}")
+            return None
+            
