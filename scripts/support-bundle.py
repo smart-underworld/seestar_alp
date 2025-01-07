@@ -36,7 +36,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.INFO)
 
     req = Request(args.description, args.get_seestar_logs)
-    zip_buffer = do_support_bundle(req, 1)
+    zip_buffer = do_support_bundle(req, args.telescope_id)
 
     cwd = Path(os.getcwd())
     fpath = cwd.joinpath(cwd, args.outfile)
