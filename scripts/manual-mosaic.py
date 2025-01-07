@@ -5,6 +5,7 @@ An example script for generating individual scheduled items for a mosaic
 import sys
 import os
 import argparse
+import json
 
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.realpath(os.path.join(current, ".."))
@@ -16,7 +17,7 @@ from device.seestar_util import Util
 # Tunables
 #
 class Tunables:
-    def __init__(self, tn,ij,nra,ndec,cra,cdec,ov,th,lp,af,dh,g,po,nr,rws) -> None:
+    def __init__(self, tn,ij,nra,ndec,cra,cdec,ov,pts,lp,af,dh,g,po,nr,rws) -> None:
         self.target_name=tn
         self.is_j2000=ij
         self.nRA = nra
@@ -24,7 +25,7 @@ class Tunables:
         self.center_RA = cra
         self.center_Dec = cdec
         self.overlap_percent = ov
-        self.time_in_hours = th
+        self.panel_time_sec = pts
         self.use_LPF = lp
         self.use_AF = af
         self.use_heater = dh
@@ -36,14 +37,16 @@ class Tunables:
 class ManualMosaic:
     def __init__(self, tunables) -> None:
         self.tunables = tunables
-        self.lines = {}
-        self.llines = []
+        self.panels = {}
+        self.schedule = {
+            "version": 1.0,
+            "state": "stoppped",
+            "current_item_id": "",
+            "item_number": 0,
+            "list": []
+        }
 
     def calculate(self):
-        #### Calculate panels
-        time_in_seconds=self.tunables.time_in_hours*60*60
-        secs_per_panel=int(time_in_seconds/(self.tunables.nRA*self.tunables.nDec))
-
         parsed_coord = Util.parse_coordinate(self.tunables.is_j2000, self.tunables.center_RA, self.tunables.center_Dec)
         center_RA = parsed_coord.ra.hour
         center_Dec = parsed_coord.dec.deg
@@ -67,22 +70,40 @@ class ManualMosaic:
             for index_ra in range(self.tunables.nRA):
                 panel_string = str(index_ra + 1) + str(index_dec + 1)
 
-                panel_line=f"start_mosaic,{cur_dec},1,{self.tunables.gain},{self.tunables.use_heater},{self.tunables.is_j2000},{self.tunables.use_AF},{self.tunables.use_LPF},{self.tunables.num_tries},{self.tunables.overlap_percent},{cur_ra},1,{self.tunables.retry_wait_s},{secs_per_panel},{self.tunables.target_name}_{panel_string}"
-                self.lines[panel_string] = panel_line
-                self.llines.append(panel_line)
+                panel_dict = {
+                    "action": "start_mosaic",
+                    "params": {
+                        "dec": cur_dec,
+                        "dec_num": 1,
+                        "gain": self.tunables.gain,
+                        "is_j2000": self.tunables.is_j2000,
+                        "is_use_autofocus": self.tunables.use_AF,
+                        "is_use_lp_filter": self.tunables.use_LPF,
+                        "num_tries": self.tunables.num_tries,
+                        "panel_overlap_percent": 100,
+                        "ra": cur_ra,
+                        "ra_num": 1,
+                        "retry_wait_s": self.tunables.retry_wait_s,
+                        "target_name": self.tunables.target_name + "_" + panel_string,
+                        "panel_time_sec": self.tunables.panel_time_sec
+                    }
+                }
+                self.panels[panel_string] = panel_dict
 
                 cur_ra += delta_RA
             cur_dec += delta_Dec
 
     def print_schedule(self):
         # Print panels in order specified
-        print("action,dec,dec_num,gain,heater,is_j2000,is_use_autofocus,is_use_lp_filter,num_tries,panel_overlap_percent,ra,ra_num,retry_wait_s,session_time_sec,target_name")
         if self.tunables.panel_order:
+            ordered_list = []
             for p in self.tunables.panel_order.split(";"):
-                print(self.lines[p])
+                ordered_list.append(self.panels[p])
+            self.schedule["list"] = ordered_list
         else:
-            for line in self.llines:
-                print(line)
+            self.schedule["list"] = list(self.panels.values())
+
+        print(json.dumps(self.schedule, indent=4))
 
 
 if __name__ == '__main__':
@@ -94,7 +115,7 @@ if __name__ == '__main__':
     parser.add_argument('--center_RA', required=True)
     parser.add_argument('--center_Dec', required=True)
     parser.add_argument('--overlap_percent', type=int, default=20)
-    parser.add_argument('--time_in_hours', required=True, type=float)
+    parser.add_argument('--panel_time_sec', required=True, type=int)
     parser.add_argument('--use_LPF', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--use_AF', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--use_heater', action=argparse.BooleanOptionalAction, default=False)
@@ -113,7 +134,7 @@ if __name__ == '__main__':
     #center_RA="20h51m29.31s"
     #center_Dec="+30d40m30.9s"
     #overlap_percent=20
-    #time_in_hours=6.25
+    #panel_time_sec=4800
     #use_LPF=True
     #use_AF=False
     #use_heater=False
@@ -128,7 +149,7 @@ if __name__ == '__main__':
         args.center_RA,
         args.center_Dec,
         args.overlap_percent,
-        args.time_in_hours,
+        args.panel_time_sec,
         args.use_LPF,
         args.use_AF,
         args.use_heater,
