@@ -42,8 +42,8 @@
                 {% elif item["action"] == 'auto_focus' %}
                     <div class="col-2 align-self-start">Auto Focus</div>
                     <div class="col align-self-start">{{ item["params"]["try_count"] }}x</div>
-                {% elif item["action"] == 'set_setting_exposures' %}
-                    <div class="col-2 align-self-start">Set exposure ...</div>
+                {% elif item["action"] == 'set_setting' %}
+                    <div class="col-2 align-self-start">Set exposure {{ item["params"]["exp_ms"]["stack_l"]}}ms</div>
                 {% elif item["action"] == 'shutdown' %}
                     <div class="col-2 align-self-start">Shutdown</div>
                 {% elif item["action"] == 'scope_park' %}
