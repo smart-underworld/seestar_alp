@@ -1328,6 +1328,13 @@ def import_csv_schedule(input, telescope_id):
                 required_params = ["target_name", "ra", "dec", "is_j2000", "is_use_lp_filter",
                                    "is_use_autofocus", "panel_time_sec", "ra_num",
                                    "dec_num", "panel_overlap_percent", "gain", "selected_panels","num_tries","retry_wait_s","array_mode"]
+                if "session_time_sec" in params:
+                    session_time_sec = params.pop("session_time_sec")
+                    ra_num = params.get("ra_num")
+                    dec_num = params.get("dec_num")
+                    panels = ra_num * dec_num
+                    panel_time_sec = session_time_sec / panels
+                    params["panel_time_sec"] = round(panel_time_sec)
                 mosaic_params = {key: value for key, value in params.items() if key in required_params}
                 do_schedule_action_device("start_mosaic", mosaic_params, telescope_id)
             case "shutdown":
