@@ -1451,6 +1451,19 @@ def get_live_status(telescope_id: int):
         yield status_update_frame.encode('utf-8') + mode_change_frame.encode('utf-8') + status_frame.encode('utf-8')
         time.sleep(0.5)
 
+def determine_file_type(file_path):
+    """Determines if a file is CSV or JSON."""
+    try:
+        with open(file_path, 'r') as file:
+            json.load(file)
+        return 'json'
+    except json.JSONDecodeError:
+        try:
+            with open(file_path, 'r') as file:
+                csv.Sniffer().sniff(file.read(1024))
+            return 'csv'
+        except csv.Error:
+            return 'unknown'
 
 class HomeResource:
     @staticmethod
@@ -1864,6 +1877,8 @@ class ScheduleDownloadSchedule:
         filename = req.media.get("filename")
         if not filename:
             raise HTTPInternalServerError(description="Filename is required.")
+        if not filename.lower().endswith(".json"):
+            filename = filename + ".json"
 
         directory = os.path.join(os.getcwd(), "schedule")
         file_path = os.path.join(directory, filename)
@@ -1892,6 +1907,8 @@ class ScheduleExportResource:
     def on_post(req, resp, telescope_id=0):
 
         filename = req.media["filename"]
+        if not filename.lower().endswith(".json"):
+            filename = filename + ".json"
         directory = os.path.join(os.getcwd(), "schedule")
         file_path = os.path.join(directory, filename)
 
@@ -1905,23 +1922,24 @@ class ScheduleImportResource:
 
         form = req.media
         selected_file = form.get('schedule_file')
-        
+
         if not selected_file:
             raise falcon.HTTPBadRequest("Missing Parameter", "No file selected")
-        
+
         directory = os.path.join(os.getcwd(), "schedule")
         file_path = os.path.join(directory, selected_file)
+        file_type = determine_file_type(file_path)
 
         data = req.get_param('schedule_file')
         if not selected_file:
             raise falcon.HTTPBadRequest("Missing Parameter", "No file selected")
 
-        if selected_file.endswith('.csv'):
+        if file_type == "csv":
             with open(file_path, 'r', encoding='utf-8') as file:
                 string_data = file.read().splitlines()
             import_csv_schedule(string_data, telescope_id)
 
-        elif selected_file.endswith('.json'):
+        elif file_type == "json":
             do_action_device("import_schedule", telescope_id, {"filepath":file_path, "is_retain_state":False})
 
         else:
@@ -1948,12 +1966,13 @@ class ScheduleUploadResource:
                 with open(file_path, 'w', encoding='utf-8') as f:
                     f.write(part.data.decode('utf-8'))
 
-                if filename.endswith('.csv'):
+                file_type = determine_file_type(file_path)
+                if file_type == "csv":
                     with open(file_path, 'r', encoding='utf-8') as file:
                         string_data = file.read().splitlines()
                     import_csv_schedule(string_data, telescope_id)
 
-                elif filename.endswith('.json'):
+                elif file_type == "json":
                     do_action_device("import_schedule", telescope_id, {"filepath":file_path, "is_retain_state":False})
 
                 else:
@@ -2024,7 +2043,7 @@ class LivePage:
         status = method_sync('get_view_state', telescope_id)
         if status is None:
             return
-        
+
         logger.info(status)
         context = get_context(telescope_id, req)
         now = datetime.now()
@@ -2951,9 +2970,9 @@ class BlindPolarAlignResource:
         elif action == 'runpa':
             polar_align = PostedForm.get("polar_align","False").strip() == "on"
             raise_arm = PostedForm.get("raise_arm","False").strip() == "on"
-            do_action_device("action_start_up_sequence", telescope_id, {"3ppa": polar_align, "raise_arm": raise_arm})   
-            render_template(req, resp, 'blind_pa.html', **context)            
-            
+            do_action_device("action_start_up_sequence", telescope_id, {"3ppa": polar_align, "raise_arm": raise_arm})
+            render_template(req, resp, 'blind_pa.html', **context)
+
 class PlatformRpiResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
