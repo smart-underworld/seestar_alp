@@ -8,64 +8,70 @@
 
 {% block content %}
 	{% if online %}
-    {% if state["firmware_ver_int"] > 2300 %}
-      <div class="container mt-3">
-        <div class="row row-cols-auto gap-3">
-          {% for client in state["client_list"] %}
-            <div class="col" style="width: 18rem;">
-              {% if loop.index0 == state["master_index"] %}
-                {% set card_class = 'text-bg-success' %}
-                {% set card_type = 'Controller' %}
-              {% else %}
-                {% set card_class = 'text-bg-secondary' %}
-                {% set card_type = 'Guest' %}
-              {% endif %}
-
-              <div class="card text-center {{ card_class }}" style="width: 18rem;">
-                <div class="card-header"><strong>{{client}}</strong></div>
-                <div class="card-body">
-                  <p class="card-text">
-                    {{ card_type }}
-                  </p>
-                </div>
-              </div>
-            </div>
-          {% endfor %}
-        </div>
-
-        <br>
-        <br>
+    {% if state %}
+      {% if state["firmware_ver_int"] > 2300 %}
         <div class="container mt-3">
           <div class="row row-cols-auto gap-3">
-            {% if state["master_index"] == -1 %}
-              {% set claimbtnstate = "" %}
-            {% else %}
-              {% set claimbtnstate = " disabled" %}
-            {% endif %}
-            {% if state["client_master"] %}
-              {% set relbtnstate = "" %}
-            {% else %}
-              {% set relbtnstate = " disabled" %}
-            {% endif %}
-            <div class="col">
-              <form method="post" action="{{ action }}">
-                <input type="hidden" name="command" value="grab_control">
-                <button type="submit" class="btn btn-primary"{{claimbtnstate}}>Claim Control</button>
-              </form>
-            </div>
-            <div class="col">
-              <form method="post" action="{{ action }}">
-                <input type="hidden" name="command" value="release_control">
-                <button type="submit" class="btn btn-primary"{{relbtnstate}}>Release Control</button>
-              </form>
+            {% for client in state["client_list"] %}
+              <div class="col" style="width: 18rem;">
+                {% if loop.index0 == state["master_index"] %}
+                  {% set card_class = 'text-bg-success' %}
+                  {% set card_type = 'Controller' %}
+                {% else %}
+                  {% set card_class = 'text-bg-secondary' %}
+                  {% set card_type = 'Guest' %}
+                {% endif %}
+
+                <div class="card text-center {{ card_class }}" style="width: 18rem;">
+                  <div class="card-header"><strong>{{client}}</strong></div>
+                  <div class="card-body">
+                    <p class="card-text">
+                      {{ card_type }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+
+          <br>
+          <br>
+          <div class="container mt-3">
+            <div class="row row-cols-auto gap-3">
+              {% if state["master_index"] == -1 %}
+                {% set claimbtnstate = "" %}
+              {% else %}
+                {% set claimbtnstate = " disabled" %}
+              {% endif %}
+              {% if state["client_master"] %}
+                {% set relbtnstate = "" %}
+              {% else %}
+                {% set relbtnstate = " disabled" %}
+              {% endif %}
+              <div class="col">
+                <form method="post" action="{{ action }}">
+                  <input type="hidden" name="command" value="grab_control">
+                  <button type="submit" class="btn btn-primary"{{claimbtnstate}}>Claim Control</button>
+                </form>
+              </div>
+              <div class="col">
+                <form method="post" action="{{ action }}">
+                  <input type="hidden" name="command" value="release_control">
+                  <button type="submit" class="btn btn-primary"{{relbtnstate}}>Release Control</button>
+                </form>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      {% else %}
+        <div class="container mt-3">
+          <p>Guest mode is unavailable in this firmware</p>
+        </div>
+      {% endif %}
     {% else %}
-      <div class="container mt-3">
-        <p>Guest mode is unavailable in this firmware</p>
-      </div>
+    <div class="mb-3">
+      <p>You have the Seestar Federation Device selected. Please select an actual telescope from the dropdown.</p>
+    </div>
     {% endif %}
 	{% else %}
 		<div class="container mt-3">
