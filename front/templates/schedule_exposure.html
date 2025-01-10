@@ -1,0 +1,19 @@
+{% extends 'schedule_base.html' %}
+
+{% block schedule_tab_content %}
+    <form method="post" action="{{ root }}/schedule/exposure">
+        <div class="card border-primary mb-3">
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="exposure" class="form-label">Exposure</label>
+                    <input type="text" class="form-control" id="exposure" name="exposure"
+                           aria-describedby="exposureHelp" required>
+                    <div id="exposureHelp" class="form-text">Specify the exposure time in milliseconds (Eg, 10000 = 10s)
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Submit</button>
+    </form>
+{% endblock %}

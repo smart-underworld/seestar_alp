@@ -1691,6 +1691,32 @@ class ScheduleAutoFocusResource:
         render_schedule_tab(req, resp, telescope_id, 'schedule_auto_focus.html', 'auto-focus', {}, {})
 
 
+class ScheduleExposureResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telecope_id = 0
+        render_schedule_tab(req, resp, telescope_id, 'schedule_exposure.html', 'exposure', {}, {})
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        exposure = req.media["exposure"]
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
+        response = do_schedule_action_device("set_setting",
+            {
+                "exp_ms": {
+                    "stack_l": int(exposure),
+                    "continuous": Config.init_expo_preview_ms
+                }
+            },
+            telescope_id
+        )
+        logger.info("POST scheduled request %s", response)
+        render_schedule_tab(req, resp, telescope_id, 'schedule_exposure.html', 'exposure', {}, {})
+
 class ScheduleImageResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
@@ -3266,6 +3292,7 @@ class FrontMain:
         app.add_route('/settings', SettingsResource())
         app.add_route('/schedule', ScheduleResource())
         app.add_route('/schedule/auto-focus', ScheduleAutoFocusResource())
+        app.add_route('/schedule/exposure', ScheduleExposureResource())
         app.add_route('/schedule/clear', ScheduleClearResource())
         app.add_route('/schedule/download', ScheduleDownloadSchedule())
         app.add_route('/schedule/export', ScheduleExportResource())
@@ -3310,6 +3337,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/settings', SettingsResource())
         app.add_route('/{telescope_id:int}/schedule', ScheduleResource())
         app.add_route('/{telescope_id:int}/schedule/auto-focus', ScheduleAutoFocusResource())
+        app.add_route('/{telescope_id:int}/schedule/exposure', ScheduleExposureResource())
         app.add_route('/{telescope_id:int}/schedule/clear', ScheduleClearResource())
         app.add_route('/{telescope_id:int}/schedule/download', ScheduleDownloadSchedule())
         app.add_route('/{telescope_id:int}/schedule/export', ScheduleExportResource())
