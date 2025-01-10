@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" data-bs-theme="{{ webui_theme }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %} - SSC</title>
+  <script src="/public/htmx.min.js"></script>
+  <script src="/public/sse.js"></script>
+  <script src="/public/nipplejs.min.js"></script>
+  <script src="/public/liveview.js"></script>
+  <link rel="icon" type="image/x-icon" href="/public/favicon.ico">
+  <link href="/public/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<main class="container">
+  <section class="content mt-3">
+    <h1>No telescopes</h1>
+    <p>No local or remote telescopes defined. Check the configuration in config.toml.</p>
+  </section>
+</main>
+</body>
+</html>
