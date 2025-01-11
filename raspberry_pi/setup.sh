@@ -19,6 +19,10 @@ function validate_access {
     echo "ERROR: Unsupported architecture. Please ensure you are running the 64bit raspberry pi OS"
     exit 255
   fi
+
+  if [ "$(uname)" != "Linux" ]; then
+    echo "ERROR: You should only run this script on a Linux machine"
+  fi
 }
 
 function install_apt_packages {

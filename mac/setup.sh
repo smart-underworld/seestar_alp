@@ -9,6 +9,10 @@ function validate_access {
     echo "ERROR: You should not run this script as root"
     exit 255
   fi
+
+  if [ "$(uname)" != "Darwin" ]; then
+    echo "ERROR: You should only run this script on a Mac"
+  fi
 }
 
 function config_toml_setup {
