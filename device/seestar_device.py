@@ -107,6 +107,8 @@ class Seestar:
         self.cur_solve_RA: float = -9999.0  #
         self.cur_solve_Dec: float = -9999.0
         self.first_plate_solve_altaz = None    # for blind plate solve logic
+        self.first_plate_solve_RA = None
+        self.first_plate_solve_Dec = None
         self.first_obs_time = None
         self.site_altaz_frame = None
 
@@ -319,6 +321,8 @@ class Seestar:
                                     self.first_obs_time = Time.now()
                                     self.first_plate_solve_altaz = self.get_altaz_from_eq(self.cur_solve_RA, self.cur_solve_Dec, self.first_obs_time)
                                     self.logger.info(f"set first plate solve position: {self.cur_solve_RA}, {self.cur_solve_Dec}")
+                                    self.first_plate_solve_RA = self.cur_solve_RA
+                                    self.first_plate_solve_Dec = self.cur_solve_Dec
                                 self.plate_solve_state = "complete"
                                 # repeat plate solve if we are in PA refinement loop
                                 if self.is_in_plate_solve_loop:
@@ -818,9 +822,9 @@ class Seestar:
                         event_state = self.event_state["3PPA"]
                         if "state" in event_state and (event_state["state"] == "fail"):
                             self.logger.info(f"3PPA failed: {event_state}.")
-                            if not is_3PPA:
-                                response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"AutoGoto"}})
-                                self.logger.info(response)
+                            #if not is_3PPA:
+                            response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"AutoGoto"}})
+                            self.logger.info(response)
                             result = False
                             break
                         elif "percent" in event_state:
@@ -1153,6 +1157,7 @@ class Seestar:
             self.logger.info("verify location string: %s", loc_data)
 
             self.send_message_param_sync({"method": "pi_is_verified"})
+
             msg = f"Setting location to {Config.init_lat}, {Config.init_long}"
             self.logger.info(msg)
             self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
@@ -1305,20 +1310,6 @@ class Seestar:
             if self.schedule["state"] != "working":
                 return
 
-
-            if do_dark_frames:
-                msg = f"dark frame measurement"
-                self.logger.info(msg)
-                self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
-                result = self.try_dark_frame()
-                if result == False:
-                    self.logger.warn("Start-up sequence stopped and was unsuccessful.")
-                    self.schedule['state'] == "stopping"
-                    return
-
-            if self.schedule["state"] != "working":
-                return
-
             if False:
                 time.sleep(1.0)
                 # move 15% back to the starting point, to be ready for anothr 3PPA after a BPA
@@ -1339,6 +1330,7 @@ class Seestar:
 
             if do_3PPA:
                 msg = "perform a quick goto routine to go back to start of 3ppa to confirm and add to the sky model"
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
                 self.logger.info(msg)
                 time.sleep(1.0)
                 response = self.send_message_param_sync({"method":"get_last_solve_result"})
@@ -1347,20 +1339,56 @@ class Seestar:
                 # sync to this position
                 # {"method":"scope_sync","params":[2.96,67.4]}
                 result = self._sync_target(last_pos)
-
-                self.logger.info(f"move from {last_pos[0]}, {last_pos[1]}")
+                self.logger.info(f"result from sync request: {result}")
+                
+                # move a little bit, platesolve and sync to ensure we have a good sky model
+                time.sleep(1.0)
+                msg = "move a little bit, platesolve and sync to ensure we have a good sky model"
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
-                goto_params = {'is_j2000':False, 'ra': last_pos[0]-1.4, 'dec': last_pos[1]}
+                self.logger.info(msg)
+                response = self.send_message_param_sync({"method":"scope_move_left_by_angle", "params":[-1]})
+                result = self.wait_end_op("MoveByAngle")
+                time.sleep(2.0)
+                response = self.send_message_param_sync({"method":"iscope_start_view", "params":{"mode":"star"}})
+                self.logger.info(f"result from start star view: {response}")
+                time.sleep(1.0)
+                #platesolve
+                response = self.send_message_param_sync({"method":"start_solve"})
+                result = self.wait_end_op("PlateSolve")
+                if result == True:
+                    self.logger.info(f"platesolved to {self.cur_solve_RA}, {self.cur_solve_Dec}")
+                    self._sync_target([self.cur_solve_RA, self.cur_solve_Dec])
+                else:
+                    self.logger.warn("Failed to plate solve after moving slightly to the left")
+
+                # now move back to position at start of 3ppa
+                time.sleep(1.0)
+                msg = "move back to position at start of 3ppa"
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+                self.logger.info(msg)
+                goto_params = {'is_j2000':False, 'ra': self.first_plate_solve_RA, 'dec': self.first_plate_solve_Dec}
                 result = self.goto_target(goto_params)
                 self.logger.info(f"result from goto request: {result}")
                 result = self.wait_end_op("goto_target")
-                self.logger.info(f"Goto operation finished with result code: {result}")
-
+                msg = f"Goto operation finished with result code: {result}"
+                self.logger.info(msg)
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
                 # i have seen instance where seestar automatically starts stacking, even though my param stack_after_goto is false
                 # so I will explicit tell seestar to stop stack just in case
                 time.sleep(2)
                 ignore = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"Stack"}})
 
+            if result is True:
+                if do_dark_frames:
+                    msg = f"dark frame measurement"
+                    self.logger.info(msg)
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+                    result = self.try_dark_frame()
+                    if result == False:
+                        self.logger.warn("Start-up sequence stopped and was unsuccessful.")
+                        self.schedule['state'] == "stopping"
+                        return
+            
             self.logger.info(f"Start-up sequence result: {result}")
 
 
@@ -1383,8 +1411,11 @@ class Seestar:
     def action_start_up_sequence(self, params):
         if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete" :
             return self.json_result("start_up_sequence", -1, "Device is busy. Try later.")
-        elif not self.is_client_master():
-            return self.json_result("start_up_sequence", -1, "Alp is not the device controller. Grab control first.")
+        response = self.send_message_param_sync({"method":"set_setting","params":{"master_cli":True}})
+        self.logger.info(f"set master_cli response: {response}")
+        if not self.is_client_master():
+            self.json_result("start_up_sequence", -1, "Alp is not the device controller. Will try to grab control first.")
+            return self.json_result("Need to be master client to start up sequence.", -1, "Need to be master client to start up sequence.")
 
         move_up_dec_thread = threading.Thread(name=f"start-up-thread:{self.device_name}", target=lambda: self.start_up_thread_fn(params, False))
         move_up_dec_thread.start()
