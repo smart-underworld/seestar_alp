@@ -80,7 +80,7 @@ class SeestarRemote(AbstractDevice):
             yield line + b'\n'
 
     def is_goto_completed_ok(self):
-        return self._do_action_device('is_goto_completed_ok')
+        return self._do_action_device('is_goto_completed_ok', {})
 
     def set_below_horizon_dec_offset(self, offset):
         # XXX hmm....

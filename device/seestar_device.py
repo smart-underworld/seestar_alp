@@ -47,7 +47,7 @@ class DequeEncoder(JSONEncoder):
        if isinstance(obj, collections.deque):
           return list(obj)
        return JSONEncoder.default(self, obj)
-    
+
 class Seestar:
     def __new__(cls, *args, **kwargs):
         # print("Create a new instance of Seestar.")
@@ -422,7 +422,7 @@ class Seestar:
 
         elif self.cur_equ_offset_alt == None:
             return ({"ok":False, "error":"Need to perform 3 point polar alignment in start up sequence first."})
-        
+
         elif self.schedule['state'] == "stopped" or self.schedule['state'] == 'complete':
             self.schedule['state'] = "working"
             self.first_plate_solve_altaz = None
@@ -443,7 +443,7 @@ class Seestar:
         self.schedule['state'] = "stopped"
         self.logger.info("Stopped plate solve loop")
         return({"ok":True, "error":""})
-    
+
     def get_altaz_from_eq(self, in_ra, in_dec, obs_time):
         if self.site_altaz_frame == None:
             self.logger.warn("SCC has a rouge thread trying to call BPA error!")
@@ -456,7 +456,7 @@ class Seestar:
 
     def get_pa_error(self, param):
         max_error = 9999.9
-  
+
 #todo mock data only
 #        if self.cur_equ_offset_alt == None:
 #            self.cur_equ_offset_alt = 0.0
@@ -466,23 +466,23 @@ class Seestar:
 #            self.cur_equ_offset_az = 0.0
 #        else:
 #            self.cur_equ_offset_az += (2*random.random() - 1) * 0.3
-    
-#        return({"pa_error_alt" : self.cur_equ_offset_alt, 
+
+#        return({"pa_error_alt" : self.cur_equ_offset_alt,
 #                "pa_error_az" : self.cur_equ_offset_az})
 
         if self.first_plate_solve_altaz == None:
             return({"pa_error_alt" : max_error, "pa_error_az" : max_error})
-      
+
         if self.plate_solve_state == "working":
             self.logger.warn("Warning: Alignment logic is still trying to platesolve. Data is not ready.")
             return({"pa_error_alt" : max_error, "pa_error_az" : max_error})
         elif self.cur_equ_offset_alt == None:
             self.logger.warn("Warning: Polar alignment has not been completed yet. Data is not ready.")
             return({"pa_error_alt" : max_error, "pa_error_az" : max_error})
-        
+
 
         cur_solve_altaz = self.get_altaz_from_eq(self.cur_solve_RA, self.cur_solve_Dec, self.first_obs_time)
-        
+
         # note seestar returns equ offset as [az, alt], bad convention!
         error_alt = self.cur_equ_offset_alt - (cur_solve_altaz[0] - self.first_plate_solve_altaz[0])
         error_az = self.cur_equ_offset_az  - (cur_solve_altaz[1] - self.first_plate_solve_altaz[1])
@@ -1125,7 +1125,7 @@ class Seestar:
             loc_param = {}
             # special case of (0,0) will use the ip address to estimate the location
             has_latlon = 'lat' in params and 'lon' in params
-            if not has_latlon or (params['lat'] == 0 and params['lon'] == 0): 
+            if not has_latlon or (params['lat'] == 0 and params['lon'] == 0):
                 if (has_latlon and params['lat'] == 0 and params['lon'] == 0) or (Config.init_lat == 0 and Config.init_long == 0):
                     coordinates = Util.get_current_gps_coordinates()
                     if coordinates is not None:
@@ -1214,7 +1214,7 @@ class Seestar:
                     lat = params['scope_aim_lat']
                 else:
                     lat = device.get('scope_aim_lat', lat)
-                
+
                 if 'scope_aim_lon' in params:
                     lon = params['scope_aim_lon']
                 else:
@@ -1233,7 +1233,7 @@ class Seestar:
                 if isinstance(cur_latlon, str):
                     self.logger.error(f"Failed to get aiming position: {cur_latlon}")
                     return
-                
+
                 msg = f"moving scope's aim toward a clear patch of sky for HC, from lat-lon {cur_latlon[0]}, {cur_latlon[1]} to {lat}, {lon}"
                 self.logger.info(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
@@ -1385,7 +1385,7 @@ class Seestar:
             return self.json_result("start_up_sequence", -1, "Device is busy. Try later.")
         elif not self.is_client_master():
             return self.json_result("start_up_sequence", -1, "Alp is not the device controller. Grab control first.")
-        
+
         move_up_dec_thread = threading.Thread(name=f"start-up-thread:{self.device_name}", target=lambda: self.start_up_thread_fn(params, False))
         move_up_dec_thread.start()
         return self.json_result("start_up_sequence", 0, "Sequence started.")
@@ -1419,14 +1419,15 @@ class Seestar:
             is_LP = [False, False, True, False, False, False, True, False]
             num_segments = len(spacing)
 
-            item_state = {"type": "spectra", "schedule_item_id": self.schedule['current_item_id'], "target_name":target_name, "action": "slew to target", "item_total_time_s":session_length, "item_remaining_time_s":session_length}
-            self.update_scheduler_state_obj(item_state)
             parsed_coord = Util.parse_coordinate(is_j2000, center_RA, center_Dec)
             center_RA = parsed_coord.ra.hour
             center_Dec = parsed_coord.dec.deg
 
             # 60s for the star
             time_remaining = exposure_time_per_segment * num_segments - 60.0
+
+            item_state = {"type": "spectra", "schedule_item_id": self.schedule['current_item_id'], "target_name":target_name, "action": "slew to target", "item_total_time_s":exposure_time_per_segment, "item_remaining_time_s":time_remaining}
+            self.update_scheduler_state_obj(item_state)
 
             if center_RA < 0:
                 center_RA = self.ra
@@ -1668,7 +1669,7 @@ class Seestar:
             self.logger.info("Run Scheduler is stopping")
             self.schedule['state'] = "stopped"
             return
-        
+
         target_name = params['target_name']
         center_RA = params['ra']
         center_Dec = params['dec']
@@ -1911,7 +1912,7 @@ class Seestar:
             return self.json_result("start_scheduler", -1, "This device cannot be controlled. Grab the control first.")
         if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete":
             return self.json_result("start_scheduler", -1, "An existing scheduler is active. Returned with no action.")
-        
+
         self.scheduler_thread = threading.Thread(target=lambda: self.scheduler_thread_fn(), daemon=True)
         self.scheduler_thread.name = f"SchedulerThread:{self.device_name}"
         self.scheduler_thread.start()

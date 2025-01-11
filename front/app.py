@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import tzlocal
 
 import falcon
-from falcon import HTTPTemporaryRedirect, HTTPFound
+from falcon import HTTPTemporaryRedirect, HTTPFound, HTTPInternalServerError, HTTPNotFound
 from falcon import CORSMiddleware
 from astroquery.simbad import Simbad
 from jinja2 import Template, Environment, FileSystemLoader
@@ -1353,7 +1353,7 @@ def import_csv_schedule(input, telescope_id):
                         except ValueError:
                             logger.warn(f"Invalid wheel position value: {position}. Skipping.")
                 else:
-                    logging.warning("Missing 'params' for set_wheel_position.")
+                    logger.warn("Missing 'params' for set_wheel_position.")
             case "action_set_dew_heater":
                 heater_value = int(params.get("heater", 0))
                 do_schedule_action_device("action_set_dew_heater", {"heater": heater_value}, telescope_id)
@@ -1366,7 +1366,7 @@ def import_csv_schedule(input, telescope_id):
                 }
                 do_schedule_action_device("start_up_sequence", startup_params, telescope_id)
             case "_":
-                logging.warning(f"Unknown action '{action}' encountered; skipping.")
+                logger.warn(f"Unknown action '{action}' encountered; skipping.")
 
 
 def get_live_status(telescope_id: int):
@@ -2717,6 +2717,7 @@ class StellariumResource:
             StelJSON = json.loads(html_content)
             ra_j2000 = StelJSON['raJ2000']
             dec_J2000 = StelJSON['decJ2000']
+            objName = "Unknown"
             if (StelJSON['object-type'] == 'star' and StelJSON['name'] == ''):
                 objName = 'Unnamed Star'
             else:
