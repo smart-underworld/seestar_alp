@@ -1431,7 +1431,8 @@ class Seestar:
                 self.play_sound(82)
 
     def action_set_dew_heater(self, params):
-        return self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
+        response = self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
+        return response
 
     def action_start_up_sequence(self, params):
         if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete" :
@@ -2057,6 +2058,9 @@ class Seestar:
                 while startup_thread.is_alive():
                     update_time()
                     time.sleep(2)
+            elif action == 'action_set_dew_heater':
+                self.logger.info(f"Trying to set dew heater to {cur_schedule_item['params']}")
+                self.action_set_dew_heater(cur_schedule_item['params'])
             else:
                 if 'params' in cur_schedule_item:
                     request = {'method': action, 'params': cur_schedule_item['params']}
