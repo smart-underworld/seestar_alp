@@ -1293,6 +1293,16 @@ class Seestar:
                     self.schedule['state'] == "stopping"
                     return
 
+            if do_dark_frames:
+                msg = f"dark frame measurement"
+                self.logger.info(msg)
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+                result = self.try_dark_frame()
+                if result == False:
+                    self.logger.warn("Start-up sequence stopped and was unsuccessful.")
+                    self.schedule['state'] == "stopping"
+                    return
+                
             if self.schedule["state"] != "working":
                 return
 
@@ -1377,17 +1387,6 @@ class Seestar:
                 # so I will explicit tell seestar to stop stack just in case
                 time.sleep(2)
                 ignore = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"Stack"}})
-
-            if result is True:
-                if do_dark_frames:
-                    msg = f"dark frame measurement"
-                    self.logger.info(msg)
-                    self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
-                    result = self.try_dark_frame()
-                    if result == False:
-                        self.logger.warn("Start-up sequence stopped and was unsuccessful.")
-                        self.schedule['state'] == "stopping"
-                        return
             
             self.logger.info(f"Start-up sequence result: {result}")
 
@@ -2059,6 +2058,7 @@ class Seestar:
             self.stop_slew()
             self.stop_stack()
             self.play_sound(83)
+            self.schedule['state'] = "stopped"
             return self.json_result("stop_scheduler", 0, f"Scheduler stopped successfully.")
 
         elif self.schedule['state'] == "complete":
