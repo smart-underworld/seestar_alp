@@ -180,6 +180,28 @@ class Seestar:
         self.is_connected = False
         self.socket_force_close()
 
+    def send_udp_intro(self):
+        # {"id":1,"method":"scan_iscope","params":""}
+        try:
+            # Create a UDP socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            udp_port = 4720
+            # Enable broadcast option
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1) 
+            addr = (self.host, udp_port)
+            # Send the message to the broadcast address
+            message = '{"id":1,"method":"scan_iscope","params":""}'
+            sock.sendto(message.encode(), addr) 
+
+            self.logger.info(f"Sent broadcast message: '{message}' on port {udp_port}")
+
+        except Exception as e:
+            self.logger.info(f"Error sending broadcast message: {e}")
+
+        finally:
+            # Close the socket
+            sock.close() 
+
     def reconnect(self):
         if self.is_connected:
             return True
@@ -188,6 +210,9 @@ class Seestar:
             self.logger.info(f"RECONNECTING {self.device_name}")
 
             self.disconnect()
+
+            # send a udp message to satisfy seestar's guest mode to gain control properly
+            self.send_udp_intro()
 
             # note: the below isn't thread safe!  (Reconnect can be called from different threads.)
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1173,7 +1198,8 @@ class Seestar:
             self.set_setting(Config.init_expo_stack_ms, Config.init_expo_preview_ms, Config.init_dither_length_pixel,
                             Config.init_dither_frequency, Config.init_dither_enabled, Config.init_activate_LP_filter)
 
-            self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":Config.init_dew_heater_power> 0,"value":Config.init_dew_heater_power}}})
+            is_dew_on = Config.init_dew_heater_power > 0
+            self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":is_dew_on, "value":Config.init_dew_heater_power}}})
 
             # save frames setting
             self.send_message_param_sync({"method":"set_stack_setting", "params":{"save_discrete_ok_frame":Config.init_save_good_frames, "save_discrete_frame":Config.init_save_all_frames}})
