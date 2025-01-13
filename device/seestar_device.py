@@ -188,12 +188,23 @@ class Seestar:
             udp_port = 4720
             # Enable broadcast option
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1) 
+            sock.settimeout(1.0)  # Timeout in seconds
+
             addr = (self.host, udp_port)
             # Send the message to the broadcast address
-            message = '{"id":1,"method":"scan_iscope","params":""}'
-            sock.sendto(message.encode(), addr) 
+            message = {"id":1,"method":"scan_iscope","params":""}
+            message_payload = json.dumps(message).encode()
+            self.logger.info(f"UDP: Sending broadcast message: {message_payload} on port {udp_port}")
+            sock.sendto(message_payload, addr)
 
-            self.logger.info(f"Sent broadcast message: '{message}' on port {udp_port}")
+            while True:
+                try:
+                    # Listen for incoming messages
+                    data, addr = sock.recvfrom(1024)  # Buffer size is 1024 bytes
+                    self.logger.info(f"UDP: Received message from {addr}: {data.decode()}")
+                except socket.timeout:
+                    self.logger.info("UDP: No more responses received.")
+                    break
 
         except Exception as e:
             self.logger.info(f"Error sending broadcast message: {e}")
@@ -801,7 +812,11 @@ class Seestar:
                     break
         # give extra time to settle focuser
         time.sleep(2)
-        self.logger.info("auto_focus completed")
+        self.logger.info(f"auto_focus completed with result {result}")
+        if result == True:
+            self.event_state["AutoFocus"]["state"] = "complete"
+        else:
+            self.event_state["AutoFocus"]["state"] = "fail"
         return result
 
     def start_3PPA(self):
@@ -913,6 +928,7 @@ class Seestar:
     def try_dark_frame(self):
         self.logger.info("start dark frame measurement...")
         self.event_state["DarkLibrary"] = {"state":"working"}
+        result = self.send_message_param_sync({"method": "iscope_stop_view"})
         result = self.send_message_param_sync({"method": "start_create_dark"})
         if 'error' in result:
             self.logger.error("Faild to start create darks: %s", result)
@@ -1221,7 +1237,8 @@ class Seestar:
                     msg = "Failed to park scope. Need to restart Seestar and try again."
                     self.logger.error(msg)
                     self.schedule['state'] == "stopping"
-                    return msg
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+                    return
 
                 result = self.wait_end_op("ScopeHome")
 
@@ -1262,7 +1279,10 @@ class Seestar:
 
                 cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
                 if isinstance(cur_latlon, str):
-                    self.logger.error(f"Failed to get aiming position: {cur_latlon}")
+                    msg = f"Failed to get aiming position: {cur_latlon}"
+                    self.logger.error(msg)
+                    self.schedule['state'] == "stopping"
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
                     return
 
                 msg = f"moving scope's aim toward a clear patch of sky for HC, from lat-lon {cur_latlon[0]}, {cur_latlon[1]} to {lat}, {lon}"
@@ -1305,19 +1325,25 @@ class Seestar:
                 if self.schedule["state"] != "working":
                     return
 
-            # need to make sure we are in star mode
-            result = self.send_message_param_sync({"method": "iscope_start_view", "params": {"mode": "star"}})
-            self.logger.info(f"start star mode: {result}")
 
             if do_AF:
+                # need to make sure we are in star mode
+                result = self.send_message_param_sync({"method": "iscope_start_view", "params": {"mode": "star"}})
+                self.logger.info(f"start star mode: {result}")
+
                 msg = f"auto focus"
                 self.logger.info(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
                 result = self.try_auto_focus(2)
                 if result == False:
-                    self.logger.warn("Start-up sequence stopped and was unsuccessful.")
-                    self.schedule['state'] == "stopping"
+                    msg = "Auto focus was unsuccessful."
+                    self.logger.warn(msg)
+                    self.schedule['state'] = "stopping"
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
                     return
+
+            if self.schedule["state"] != "working":
+                return
 
             if do_dark_frames:
                 msg = f"dark frame measurement"
@@ -1325,22 +1351,26 @@ class Seestar:
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
                 result = self.try_dark_frame()
                 if result == False:
-                    self.logger.warn("Start-up sequence stopped and was unsuccessful.")
-                    self.schedule['state'] == "stopping"
+                    msg = "Failed to take dark frame data."
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+                    self.logger.warn(msg)
+                    self.schedule['state'] = "stopping"
                     return
-                
-            if self.schedule["state"] != "working":
-                return
 
             if do_3PPA:
+                # need to make sure we are in star mode
+                result = self.send_message_param_sync({"method": "iscope_start_view", "params": {"mode": "star"}})
+                self.logger.info(f"start star mode: {result}")
                 result = self.send_message_param_sync({"method":"set_setting","params":{"auto_3ppa_calib":True}})
                 msg = f"3 point polar alignment"
                 self.logger.info(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
                 result = self.try_3PPA(1)
                 if result == False:
-                    self.logger.warn("Start-up sequence stopped and was unsuccessful.")
-                    self.schedule['state'] == "stopping"
+                    msg = "3 point PA was unsuccessful."
+                    self.logger.warn(msg)
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+                    self.schedule['state'] = "stopping"
                     return
 
             if self.schedule["state"] != "working":
@@ -1395,8 +1425,15 @@ class Seestar:
                     self.logger.info(f"platesolved to {self.cur_solve_RA}, {self.cur_solve_Dec}")
                     self._sync_target([self.cur_solve_RA, self.cur_solve_Dec])
                 else:
-                    self.logger.warn("Failed to plate solve after moving slightly to the left")
+                    msg = "Failed to plate solve after moving slightly to the left"
+                    self.logger.warn(msg)
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+                    self.schedule['state'] = "stopping"
+                    return
 
+                if self.schedule["state"] != "working":
+                    return
+                
                 # now move back to position at start of 3ppa
                 time.sleep(1.0)
                 msg = "move back to position at start of 3ppa"
@@ -1409,20 +1446,28 @@ class Seestar:
                 msg = f"Goto operation finished with result code: {result}"
                 self.logger.info(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+
+                if result == False:
+                    msg = "Failed to move back to starting point of 3PPA"
+                    self.logger.warn(msg)
+                    self.schedule['state'] = "stopping"
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+                    return
+                
+                if self.schedule["state"] != "working":
+                    return
+                
                 # i have seen instance where seestar automatically starts stacking, even though my param stack_after_goto is false
                 # so I will explicit tell seestar to stop stack just in case
                 time.sleep(2)
                 ignore = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"Stack"}})
-            
+                            
             self.logger.info(f"Start-up sequence result: {result}")
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
 
-
-            if result:
-                self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
-            else:
-                self.schedule['state'] == "stopping"
-                self.event_state["scheduler"]["cur_scheduler_item"]["action"]="stopping"
         finally:
+            time.sleep(1)
+            self.send_message_param_sync({"method": "iscope_start_view", "params": {"mode": "star"}})
             if self.schedule['state'] == "stopping":
                 self.schedule['state'] = "stopped"
                 self.play_sound(82)
