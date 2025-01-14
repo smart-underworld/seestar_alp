@@ -398,13 +398,19 @@ def check_api_state(telescope_id):
     return _api_state_cached[telescope_id]
 
 def check_internet_connection():
+    remote_server = "www.google.com"
+    port = 80
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(2)
     try:
-        requests.get("https://github.com/smart-underworld/seestar_alp", timeout=2.0)
+        sock.connect((remote_server, port))
         logger.info(f"Internet connection detected.")
         return True
-    except requests.exceptions.ConnectionError:
-        logger.info(f"Unable to detect Internet connection or github is down.")  # or github is down...
+    except socket.error:
+        logger.info(f"Unable to detect Internet connection.")  # or google is down...
         return False
+    finally:
+        sock.close()
 
 
 def queue_action(dev_num, payload):
