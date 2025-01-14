@@ -140,6 +140,7 @@ class Seestar:
     def update_scheduler_state_obj(self, item_state, result = 0):
         self.event_state["scheduler"]  = {"schedule_id": self.schedule['schedule_id'], "state":self.schedule['state'],
                                             "item_number": self.schedule["item_number"], "cur_scheduler_item": item_state , "result":result}
+        self.logger.info(f"scheduler event state: {self.event_state["scheduler"]}")
 
     def heartbeat(self):  # I noticed a lot of pairs of test_connection followed by a get if nothing was going on
         #    json_message("test_connection")
@@ -480,7 +481,7 @@ class Seestar:
             self.logger.warn("Error: there is no active plate solve loop to stop.")
             return({"ok":False, "error":"there is no active plate solve loop to stop."})
         self.is_in_plate_solve_loop = False
-        self.schedule['state'] = "stopped"
+        self.schedule['state'] = "complete"
         self.logger.info("Stopped plate solve loop")
         return({"ok":True, "error":""})
 
@@ -1858,7 +1859,7 @@ class Seestar:
             schedule_id = str(uuid.uuid4())
 
         self.schedule['schedule_id'] = schedule_id
-        self.schedule['state'] = self.schedule['state']
+        self.schedule['state'] = "stopped"
         self.schedule['list'].clear()
         return self.schedule
 
@@ -2019,7 +2020,7 @@ class Seestar:
         self.scheduler_thread = threading.Thread(target=lambda: self.scheduler_thread_fn(), daemon=True)
         self.scheduler_thread.name = f"SchedulerThread:{self.device_name}"
         self.scheduler_thread.start()
-        self.schedule['state'] = "working"
+
         return self.schedule
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
