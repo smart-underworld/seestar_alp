@@ -407,7 +407,7 @@ def check_internet_connection():
         logger.info(f"Internet connection detected.")
         return True
     except socket.error:
-        logger.info(f"Unable to detect Internet connection or github is down.")  # or github is down...
+        logger.info(f"Unable to detect Internet connection.")  # or google is down...
         return False
     finally:
         sock.close()
