@@ -657,6 +657,7 @@ class Seestar:
             data['params'] = params
             self.send_message_param_sync(data)
             return
+        
         else:
             self.logger.info(f"going to target with below horizon logic: {self.below_horizon_dec_offset }")
             # do the same, but when trying to center on target, need to implement ourselves to platesolve correctly to compensate for the dec offset
@@ -2144,17 +2145,20 @@ class Seestar:
             return self.json_result("stop_scheduler", -5, f"scheduler is in unaccounted for state: {self.schedule['state']}")
 
     def wait_end_op(self, in_op_name):
+        self.logger.info(f"Waiting for {in_op_name} to finish.")
         if in_op_name == "goto_target":
             self.mark_goto_status_as_start()
             while self.is_goto() == True:
                 time.sleep(1)
-            return self.is_goto_completed_ok()
-
+            result = self.is_goto_completed_ok()
         else:
             self.event_state[in_op_name] = {"state":"stopped"}
             while in_op_name not in self.event_state or (self.event_state[in_op_name]["state"] != "complete" and self.event_state[in_op_name]["state"] != "fail"):
                 time.sleep(1)
-            return self.event_state[in_op_name]["state"] == "complete"
+                result = self.event_state[in_op_name]["state"] == "complete"
+        
+        self.logger.info(f"Finished waiting for {in_op_name}. Result: {result}")
+        return result
 
     # def sleep_with_heartbeat(self, in_sleep_time):
     #     stacking_timer = 0
