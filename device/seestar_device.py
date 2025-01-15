@@ -867,6 +867,7 @@ class Seestar:
                             #if not is_3PPA:
                             response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"AutoGoto"}})
                             self.logger.info(response)
+                            time.sleep(1)
                             result = False
                             break
                         elif "percent" in event_state:
@@ -903,6 +904,7 @@ class Seestar:
                                     response = self.send_message_param_sync({"method":"stop_polar_align"})
                                 else:
                                     response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"AutoGoto"}})
+                                    time.sleep(1)
                                 self.logger.info(response)
 
                                 break
@@ -931,6 +933,11 @@ class Seestar:
         self.logger.info("start dark frame measurement...")
         self.event_state["DarkLibrary"] = {"state":"working"}
         result = self.send_message_param_sync({"method": "iscope_stop_view"})
+
+        # seem like there's a side effect here of autofocus state was set to "cancel" after stop view
+        time.sleep(1)
+        self.event_state["AutoFocus"]["state"] = "complete"
+
         result = self.send_message_param_sync({"method": "start_create_dark"})
         if 'error' in result:
             self.logger.error("Faild to start create darks: %s", result)
@@ -942,6 +949,7 @@ class Seestar:
         if result == True:
             response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"Stack"}})
             self.logger.info(f"Response from stop stack after dark frame measurement: {response}")
+            time.sleep(1)
         else:
             self.logger.warn("Create dark frame data failed.")
         return result
@@ -1463,6 +1471,7 @@ class Seestar:
                 # so I will explicit tell seestar to stop stack just in case
                 time.sleep(2)
                 ignore = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"Stack"}})
+                time.sleep(1)
                             
             self.logger.info(f"Start-up sequence result: {result}")
             self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
