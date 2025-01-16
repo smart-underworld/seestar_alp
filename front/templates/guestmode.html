@@ -9,7 +9,7 @@
 {% block content %}
 	{% if online %}
     {% if state %}
-      {% if state["firmware_ver_int"] > 2300 %}
+      {% if state["guest_mode"] %}
         <div class="container mt-3">
           <div class="row row-cols-auto gap-3">
             {% for client in state["client_list"] %}
@@ -65,7 +65,7 @@
         </div>
       {% else %}
         <div class="container mt-3">
-          <p>Guest mode is unavailable in this firmware</p>
+          <p>Guest mode is unavailable</p>
         </div>
       {% endif %}
     {% else %}

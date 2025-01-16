@@ -87,6 +87,7 @@ class Seestar:
         self.scheduler_thread: Optional[threading.Thread] = None
         self.schedule: dict = {}
         self.schedule['version'] = 1.0
+        self.schedule['Event'] = "Scheduler"
         self.schedule['schedule_id'] = str(uuid.uuid4())
         self.schedule['list'] = collections.deque()
         self.schedule['state'] = "stopped"
@@ -140,6 +141,7 @@ class Seestar:
     def update_scheduler_state_obj(self, item_state, result = 0):
         self.event_state["scheduler"]  = {"schedule_id": self.schedule['schedule_id'], "state":self.schedule['state'],
                                             "item_number": self.schedule["item_number"], "cur_scheduler_item": item_state , "result":result}
+        self.logger.info(f"scheduler event state: {self.event_state["scheduler"]}")
 
     def heartbeat(self):  # I noticed a lot of pairs of test_connection followed by a get if nothing was going on
         #    json_message("test_connection")
@@ -480,7 +482,7 @@ class Seestar:
             self.logger.warn("Error: there is no active plate solve loop to stop.")
             return({"ok":False, "error":"there is no active plate solve loop to stop."})
         self.is_in_plate_solve_loop = False
-        self.schedule['state'] = "stopped"
+        self.schedule['state'] = "complete"
         self.logger.info("Stopped plate solve loop")
         return({"ok":True, "error":""})
 
@@ -558,8 +560,15 @@ class Seestar:
         #    data = {"id":cmdid, "method":"set_setting", "params":{"exp_ms":{"stack_l":x_stack_l,"continuous":x_continuous}, "stack_dither":{"pix":d_pix,"interval":d_interval,"enable":d_enable}, "stack_lenhance":l_enhance, "heater_enable":heater_enable}}
         data = {"method": "set_setting", "params": {"exp_ms": {"stack_l": x_stack_l, "continuous": x_continuous},
                                                     "stack_dither": {"pix": d_pix, "interval": d_interval,
-                                                                     "enable": d_enable}, "stack_lenhance": l_enhance}}
+                                                                     "enable": d_enable}, "stack_lenhance": l_enhance,
+                                                                     "auto_3ppa_calib": True,
+                                                                     "auto_power_off" : False}}
         result = self.send_message_param_sync(data)
+        self.logger.info(f"set setting result: {result}")
+
+        response = self.send_message_param_sync({"method":"get_setting"})
+        self.logger.info(f"get setting response: {response}")  
+
         time.sleep(2)  # to wait for filter change
         return result
 
@@ -657,6 +666,7 @@ class Seestar:
             data['params'] = params
             self.send_message_param_sync(data)
             return
+        
         else:
             self.logger.info(f"going to target with below horizon logic: {self.below_horizon_dec_offset }")
             # do the same, but when trying to center on target, need to implement ourselves to platesolve correctly to compensate for the dec offset
@@ -821,6 +831,7 @@ class Seestar:
 
     def start_3PPA(self):
         self.logger.info("start 3 point polar alignment...")
+        self.first_plate_solve_altaz = None
         result = self.send_message_param_sync({"method": "start_polar_align"})
         if 'error' in result:
             self.logger.error("Faild to start polar alignment: %s", result)
@@ -849,7 +860,11 @@ class Seestar:
             response = response["result"]["setting"]
 
             is_3PPA = True
-            if "offset_deg_3ppa" not in response:
+
+            #if "offset_deg_3ppa" not in response:
+            # testing. Trying to verify if I can just go straight to 3ppa instead
+
+            if False:
                 result = self.start_stack({"restart":True, "gain": Config.init_gain})
                 is_3PPA = False
             else:
@@ -865,6 +880,7 @@ class Seestar:
                             #if not is_3PPA:
                             response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"AutoGoto"}})
                             self.logger.info(response)
+                            time.sleep(1)
                             result = False
                             break
                         elif "percent" in event_state:
@@ -901,6 +917,7 @@ class Seestar:
                                     response = self.send_message_param_sync({"method":"stop_polar_align"})
                                 else:
                                     response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"AutoGoto"}})
+                                    time.sleep(1)
                                 self.logger.info(response)
 
                                 break
@@ -929,6 +946,11 @@ class Seestar:
         self.logger.info("start dark frame measurement...")
         self.event_state["DarkLibrary"] = {"state":"working"}
         result = self.send_message_param_sync({"method": "iscope_stop_view"})
+
+        # seem like there's a side effect here of autofocus state was set to "cancel" after stop view
+        time.sleep(1)
+        self.event_state["AutoFocus"]["state"] = "complete"
+
         result = self.send_message_param_sync({"method": "start_create_dark"})
         if 'error' in result:
             self.logger.error("Faild to start create darks: %s", result)
@@ -940,6 +962,7 @@ class Seestar:
         if result == True:
             response = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"Stack"}})
             self.logger.info(f"Response from stop stack after dark frame measurement: {response}")
+            time.sleep(1)
         else:
             self.logger.warn("Create dark frame data failed.")
         return result
@@ -1103,6 +1126,14 @@ class Seestar:
     def start_stack(self, params={"gain": Config.init_gain, "restart": True}):
         stack_gain = params["gain"]
         result = self.send_message_param_sync({"method": "iscope_start_stack", "params": {"restart": params["restart"]}})
+        if "error" in result:
+            #try again:
+            self.logger.warn("Failed to start stack. Trying again...")
+            time.sleep(2)
+            result = self.send_message_param_sync({"method": "iscope_start_stack", "params": {"restart": params["restart"]}})
+            if "error" in result:
+                self.logger.error("Failed to start stack: %s", result)
+                return False
         self.logger.info(result)
         result = self.send_message_param_sync({"method": "set_control_value", "params": ["gain", stack_gain]})
         self.logger.info(result)
@@ -1461,6 +1492,7 @@ class Seestar:
                 # so I will explicit tell seestar to stop stack just in case
                 time.sleep(2)
                 ignore = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"Stack"}})
+                time.sleep(1)
                             
             self.logger.info(f"Start-up sequence result: {result}")
             self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
@@ -1811,6 +1843,10 @@ class Seestar:
         center_RA = parsed_coord.ra.hour
         center_Dec = parsed_coord.dec.deg
 
+        response = self.send_message_param_sync({"method": "get_setting"})
+        result = response["result"]
+        self.logger.info(f"get_setting response: {result}")
+
         # print input requests
         self.logger.info("received parameters:")
         self.logger.info(f"Firmware version: {self.firmware_ver_int}")
@@ -1825,6 +1861,9 @@ class Seestar:
         self.logger.info("  Dec num panels: %s", nDec)
         self.logger.info("  overlap %%    : %s", overlap_percent)
         self.logger.info("  gain          : %s", gain)
+        self.logger.info("  exposure time : %s", result["exp_ms"]["stack_l"])
+        self.logger.info("  dither pixLen : %s", result["stack_dither"]["pix"])
+        self.logger.info("  dither interv : %s", result["stack_dither"]["interval"])      
         self.logger.info("  use autofocus : %s", is_use_autofocus)
         self.logger.info("  select panels : %s", selected_panels)
         self.logger.info("  # goto tries  : %s", num_tries)
@@ -1857,7 +1896,7 @@ class Seestar:
             schedule_id = str(uuid.uuid4())
 
         self.schedule['schedule_id'] = schedule_id
-        self.schedule['state'] = self.schedule['state']
+        self.schedule['state'] = "stopped"
         self.schedule['list'].clear()
         return self.schedule
 
@@ -2018,7 +2057,7 @@ class Seestar:
         self.scheduler_thread = threading.Thread(target=lambda: self.scheduler_thread_fn(), daemon=True)
         self.scheduler_thread.name = f"SchedulerThread:{self.device_name}"
         self.scheduler_thread.start()
-        self.schedule['state'] = "working"
+
         return self.schedule
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
@@ -2144,17 +2183,20 @@ class Seestar:
             return self.json_result("stop_scheduler", -5, f"scheduler is in unaccounted for state: {self.schedule['state']}")
 
     def wait_end_op(self, in_op_name):
+        self.logger.info(f"Waiting for {in_op_name} to finish.")
         if in_op_name == "goto_target":
             self.mark_goto_status_as_start()
             while self.is_goto() == True:
                 time.sleep(1)
-            return self.is_goto_completed_ok()
-
+            result = self.is_goto_completed_ok()
         else:
             self.event_state[in_op_name] = {"state":"stopped"}
             while in_op_name not in self.event_state or (self.event_state[in_op_name]["state"] != "complete" and self.event_state[in_op_name]["state"] != "fail"):
                 time.sleep(1)
-            return self.event_state[in_op_name]["state"] == "complete"
+                result = self.event_state[in_op_name]["state"] == "complete"
+        
+        self.logger.info(f"Finished waiting for {in_op_name}. Result: {result}")
+        return result
 
     # def sleep_with_heartbeat(self, in_sleep_time):
     #     stacking_timer = 0
