@@ -437,6 +437,7 @@ class Seestar:
         return self.response_dict[cur_cmdid]
 
     def get_event_state(self, params=None):
+        self.event_state["scheduler"]["Event"] = "Scheduler"
         self.event_state["scheduler"]["state"] = self.schedule["state"]
         if "3PPA" in self.event_state:
             self.event_state["3PPA"]["eq_offset_alt"] = self.cur_equ_offset_alt
