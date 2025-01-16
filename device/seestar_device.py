@@ -559,8 +559,15 @@ class Seestar:
         #    data = {"id":cmdid, "method":"set_setting", "params":{"exp_ms":{"stack_l":x_stack_l,"continuous":x_continuous}, "stack_dither":{"pix":d_pix,"interval":d_interval,"enable":d_enable}, "stack_lenhance":l_enhance, "heater_enable":heater_enable}}
         data = {"method": "set_setting", "params": {"exp_ms": {"stack_l": x_stack_l, "continuous": x_continuous},
                                                     "stack_dither": {"pix": d_pix, "interval": d_interval,
-                                                                     "enable": d_enable}, "stack_lenhance": l_enhance}}
+                                                                     "enable": d_enable}, "stack_lenhance": l_enhance,
+                                                                     "auto_3ppa_calib": True,
+                                                                     "auto_power_off" : False}}
         result = self.send_message_param_sync(data)
+        self.logger.info(f"set setting result: {result}")
+
+        response = self.send_message_param_sync({"method":"get_setting"})
+        self.logger.info(f"get setting response: {response}")  
+
         time.sleep(2)  # to wait for filter change
         return result
 
@@ -823,6 +830,7 @@ class Seestar:
 
     def start_3PPA(self):
         self.logger.info("start 3 point polar alignment...")
+        self.first_plate_solve_altaz = None
         result = self.send_message_param_sync({"method": "start_polar_align"})
         if 'error' in result:
             self.logger.error("Faild to start polar alignment: %s", result)
@@ -851,7 +859,11 @@ class Seestar:
             response = response["result"]["setting"]
 
             is_3PPA = True
-            if "offset_deg_3ppa" not in response:
+
+            #if "offset_deg_3ppa" not in response:
+            # testing. Trying to verify if I can just go straight to 3ppa instead
+            
+            if False:
                 result = self.start_stack({"restart":True, "gain": Config.init_gain})
                 is_3PPA = False
             else:
@@ -1113,6 +1125,14 @@ class Seestar:
     def start_stack(self, params={"gain": Config.init_gain, "restart": True}):
         stack_gain = params["gain"]
         result = self.send_message_param_sync({"method": "iscope_start_stack", "params": {"restart": params["restart"]}})
+        if "error" in result:
+            #try again:
+            self.logger.warn("Failed to start stack. Trying again...")
+            time.sleep(2)
+            result = self.send_message_param_sync({"method": "iscope_start_stack", "params": {"restart": params["restart"]}})
+            if "error" in result:
+                self.logger.error("Failed to start stack: %s", result)
+                return False
         self.logger.info(result)
         result = self.send_message_param_sync({"method": "set_control_value", "params": ["gain", stack_gain]})
         self.logger.info(result)
@@ -1822,6 +1842,10 @@ class Seestar:
         center_RA = parsed_coord.ra.hour
         center_Dec = parsed_coord.dec.deg
 
+        response = self.send_message_param_sync({"method": "get_setting"})
+        result = response["result"]
+        self.logger.info(f"get_setting response: {result}")
+
         # print input requests
         self.logger.info("received parameters:")
         self.logger.info(f"Firmware version: {self.firmware_ver_int}")
@@ -1836,9 +1860,9 @@ class Seestar:
         self.logger.info("  Dec num panels: %s", nDec)
         self.logger.info("  overlap %%    : %s", overlap_percent)
         self.logger.info("  gain          : %s", gain)
-        self.logger.info("  exposure time : %s", Config.init_expo_stack_ms)
-        self.logger.info("  dither pixLen : %s", Config.init_dither_length_pixel)
-        self.logger.info("  dither interv : %s", Config.init_dither_frequency)        
+        self.logger.info("  exposure time : %s", result["exp_ms"]["stack_l"])
+        self.logger.info("  dither pixLen : %s", result["stack_dither"]["pix"])
+        self.logger.info("  dither interv : %s", result["stack_dither"]["interval"])      
         self.logger.info("  use autofocus : %s", is_use_autofocus)
         self.logger.info("  select panels : %s", selected_panels)
         self.logger.info("  # goto tries  : %s", num_tries)
