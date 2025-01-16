@@ -512,15 +512,36 @@ def get_client_master(telescope_id):
 def get_guestmode_state(telescope_id):
     state = {}
     if check_api_state(telescope_id):
+        guestmode = False
+        is_master = False
+        master_idx = -1
+        client_list = []
+        fw = 0
+
         result = method_sync("get_device_state", telescope_id)
         if result != None:
             device = result.get("device",{})
-            state = {
-                "firmware_ver_int": device.get("firmware_ver_int", 0),
-                "client_master" : result.get("client", { "is_master": False }).get("is_master", False),
-                "master_index": result.get("client", { "master_index": -1}).get("master_index", -1),
-                "client_list" : result.get("client", {"connected": []}).get("connected", [])
-            }
+            fw = device.get("firmware_ver_int", 0)
+
+            if fw >= 2300:
+                settings = result.get("setting",{})
+                if fw >= 2400:
+                    guestmode = settings.get("guest_mode", False)
+                else:
+                    guestmode = True
+
+                if guestmode:
+                    is_master = result.get("client", { "is_master": is_master }).get("is_master", is_master)
+                    master_idx = result.get("client", { "master_index": master_idx}).get("master_index", master_idx)
+                    client_list = result.get("client", {"connected": client_list}).get("connected", client_list)
+
+    state = {
+        "firmware_ver_int": fw,
+        "guest_mode": guestmode,
+        "client_master" : is_master,
+        "master_index": master_idx,
+        "client_list" : client_list
+    }
 
     return state
 
@@ -559,6 +580,10 @@ def get_device_state(telescope_id):
 
         # Check for bad data
         if status is not None and result is not None:
+            guestmode = False
+            is_master = False
+            master_idx = -1
+            client_list = []
             schedule = do_action_device("get_schedule", telescope_id, {})
             if result is not None:
                 device = result.get("device",{})
@@ -571,18 +596,25 @@ def get_device_state(telescope_id):
                 elif  storage.get("state") == "connected":
                     free_storage = "Unavailable while in USB storage mode."
 
-                if device.get("firmware_ver_int", 0) > 2300:
-                    client_master = result.get("client", { "is_master": False }).get("is_master", False)
-                    clients = result.get("client", {"connected": []}).get("connected", [])
-                    master_idx = result.get("client", { "master_index": -1 }).get("master_index", -1)
-                    if master_idx >= 0:
-                        clients[master_idx] = "master:" + clients[master_idx]
-                    client_list = "<br>".join(clients)
+                fw = device.get("firmware_ver_int", 0)
+                if fw > 2300:
+                    if fw >= 2400:
+                        guestmode = settings.get("guest_mode", False)
+                    else:
+                        guestmode = True
+
+                    if guestmode:
+                        client_master = result.get("client", { "is_master": False }).get("is_master", False)
+                        clients = result.get("client", {"connected": []}).get("connected", [])
+                        master_idx = result.get("client", { "master_index": -1 }).get("master_index", -1)
+                        if master_idx >= 0:
+                            clients[master_idx] = "master:" + clients[master_idx]
+                        client_list = "<br>".join(clients)
 
             if wifi_status is not None:
-                if wifi_status.get("server", False) and client_master:  # sig_lev is only there while in station mode.
+                if wifi_status.get("server", False) and not guestmode or guestmode and is_master:  # sig_lev is only there while in station mode.
                     wifi_signal = f"{wifi_status['sig_lev']} dBm"
-                elif not client_master:
+                elif guestmode:
                     wifi_signal = f"Unavailable in Guest mode."
                 else:
                     wifi_signal = f"Unavailable in AP mode."
