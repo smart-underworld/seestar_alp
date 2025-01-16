@@ -2035,7 +2035,7 @@ class EventStatus:
         results = []
         action = req.get_param('action')
         if action == 'command':
-            eventlist = ['WheelMove', 'AutoFocus', '3PPA', 'AutoGoto', 'PlateSolve', 'DarkLibrary']
+            eventlist = ['WheelMove', 'AutoFocus', 'DarkLibrary', '3PPA', 'PlateSolve', 'Scheduler' ]
         elif action == 'goto':
             eventlist = ['WheelMove', 'AutoGoto', 'PlateSolve']
         elif action == 'image' or action == 'mosaic':
@@ -2072,6 +2072,7 @@ class EventStatus:
                                         # Add the device ID to each event
                                         event_value['DeviceID'] = device_id
                                         results.append(event_value)
+
         render_template(req, resp, 'eventstatus.html', results=results, events=eventlist, now=now, **context)
 
 

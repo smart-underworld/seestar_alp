@@ -73,6 +73,12 @@
                     <strong>Filter:</strong> {{ filter }}<br>
                 {% endif %}
             {% endif %}
+
+            {% if event_name == 'Scheduler' %}
+                {% if event_status and event_status.cur_scheduler_item %}
+                    <strong>Action:</strong> {{ event_status.cur_scheduler_item.type }}
+                {% endif %}
+            {% endif %}
         </p>
     </div>
 </div>
