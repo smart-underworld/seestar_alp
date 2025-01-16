@@ -87,6 +87,7 @@ class Seestar:
         self.scheduler_thread: Optional[threading.Thread] = None
         self.schedule: dict = {}
         self.schedule['version'] = 1.0
+        self.schedule['Event'] = "Scheduler"
         self.schedule['schedule_id'] = str(uuid.uuid4())
         self.schedule['list'] = collections.deque()
         self.schedule['state'] = "stopped"
@@ -862,7 +863,7 @@ class Seestar:
 
             #if "offset_deg_3ppa" not in response:
             # testing. Trying to verify if I can just go straight to 3ppa instead
-            
+
             if False:
                 result = self.start_stack({"restart":True, "gain": Config.init_gain})
                 is_3PPA = False
