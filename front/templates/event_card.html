@@ -49,9 +49,6 @@
                 {% endif %}
             {% endif %}
 
-            {% if event_name == 'Scheduler' %}
-            {% endif %}
-
             {% if event_name == 'Stack' %}
                 {% if event_status %}
                     {% set stacked_frame = event_status.stacked_frame | default(0) %}
