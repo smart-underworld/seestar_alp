@@ -2072,6 +2072,7 @@ class EventStatus:
                                         # Add the device ID to each event
                                         event_value['DeviceID'] = device_id
                                         results.append(event_value)
+
         render_template(req, resp, 'eventstatus.html', results=results, events=eventlist, now=now, **context)
 
 
