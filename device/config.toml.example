@@ -27,6 +27,7 @@ can_reverse = true
 step_size = 1.0
 steps_per_sec = 6
 
+
 [seestar_initialization]
 save_good_frames = true
 save_all_frames = false             # including good and bad frames
@@ -38,12 +39,13 @@ exposure_length_stack_ms = 10000
 dither_enabled = true
 dither_length_pixel = 50
 dither_frequency = 10
-activate_LP_filter = false                   
+activate_LP_filter = false
 dew_heater_power = 0                # 0 - 100; 0 is off, 100 is max
 scope_aim_lat = 60          # start up latitude in degrees -90 to 80
 scope_aim_lon = 20          # start up longitude in degrees 0 to 360
 is_EQ_mode = false
 guest_mode_init = true
+battery_low_limit = 3
 
 [logging]
 log_level = 'INFO'   #'WARN' only if trouble    #'INFO' to output more logging      #'DEBUG' still more output

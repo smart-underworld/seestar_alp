@@ -83,6 +83,10 @@ class Seestar:
         self.utcdate = time.time()
         self.firmware_ver_int: int = 0
 
+        self.discharging : bool = False
+        self.charge_online : bool = True
+        self.battery_capacity : int = 100
+
         self.mosaic_thread: Optional[threading.Thread] = None
         self.scheduler_thread: Optional[threading.Thread] = None
         self.schedule: dict = {}
@@ -189,7 +193,7 @@ class Seestar:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             udp_port = 4720
             # Enable broadcast option
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1) 
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             sock.settimeout(1.0)  # Timeout in seconds
 
             addr = (self.host, udp_port)
@@ -213,7 +217,7 @@ class Seestar:
 
         finally:
             # Close the socket
-            sock.close() 
+            sock.close()
 
     def reconnect(self):
         if self.is_connected:
@@ -370,6 +374,18 @@ class Seestar:
                                 self.logger.info("Plate Solve Failed")
                                 if self.is_in_plate_solve_loop:
                                     threading.Thread(name=f"plate_solve:{self.device_name}", target=lambda: self.request_plate_solve_for_BPA()).start()
+
+                        if event_name == 'PiStatus':
+                            if 'charger_status' in parsed_data:
+                                self.discharging = parsed_data['charger_status'] == "Discharging"
+                            if 'charge_online' in parsed_data:
+                                self.charge_online = parsed_data['charge_online']
+                            if 'battery_capacity' in parsed_data:
+                                self.battery_capacity = parsed_data['battery_capacity']
+
+                            if self.discharging and not self.charge_online and self.battery_capacity <= Config.battery_low_limit:
+                                self.logger.info("Shutting down due to battery capacity lower limit reached")
+                                self.send_message_param_sync({"method":"pi_shutdown"})
 
                         #else:
                         #    self.logger.debug(f"Received event {event_name} : {data}")
@@ -567,7 +583,7 @@ class Seestar:
         self.logger.info(f"set setting result: {result}")
 
         response = self.send_message_param_sync({"method":"get_setting"})
-        self.logger.info(f"get setting response: {response}")  
+        self.logger.info(f"get setting response: {response}")
 
         time.sleep(2)  # to wait for filter change
         return result
@@ -666,7 +682,7 @@ class Seestar:
             data['params'] = params
             self.send_message_param_sync(data)
             return
-        
+
         else:
             self.logger.info(f"going to target with below horizon logic: {self.below_horizon_dec_offset }")
             # do the same, but when trying to center on target, need to implement ourselves to platesolve correctly to compensate for the dec offset
@@ -1256,6 +1272,11 @@ class Seestar:
             self.firmware_ver_int = response["result"]["device"]["firmware_ver_int"]
             self.logger.info(f"Firmware version: {self.firmware_ver_int}")
 
+            # get initial battery values
+            self.discharging = response["result"]["pi_status"]["charger_status"] == "Discharging"
+            self.charge_online = response["result"]["pi_status"]["charge_online"]
+            self.battery_capacity = response["result"]["pi_status"]["battery_capacity"]
+
             result = True
 
             if do_raise_arm:
@@ -1437,7 +1458,7 @@ class Seestar:
                 # {"method":"scope_sync","params":[2.96,67.4]}
                 result = self._sync_target(last_pos)
                 self.logger.info(f"result from sync request: {result}")
-                
+
                 # move a little bit, platesolve and sync to ensure we have a good sky model
                 time.sleep(1.0)
                 msg = "move a little bit, platesolve and sync to ensure we have a good sky model"
@@ -1464,7 +1485,7 @@ class Seestar:
 
                 if self.schedule["state"] != "working":
                     return
-                
+
                 # now move back to position at start of 3ppa
                 time.sleep(1.0)
                 msg = "move back to position at start of 3ppa"
@@ -1484,16 +1505,16 @@ class Seestar:
                     self.schedule['state'] = "stopping"
                     self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
                     return
-                
+
                 if self.schedule["state"] != "working":
                     return
-                
+
                 # i have seen instance where seestar automatically starts stacking, even though my param stack_after_goto is false
                 # so I will explicit tell seestar to stop stack just in case
                 time.sleep(2)
                 ignore = self.send_message_param_sync({"method":"iscope_stop_view","params":{"stage":"Stack"}})
                 time.sleep(1)
-                            
+
             self.logger.info(f"Start-up sequence result: {result}")
             self.event_state["scheduler"]["cur_scheduler_item"]["action"]="complete"
 
@@ -1863,7 +1884,7 @@ class Seestar:
         self.logger.info("  gain          : %s", gain)
         self.logger.info("  exposure time : %s", result["exp_ms"]["stack_l"])
         self.logger.info("  dither pixLen : %s", result["stack_dither"]["pix"])
-        self.logger.info("  dither interv : %s", result["stack_dither"]["interval"])      
+        self.logger.info("  dither interv : %s", result["stack_dither"]["interval"])
         self.logger.info("  use autofocus : %s", is_use_autofocus)
         self.logger.info("  select panels : %s", selected_panels)
         self.logger.info("  # goto tries  : %s", num_tries)
@@ -2194,7 +2215,7 @@ class Seestar:
             while in_op_name not in self.event_state or (self.event_state[in_op_name]["state"] != "complete" and self.event_state[in_op_name]["state"] != "fail"):
                 time.sleep(1)
                 result = self.event_state[in_op_name]["state"] == "complete"
-        
+
         self.logger.info(f"Finished waiting for {in_op_name}. Result: {result}")
         return result
 
