@@ -1449,7 +1449,7 @@ class Seestar:
                 time.sleep(2.0)
                 response = self.send_message_param_sync({"method":"iscope_start_view", "params":{"mode":"star"}})
                 self.logger.info(f"result from start star view: {response}")
-                time.sleep(1.0)
+                time.sleep(2.0)
                 #platesolve
                 response = self.send_message_param_sync({"method":"start_solve"})
                 result = self.wait_end_op("PlateSolve")
@@ -1457,11 +1457,18 @@ class Seestar:
                     self.logger.info(f"platesolved to {self.cur_solve_RA}, {self.cur_solve_Dec}")
                     self._sync_target([self.cur_solve_RA, self.cur_solve_Dec])
                 else:
-                    msg = "Failed to plate solve after moving slightly to the left"
-                    self.logger.warn(msg)
-                    self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
-                    self.schedule['state'] = "stopping"
-                    return
+                    # try one more time...
+                    response = self.send_message_param_sync({"method":"start_solve"})
+                    result = self.wait_end_op("PlateSolve")
+                    if result == True:
+                        self.logger.info(f"platesolved to {self.cur_solve_RA}, {self.cur_solve_Dec}")
+                        self._sync_target([self.cur_solve_RA, self.cur_solve_Dec])
+                    else:
+                        msg = "Failed to plate solve after moving slightly to the left"
+                        self.logger.warn(msg)
+                        self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+                        self.schedule['state'] = "stopping"
+                        return
 
                 if self.schedule["state"] != "working":
                     return
