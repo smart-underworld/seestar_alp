@@ -1657,6 +1657,7 @@ class Seestar:
                 while self.custom_goto_state == "start" or self.custom_goto_state == "working" or self.custom_goto_state == "fail":     #fix Issue of below horizon targets keep on imaging even if failed to goto
                     if self.custom_goto_state == "fail":
                         self.logger.warn("Failed to goto the target with custom goto logic before stacking. Will stop here.")
+                        self.custom_goto_state = "stopped"
                         return False
                     time.sleep(3)
                 self.custom_goto_state = "stopped"
