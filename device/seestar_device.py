@@ -909,10 +909,10 @@ class Seestar:
                                         self.cur_equ_offset_az = -self.cur_equ_offset_az
                                     self.logger.info(f"3PPA equ offset-- firmware:{self.firmware_ver_int}, alt:{self.cur_equ_offset_alt}, az:{self.cur_equ_offset_az}")
                                 else:
-                                    result = True
+                                    result = False
                                     self.cur_equ_offset_alt = None
                                     self.cur_equ_offset_az = None
-                                    self.logger.warn(f"did not find eq offset data: {event_state}")
+                                    self.logger.warn(f"did not find eq offset data: {event_state}. Will stop now.")
                                 self.logger.info("3PPA finished 3rd pt. Will stop return to origin now.")
                                 if is_3PPA:
                                     response = self.send_message_param_sync({"method":"stop_polar_align"})
