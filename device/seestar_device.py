@@ -141,7 +141,7 @@ class Seestar:
     def update_scheduler_state_obj(self, item_state, result = 0):
         self.event_state["scheduler"]  = {"Event":"Scheduler", "schedule_id": self.schedule['schedule_id'], "state":self.schedule['state'],
                                             "item_number": self.schedule["item_number"], "cur_scheduler_item": item_state , "result":result}
-        self.logger.info(f"scheduler event state: {self.event_state["scheduler"]}")
+        self.logger.info(f"scheduler event state: {self.event_state['scheduler']}")
 
     def heartbeat(self):  # I noticed a lot of pairs of test_connection followed by a get if nothing was going on
         #    json_message("test_connection")
@@ -1360,9 +1360,10 @@ class Seestar:
 
             if do_AF:
                 # need to make sure we are in star mode
-                result = self.send_message_param_sync({"method": "iscope_start_view", "params": {"mode": "star"}})
-                self.logger.info(f"start star mode: {result}")
-
+                if "View" not in self.event_state or "mode" not in self.event_state["View"] or self.event_state["View"]["mode"] != "star":
+                    result = self.send_message_param_sync({"method": "iscope_start_view", "params": {"mode": "star"}})
+                    self.logger.info(f"start star mode: {result}")
+                    time.sleep(2)
                 msg = f"auto focus"
                 self.logger.info(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
@@ -1388,11 +1389,15 @@ class Seestar:
                     self.logger.warn(msg)
                     self.schedule['state'] = "stopping"
                     return
+                else:
+                    time.sleep(1)
 
             if do_3PPA:
                 # need to make sure we are in star mode
-                result = self.send_message_param_sync({"method": "iscope_start_view", "params": {"mode": "star"}})
-                self.logger.info(f"start star mode: {result}")
+                if "View" not in self.event_state or "mode" not in self.event_state["View"] or self.event_state["View"]["mode"] != "star":
+                    result = self.send_message_param_sync({"method": "iscope_start_view", "params": {"mode": "star"}})
+                    self.logger.info(f"start star mode: {result}")
+                    time.sleep(2)
                 result = self.send_message_param_sync({"method":"set_setting","params":{"auto_3ppa_calib":True}})
                 msg = f"3 point polar alignment"
                 self.logger.info(msg)
@@ -1507,7 +1512,9 @@ class Seestar:
 
         finally:
             time.sleep(1)
-            self.send_message_param_sync({"method": "iscope_start_view", "params": {"mode": "star"}})
+            if "View" not in self.event_state or "mode" not in self.event_state["View"] or self.event_state["View"]["mode"] != "star":
+                self.send_message_param_sync({"method": "iscope_start_view", "params": {"mode": "star"}})
+                time.sleep(2)
             if self.schedule['state'] == "stopping":
                 self.schedule['state'] = "stopped"
                 self.play_sound(82)
