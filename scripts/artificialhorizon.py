@@ -273,7 +273,7 @@ author = author\n\
 description = '+f'{stell_landscape_new}'+'\n\
 type = polygonal\n\
 polygonal_horizon_list = horizon.txt\n\
-polygonal_angle_rotatez={adj2}\n\
+polygonal_angle_rotatez='+f'{adj2}'+'\n\
 ground_color = .15,.45,.05\n\
 minimal_brightness = 0.15\n\
 '
