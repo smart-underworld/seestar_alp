@@ -318,8 +318,8 @@ try {
         document.getElementById('targetName').value = elements.name;
         document.getElementById('ra').value = elements.ra;
         document.getElementById('dec').value = elements.dec;
-        document.getElementById('useLpFilter').checked = elements.lp;
         document.getElementById('useJ2000').checked = true;
+        document.getElementById('useLpFilter').checked = elements.lp;
     })
     .catch(error => console.error('There was a problem with the fetch operation:', error));
 

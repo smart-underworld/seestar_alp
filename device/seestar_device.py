@@ -1229,7 +1229,8 @@ class Seestar:
             self.logger.info("verify datetime string: %s", date_data)
             self.logger.info("verify location string: %s", loc_data)
 
-            self.send_message_param_sync({"method": "pi_is_verified"})
+            response = self.send_message_param_sync({"method": "pi_is_verified"})
+            self.logger.info(f"pi_is_verified response: {response}")
 
             msg = f"Setting location to {Config.init_lat}, {Config.init_long}"
             self.logger.info(msg)
