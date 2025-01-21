@@ -118,6 +118,5 @@ class UserScriptEvent(EventCallback):
             return []
 
     def eventFired(self, device, event_data):
-        if True: #device.is_goto_completed_ok():
-            self.logger.info("UserScriptGoto - event fired, execute {self.user_script}")
-            os.system(self.user_script["execute"])
+        self.logger.info("UserScriptGoto - event fired, execute {self.user_script}")
+        os.system(self.user_script["execute"])
