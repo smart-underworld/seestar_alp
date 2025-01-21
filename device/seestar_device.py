@@ -2269,6 +2269,20 @@ class Seestar:
             #SensorTempWatch(self, initial_state)
         ]
 
+        # read files in user_triggers subdir, and read json
+        user_hooks = []
+        for filename in os.listdir("user_hooks"):
+            if filename.endswith(".json"):
+                filepath = os.path.join("user_hooks", filename)
+                with open(filepath, 'r') as f:
+                    try:
+                        user_hooks.append(json.load(f))
+                    except json.JSONDecodeError as e:
+                        self.logger.warn("Unable to decode user_hooks/{filename} - json parsing error")
+        for hook in user_hooks:
+            if "events" in hook and "execute" in hook:
+                self.event_callbacks.append(UserScriptEvent(self, initial_state, hook))
+
     def start_watch_thread(self):
         # only bail if is_watch_events is true
         if self.is_watch_events:
@@ -2304,6 +2318,7 @@ class Seestar:
 
             except Exception as ex:
                 # todo : Disconnect socket and set is_watch_events false
+                #print(f"XXXX Exception {ex}")
                 pass
 
     def end_watch_thread(self):

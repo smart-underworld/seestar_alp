@@ -1,3 +1,5 @@
+import os
+
 from device.config import Config
 
 class EventCallback:
@@ -99,3 +101,23 @@ class SensorTempWatch(EventCallback):
                 self.triggered = True
         #else:
         #    self.logger.info("SensorTempWatch Ignoring event {event_data}")
+
+class UserScriptEvent(EventCallback):
+    """
+    A callback class to watch for GotoComplete events, that executes a script
+    """
+    def __init__(self, device, initial_state, user_script):
+        self.logger = device.logger
+        self.logger.info("UserScriptEvent - init")
+        self.user_script = user_script
+
+    def fireOnEvents(self):
+        if "events" in self.user_script:
+            return self.user_script["events"]
+        else:
+            return []
+
+    def eventFired(self, device, event_data):
+        if True: #device.is_goto_completed_ok():
+            self.logger.info("UserScriptGoto - event fired, execute {self.user_script}")
+            os.system(self.user_script["execute"])
