@@ -196,6 +196,7 @@ def _get_context_real(telescope_id, req):
             "platform": os_platform, "defgain": defgain, "defexp": defexp
             }
 
+
 def get_context(telescope_id, req):
     if telescope_id not in _context_cached or time.time() - _last_context_get_time[telescope_id] > 1.0:
         _last_context_get_time[telescope_id] = time.time()
