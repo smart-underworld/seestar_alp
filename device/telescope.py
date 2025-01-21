@@ -161,7 +161,7 @@ class action:
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "method_sync":
                 result = cur_dev.send_message_param_sync(params)
-                if params["method"] == 'pi_shutdown': 
+                if params["method"] == 'pi_shutdown':
                     print('Seestar has been shut down')
                     # we will leave the threads running in case user leaves app running
                     # end_seestar_device(devnum)
@@ -226,11 +226,14 @@ class action:
             elif action_name == "action_set_dew_heater":
                 result = cur_dev.action_set_dew_heater(params)
                 resp.text = MethodResponse(req, value = result).json
+            elif action_name == "action_set_exposure":
+                result = cur_dev.action_set_exposure(params)
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "get_last_image":
                 redirect_url = cur_dev.get_last_image(params)
-                resp.text = MethodResponse(req, value = redirect_url).json  
+                resp.text = MethodResponse(req, value = redirect_url).json
             elif action_name == "adjust_mag_declination":
-                result = cur_dev.adjust_mag_declination(params) 
+                result = cur_dev.adjust_mag_declination(params)
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "start_plate_solve_loop":
                 result = cur_dev.start_plate_solve_loop()

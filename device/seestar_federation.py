@@ -12,7 +12,7 @@ class DequeEncoder(JSONEncoder):
        if isinstance(obj, collections.deque):
           return list(obj)
        return JSONEncoder.default(self, obj)
-    
+
 class Seestar_Federation:
     def __new__(cls, *args, **kwargs):
         # print("Create a new instance of Seestar.")
@@ -49,49 +49,49 @@ class Seestar_Federation:
             if self.seestar_devices[key].is_connected:
                 result[key] = self.seestar_devices[key].send_message_param_sync(data)
         return result
-                
+
     def goto_target(self, params):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
                 result[key] = self.seestar_devices[key].goto_target(params)
         return result
-    
+
     def stop_goto_target(self):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
                 result[key] = result[key] = self.seestar_devices[key].stop_goto_target()
         return result
-    
+
     def is_goto(self):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
                 result[key] = result[key] = self.seestar_devices[key].is_goto()
         return result
-    
+
     def is_goto_completed_ok(self):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
                 result[key] = result[key] = self.seestar_devices[key].is_goto_completed_ok()
         return result
-    
+
     def set_below_horizon_dec_offset(self, offset):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
                 result[key] = self.seestar_devices[key].set_below_horizon_dec_offset(offset)
         return result
-    
+
     def stop_slew(self):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
                 result[key] = self.seestar_devices[key].stop_slew()
         return result
-    
+
     # {"method":"scope_speed_move","params":{"speed":4000,"angle":270,"dur_sec":10}}
     def move_scope(self, in_angle, in_speed, in_dur=3):
         result = {}
@@ -99,7 +99,7 @@ class Seestar_Federation:
             if self.seestar_devices[key].is_connected:
                 result[key] = self.seestar_devices[key].move_scope(in_angle, in_speed, in_dur)
         return result
-    
+
     def try_auto_focus(self, try_count):
         result = {}
         for key in self.seestar_devices:
@@ -108,21 +108,21 @@ class Seestar_Federation:
                 af_thread.start()
                 result[key] = "Auto focus started"
         return result
-    
+
     def stop_stack(self):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
                 result[key] = self.seestar_devices[key].stop_stack()
         return result
-    
+
     def play_sound(self, in_sound_id: int):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
                 result[key] = self.seestar_devices[key].play_sound(in_sound_id)
         return result
-    
+
     def start_stack(self, params={"gain": 80, "restart": True}):
         result = {}
         for key in self.seestar_devices:
@@ -136,14 +136,21 @@ class Seestar_Federation:
             if self.seestar_devices[key].is_connected:
                 result[key] = self.seestar_devices[key].action_set_dew_heater(params)
         return result
-           
+
+    def action_set_exposure(self, params):
+        result = {}
+        for key in self.seestar_devices:
+            if self.seestar_devices[key].is_connected:
+                result[key] = self.seestar_devices[key].action_set_exposure(params)
+        return result
+
     def action_start_up_sequence(self, params):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
                 result[key] = self.seestar_devices[key].action_start_up_sequence(params)
         return result
-    
+
     def get_schedule(self, params):
         if 'schedule_id' in params:
             if self.schedule['schedule_id'] == params['schedule_id']:
@@ -188,7 +195,7 @@ class Seestar_Federation:
                     self.logger.warn("Failed. Must specify an proper coordinate for a federated schedule.")
                     raise Exception( "Failed. Must specify an proper coordinate for a federated schedule.")
                 mosaic_params['ra'] = round(mosaic_params['ra'], 4)
-                mosaic_params['dec'] = round(mosaic_params['dec'], 4)                
+                mosaic_params['dec'] = round(mosaic_params['dec'], 4)
         self.schedule['list'].append(item)
         return self.schedule
 
@@ -220,7 +227,7 @@ class Seestar_Federation:
         num_devices = len(device_id_list)
         if num_devices == 0:
             raise Exception("there is no active device connected!")
-        
+
         if 'selected_panels' in params and params['selected_panels'] != "":
             panel_array = params['selected_panels'].split(';')
             num_panels = len(panel_array)
@@ -271,7 +278,7 @@ class Seestar_Federation:
     def start_scheduler(self, params):
         if len(self.schedule['list']) == 0:
             return {"error": "Failed: The schedule is empty."}
-        
+
         root_schedule = self.get_schedule(params)
         available_devices = root_schedule["available_device_list"]
         random.shuffle(available_devices)
@@ -293,7 +300,7 @@ class Seestar_Federation:
             else:
                 cur_params = schedule_item['params'].copy()
 
-            if schedule_item['action'] == "start_mosaic":                
+            if schedule_item['action'] == "start_mosaic":
                 # federation_mode : duplicate, by_panels or by_time
                 if 'federation_mode' not in cur_params or num_devices == 1:
                     cur_params["federation_mode"] = "duplicate"
@@ -321,7 +328,7 @@ class Seestar_Federation:
                     cur_params = schedule_item['params'].copy()
                     new_item['params'] = cur_params
                     cur_device.add_schedule_item(new_item)
-        
+
         for key in available_devices:
             cur_device = self.seestar_devices[key]
             cur_device.start_scheduler(params)
@@ -335,7 +342,7 @@ class Seestar_Federation:
             if cur_device.is_connected:
                 result[key] = cur_device.stop_scheduler(params)
         return result
-    
-    
+
+
 
 

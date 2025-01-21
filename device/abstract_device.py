@@ -82,6 +82,10 @@ class AbstractDevice(ABC):
         pass
 
     @abstractmethod
+    def action_set_exposure(self, params):
+        pass
+
+    @abstractmethod
     def action_start_up_sequence(self, params):
         pass
 
