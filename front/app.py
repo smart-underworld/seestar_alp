@@ -193,7 +193,7 @@ def _get_context_real(telescope_id, req):
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
             "online": online, "imager_root": imager_root, "experimental": experimental, "confirm": confirm,
             "uitheme": uitheme, "client_master": client_master, "current_item": current_item,
-            "platform": os_platform, "defgain": defgain
+            "platform": os_platform, "defgain": defgain, "defexp": defexp
             }
 
 def get_context(telescope_id, req):
