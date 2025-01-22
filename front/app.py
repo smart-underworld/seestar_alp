@@ -176,15 +176,21 @@ def _get_context_real(telescope_id, req):
     confirm = Config.confirm
     uitheme = Config.uitheme
     defgain = Config.init_gain
-    defexp = Config.init_expo_stack_ms
     if telescope_id > 0:
         telescope = get_telescope(telescope_id)
+        settings = method_sync("get_setting", telescope_id)
+        if settings:
+            defexp = settings["exp_ms"]["stack_l"]
+        else:
+            defexp = Config.init_expo_stack_ms
     else:
         telescope = {
             "device_num": 0,
             "name": "Seestar Federation",
             "ip_address": get_ip()
         }
+        defexp = Config.init_expo_stack_ms
+
     current_item = None
     scheduler_state = do_action_device("get_event_state", telescope_id, {"event_name": "scheduler"})
     if scheduler_state:
