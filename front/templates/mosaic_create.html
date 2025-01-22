@@ -12,14 +12,14 @@
                                aria-describedby="targetNameHelp" value="{{ values.target_name }}" required>
                         <div id="targetNameHelp" class="form-text">Enter a descriptive name for the target. (e.g. ...)</div>
                     </div>
-    
+
                     <!-- Search For -->
                     <div class="col">
                         <label for="searchFor" class="form-label">Search For</label>
                         <div class="d-flex mb-0">
                             <select class="form-select" id="searchFor" name="searchFor" title="Select type of target">
                                 <option value="DS" selected>Simbad Deepsky (Online)</option>
-                                <option value="LS" >Local Deepsky DB</option> 
+                                <option value="LS" >Local Deepsky DB</option>
                                 <option value="PL">Planet</option>
                                 <option value="MP">Minor Planet (Asteroid)</option>
                                 <option value="CO">Comet</option>
@@ -35,7 +35,7 @@
                     </div>
                 </div>
             </div>
-    
+
             <!-- Second Row: RA and Dec -->
             <div class="mb-3 row">
                 <div class="col">
@@ -87,7 +87,7 @@
                     <div id="panelOverlapHelp" class="form-text">Overlap of panels in percentage</div>
                 </div>
             </div>
-               
+
             <!-- Selected Panels -->
             <div class="mb-3 row">
                 <div class="col">
@@ -97,7 +97,7 @@
                     <div id="panelSelectHelp" class="form-text">Semicolon delimited list of panels you want to image</div>
                 </div>
             </div>
-     
+
 
             <!-- Buttons for importing coordinates from other sources -->
             <div class="mb-3 row justify-content-center">
@@ -133,7 +133,7 @@
 
         </div>
     </div>
-    
+
     {% if telescope["device_num"] == 0 %}
 	<h5 class="card-title mb-2">Federation Settings</h5>
 	<div class="card border-primary mb-3">
@@ -142,6 +142,7 @@
 				<div class="col-md-3 col-sm-3">
 					<label for="federation_mode" class="form-label">Mode</label>
 					<select id="federation_mode" name="federation_mode" class="dropdown-toggle">
+            <option value="duplicate">Duplicate</option>
 						<option value="by_time">Split By Time</option>
 						<option value="by_panel">Split By Panel</option>
 					</select>
@@ -158,7 +159,7 @@
     <h5 class="card-title mb-2">Exposure Settings</h5>
     <div class="card border-primary mb-3">
         <div class="card-body">
-           
+
 
             <div class="mb-3">
                 <label for="panelTime" class="form-label">Panel Acquisition Time</label>

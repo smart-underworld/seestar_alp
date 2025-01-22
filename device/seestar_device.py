@@ -1548,6 +1548,15 @@ class Seestar:
         response = self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
         return response
 
+    def action_set_exposure(self, params):
+        set_response = self.send_message_param_sync({"method": "set_setting", "params":{"exp_ms":{"stack_l":params['exp']}}})
+        dark_response = self.send_message_param_sync({"method": "start_create_dark"})
+        response = {
+            "set_response": set_response,
+            "dark_response": dark_response,
+        }
+        return response
+
     def action_start_up_sequence(self, params):
         if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete" :
             return self.json_result("start_up_sequence", -1, "Device is busy. Try later.")
@@ -2183,6 +2192,9 @@ class Seestar:
             elif action == 'action_set_dew_heater':
                 self.logger.info(f"Trying to set dew heater to {cur_schedule_item['params']}")
                 self.action_set_dew_heater(cur_schedule_item['params'])
+            elif action == 'action_set_exposure':
+                self.logger.info(f"Trying to set exposure to {cur_schedule_item['params']}")
+                self.action_set_exposure(cur_schedule_item['params'])
             else:
                 if 'params' in cur_schedule_item:
                     request = {'method': action, 'params': cur_schedule_item['params']}

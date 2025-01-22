@@ -176,6 +176,7 @@ def _get_context_real(telescope_id, req):
     confirm = Config.confirm
     uitheme = Config.uitheme
     defgain = Config.init_gain
+    defexp = Config.init_expo_stack_ms
     if telescope_id > 0:
         telescope = get_telescope(telescope_id)
     else:
@@ -192,8 +193,9 @@ def _get_context_real(telescope_id, req):
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
             "online": online, "imager_root": imager_root, "experimental": experimental, "confirm": confirm,
             "uitheme": uitheme, "client_master": client_master, "current_item": current_item,
-            "platform": os_platform, "defgain": defgain
+            "platform": os_platform, "defgain": defgain, "defexp": defexp
             }
+
 
 def get_context(telescope_id, req):
     if telescope_id not in _context_cached or time.time() - _last_context_get_time[telescope_id] > 1.0:
@@ -1859,6 +1861,25 @@ class ScheduleDewHeaterResource:
         render_schedule_tab(req, resp, telescope_id, 'schedule_dew_heater.html', 'dew-heater', {}, {})
 
 
+class ScheduleExposureResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
+        render_schedule_tab(req, resp, telescope_id, 'schedule_exposure.html', 'exposure', {}, {})
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        form = req.media
+        expValue = form.get("exposure")
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
+        response = do_schedule_action_device("action_set_exposure", {"exp": int(expValue)}, telescope_id)
+        render_schedule_tab(req, resp, telescope_id, 'schedule_exposure.html', 'exposure', {}, {})
+
+
 class ScheduleToggleResource:
     def on_get(self, req, resp, telescope_id=0):
         self.display_state(req, resp, telescope_id)
@@ -3309,6 +3330,7 @@ class FrontMain:
         app.add_route('/schedule/clear', ScheduleClearResource())
         app.add_route('/schedule/download', ScheduleDownloadSchedule())
         app.add_route('/schedule/export', ScheduleExportResource())
+        app.add_route('/schedule/exposure', ScheduleExposureResource())
         app.add_route('/schedule/image', ScheduleImageResource())
         app.add_route('/schedule/import', ScheduleImportResource())
         app.add_route('/schedule/list', ScheduleListResource())
@@ -3340,6 +3362,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/live/record', LiveExposureRecordResource())
         # app.add_route('/{telescope_id:int}/live/state', LiveStateResource())
         app.add_route('/{telescope_id:int}/live/exposure', LiveExposureResource())
+        app.add_route('/{telescope_id:int}/schedule/exposure', ScheduleExposureResource())
         app.add_route('/{telescope_id:int}/live/focus', LiveFocusResource())
         app.add_route('/{telescope_id:int}/live/gain', LiveGainResource())
         app.add_route('/{telescope_id:int}/live/{mode}', LivePage())

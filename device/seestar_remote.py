@@ -127,6 +127,9 @@ class SeestarRemote(AbstractDevice):
     def action_set_dew_heater(self, params):
         return self._do_action_device('action_set_dew_heater', params)
 
+    def action_set_exposure(self, params):
+        return self._do_action_device('action_set_exposure', params)
+
     def action_start_up_sequence(self, params):
         return self._do_action_device('action_start_up_sequence', params)
 

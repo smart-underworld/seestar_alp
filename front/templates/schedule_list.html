@@ -56,6 +56,9 @@
                       <p class="mt-0 mb-0">polar_align: {{ item["params"]["3ppa"] }}</p>
                       <p class="mt-0 mb-0">dark_frames: {{ item["params"]["dark_frames"] }}</p>
                     </div>
+                {% elif item["action"] == 'action_set_exposure' %}
+                    <div class="col-2 align-self-start">Set Exposure</div>
+                    <div class="col align-self-start">{{ item["params"]["exp"] }}</div>
                 {% elif item["action"] == 'set_wheel_position' %}
 
 					{% if item["params"] == [2] %}
@@ -137,6 +140,7 @@
                     <div class="col" colspan="10">Unrecognized schedule item: {{ item }}</div>
                 {% endif %}
             </div>
+
         {% endfor %}
     </div>
 </div>
