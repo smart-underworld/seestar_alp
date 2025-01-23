@@ -25,6 +25,7 @@ import pydash
 from device.config import Config
 from device.version import Version # type: ignore
 from device.seestar_util import Util
+from device.event_callbacks import *
 
 from collections import OrderedDict
 
@@ -83,9 +84,7 @@ class Seestar:
         self.utcdate = time.time()
         self.firmware_ver_int: int = 0
 
-        self.discharging : bool = False
-        self.charge_online : bool = True
-        self.battery_capacity : int = 100
+        self.event_callbacks : list[EventCallback] = []
 
         self.mosaic_thread: Optional[threading.Thread] = None
         self.scheduler_thread: Optional[threading.Thread] = None
@@ -375,18 +374,9 @@ class Seestar:
                                 if self.is_in_plate_solve_loop:
                                     threading.Thread(name=f"plate_solve:{self.device_name}", target=lambda: self.request_plate_solve_for_BPA()).start()
 
-                        if event_name == 'PiStatus':
-                            if 'charger_status' in parsed_data:
-                                self.discharging = parsed_data['charger_status'] == "Discharging"
-                            if 'charge_online' in parsed_data:
-                                self.charge_online = parsed_data['charge_online']
-                            if 'battery_capacity' in parsed_data:
-                                self.battery_capacity = parsed_data['battery_capacity']
-
-                            if self.discharging and not self.charge_online and self.battery_capacity <= Config.battery_low_limit:
-                                self.logger.info("Shutting down due to battery capacity lower limit reached")
-                                self.send_message_param_sync({"method":"pi_shutdown"})
-
+                        for cb in self.event_callbacks:
+                            if event_name in cb.fireOnEvents():
+                                cb.eventFired(self, parsed_data)
                         #else:
                         #    self.logger.debug(f"Received event {event_name} : {data}")
 
@@ -1273,11 +1263,6 @@ class Seestar:
             # make sure we have the right firmware version here
             self.firmware_ver_int = response["result"]["device"]["firmware_ver_int"]
             self.logger.info(f"Firmware version: {self.firmware_ver_int}")
-
-            # get initial battery values
-            self.discharging = response["result"]["pi_status"]["charger_status"] == "Discharging"
-            self.charge_online = response["result"]["pi_status"]["charge_online"]
-            self.battery_capacity = response["result"]["pi_status"]["battery_capacity"]
 
             result = True
 
@@ -2289,6 +2274,27 @@ class Seestar:
                 host="SSC"
             self.send_message_param_sync({"method":"set_setting", "params":{"cli_name": f"{host}"}})
 
+    def event_callbacks_init(self, initial_state):
+        self.logger.info(f'event_callback_init({self}, {initial_state})')
+        self.event_callbacks = [
+            BatteryWatch(self, initial_state),
+            #SensorTempWatch(self, initial_state)
+        ]
+
+        # read files in user_triggers subdir, and read json
+        user_hooks = []
+        for filename in os.listdir("user_hooks"):
+            if filename.endswith(".json"):
+                filepath = os.path.join("user_hooks", filename)
+                with open(filepath, 'r') as f:
+                    try:
+                        user_hooks.append(json.load(f))
+                    except json.JSONDecodeError as e:
+                        self.logger.warn("Unable to decode user_hooks/{filename} - json parsing error")
+        for hook in user_hooks:
+            if "events" in hook and "execute" in hook:
+                self.event_callbacks.append(UserScriptEvent(self, initial_state, hook))
+
     def start_watch_thread(self):
         # only bail if is_watch_events is true
         if self.is_watch_events:
@@ -2318,10 +2324,13 @@ class Seestar:
                 self.heartbeat_msg_thread.name = f"HeartbeatMsgThread:{self.device_name}"
                 self.heartbeat_msg_thread.start()
 
+                initial_state = self.send_message_param_sync({"method":"get_device_state"})
                 self.guest_mode_init()
+                self.event_callbacks_init(initial_state["result"])
 
             except Exception as ex:
                 # todo : Disconnect socket and set is_watch_events false
+                #print(f"XXXX Exception {ex}")
                 pass
 
     def end_watch_thread(self):
