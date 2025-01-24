@@ -621,15 +621,12 @@ class Seestar:
         except:
             return False
 
+    # synchronise call. Will return only if there's result
     def goto_target(self, params):
         if self.is_goto():
             self.logger.info("Failed to goto target: mount is in goto routine.")
-            return {"result":"Failed to goto target: mount is in goto routine."}
+            return False
         self.mark_goto_status_as_start()
-        threading.Thread(name=f"goto-target-thread:{self.device_name}", target=lambda: self.goto_target_thread(params)).start()
-        return {"result":0}
-
-    def goto_target_thread(self, params):
 
         is_j2000 = params['is_j2000']
         in_ra = params['ra']
@@ -646,18 +643,22 @@ class Seestar:
                 msg = f"Failed. You tried to geto to a target [ {in_ra}, {in_dec} ] that seems to be too low for your location at lat={Config.init_lat}"
                 self.logger.warn(msg)
                 self.mark_goto_status_as_stopped()
-                return
+                return False
 
             safe_dec_offset = -in_dec+self.safe_dec_for_offset
             if self.below_horizon_dec_offset > 0 and in_dec > self.safe_dec_for_offset:
                 result = self.reset_below_horizon_dec_offset()
+                if result == False:
+                    self.logger.warn("Failed to reset dec offset before applying a large offset")
+                    self.mark_goto_status_as_stopped()
+                    return False
+
             elif safe_dec_offset > self.below_horizon_dec_offset:
                 result = self.set_below_horizon_dec_offset(safe_dec_offset, in_dec)
-
-            if result != True:
-                self.logger.warn("Failed to set or reset horizontal dec offset. Goto will not proceed.")
-                self.mark_goto_status_as_stopped()
-                return
+                if result == False:
+                    self.logger.warn("Failed to set or reset horizontal dec offset. Goto will not proceed.")
+                    self.mark_goto_status_as_stopped()
+                    return False
 
         if self.below_horizon_dec_offset == 0:
             self.logger.info(f"going to target with normal logic: {self.below_horizon_dec_offset }")
@@ -672,13 +673,23 @@ class Seestar:
             params['lp_filter'] = False
             data['params'] = params
             self.send_message_param_sync(data)
-            return
+            result = self.wait_end_op("goto_target")
+            return result
 
         else:
             self.logger.info(f"going to target with below horizon logic: {self.below_horizon_dec_offset }")
             # do the same, but when trying to center on target, need to implement ourselves to platesolve correctly to compensate for the dec offset
             self.goto_target_with_dec_offset_async(target_name, in_ra, in_dec)
-            return
+            # need to check if we have a custom goto running, and make sure it is finished before stacking
+            while self.custom_goto_state == "start" or self.custom_goto_state == "working" or self.custom_goto_state == "fail":     #fix Issue of below horizon targets keep on imaging even if failed to goto
+                if self.custom_goto_state == "fail":
+                    self.logger.warn("Failed to goto the target with custom goto logic before stacking. Will stop here.")
+                    self.custom_goto_state = "stopped"
+                    return False
+                time.sleep(3)
+            self.custom_goto_state = "stopped"
+            time.sleep(2)
+            return True
 
     # {"method":"scope_goto","params":[1.2345,75.0]}
     def _slew_to_ra_dec(self, params):
@@ -730,7 +741,7 @@ class Seestar:
 
     def reset_below_horizon_dec_offset(self):
         if not self.is_EQ_mode:
-            return
+            return False
 
         old_ra = self.ra
         old_dec = self.dec
@@ -1070,10 +1081,11 @@ class Seestar:
             self.set_target_name(target_name)
             # repeat plate solve and adjust position as needed
             threading.Thread(name=f"goto-dec-offset-thread:{self.device_name}", target=lambda: self.auto_center_thread(target_ra, target_dec)).start()
-            return True
+            return
         else:
             self.logger.info("Failed to slew")
-            return False
+            self.custom_goto_state = "fail"
+            return
 
     # after we goto_ra_dec, we can do a platesolve and refine until we are close enough
     def auto_center_thread(self, target_ra, target_dec):
@@ -1492,8 +1504,6 @@ class Seestar:
                 self.logger.info(msg)
                 goto_params = {'is_j2000':False, 'ra': self.first_plate_solve_RA, 'dec': self.first_plate_solve_Dec}
                 result = self.goto_target(goto_params)
-                self.logger.info(f"result from goto request: {result}")
-                result = self.wait_end_op("goto_target")
                 msg = f"Goto operation finished with result code: {result}"
                 self.logger.info(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
@@ -1660,36 +1670,24 @@ class Seestar:
         return "spectra mosiac started"
 
     def mosaic_goto_inner_worker(self, cur_ra, cur_dec, save_target_name, is_use_autofocus, is_use_LP_filter):
-        self.goto_target({'ra': cur_ra, 'dec': cur_dec, 'is_j2000': False, 'target_name': save_target_name})
-        result = self.wait_end_op("goto_target")
+        result = self.goto_target({'ra': cur_ra, 'dec': cur_dec, 'is_j2000': False, 'target_name': save_target_name})
         self.logger.info(f"Goto operation finished with result code: {result}")
-
-        time.sleep(3)
-
-        if result == True:
-            self.send_message_param_sync(
-                {"method": "set_setting", "params": {"stack_lenhance": is_use_LP_filter}})
-            if is_use_autofocus == True:
-                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "auto focusing"
-                result = self.try_auto_focus(2)
-            if result == False:
-                self.logger.info("Failed to auto focus, but will continue to image panel anyway.")
-                result = True
-            if result == True:
-                # need to check if we have a custom goto running, and make sure it is finished before stacking
-                while self.custom_goto_state == "start" or self.custom_goto_state == "working" or self.custom_goto_state == "fail":     #fix Issue of below horizon targets keep on imaging even if failed to goto
-                    if self.custom_goto_state == "fail":
-                        self.logger.warn("Failed to goto the target with custom goto logic before stacking. Will stop here.")
-                        self.custom_goto_state = "stopped"
-                        return False
-                    time.sleep(3)
-                self.custom_goto_state = "stopped"
-                time.sleep(4)
-                return True
-        else:
+        if result == False:
             self.logger.info("Goto failed.")
             return False
 
+        time.sleep(3)
+
+
+        self.send_message_param_sync(
+            {"method": "set_setting", "params": {"stack_lenhance": is_use_LP_filter}})
+        if is_use_autofocus == True:
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "auto focusing"
+            result = self.try_auto_focus(2)
+        if result == False:
+            self.logger.info("Failed to auto focus, but will continue to image panel anyway.")
+            result = True
+        return result
 
     def mosaic_thread_fn(self, target_name, center_RA, center_Dec, is_use_LP_filter, panel_time_sec, nRA, nDec,
                          overlap_percent, gain, is_use_autofocus, selected_panels, num_tries, retry_wait_s):
