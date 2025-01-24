@@ -157,13 +157,15 @@ fn_landscape_ini = '/landscape.ini' #add slash prefix
 adj1 = 170 #MattC I needed to rotate the array to align with "north"
 adj2 = -6.50001 #MattC For reasons that escape me, the horizon.txt version needed to be adjusted as well
 
+OVERRIDE = False #Change to True to use test data from erewhon
+
 # Example RA and Dec strings for True
 #ra_str = '22h54m37.98s'  # Right Ascension J2000
 #dec_str = '-15d49m23.3s'  # Declination J2000
 #ra_str = '22h55m57.87s'  # Right Ascension "on date"
 #dec_str = '-15d41m23.2s'  # Declination "on date"
 
-# Example RA and Dec strings for False; resume execution at line 270 after switch from True case
+# Example RA and Dec strings for False; resume execution at line 317 after switch from True case
 ra_str = '22h47m55.32s'  # Right Ascension J2000
 dec_str = '-25d54m56.2s'  # Declination J2000
 
@@ -180,13 +182,58 @@ image_path = stellpath + stell_landscapes_folder + stell_landscape + '/'+ fn_pro
 y_obs = find_values(image_path, 0, False)
 x_obs = np.linspace(0, 359, len(y_obs))
 
+if OVERRIDE:
+    #Override with a test set
+    # Create new standardized dataset
+    erewhon_obs = np.array([[12, 62],
+    [17, 45],
+    [18, 29],
+    [19, 15],
+    [22, 10],
+    [29, 7],
+    [29, 12],
+    [37, 18],
+    [45, 14],
+    [54, 17],
+    [53, 24],
+    [53, 28],
+    [64, 27],
+    [76, 31],
+    [76, 33],
+    [91, 37],
+    [88,44],
+    [119, 54],
+    [139, 42],
+    [162, 44],
+    [184, 24],
+    [197, 24],
+    [198, 50],
+    [235, 42],
+    [223, 63],
+    [230, 66],
+    [304, 73],
+    [304, 73],
+    [14, 11]])
+
+    # Sort by the first column
+    erewhon_obs_sort = erewhon_obs[np.argsort(erewhon_obs[:, 0])]
+
+    # Find unique values and compute averages
+    unique_x, indices = np.unique(erewhon_obs_sort[:, 0], return_inverse=True)
+    y_sums = np.bincount(indices, weights=erewhon_obs_sort[:, 1])
+    y_counts = np.bincount(indices)
+    averaged_obs = np.column_stack((unique_x, y_sums / y_counts))
+
+    x_obs=averaged_obs[:,0]
+    y_obs=averaged_obs[:,1]
+
 # Ensure the first and last y-values match to enforce periodicity
 if y_obs[0] != y_obs[-1]:
-    y_obs = np.append(y_obs,0)
+    y_obs = np.append(y_obs,y_obs[0])
     x_obs = np.append(x_obs,360)  # Extend x_obs to 360 for periodicity to numpy array
 if x_obs[0] != 0:
     x_obs = np.append([0], x_obs)
-    y_obs = np.append([0], y_obs[-1])
+    y_obs = np.append(y_obs[-1], y_obs)
 
 # Fit a periodic cubic spline
 pchip = PchipInterpolator(x_obs, y_obs)
@@ -226,7 +273,7 @@ author = author\n\
 description = '+f'{stell_landscape_new}'+'\n\
 type = polygonal\n\
 polygonal_horizon_list = horizon.txt\n\
-polygonal_angle_rotatez={adj2}\n\
+polygonal_angle_rotatez='+f'{adj2}'+'\n\
 ground_color = .15,.45,.05\n\
 minimal_brightness = 0.15\n\
 '
@@ -276,12 +323,12 @@ altaz = coord.transform_to(altaz_frame) #Should return referred to JNow
 azimuth = altaz.az.deg
 altitude = altaz.alt.deg
 
-print(f"RA (decimal degrees): {azimuth:.6f}")
-print(f"Dec (decimal degrees): {altitude:.6f}")
+print(f"Az (decimal degrees): {azimuth:.6f}")
+print(f"Alt (decimal degrees): {altitude:.6f}")
 
 test_point = (np.round(azimuth), np.round(altitude))
 
 # Check if the test point is inside the polygon
 inside = is_point_in_polygon(azalt_pairs, test_point)
-print(azalt_pairs[int(test_point[0])])
+print(azalt_pairs[int(test_point[0])])  #corresponding value of horizon
 print(f"Is the test point {test_point} inside the circle? {inside}")
