@@ -51,16 +51,16 @@ async function fetchCoordinates() {
             });
             break;
 
-        // Deepsky    
+        // Deepsky
         case 'DS':
             if (document.getElementById('targetName').value == '') {
                 alert('You must supply a target name to be looked up in Simbad');
                 return;
             }
             // compose the url to retreive the data from the server
-            const baseURL = 
+            const baseURL =
                 `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
-            simbadURL = baseURL + '/simbad?name=' + document.getElementById('targetName').value;
+            simbadURL = baseURL + '/simbad?name=' + encodeURIComponent(document.getElementById('targetName').value);
             // fetch the data
             fetch(simbadURL)
             .then(response => {
@@ -82,12 +82,12 @@ async function fetchCoordinates() {
                 document.getElementById('dec').value = elements[1];
                 document.getElementById("useJ2000").checked = true;
                 document.getElementById('useLpFilter').checked = false;
-                if (elements[2] == 'on') 
+                if (elements[2] == 'on')
                     document.getElementById('useLpFilter').checked = true;
             })
             .catch(error => console.error('There was a problem with the fetch operation:', error));
             break;
-        
+
         // Planet
         case 'PL':
             if (document.getElementById('targetName').value == '') {
@@ -152,7 +152,7 @@ async function fetchCoordinates() {
                 // Only proess if object data sent back
                 if (data){
                     elements = JSON.parse(data)
-                    
+
                     document.getElementById('ra').value = elements.ra;
                     document.getElementById('dec').value = elements.dec;
                     document.getElementById("useJ2000").checked = true;
@@ -161,7 +161,7 @@ async function fetchCoordinates() {
             });
             break;
 
-        // Comet    
+        // Comet
         case 'CO':
             if (document.getElementById('targetName').value == '') {
                 alert('You must supply a planet name to be looked up');
@@ -202,11 +202,11 @@ async function fetchCoordinates() {
                         document.getElementById("useJ2000").checked = true;
                         document.getElementById('useLpFilter').checked = false;
                     };
-                
+
                 };
             });
         break;
-        
+
         // Variable Star
         case 'VS':
             if (document.getElementById('targetName').value == '') {
@@ -251,7 +251,7 @@ async function fetchClipboard() {
         // Split the input string into an array using space as the separator
         const elements = text.trim().split(/[\s,]+/);   // Telescopious has a comma in the coordinates
         // Check that there are exactly 6 elements
-        if (elements.length == 6) {  // astro mosaic, telescopious from csv file, Mosaic Planner 
+        if (elements.length == 6) {  // astro mosaic, telescopious from csv file, Mosaic Planner
             // Format RA and DEC
             ra = `${elements[0]}h${elements[1]}m${elements[2]}s`;
             dec = `${elements[3]}d${elements[4]}m${elements[5]}s`;
@@ -264,7 +264,7 @@ async function fetchClipboard() {
         } else if (elements.length == 2 ) {
             ra  = elements[0].replace("δ:","");   // astro-bin format
 
-            dec = elements[1].replace("°","d"); 
+            dec = elements[1].replace("°","d");
             dec = dec.replace("'","m");
             dec = dec.replace('"',"s");
             dec = dec.replace("DE:","");   // Cartes du Ciel puts a DE: in the string
@@ -278,7 +278,7 @@ async function fetchClipboard() {
             ra = ra.replace('"',"s");
             ra = ra.replace(',',"");
 
-            dec = dec.replace("°","d"); 
+            dec = dec.replace("°","d");
             dec = dec.replace("'","m");
             dec = dec.replace('"',"s");
             document.getElementById('ra').value = ra;
@@ -296,7 +296,7 @@ async function fetchClipboard() {
 
 async function fetchStellarium() {
 try {
-    const baseURL = 
+    const baseURL =
          `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
     stellariumURL = baseURL + '/stellarium';
     fetch(stellariumURL)
@@ -307,7 +307,7 @@ try {
                 return;
             } else {
                 alert('Failed to read from Stellarium');
-            }                
+            }
             throw new Error('Network response was not ok ' + response.statusText);
         }
         return response.text();
@@ -335,10 +335,10 @@ async function toggleuitheme() {
     } else {
         document.documentElement.setAttribute('data-bs-theme','dark')
     }
-    
+
     //update the config
     try{
-        const baseURL = 
+        const baseURL =
          `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
         toggleuithemeURL = baseURL + '/toggleuitheme';
         fetch(toggleuithemeURL)
@@ -356,12 +356,12 @@ function get_location_from_browser() {
         document.getElementById('Latitude').value = latitude;
         document.getElementById('Longitude').value = longitude;
     }
-  
+
     function error(err) {
         alert("Unable to get location from browser.");
         console.warn(`ERROR(${err.code}): ${err.message}`);
     }
-  
+
     if (!navigator.geolocation) {
         alert("Geolocation is not supported by your browser");
     } else {
@@ -429,7 +429,7 @@ function handleItemSelection(item) {
 function addSeestar(){
     var devicecount = document.getElementsByName('ss_name').length + 1; //parseInt(document.getElementById('devicecount') + 1);
     var lastElement = document.getElementById(`device_div_${devicecount - 1}`);
-       
+
     var insertBlock = `<div id="device_div_${devicecount}">
                             <div class="col-sm-4 text-end">
                                 <label class="form-label">
@@ -528,7 +528,7 @@ function addSeestar(){
                                 </div>
                                 <!--Close checkbox -->
                             </div>
-                            <!-- Close checkbox row -->                        
+                            <!-- Close checkbox row -->
                         </div>
                             `;
     lastElement.insertAdjacentHTML('afterend', insertBlock);
@@ -537,7 +537,7 @@ function addSeestar(){
 
 function NewCheckboxChange(element) {
     hidden = document.getElementById(element);
-    if (hidden.value == "True") { 
+    if (hidden.value == "True") {
         hidden.value = "False";
     } else {
         hidden.value = "True";
@@ -560,7 +560,7 @@ function delSeestar() {
 // Create event listener to monitor the seestar checkboxes.  Upon change of the checkbox state,
 // update the associated hidden checkbox with True / False so we have somthing to send back upon unchecked.
 
-document.querySelectorAll('[id^=ss_is_EQ_mode_]:not([id^=is_EQ_mode_hidden_])').forEach(function(element) { 
+document.querySelectorAll('[id^=ss_is_EQ_mode_]:not([id^=is_EQ_mode_hidden_])').forEach(function(element) {
     element.addEventListener('change', function(event) {
         // Directly access the changed element
         var changedElement = event.target;
