@@ -10,6 +10,7 @@ from jinja2 import Template, Environment, FileSystemLoader
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 from collections import defaultdict
 from pathlib import Path
+import urllib.parse
 import requests
 import humanize
 import json
@@ -2651,7 +2652,7 @@ class SystemResource:
 class SimbadResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
-        objName = req.get_param('name')  # get the name to lookup from the request
+        objName = urllib.parse.quote_plus(req.get_param('name'))  # get the name to lookup from the request
         try:
             r = requests.get(simbad_url + objName, timeout=10)
         except:
