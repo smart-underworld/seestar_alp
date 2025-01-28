@@ -178,18 +178,12 @@ def _get_context_real(telescope_id, req):
     defgain = Config.init_gain
     if telescope_id > 0:
         telescope = get_telescope(telescope_id)
-        settings = method_sync("get_setting", telescope_id)
-        if settings:
-            defexp = settings["exp_ms"]["stack_l"]
-        else:
-            defexp = Config.init_expo_stack_ms
     else:
         telescope = {
             "device_num": 0,
             "name": "Seestar Federation",
             "ip_address": get_ip()
         }
-        defexp = Config.init_expo_stack_ms
 
     current_item = None
     scheduler_state = do_action_device("get_event_state", telescope_id, {"event_name": "scheduler"})
@@ -199,7 +193,7 @@ def _get_context_real(telescope_id, req):
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
             "online": online, "imager_root": imager_root, "experimental": experimental, "confirm": confirm,
             "uitheme": uitheme, "client_master": client_master, "current_item": current_item,
-            "platform": os_platform, "defgain": defgain, "defexp": defexp
+            "platform": os_platform, "defgain": defgain
             }
 
 
@@ -1317,7 +1311,6 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
     if nearest_csc["status_msg"] != "SUCCESS":
         nearest_csc["href"] = ""
         nearest_csc["full_img"] = ""
-
     render_template(req, resp, template_name, schedule=schedule, tab=tab, errors=errors, values=values, files=files, **context)
 
 
@@ -1873,7 +1866,15 @@ class ScheduleExposureResource:
         online = check_api_state(telescope_id)
         if not online:
             telescope_id = 0
-        render_schedule_tab(req, resp, telescope_id, 'schedule_exposure.html', 'exposure', {}, {})
+        settings = method_sync("get_setting", telescope_id)
+        if settings:
+            defexp = settings["exp_ms"]["stack_l"]
+        else:
+            defexp = Config.init_expo_stack_ms
+        values = {
+            "defexp": int(defexp)
+        }
+        render_schedule_tab(req, resp, telescope_id, 'schedule_exposure.html', 'exposure', values, {})
 
     @staticmethod
     def on_post(req, resp, telescope_id=0):
