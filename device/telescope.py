@@ -244,6 +244,15 @@ class action:
             elif action_name == "get_pa_error":
                 result = cur_dev.get_pa_error(params)
                 resp.text = MethodResponse(req, value = result).json
+            elif action_name == "pause_scheduler":
+                result = cur_dev.pause_scheduler(params)
+                resp.text = MethodResponse(req, value = result).json                
+            elif action_name == "continue_scheduler":
+                result = cur_dev.continue_scheduler(params)
+                resp.text = MethodResponse(req, value = result).json   
+            elif action_name == "skip_scheduler_cur_item":
+                result = cur_dev.skip_scheduler_cur_item(params)
+                resp.text = MethodResponse(req, value = result).json   
             if log_debug:
                 cur_dev.logger.debug(f"response: {result}")
             else:

@@ -196,6 +196,7 @@ class _Config:
         self.scope_aim_lon: float = self.get_toml(section, 'scope_aim_lon', 20.0)
         self.is_EQ_mode: bool = self.get_toml(section, 'is_EQ_mode', False)
         self.battery_low_limit: int = self.get_toml(section, 'battery_low_limit', 3)
+        self.is_frame_calibrated : bool = self.get_toml(section, 'is_frame_calibrated', True)
 
     def load_from_form(self, req):
         """

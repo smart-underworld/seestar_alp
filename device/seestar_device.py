@@ -94,8 +94,11 @@ class Seestar:
         self.schedule['schedule_id'] = str(uuid.uuid4())
         self.schedule['list'] = collections.deque()
         self.schedule['state'] = "stopped"
+        self.schedule['is_stacking_paused'] = False
+        self.schedule['is_stacking'] = False
+        self.schedule['is_skip_requested'] = False
         self.schedule['current_item_id'] = ""  # uuid of the current/active item in the schedule list
-        self.schedule["item_number"] = 0  # order number of the schedule_item in the schedule list
+        self.schedule["item_number"] = 9999  # order number of the schedule_item in the schedule list
         self.is_cur_scheduler_item_working: bool = False
         self.is_below_horizon_goto_method: bool = False
 
@@ -142,8 +145,11 @@ class Seestar:
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
 
     def update_scheduler_state_obj(self, item_state, result = 0):
-        self.event_state["scheduler"]  = {"Event":"Scheduler", "schedule_id": self.schedule['schedule_id'], "state":self.schedule['state'],
-                                            "item_number": self.schedule["item_number"], "cur_scheduler_item": item_state , "result":result}
+        self.event_state["scheduler"]  = {"Event":"Scheduler", 
+                                            "schedule_id": self.schedule['schedule_id'], "state":self.schedule['state'],
+                                            "item_number": self.schedule["item_number"], "cur_scheduler_item": item_state, 
+                                            "is_stacking": self.schedule["is_stacking"], "is_stacking_paused": self.schedule["is_stacking_paused"],
+                                            "result":result}
         self.logger.info(f"scheduler event state: {self.event_state['scheduler']}")
 
     def heartbeat(self):  # I noticed a lot of pairs of test_connection followed by a get if nothing was going on
@@ -445,6 +451,9 @@ class Seestar:
     def get_event_state(self, params=None):
         self.event_state["scheduler"]["Event"] = "Scheduler"
         self.event_state["scheduler"]["state"] = self.schedule["state"]
+        self.event_state["scheduler"]["is_stacking"] = self.schedule["is_stacking"]
+        self.event_state["scheduler"]["is_stacking_paused"] = self.schedule["is_stacking_paused"]
+
         if "3PPA" in self.event_state:
             self.event_state["3PPA"]["eq_offset_alt"] = self.cur_equ_offset_alt
             self.event_state["3PPA"]["eq_offset_az"] = self.cur_equ_offset_az
@@ -552,7 +561,7 @@ class Seestar:
         return({"pa_error_alt" : error_alt, "pa_error_az" : error_az})
 
 
-    def set_setting(self, x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, auto_af=False, stack_after_goto=False):
+    def set_setting(self, x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, is_frame_calibrated, auto_af = False, stack_after_goto = False ):
         # auto_af was introduced in recent firmware that seems to perform autofocus after a goto.
         result = self.send_message_param_sync({"method":"set_setting", "params":{"auto_af": auto_af}})
         self.logger.info(f"trying to set auto_af: {result}")
@@ -565,14 +574,23 @@ class Seestar:
         #   heater_enable failed.
         #   lenhace should be by itself as it moves the wheel and thus need to wait a bit
         #    data = {"id":cmdid, "method":"set_setting", "params":{"exp_ms":{"stack_l":x_stack_l,"continuous":x_continuous}, "stack_dither":{"pix":d_pix,"interval":d_interval,"enable":d_enable}, "stack_lenhance":l_enhance, "heater_enable":heater_enable}}
-        data = {"method": "set_setting", "params": {"exp_ms": {"stack_l": x_stack_l, "continuous": x_continuous},
-                                                    "stack_dither": {"pix": d_pix, "interval": d_interval,
-                                                                     "enable": d_enable}, "stack_lenhance": l_enhance,
-                                                                     "auto_3ppa_calib": True,
-                                                                     "auto_power_off" : False}}
+        data = {"method": "set_setting", "params": {"exp_ms": {"stack_l": x_stack_l, "continuous": x_continuous}},
+                                                    "stack_lenhance": l_enhance,
+                                                    "auto_3ppa_calib": True,
+                                                    "auto_power_off" : False}
+        
         result = self.send_message_param_sync(data)
-        self.logger.info(f"set setting result: {result}")
+        self.logger.info(f"result for set setting: {result}")
 
+        result = self.send_message_param_sync({"method":"set_setting", "params": {
+                                                    "stack_dither": {"pix": d_pix, "interval": d_interval, "enable": d_enable}}})
+        self.logger.info(f"result for set setting for dither: {result}")
+
+        result = self.send_message_param_sync({"method":"set_setting", "params":{
+                                                    "stack":{"dbe":False},
+                                                    "frame_calib": is_frame_calibrated}})
+        self.logger.info(f"result for set setting for dbe and auto frame_calib: {result}")
+        
         response = self.send_message_param_sync({"method":"get_setting"})
         self.logger.info(f"get setting response: {response}")
 
@@ -992,6 +1010,7 @@ class Seestar:
         params = {}
         params['stage'] = 'Stack'
         data['params'] = params
+        self.schedule['is_stacking'] = False
         return self.send_message_param_sync(data)
 
     def play_sound(self, in_sound_id: int):
@@ -1143,7 +1162,7 @@ class Seestar:
         return
 
     def start_stack(self, params={"gain": Config.init_gain, "restart": True}):
-        stack_gain = params["gain"]
+
         result = self.send_message_param_sync({"method": "iscope_start_stack", "params": {"restart": params["restart"]}})
         if "error" in result:
             #try again:
@@ -1154,8 +1173,11 @@ class Seestar:
                 self.logger.error("Failed to start stack: %s", result)
                 return False
         self.logger.info(result)
-        result = self.send_message_param_sync({"method": "set_control_value", "params": ["gain", stack_gain]})
-        self.logger.info(result)
+        self.schedule['is_stacking'] = True
+        if "gain" in params:
+            stack_gain = params["gain"]
+            result = self.send_message_param_sync({"method": "set_control_value", "params": ["gain", stack_gain]})
+            self.logger.info(result)           
         return not "error" in result
 
     def get_last_image(self, params):
@@ -1209,7 +1231,7 @@ class Seestar:
             date_data['method'] = 'pi_set_time'
             date_data['params'] = [date_json]
 
-            do_raise_arm = params.get("raise_arm", True)
+            do_raise_arm = params.get("raise_arm", False)
             do_AF = params.get("auto_focus", False)
             do_3PPA = params.get("3ppa", False)
             do_dark_frames = params.get("dark_frames", False)
@@ -1263,7 +1285,7 @@ class Seestar:
             self.send_message_param_sync(lang_data)
 
             self.set_setting(Config.init_expo_stack_ms, Config.init_expo_preview_ms, Config.init_dither_length_pixel,
-                            Config.init_dither_frequency, Config.init_dither_enabled, Config.init_activate_LP_filter)
+                            Config.init_dither_frequency, Config.init_dither_enabled, Config.init_activate_LP_filter, Config.is_frame_calibrated)
 
             is_dew_on = Config.init_dew_heater_power > 0
             self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":is_dew_on, "value":Config.init_dew_heater_power}}})
@@ -1539,6 +1561,45 @@ class Seestar:
                 self.schedule['state'] = "complete"
                 self.play_sound(82)
 
+    def pause_scheduler(self, params):
+        self.logger.info("pausing scheduler...")
+        if self.schedule['state'] == "working" and self.schedule['is_stacking'] and not self.schedule['is_stacking_paused']:
+            self.schedule['is_stacking_paused'] = True
+            self.logger.info("confirmed scheduler is stacking, so stop for further instrctions.")
+            return self.stop_stack()
+        else:
+            self.logger.warn("scheduler is not stacking, so nothing to pause")
+            return self.json_result("pause_scheduler", -1, "Scheduler is not stacking.")
+        
+    def continue_scheduler(self, params):
+        self.logger.info("continue scheduler...")
+        if self.schedule['state'] == "working" and not self.schedule['is_stacking'] and self.schedule['is_stacking_paused']:
+            self.schedule['is_stacking_paused'] = False
+            self.logger.info("confirmed scheduler was paused stacking, so continue stacking now..")
+            result = self.start_stack({"restart" : False})
+            if result:
+                return self.json_result("continue_scheduler", 0, "")
+            else:
+                return self.json_result("continue_scheduler", -1, "Failed to continue stacking.")
+        else:
+            self.logger.warn("scheduler was not paused, so nothing to do")
+            return self.json_result("pause_scheduler", -1, "Scheduler was not paused stacking.")
+        
+    def skip_scheduler_cur_item(self, params):
+        self.logger.info("skipping scheduler item...")
+        if self.schedule['state'] == "working" and self.schedule['is_skip_requested'] == False:
+            cur_item_num = self.schedule["item_number"]
+            self.logger.info(f"confirmed scheduler is working, so skip current item {cur_item_num} by stopping the scheduler first.")
+            self.schedule['is_skip_requested'] = True
+            self.schedule['is_stacking_paused'] = False
+            self.schedule['is_stacking'] = False
+            return self.json_result("skip_scheduler_cur_item", 0, "Requested to skip current item.")
+
+        else:
+            msg = "scheduler is not working or skip was already requested, so nothing to skip"
+            self.logger.warn(msg)
+            return self.json_result("skip_scheduler_cur_item", -1, msg)
+
     def action_set_dew_heater(self, params):
         response = self.send_message_param_sync({"method": "pi_output_set2", "params":{"heater":{"state":params['heater']> 0,"value":params['heater']}}})
         return response
@@ -1643,6 +1704,9 @@ class Seestar:
                         self.stop_stack()
                         self.schedule['state'] = "stopped"
                         return
+                    elif self.schedule['is_skip_requested']:
+                        self.logger.info("requested to skip. Stopping spectra_thread.")
+                        return
                     time_remaining -= count_down
                     time.sleep(10)
                     count_down -= 10
@@ -1726,7 +1790,10 @@ class Seestar:
                         self.logger.info("Mosaic mode was requested to stop. Stopping")
                         self.schedule['state'] = "stopped"
                         return
-
+                    if self.schedule['is_skip_requested']:
+                        self.logger.info("current mosaic was requested to skip. Stopping at current mosaic.")  
+                        return
+                    
                     # check if we are doing a subset of the panels
                     panel_string = str(index_ra + 1) + str(index_dec + 1)
                     if is_use_selected_panels and panel_string not in panel_set:
@@ -1809,7 +1876,10 @@ class Seestar:
                             self.event_state["scheduler"]["cur_scheduler_item"]["panel_remaining_time_s"] = 0
                             self.event_state["scheduler"]["cur_scheduler_item"]["item_remaining_time_s"] = 0
                             return
-
+                        elif self.schedule['is_skip_requested']:
+                            self.logger.info("current mosaic stacking was requested to skip. Stopping at current mosaic.")
+                            return
+                        
                         time.sleep(5)
                         panel_remaining_time_s -= 5
                         item_remaining_time_s -= 5
@@ -2084,6 +2154,11 @@ class Seestar:
         if self.schedule['state'] != "stopped" and self.schedule['state'] != "complete":
             return self.json_result("start_scheduler", -1, "An existing scheduler is active. Returned with no action.")
 
+        if "start_item" in params:
+            self.schedule['item_number'] = params['start_item']
+        else:
+            self.schedule['item_number'] = 1
+
         self.scheduler_thread = threading.Thread(target=lambda: self.scheduler_thread_fn(), daemon=True)
         self.scheduler_thread.name = f"SchedulerThread:{self.device_name}"
         self.scheduler_thread.start()
@@ -2104,10 +2179,12 @@ class Seestar:
         self.logger.info(f"start run scheduler with seestar_alp version {Version.app_version}")
 
         self.schedule['state'] = "working"
+        self.schedule['is_stacking'] = False
+        self.schedule['is_stacking_paused'] = False
         issue_shutdown = False
         self.play_sound(80)
-        self.logger.info("schedule started ...")
-        index = 0
+        self.logger.info(f"schedule started from item {self.schedule['item_number']}...")
+        index = self.schedule['item_number'] - 1
         while index < len(self.schedule['list']):
             update_time()
             if self.schedule['state'] != "working":
@@ -2142,6 +2219,9 @@ class Seestar:
                 self.update_scheduler_state_obj(item_state)
                 sleep_count = 0
                 while sleep_count < sleep_time and self.schedule['state'] == "working":
+                    if self.schedule['is_skip_requested']:
+                        self.logger.info("requested to skip. Stopping wait_for.")
+                        break
                     update_time()
                     time.sleep(5)
                     sleep_count += 5
@@ -2159,6 +2239,9 @@ class Seestar:
                     update_time()
                     local_time = datetime.now()
                     if local_time.hour == wait_until_hour and local_time.minute == wait_until_minute:
+                        break
+                    elif self.schedule['is_skip_requested']:
+                        self.logger.info("requested to skip. Stopping wait_until.")
                         break
                     time.sleep(5)
                     self.event_state["scheduler"]["cur_scheduler_item"]["current time"] = f"{local_time.hour:02d}:{local_time.minute:02d}"
@@ -2185,6 +2268,8 @@ class Seestar:
                     request = {'method': action}
                 self.send_message_param_sync(request)
             index += 1
+            self.schedule['is_skip_requested'] = False
+
         self.reset_below_horizon_dec_offset()
 
         if self.schedule['state'] != "stopped":
@@ -2196,7 +2281,7 @@ class Seestar:
         if issue_shutdown:
             self.send_message_param_sync({"method":"pi_shutdown"})
 
-    def stop_scheduler(self, params):
+    def stop_scheduler(self, params={}):
         if 'schedule_id' in params and self.schedule['schedule_id'] != params['schedule_id']:
             return self.json_result("stop_scheduler", 0, f"Schedule with id {params['schedule_id']} did not match this device's schedule. Returned with no action.")
 
@@ -2206,6 +2291,7 @@ class Seestar:
             self.stop_stack()
             self.play_sound(83)
             self.schedule['state'] = "stopped"
+            self.schedule['is_stacking'] = False
             return self.json_result("stop_scheduler", 0, f"Scheduler stopped successfully.")
 
         elif self.schedule['state'] == "complete":
