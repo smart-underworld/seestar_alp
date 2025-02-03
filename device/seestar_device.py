@@ -1356,18 +1356,20 @@ class Seestar:
                         cur_latlon = tmp["result"]
                 self.move_scope(0, 0, 0)
 
+                # move determination of direction out of loop
+                delta_lon = lon-cur_latlon[1]
+                if abs(delta_lon) < 180:
+                    direction = 0
+                else:
+                    direction = 180
                 while True:
-                    delta_lon = lon-cur_latlon[1]
                     if abs(delta_lon) < 5:
                         break
-                    elif delta_lon > 0 or delta_lon < -180:
-                        direction = 0
-                    else:
-                        direction = 180
                     if self.move_scope(direction, 1000, 10) == False:
                         break
                     time.sleep(0.1)
                     cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
+                    delta_lon = lon-cur_latlon[1]
                 self.move_scope(0, 0, 0)
 
                 cur_latlon = self.send_message_param_sync({"method":"scope_get_horiz_coord"})["result"]
