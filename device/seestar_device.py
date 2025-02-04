@@ -22,6 +22,8 @@ from json import JSONEncoder
 import tzlocal
 import queue
 import pydash
+from pyhocon import ConfigFactory
+
 from device.config import Config
 from device.version import Version # type: ignore
 from device.seestar_util import Util
@@ -32,6 +34,7 @@ from collections import OrderedDict
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz
 from astropy.time import Time
 import astropy.units as u
+
 
 class FixedSizeOrderedDict(OrderedDict):
     def __init__(self, *args, maxsize=None, **kwargs):
@@ -144,10 +147,13 @@ class Seestar:
     def __repr__(self) -> str:
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
 
+    def get_name(self):
+        return self.device_name
+
     def update_scheduler_state_obj(self, item_state, result = 0):
-        self.event_state["scheduler"]  = {"Event":"Scheduler", 
+        self.event_state["scheduler"]  = {"Event":"Scheduler",
                                             "schedule_id": self.schedule['schedule_id'], "state":self.schedule['state'],
-                                            "item_number": self.schedule["item_number"], "cur_scheduler_item": item_state, 
+                                            "item_number": self.schedule["item_number"], "cur_scheduler_item": item_state,
                                             "is_stacking": self.schedule["is_stacking"], "is_stacking_paused": self.schedule["is_stacking_paused"],
                                             "result":result}
         self.logger.info(f"scheduler event state: {self.event_state['scheduler']}")
@@ -578,7 +584,7 @@ class Seestar:
                                                     "stack_lenhance": l_enhance,
                                                     "auto_3ppa_calib": True,
                                                     "auto_power_off" : False}
-        
+
         result = self.send_message_param_sync(data)
         self.logger.info(f"result for set setting: {result}")
 
@@ -590,7 +596,7 @@ class Seestar:
                                                     "stack":{"dbe":False},
                                                     "frame_calib": is_frame_calibrated}})
         self.logger.info(f"result for set setting for dbe and auto frame_calib: {result}")
-        
+
         response = self.send_message_param_sync({"method":"get_setting"})
         self.logger.info(f"get setting response: {response}")
 
@@ -1177,7 +1183,7 @@ class Seestar:
         if "gain" in params:
             stack_gain = params["gain"]
             result = self.send_message_param_sync({"method": "set_control_value", "params": ["gain", stack_gain]})
-            self.logger.info(result)           
+            self.logger.info(result)
         return not "error" in result
 
     def get_last_image(self, params):
@@ -1570,7 +1576,7 @@ class Seestar:
         else:
             self.logger.warn("scheduler is not stacking, so nothing to pause")
             return self.json_result("pause_scheduler", -1, "Scheduler is not stacking.")
-        
+
     def continue_scheduler(self, params):
         self.logger.info("continue scheduler...")
         if self.schedule['state'] == "working" and not self.schedule['is_stacking'] and self.schedule['is_stacking_paused']:
@@ -1584,7 +1590,7 @@ class Seestar:
         else:
             self.logger.warn("scheduler was not paused, so nothing to do")
             return self.json_result("pause_scheduler", -1, "Scheduler was not paused stacking.")
-        
+
     def skip_scheduler_cur_item(self, params):
         self.logger.info("skipping scheduler item...")
         if self.schedule['state'] == "working" and self.schedule['is_skip_requested'] == False:
@@ -1791,9 +1797,9 @@ class Seestar:
                         self.schedule['state'] = "stopped"
                         return
                     if self.schedule['is_skip_requested']:
-                        self.logger.info("current mosaic was requested to skip. Stopping at current mosaic.")  
+                        self.logger.info("current mosaic was requested to skip. Stopping at current mosaic.")
                         return
-                    
+
                     # check if we are doing a subset of the panels
                     panel_string = str(index_ra + 1) + str(index_dec + 1)
                     if is_use_selected_panels and panel_string not in panel_set:
@@ -1879,7 +1885,7 @@ class Seestar:
                         elif self.schedule['is_skip_requested']:
                             self.logger.info("current mosaic stacking was requested to skip. Stopping at current mosaic.")
                             return
-                        
+
                         time.sleep(5)
                         panel_remaining_time_s -= 5
                         item_remaining_time_s -= 5
@@ -2360,7 +2366,7 @@ class Seestar:
 
     def event_callbacks_init(self, initial_state):
         self.logger.info(f'event_callback_init({self}, {initial_state})')
-        self.event_callbacks = [
+        self.event_callbacks: list[EventCallback] = [
             BatteryWatch(self, initial_state),
             #SensorTempWatch(self, initial_state)
         ]
@@ -2368,13 +2374,12 @@ class Seestar:
         # read files in user_triggers subdir, and read json
         user_hooks = []
         for filename in os.listdir("user_hooks"):
-            if filename.endswith(".json"):
+            if filename.endswith(".conf"):
                 filepath = os.path.join("user_hooks", filename)
-                with open(filepath, 'r') as f:
-                    try:
-                        user_hooks.append(json.load(f))
-                    except json.JSONDecodeError as e:
-                        self.logger.warn("Unable to decode user_hooks/{filename} - json parsing error")
+                try:
+                    user_hooks.append(ConfigFactory.parse_file(filepath))
+                except Exception as e:
+                    self.logger.warn("Unable to decode user_hooks/{filename} - parsing error")
         for hook in user_hooks:
             if "events" in hook and "execute" in hook:
                 self.event_callbacks.append(UserScriptEvent(self, initial_state, hook))

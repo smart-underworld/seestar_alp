@@ -1,8 +1,10 @@
-import os
+import json
+import subprocess
+from abc import ABC, abstractmethod
 
 from device.config import Config
 
-class EventCallback:
+class EventCallback(ABC):
     """
     An event callback can be initialized from
     the current state of the device, or the result of get_device_state
@@ -14,14 +16,17 @@ class EventCallback:
     This is meant to be a passive callback system that reacts to the events
     being reported by the scope.
     """
+    @abstractmethod
     def __init__(self, device, initial_state):
-        return
+        pass
 
+    @abstractmethod
     def fireOnEvents(self):
-        return ['PiStatus']
+        pass
 
+    @abstractmethod
     def eventFired(self, device, event_data):
-        return
+        pass
 
 
 
@@ -118,5 +123,11 @@ class UserScriptEvent(EventCallback):
             return []
 
     def eventFired(self, device, event_data):
-        self.logger.info("UserScriptGoto - event fired, execute {self.user_script}")
-        os.system(self.user_script["execute"])
+        self.logger.info(f"UserScriptGoto - event fired, execute {self.user_script}")
+        subprocess.run(self.user_script["execute"], env={
+            'DEVNUM': str(device.device_num),
+            'DEVICENAME': device.device_name,
+            'NAME': event_data["Event"],
+            # 'DEVICE': json.dumps(device.__dict__),
+            'EVENT_DATA': json.dumps(event_data)
+        })
