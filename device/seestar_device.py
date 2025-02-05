@@ -2374,7 +2374,7 @@ class Seestar:
         # read files in user_triggers subdir, and read json
         user_hooks = []
         for filename in os.listdir("user_hooks"):
-            if filename.endswith(".conf"):
+            if filename.endswith(".conf") or filename.endswith(".hcon"):
                 filepath = os.path.join("user_hooks", filename)
                 try:
                     user_hooks.append(ConfigFactory.parse_file(filepath))
