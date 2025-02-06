@@ -258,10 +258,11 @@ class action:
             else:
                 cur_dev.logger.info(f"response: {result}")
 
-            event_name = f"action_{action_name}"
-            for cb in cur_dev.event_callbacks:
-                if event_name in cb.fireOnEvents() or "action_*" in cb.fireOnEvents():
-                    cb.eventFired(cur_dev, { "Event": event_name, **params })
+            if hasattr(cur_dev, 'event_callbacks'):
+                event_name = f"action_{action_name}"
+                for cb in cur_dev.event_callbacks:
+                    if event_name in cb.fireOnEvents() or "action_*" in cb.fireOnEvents():
+                        cb.eventFired(cur_dev, { "Event": event_name, **params })
         except Exception as ex:
             resp.text = MethodResponse(req,
                             DevDriverException(0x500, '\n'.join(ex.args), ex)).json
