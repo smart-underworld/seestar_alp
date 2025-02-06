@@ -387,7 +387,7 @@ class Seestar:
                                     threading.Thread(name=f"plate_solve:{self.device_name}", target=lambda: self.request_plate_solve_for_BPA()).start()
 
                         for cb in self.event_callbacks:
-                            if event_name in cb.fireOnEvents():
+                            if event_name in cb.fireOnEvents() or "event_*" in cb.fireOnEvents():
                                 cb.eventFired(self, parsed_data)
                         #else:
                         #    self.logger.debug(f"Received event {event_name} : {data}")
