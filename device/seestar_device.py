@@ -457,8 +457,8 @@ class Seestar:
     def get_event_state(self, params=None):
         self.event_state["scheduler"]["Event"] = "Scheduler"
         self.event_state["scheduler"]["state"] = self.schedule["state"]
-        self.event_state["scheduler"]["is_stacking"] = self.schedule["is_stacking"]
-        self.event_state["scheduler"]["is_stacking_paused"] = self.schedule["is_stacking_paused"]
+        self.event_state["scheduler"]["is_stacking"] = self.schedule.get("is_stacking", False)
+        self.event_state["scheduler"]["is_stacking_paused"] = self.schedule.get("is_stacking_paused", False)
 
         if "3PPA" in self.event_state:
             self.event_state["3PPA"]["eq_offset_alt"] = self.cur_equ_offset_alt
