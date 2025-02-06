@@ -246,17 +246,22 @@ class action:
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "pause_scheduler":
                 result = cur_dev.pause_scheduler(params)
-                resp.text = MethodResponse(req, value = result).json                
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "continue_scheduler":
                 result = cur_dev.continue_scheduler(params)
-                resp.text = MethodResponse(req, value = result).json   
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "skip_scheduler_cur_item":
                 result = cur_dev.skip_scheduler_cur_item(params)
-                resp.text = MethodResponse(req, value = result).json   
+                resp.text = MethodResponse(req, value = result).json
             if log_debug:
                 cur_dev.logger.debug(f"response: {result}")
             else:
                 cur_dev.logger.info(f"response: {result}")
+
+            event_name = f"action_{action_name}"
+            for cb in cur_dev.event_callbacks:
+                if event_name in cb.fireOnEvents() or "action_*" in cb.fireOnEvents():
+                    cb.eventFired(cur_dev, { "Event": event_name, **params })
         except Exception as ex:
             resp.text = MethodResponse(req,
                             DevDriverException(0x500, '\n'.join(ex.args), ex)).json
