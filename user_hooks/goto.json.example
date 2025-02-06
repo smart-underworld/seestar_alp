@@ -1,4 +1,0 @@
-{
-    "events": ["ScopeGoto", "AutoGoto"],
-    "execute": "/foo/bar.py"
-}
