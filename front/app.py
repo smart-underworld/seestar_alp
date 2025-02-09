@@ -1894,11 +1894,28 @@ class ScheduleToggleResource:
 
     def on_post(self, req, resp, telescope_id=0):
         current = do_action_device("get_schedule", telescope_id, {})
-        state = current["Value"]["state"]
-        if state == "stopped" or state == "complete":
-            do_action_device("start_scheduler", telescope_id, {})
-        else:
-            do_action_device("stop_scheduler", telescope_id, {})
+        value = current.get("Value",{})
+        action = req.media.get('action')
+        state = value.get("state")
+        if action == "toggle":
+            if state == "stopped" or state == "complete":
+                do_action_device("start_scheduler", telescope_id, {})
+            else:
+                do_action_device("stop_scheduler", telescope_id, {})
+        elif action == "pause":
+            paused = value.get("is_stacking_paused")
+            if state == "working":
+                if paused:
+                    print("RESUMING")
+                    do_action_device("continue_scheduler", telescope_id, {})
+                else:
+                    print("PAUSING")
+                    do_action_device("pause_scheduler", telescope_id, {})
+
+        elif action == "skip":
+            current_item_id = value.get("current_item_id")
+            if current_item_id:
+                do_action_device("skip_scheduler_cur_item", telescope_id, {})
         self.display_state(req, resp, telescope_id)
 
     @staticmethod

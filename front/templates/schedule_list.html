@@ -1,14 +1,39 @@
 <div class="mb-3">
     {% if client_master and online %}
         <div style="height: 45px;">
-            <div hx-post="{{ root }}/schedule/state" hx-swap="outerHTML">
-                <span class="me-3">State: {{ schedule['state'] }}</span>
-                <span>
-                    <button type="submit" class="btn btn-primary">
-                        {% if schedule['state'] == "stopped" or schedule['state'] == 'complete' %}Start{% else %}Stop{% endif %}
-                    </button>
-                </span>
-            </div>
+          <span class="me-3">State: {{ schedule['state'] }}</span>
+          <span>
+            <button
+              hx-post="{{root}}/schedule/state"
+              hx-swap="outerHTML"
+              hx-vals='{"action": "toggle"}'
+              {% if schedule['state'] == "working" %}
+              class="btn btn-danger">
+              {% else %}
+              class="btn btn-success">
+              {% endif %}
+              {% if schedule['state'] == "stopped" or schedule['state'] == 'complete' %} &#9205; Start{% else %} &#9632; Stop{% endif %}
+            </button>
+            {% if schedule['state'] == "working" %}
+              {% if schedule['is_stacking'] %}
+                <button
+                  hx-post="{{root}}/schedule/state"
+                  hx-swap="outerHTML"
+                  hx-vals='{"action": "pause"}'
+                  class="btn btn-primary">
+                  {% if schedule['is_stacking_paused'] %}&#9707; Resume{% else %}&#9707; Pause{% endif %}
+                </button>
+              {% endif %}
+              <button
+                hx-post="{{root}}/schedule/state"
+                hx-swap="outerHTML"
+                hx-vals='{"action": "skip"}'
+                class="btn btn-secondary"
+                style="font-family: inherit;">
+                Skip
+              </button>
+            {% endif %}
+          </span>
         </div>
     {% elif not client_master %}
         <p>You are currently in guest mode. You can release this in the Advanced->Guest Mode of the SeeStar app.</p>
