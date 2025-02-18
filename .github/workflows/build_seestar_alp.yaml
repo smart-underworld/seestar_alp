@@ -169,7 +169,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
   build-MacOS-x86:
-    runs-on: "MacOS-latest"
+    runs-on: "MacOS-13"
 
     steps:
       - uses: actions/checkout@v4
