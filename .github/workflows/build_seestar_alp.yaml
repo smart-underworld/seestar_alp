@@ -116,7 +116,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-MacOS:
+  build-MacOS-arm64:
     runs-on: "MacOS-latest"
 
     steps:
@@ -138,15 +138,67 @@ jobs:
         run: |
           git_version=$(git describe --tags --always --dirty --exclude='*[0-9]-g*' --match='v*')
           echo $git_version > ./version.txt
-          pyinstaller --name="seestar_alp" --onedir \
+          pyinstaller --name="seestar_alp" --target-arch arm64 --onedir \
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
           --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp" \
           --paths=./front --paths=./device \
           --collect-all=geomag \
           root_app.py
           cd dist
-          zip -r ../MacOS_seestar_alp.zip ./seestar_alp/*
-          echo "device_script_result=MacOS_seestar_alp.zip" >> $GITHUB_ENV
+          zip -r ../MacOS_arm64_seestar_alp.zip ./seestar_alp/*
+          echo "device_script_result=MacOS_arm64_seestar_alp.zip" >> $GITHUB_ENV
+          echo "device_script_version=$(echo $git_version)" >> $GITHUB_ENV
+          if [[ $git_version =~ .*[0-9]*-g.* ]]; then
+            echo "device_script_prerelease=true"  >> $GITHUB_ENV
+          else
+            echo "device_script_prerelease=false"  >> $GITHUB_ENV
+          fi
+        shell: bash
+
+      - name: Display Result
+        run: echo "The script result is ${{ env.device_script_result }}"
+        shell: bash
+
+      - name: Upload Result as Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.device_script_result }}
+          tag_name: ${{ env.device_script_version }}
+          prerelease: ${{ env.device_script_prerelease }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+  build-MacOS-x86:
+    runs-on: "MacOS-latest"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: run pyinstaller for device
+        id: create_device
+        run: |
+          git_version=$(git describe --tags --always --dirty --exclude='*[0-9]-g*' --match='v*')
+          echo $git_version > ./version.txt
+          pyinstaller --name="seestar_alp" --target-arch x86_64 --onedir \
+          --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
+          --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp" \
+          --paths=./front --paths=./device \
+          --collect-all=geomag \
+          root_app.py
+          cd dist
+          zip -r ../MacOS_x86_seestar_alp.zip ./seestar_alp/*
+          echo "device_script_result=MacOS_x86_seestar_alp.zip" >> $GITHUB_ENV
           echo "device_script_version=$(echo $git_version)" >> $GITHUB_ENV
           if [[ $git_version =~ .*[0-9]*-g.* ]]; then
             echo "device_script_prerelease=true"  >> $GITHUB_ENV
