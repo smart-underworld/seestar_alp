@@ -1,6 +1,12 @@
 #!/bin/bash
 src_home=$(cd $(dirname $0)/.. && pwd)
 
+if [ "$SHELL" = "/bin/bash" ]; then
+  shellfile=~/.bashrc
+else
+  shellfile=~/.zshrc
+fi
+
 #
 # common functions
 #
@@ -27,12 +33,6 @@ function python_virtualenv_setup {
   if [ ! -e ~/.pyenv ]; then
     curl https://pyenv.run | bash
 
-    if [ "$SHELL" = "/bin/bash" ]; then
-      shellfile=~/.bashrc
-    else
-      shellfile=~/.zshrc
-    fi
-
     cat <<_EOF >> ${shellfile}
 # start seestar_alp
 export PYENV_ROOT="\$HOME/.pyenv"
@@ -44,6 +44,7 @@ _EOF
   else
     echo "Pyenv already configured, skipping install"
   fi
+  source $shellfile
 
   export PYENV_ROOT="$HOME/.pyenv"
   [[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
@@ -67,7 +68,21 @@ _EOF
     echo "Python local virtual environment already configured"
   fi
 
+  pyenv rehash
+  python -m pip install --upgrade pip
   pip install -r requirements.txt
+}
+
+function setup_brew {
+  if [ -z "$(which brew)" ]; then
+    echo "Installing Homebrew"
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  else
+    echo "Homebrew already installed, skipping install"
+  fi
+
+  brew update
+  brew install readline xz
 }
 
 function print_banner {
@@ -84,6 +99,9 @@ $(printf "| %-36s|" "Seestar_alp ${operation} complete")
 | logs can be found in                |
 |  ./seestar_alp/alpyca.log*          |
 |                                     |
+| If this is the first time running,  |
+| open a new shell, or run:           |
+$(printf "| %-36s|" "source $shellfile")
 |-------------------------------------|
 _EOF
 }
@@ -105,6 +123,7 @@ function setup() {
   fi
 
   config_toml_setup
+  setup_brew
   python_virtualenv_setup
   print_banner "${action}"
 }

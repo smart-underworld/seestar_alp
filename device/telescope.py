@@ -187,6 +187,9 @@ class action:
             elif action_name == "is_goto_completed_ok":
                 result = cur_dev.is_goto_completed_ok()
                 resp.text = MethodResponse(req, value = result).json
+            elif action_name == "adjust_focus":
+                result = cur_dev.adjust_focus(params["steps"])
+                resp.text = MethodResponse(req, value = result).json
             elif action_name == "start_spectra":
                 result = cur_dev.start_spectra(params)
                 resp.text = MethodResponse(req, value = result).json

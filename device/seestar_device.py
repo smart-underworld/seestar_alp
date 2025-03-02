@@ -2152,6 +2152,19 @@ class Seestar:
 
         return {"jsonrpc": "2.0", "TimeStamp":time.time(), "command":command_name, "code":code, "result":result}
 
+    def adjust_focus(self, num_steps):
+        response = self.send_message_param_sync({"method": "get_focuser_position"})
+        cur_step_value = response['result']
+        self.logger.info(f"Adjusting focus by {num_steps} steps from current value of {cur_step_value}")
+        resposne = self.send_message_param_sync({"method":"move_focuser", "params":{"step":cur_step_value+num_steps, "ret_step":True}})
+        time.sleep(2)
+        response = self.send_message_param_sync({"method": "get_focuser_position"})
+        cur_step_value = response['result']
+        result = f"Final focus position: {cur_step_value}"
+        self.logger.info(result)
+        time.sleep(2)
+        return result
+
     def start_scheduler(self, params):
         if "schedule_id" in params and params['schedule_id'] != self.schedule['schedule_id']:
             return self.json_result("start_scheduler", 0, f"Schedule with id {params['schedule_id']} did not match this device's schedule. Returned with no action.")
@@ -2213,6 +2226,10 @@ class Seestar:
                 item_state = {"type": "auto_focus", "schedule_item_id": self.schedule['current_item_id'], "action": "auto focus"}
                 self.update_scheduler_state_obj(item_state)
                 self.try_auto_focus(cur_schedule_item['params']['try_count'])
+            elif action == 'adjust_focus':
+                item_state = {"type": "adjust_focus", "schedule_item_id": self.schedule['current_item_id'], "action": "adjust focus"}
+                self.update_scheduler_state_obj(item_state)
+                self.adjust_focus(cur_schedule_item['params']['steps'])
             elif action == 'shutdown':
                 item_state = {"type": "shut_down", "schedule_item_id": self.schedule['current_item_id'], "action": "shut down"}
                 self.update_scheduler_state_obj(item_state)
@@ -2285,6 +2302,7 @@ class Seestar:
         self.logger.info("Scheduler finished.")
         self.play_sound(82)
         if issue_shutdown:
+            time.sleep(20)
             self.send_message_param_sync({"method":"pi_shutdown"})
 
     def stop_scheduler(self, params={}):
