@@ -2157,6 +2157,7 @@ class Seestar:
         cur_step_value = response['result']
         self.logger.info(f"Adjusting focus by {num_steps} steps from current value of {cur_step_value}")
         resposne = self.send_message_param_sync({"method":"move_focuser", "params":{"step":cur_step_value+num_steps, "ret_step":True}})
+        time.sleep(2)
         response = self.send_message_param_sync({"method": "get_focuser_position"})
         cur_step_value = response['result']
         result = f"Final focus position: {cur_step_value}"
