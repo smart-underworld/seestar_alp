@@ -1,11 +1,10 @@
 {% extends 'schedule_base.html' %}
 
 {% block schedule_tab_content %}
-    <form method="post" action="{{ root }}/schedule/auto-focus">
         <div class="card border-primary mb-3">
             <div class="card-body">
                 <div class="mb-3">
-                    <label for="targetName" class="form-label">Auto Focus Rounds</label>
+                    <label for="autoFocus" class="form-label">Auto Focus Rounds</label>
                     <input type="number" class="form-control" id="autoFocus" name="autoFocus"
                            aria-describedby="autoFocusHelp" required>
                     <div id="autoFocusHelp" class="form-text">Specify the desired number of rounds of auto-focus
@@ -13,7 +12,4 @@
                 </div>
             </div>
         </div>
-
-        <button type="submit" class="btn btn-primary">Submit</button>
-    </form>
 {% endblock %}

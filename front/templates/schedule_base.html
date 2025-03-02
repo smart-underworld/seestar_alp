@@ -8,28 +8,124 @@
 {% endblock %}
 
 {% block content %}
-    <div class="container mb-2">
-        <p class="h3">Current Schedule</p>
-        <div hx-get="{{ root }}/schedule/list" hx-trigger="load, every 2s">Loading schedule...</div>
+  <div class="container mb-2">
+    <p class="h3">Current Schedule</p>
 
-        <div class="mb-3">
-            <div class="container py-2">
-                <span> {% include 'clear_schedule.html' %}</span>
-            </div>
-        </div>
-
-        <p class="mt-3">Schedule page. Pick an item to schedule, and Submit to add to the schedule.</p>
-        {% include 'partials/schedule_tab_header.html' with context %}
-
-        <div class="tab-content">
-            <div class="tab-pane fade show active" role="tabpanel" aria-labelledby="auto-focus-tab">
-                {% block schedule_tab_content %}{% endblock %}
-            </div>
-        </div>
+    <div id="schedule-status" class="mb-3">
+      <div class="container mb-3">
+        <span> {% include 'partials/schedule_state.html' %}</span>
+      </div>
     </div>
 
-    <footer class="bg-body-tertiary text-center mt-3">
-        Version: {{ version }}
-    </footer>
+    <form id="scheduleForm" action="{{ root }}/schedule/delete" method="post" enctype="application/x-www-form-urlencoded">
+
+      <div id="schedule-head">
+        <div class="row fw-bold border-bottom py-1 text-start">
+          <div class="col-2 align-self-start">Target</div>
+          <div class="col-2 align-self-start">Param</div>
+          <div class="col align-self-start">Panels</div>
+          <div class="col align-self-start">Ov%</div>
+          <div class="col align-self-start">J2000</div>
+          <div class="col align-self-start">Exp</div>
+          <div class="col align-self-start">Gain</div>
+          <div class="col align-self-start">LP</div>
+          <div class="col align-self-start">AF</div>
+          <div class="col-2 align-self-start">Selected Panels</div>
+        </div>
+      </div>
+
+      <div id="schedule-body" class="container mt-3">
+        {% include 'partials/schedule_list.html' %}
+      </div>
+
+      <div id="schedule-buttons-top" class="container mt-3">
+        <div class="bt-3">
+          {% if schedule.list %}
+            <button type="submit" class="btn btn-danger" name="action" value="delete" title="Delete the selected schedule item">Delete</button>
+            <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/schedule/{{ tab }}" title="Add a schedule item to bottom of schedule">Append</button>
+            <button type="submit" class="btn btn-secondary" name="action" value="insert" formaction="{{ root }}/schedule/{{ tab }}" title="Insert a schedule item before the selected item">Insert</button>
+          {% else %}
+            <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/schedule/{{ tab }}" title="Add a schedule item to bottom of schedule">Add</button>
+          {% endif %}
+        </div>
+      </div>
+
+
+      <p class="mt-3">Schedule page. Pick an item to schedule, and Submit to add to the schedule.</p>
+
+      {% include 'partials/schedule_tab_header.html' with context %}
+
+      <div class="tab-content">
+        <div class="tab-pane fade show active" role="tabpanel" aria-labelledby="auto-focus-tab">
+          {% block schedule_tab_content %}{% endblock %}
+        </div>
+      </div>
+
+      <div id="schedule-buttons-bottom" class="container mt-3">
+        <div class="bt-3">
+          {% if schedule.list %}
+            <button type="submit" class="btn btn-danger" name="action" value="delete" title="Delete the selected schedule item">Delete</button>
+            <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/schedule/{{ tab }}" title="Add a schedule item to bottom of schedule">Append</button>
+            <button type="submit" class="btn btn-secondary" name="action" value="insert" formaction="{{ root }}/schedule/{{ tab }}" title="Insert a schedule item before the selected item">Insert</button>
+          {% else %}
+            <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/schedule/{{ tab }}" title="Add a schedule item to bottom of schedule">Add</button>
+          {% endif %}
+        </div>
+      </div>
+
+    </form>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const form = document.getElementById("scheduleForm");
+
+        form.addEventListener("submit", function (event) {
+            const checkboxes = document.querySelectorAll('input[name="selected_items"]:checked');
+            const buttonClicked = event.submitter;
+
+            if (buttonClicked) {
+                if (buttonClicked.name === "action") {
+                    if (buttonClicked.value === "insert" && checkboxes.length !== 1) {
+                        alert("Please select exactly one item to insert before.");
+                        event.preventDefault();
+                        return;
+                    }
+                    if (buttonClicked.value === "delete" && checkboxes.length === 0) {
+                        alert("Please select at least one item to delete.");
+                        event.preventDefault();
+                        return;
+                    }
+                }
+            }
+        });
+    });
+
+document.addEventListener("DOMContentLoaded", function () {
+    function checkScheduleState() {
+        fetch("{{ root }}/schedule/refresh")
+            .then(response => response.json())
+            .then(data => {
+                if (data.state === "working") {
+                    console.log("Schedule is working, refreshing...");
+                    document.getElementById("schedule-body").innerHTML = data.html;
+                    setTimeout(checkScheduleState, 5000);  // Keep checking every 5s
+                } else {
+                    console.log("Schedule is stopped");
+                    setTimeout(checkScheduleState, 5000);  // Keep polling
+                }
+            })
+            .catch(error => console.error("Error refreshing schedule:", error));
+    }
+
+    // Start checking state on page load
+    checkScheduleState();
+});
+
+  </script>
+
+  <footer class="bg-body-tertiary text-center mt-3">
+    Version: {{ version }}
+  </footer>
 
 {% endblock %}

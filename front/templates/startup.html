@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block header %}
+    <div class="container mt-3">
+		<p class="h1">{% block title %}Startup{% endblock %}</p>
+	</div>
+{% endblock %}
+
+{% block content %}
+	{% if online %}
+		<div class="mb-3 card card-body p-3">
+			<div class="accordion" id="eventStatusAccordion">
+				<div class="accordion-item">
+					<h2 class="accordion-header" id="headingOne">
+						<button class="accordion-button fs-5 fw-bold" type="button"
+								data-bs-toggle="collapse"
+								data-bs-target="#eventStatusDiv"
+								aria-expanded="true"
+								aria-controls="eventStatusDiv">
+							Event status
+						</button>
+					</h2>
+				</div>
+			</div>
+			<div id="eventStatusDiv" class="accordion-collapse collapse show"
+				 aria-labelledby="headingOne"
+				 data-bs-parent="#eventStatusAccordion">
+				<div class="accordion-body" id="eventStatusContent"
+					 hx-get="{{ root }}/eventstatus?action=command"
+					 hx-trigger="load, every 1s"
+					 hx-swap="innerHTML">
+					Loading event status...
+				</div>
+			</div>
+		</div>
+    <div class="mb-3 card-body p-3">
+      <div class="accordion" id ="startupAccordion">
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="headingTwo">
+            <button class="accordion-button fs-5 fw-bold" type="button"
+								data-bs-toggle="collapse"
+								data-bs-target="#startupDiv"
+								aria-expanded="true"
+								aria-controls="startupDiv">
+              Startup Sequence
+            </button>
+          </h2>
+        </div>
+      </div>
+      <div id="startupDiv" class="accordion-collapse collapse show"
+           aria-labelledby="headingTwo"
+           data-bs-parent="#startupAccordion">
+        <div class="accordion-body" id="startupContent">
+          {% include 'do_startup.html' %}
+        </div>
+      </div>
+    </div>
+    <div class="mb-3 card-body p-3">
+      <div class="accordion" id="paRefineAccordion">
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="headingThree">
+            <button class="accordion-button fs-5 fw-bold" type="button"
+								data-bs-toggle="collapse"
+								data-bs-target="#paRefineDiv"
+								aria-expanded="true"
+								aria-controls="paRefineDiv">
+            PA Refinement
+            </button>
+          </h2>
+        </div>
+      </div>
+      <div id="paRefineDiv" class="accordion-collapse collapse show"
+           aria-labelledby="headingThree"
+           data-bs-parent="#paRefineAccordion">
+        <div class="accordion-body" id="paRefineContent">
+          {% include 'pa_refine.html' %}
+        </div>
+      </div>
+    </div>
+	{% else %}
+		<div class="container mt-3">
+			<p>You are currently in offline mode</p>
+		</div>
+	{% endif %}
+	<footer class="bg-body-tertiary text-center mt-3">
+		Version: {{ version }}
+	</footer>
+{% endblock %}
+
+{% block scripts %}
+	<script src="/public/command.js"></script>
+{% endblock %}

@@ -89,5 +89,15 @@
          aria-selected="false">Shutdown
       </a>
   </li>
+  {% if experimental %}
+  <li class="nav-item" role="presentation">
+    <a href="{{ root }}/schedule/focus"
+       class ="nav-link {% if tab == "focus" %}active{% endif %}"
+       type="button"
+       aria-controls="focus"
+       aria-selected="false">Focus
+    </a>
+  </li>
+  {% endif %}
 </ul>
 

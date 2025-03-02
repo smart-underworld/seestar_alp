@@ -1,8 +1,153 @@
-<div hx-post="{{ root }}/schedule/state" hx-swap="outerHTML">
-    <span class="me-3">State: {{ state }}</span>
-    <span>
-        <button type="submit" class="btn btn-primary">
-            {% if state == "stopped" %}Start{% else %}Stop{% endif %}
-        </button>
-    </span>
+<div class="container mt-3">
+
+  <div id="schedule-state" class="d-flex justify-content-between">
+    {% if client_master and online %}
+      <div  class="p-2">
+        <div class="container mb-3">
+          <div>State: {{ state }}</div>
+          <div>
+            <button
+              hx-post="{{root}}/schedule/state"
+              hx-swap="outerHTML"
+              hx-target="#schedule-state"
+              hx-vals='{"action": "toggle"}'
+              {% if state == "working" %}
+                class="btn btn-danger">
+              {% else %}
+                class="btn btn-success">
+              {% endif %}
+              {% if state == "stopped" or state == "complete" %}
+                Start
+              {% else %}
+                Stop
+              {% endif %}
+            </button>
+            {% if state == "working" %}
+              <button
+                hx-post="{{root}}/schedule/state"
+                hx-swap="outerHTML"
+                hx-target="#schedule-state"
+                hx-vals='{"action": "skip"}'
+                class="btn btn-secondary">
+                Skip
+              </button>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    {% elif not client_master %}
+      <div class="p-2">
+        <p>You are currently in guest mode. You can release this in the Advanced->Guest Mode of the SeeStar app.</p>
+        <p>See the <a href="https://github.com/smart-underworld/seestar_alp/wiki/Guest-Mode">Guest Mode</a> wiki page for details</p>
+      </div>
+    {% else %}
+      <div class="p-2">
+        <p>You are currently in offline mode</p>
+      </div>
+    {% endif %}
+
+  <div class="p-2">
+    <div class="container mb-3">
+      <label for="actionSelector" class="form-label">Schedule Actions:</label>
+      <select class="form-select" id="actionSelector" onchange="handleAction()">
+        <option value="">--Select an Action--</option>
+        <option value="clear">Clear Schedule</option>
+        <option value="import">Import Schedule</option>
+        <option value="upload">Upload Schedule</option>
+        <option value="export">Export Schedule</option>
+        <option value="download">Download Schedule</option>
+      </select>
+    </div>
+  </div>
+
 </div>
+
+<div class="modal fade" id="actionModal" tabindex="-1" aria-labelledby="actionModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="actionModalLabel">Schedule Action</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="formContainer">
+                <!-- Dynamic form content goes here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function handleAction() {
+        let selectedValue = document.getElementById("actionSelector").value;
+        let formContainer = document.getElementById("formContainer");
+        let modalTitle = document.getElementById("actionModalLabel");
+
+        // Define different forms
+        let forms = {
+            "import": `
+                <form action="{{ root }}/schedule/import" method="post">
+                    <div class="mb-3">
+                        <label class="form-label">Select a File:</label>
+                        <select class="form-select" name="schedule_file" required>
+                            <option value="" disabled selected>Select a File</option>
+                            {% for file in files %}
+                                <option value="{{ file }}">{{ file }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Import</button>
+                </form>
+            `,
+            "upload": `
+                <form action="{{ root }}/schedule/upload" method="post" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">Upload File:</label>
+                        <input type="file" class="form-control" name="schedule_file" accept=".csv,.json" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Upload</button>
+                </form>
+            `,
+            "export": `
+                <form action="{{ root }}/schedule/export" method="post">
+                    <div class="mb-3">
+                        <label class="form-label">Filename:</label>
+                        <input type="text" class="form-control" name="filename" placeholder="Filename" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Export</button>
+                </form>
+            `,
+            "download": `
+                <form action="{{ root }}/schedule/download" method="post">
+                    <div class="mb-3">
+                        <label class="form-label">Filename:</label>
+                        <input type="text" class="form-control" name="filename" placeholder="Filename" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Download</button>
+                </form>
+            `
+        };
+
+        // Set the modal title based on the selected action
+        let titles = {
+            "import": "Import Schedule",
+            "upload": "Upload Schedule",
+            "export": "Export Schedule",
+            "download": "Download Schedule"
+        };
+
+        if (selectedValue === "clear") {
+            // Directly submit the form for "Clear Schedule" without showing the modal
+            let form = document.createElement("form");
+            form.method = "POST";
+            form.action = "{{ root }}/schedule/clear";
+            document.body.appendChild(form);
+            form.submit();
+        } else if (selectedValue) {
+            // Update the modal title and form content for other options
+            modalTitle.innerText = titles[selectedValue]; // Update modal title
+            formContainer.innerHTML = forms[selectedValue]; // Load the corresponding form
+            let modal = new bootstrap.Modal(document.getElementById("actionModal"));
+            modal.show();
+        }
+    }
+</script>

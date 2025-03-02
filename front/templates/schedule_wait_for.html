@@ -1,20 +1,14 @@
 {% extends 'schedule_base.html' %}
 
 {% block schedule_tab_content %}
-    <form method="post" action="{{ root }}/schedule/wait-for">
-        <div class="card border-primary mb-3">
-            <div class="card-body">
-                <div class="mb-3">
-                    <label for="waitFor" class="form-label">Wait for</label>
-                    <input type="number" class="form-control" id="waitFor" name="waitFor"
-                           aria-describedby="waitForHelp" required>
-                    <div id="waitForHelp" class="form-text">Specify the number of seconds to wait / pause the
-                        schedule.
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <button type="submit" class="btn btn-primary">Submit</button>
-    </form>
+  <div class="card border-primary mb-3">
+    <div class="card-body">
+      <div class="mb-3">
+        <label for="waitFor" class="form-label">Wait for</label>
+        <input type="number" class="form-control" id="waitFor" name="waitFor"
+               aria-describedby="waitForHelp" required>
+        <div id="waitForHelp" class="form-text">Specify the number of seconds to wait / pause the schedule.</div>
+      </div>
+    </div>
+  </div>
 {% endblock %}

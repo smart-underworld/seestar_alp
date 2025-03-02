@@ -1,25 +1,19 @@
 {% extends 'schedule_base.html' %}
 
 {% block schedule_tab_content %}
-    <form method="post" action="{{ root }}/schedule/lpf">
-
 	<div class="card border-primary mb-3">
-            <div class="card-body">
-        
-                <div class="mb-3">
-                    <div id="lpfHelp" class="form-text">Light Pollution Filter</div>
-                </div>
-	    	
-		<input type="radio" name="lpf" id="lpf_on" value="on" autocomplete="off" checked>
-            	<label for="option4">Enable</label>
-		</input>
-		<br>
-		<input type="radio" name="lpf" id="lpf_off" value="off" autocomplete="off">
-        	<label for="option4">Disable</label>
-		</input>
-            </div>
-        </div>
+    <div class="card-body">
+      <div class="mb-3">
+        <div id="lpfHelp" class="form-text">Light Pollution Filter</div>
+      </div>
 
-        <button type="submit" class="btn btn-primary">Submit</button>
-    </form>
+		  <input type="radio" name="lpf" id="lpf_on" value="on" autocomplete="off" checked>
+        <label for="lpf_on">Enable</label>
+  		</input>
+  		<br>
+  		<input type="radio" name="lpf" id="lpf_off" value="off" autocomplete="off">
+        <label for="lpf_off">Disable</label>
+  		</input>
+    </div>
+  </div>
 {% endblock %}

@@ -38,8 +38,10 @@
 			<!-- <p class="h3 mb-2">Enter a new mosaic</p> -->
 
 			<p>Creates and immediately runs a mosaic. For scheduling a mosaic, see <a href="/schedule">scheduler</a>.</p>
-
-			{% include 'mosaic_create.html' with context %}
+      <form id="scheduleForm" action="{{ root }}/mosaic" method="post" enctype="application/x-www-form-urlencoded">
+			  {% include 'mosaic_create.html' with context %}
+        <button type="submit" class="btn btn-primary">Submit</button>
+      </form>
 		</div>
   {% elif not client_master %}
     <div class="container mt-3">
