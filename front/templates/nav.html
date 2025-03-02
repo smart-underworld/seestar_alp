@@ -10,6 +10,9 @@
                 <li class="nav-item">
                     <a class="nav-link" aria-current="page" href="{{ root }}/">Home</a>
                 </li>
+              <li class="nav-item">
+                <a class="nav-link" aria-current="page" href="{{ root }}/startup">Startup</a>
+              </li>
 				<li class="nav-item dropdown">
 					<a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">Functions
 					</a>
@@ -32,14 +35,11 @@
 						<li>
 							<a class="dropdown-item" href="{{ root }}/mosaic">Mosaic</a>
 						</li>
-                        {% if experimental %}
-                        <li>
-							<a class="dropdown-item" href="{{ root }}/planning">Planning</a>
-						</li>
-                        <li>
-							<a class="dropdown-item" href="{{ root }}/blind_pa">PA Refinement</a>
-						</li>
-                        {% endif %}
+            {% if experimental %}
+              <li>
+							  <a class="dropdown-item" href="{{ root }}/planning">Planning</a>
+						  </li>
+            {% endif %}
 						<li>
 							<a class="dropdown-item" href="{{ root }}/schedule">Schedule</a>
 						</li>

@@ -1,21 +1,15 @@
 {% extends 'schedule_base.html' %}
 
 {% block schedule_tab_content %}
-    <form method="post" action="{{ root }}/schedule/dew-heater">
-
 	<div class="card border-primary mb-3">
-            <div class="card-body">
-        
-                <div class="mb-3">
-                    <div id="dewHeaterHelp" class="form-text">Dew Heater (0 = off)</div>
-                </div>
-    
-		<input type="range" min="0" max="100" value="90" class="slider" name="dewHeaterValue" id="dewHeaterValue" oninput="rangeValue.innerText = this.value">
-                <label for="option4" id="rangeValue">90</label>
-				</input>
-            </div>
-        </div>
+    <div class="card-body">
+      <div class="mb-3">
+        <div id="dewHeaterHelp" class="form-text">Dew Heater (0 = off)</div>
+      </div>
 
-        <button type="submit" class="btn btn-primary">Submit</button>
-    </form>
+		  <input type="range" min="0" max="100" value="90" class="slider" name="dewHeaterValue" id="dewHeaterValue" oninput="rangeValue.innerText = this.value">
+        <label for="dewHeaterValue" id="rangeValue">90</label>
+      </input>
+    </div>
+  </div>
 {% endblock %}

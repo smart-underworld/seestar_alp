@@ -38,8 +38,10 @@
 			<!-- <p class="h3 mb-2">Enter a new image</p> -->
 
 			<p>Creates and immediately runs an image. For scheduling an image, see <a href="/schedule">scheduler</a>.</p>
-
-			{% include 'image_create.html' with context %}
+      <form id="scheduleForm" action="{{ root }}/image" method="post" enctype="application/x-www-form-urlencoded">
+			  {% include 'image_create.html' with context %}
+        <button type="submit" class="btn btn-primary">Submit</button>
+      </form>
 		</div>
   {% elif not client_master %}
     <div class="container mt-3">

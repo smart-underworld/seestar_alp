@@ -1,7 +1,6 @@
 {% extends 'schedule_base.html' %}
 
 {% block schedule_tab_content %}
-<form method="post" action="{{ root }}/schedule/startup">
   <div class="card border-primary mb-3">
     <div class="card-body">
       <!-- Checkbox Inputs -->
@@ -27,6 +26,4 @@
       </div>
     </div>
   </div>
-  <button type="submit" class="btn btn-primary">Submit</button>
-</form>
 {% endblock %}
