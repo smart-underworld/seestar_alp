@@ -2162,7 +2162,6 @@ class Seestar:
         cur_step_value = response['result']
         result = f"Final focus position: {cur_step_value}"
         self.logger.info(result)
-        time.sleep(2)
         return result
 
     def start_scheduler(self, params):
