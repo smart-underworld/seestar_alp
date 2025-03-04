@@ -3249,7 +3249,7 @@ class BlindPolarAlignResource:
     def on_get(req, resp, telescope_id=1):
         now = datetime.now()
         context = get_context(telescope_id, req)
-        render_template(req, resp, 'blind_pa.html', now=now, **context)  # pylint: disable=repeated-keyword
+        render_template(req, resp, 'pa_refine.html', now=now, **context)  # pylint: disable=repeated-keyword
     @staticmethod
     def on_post(req, resp, telescope_id=1):
         now = datetime.now()
@@ -3274,18 +3274,18 @@ class BlindPolarAlignResource:
         elif action == "data":
             result = do_action_device("get_pa_error", telescope_id, {})
             value = result.get("Value", {})
-            blind_pa_data = {
+            pa_refine_data = {
                 "error_az": value["pa_error_az"],
                 "error_alt": value["pa_error_alt"]
             }
             resp.status = falcon.HTTP_200
             resp.content_type = 'application/json'
-            resp.text = json.dumps(blind_pa_data)
+            resp.text = json.dumps(pa_refine_data)
         elif action == 'runpa':
             polar_align = PostedForm.get("polar_align","False").strip() == "on"
             raise_arm = PostedForm.get("raise_arm","False").strip() == "on"
             do_action_device("action_start_up_sequence", telescope_id, {"3ppa": polar_align, "raise_arm": raise_arm})
-            render_template(req, resp, 'blind_pa.html', **context)
+            render_template(req, resp, 'pa_refine.html', **context)
 
 class PlatformRpiResource:
     @staticmethod
@@ -3655,7 +3655,7 @@ class FrontMain:
         app.add_route('/{telescope_id:int}/eventstatus', EventStatus())
         app.add_route('/{telescope_id:int}/gensupportbundle', GenSupportBundleResource())
         app.add_route('/{telescope_id:int}/config', ConfigResource())
-        app.add_route('/{telescope_id:int}/blind_pa', BlindPolarAlignResource())
+        app.add_route('/{telescope_id:int}/pa_refine', BlindPolarAlignResource())
         app.add_route('/{telescope_id:int}/platform-rpi', PlatformRpiResource())
         app.add_static_route("/public", f"{os.path.dirname(__file__)}/public")
         app.add_route('/simbad', SimbadResource())
@@ -3672,7 +3672,7 @@ class FrontMain:
         app.add_route('/getminorplanetcoordinates', GetMinorPlanetCoordinates())
         app.add_route('/getaavsocoordinates', GetAAVSOSearch())
         app.add_route('/config', ConfigResource())
-        app.add_route('/blind_pa', BlindPolarAlignResource())
+        app.add_route('/pa_refine', BlindPolarAlignResource())
 
         try:
             self.httpd = make_server(Config.ip_address, Config.uiport, app, handler_class=LoggingWSGIRequestHandler)
