@@ -1,7 +1,6 @@
 <div class="container mt-3">
-	<p class="h1">PA Refinement</p>
-  <p id="alt_err">alt error (deg): </p>
-  <p id="az_err">az  error (deg): </p>
+  <p id="alt_err">Alt Error (Degrees): </p>
+  <p id="az_err">Az Error (Degrees): </p>
 </div>
 
 <div class="slidecontainer">
@@ -184,7 +183,7 @@
   }
 
   async function update_pa_error() {
-    response = await fetch(get_blind_pa_URL, {
+    response = await fetch(get_pa_refine_URL, {
           method: "POST",
           body: JSON.stringify({
             action: "data"
@@ -201,9 +200,9 @@
     try {
       var baseURL =
       `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
-      get_blind_pa_URL = baseURL + '/blind_pa';
+      get_pa_refine_URL = baseURL + '/pa_refine';
 
-      var response = await fetch(get_blind_pa_URL, {
+      var response = await fetch(get_pa_refine_URL, {
         method: "POST",
         body: JSON.stringify({
           action: "start"
@@ -233,9 +232,9 @@
     try {
       var baseURL =
       `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
-      get_blind_pa_URL = baseURL + '/blind_pa';
+      get_pa_refine_URL = baseURL + '/pa_refine';
 
-      var response = await fetch(get_blind_pa_URL, {
+      var response = await fetch(get_pa_refine_URL, {
         method: "POST",
         body: JSON.stringify({
           action: "stop"
