@@ -195,7 +195,7 @@ def _get_context_real(telescope_id, req):
     current_stack = None
     stack_state = do_action_device("get_event_state", telescope_id, {"event_name": "Stack"})
     if stack_state:
-        current_stack = scheduler_state.get("Value",{}).get("result", {})
+        current_stack = stack_state.get("Value",{}).get("result", {})
 
     current_exp = None
     if telescope_id > 0:
@@ -203,7 +203,7 @@ def _get_context_real(telescope_id, req):
         if exp_value:
             current_exp = exp_value.get("exposure")
             if current_exp is not None:
-                current_exp = int(current_exp) / 100000
+                current_exp = int(current_exp) / 1000000
             else: # in case we are dealing with federation with device id 0
                 current_exp = 0
 
@@ -801,7 +801,6 @@ def hms_to_sec(timeString):
     else:
         return timeString
 
-
 def lat_lng_distance_in_km(lat1, lng1, lat2, lng2):
     """
     Based off of https://github.com/BGCastro89/nearest_csc
@@ -1302,19 +1301,25 @@ def redirect(location):
     # raise HTTPTemporaryRedirect(location)
 
 
-def fetch_template(template_name):
-    if getattr(sys, "frozen", False):
-        ## RWR Testing
-        template_dir = os.path.join(os.path.dirname(__file__), 'templates')
-        logger.debug(template_dir)
-        env = Environment(loader=FileSystemLoader(template_dir))
-        template = env.get_template(template_name)
-        ## RWR
-    else:
-        template = Environment(
-            loader=FileSystemLoader(os.path.join(os.path.dirname(__file__), 'templates'))).get_template(template_name)
-    return template
+template_dir = os.path.join(os.path.dirname(__file__), "templates")
+env = Environment(loader=FileSystemLoader(template_dir))
 
+def seconds_to_hms(seconds):
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
+
+env.globals["seconds_to_hms"] = seconds_to_hms
+
+def fetch_template(template_name):
+    try:
+        if getattr(sys, "frozen", False):
+            template_path = os.path.join(os.path.dirname(__file__), "templates")
+            env.loader = FileSystemLoader(template_path)
+        return env.get_template(template_name)
+    except Exception as e:
+        print(f"Error fetching template {template_name}: {e}")
+        raise
 
 def render_template(req, resp, template_name, **context):
     template = fetch_template(template_name)
@@ -2779,31 +2784,36 @@ class StartupResource:
 
     def on_post(self, req, resp, telescope_id=0):
         form = req.media
-        lat = form.get("lat", "").strip()
-        long = form.get("long", "").strip()
-        scope_aim_lat = form.get("scope_aim_lat", "").strip()
-        scope_aim_lon = form.get("scope_aim_lon", "").strip()
-        auto_focus = form.get("auto_focus", "False").strip() == "on"
-        dark_frames = form.get("dark_frames", "False").strip() == "on"
-        polar_align = form.get("polar_align", "False").strip() == "on"
-        raise_arm = form.get("raise_arm", "False").strip() == "on"
+        action = form.get("action")
+        if action == "start":
+            lat = form.get("lat", "").strip()
+            long = form.get("long", "").strip()
+            scope_aim_lat = form.get("scope_aim_lat", "").strip()
+            scope_aim_lon = form.get("scope_aim_lon", "").strip()
+            auto_focus = form.get("auto_focus", "False").strip() == "on"
+            dark_frames = form.get("dark_frames", "False").strip() == "on"
+            polar_align = form.get("polar_align", "False").strip() == "on"
+            raise_arm = form.get("raise_arm", "False").strip() == "on"
 
-        params = {
-            "auto_focus": auto_focus,
-            "dark_frames": dark_frames,
-            "3ppa": polar_align,
-            "raise_arm": raise_arm
-        }
+            params = {
+                "auto_focus": auto_focus,
+                "dark_frames": dark_frames,
+                "3ppa": polar_align,
+                "raise_arm": raise_arm
+            }
 
-        if lat and long:
-            params["lat"] = float(lat)
-            params["lon"] = float(long)
+            if lat and long:
+                params["lat"] = float(lat)
+                params["lon"] = float(long)
 
-        if scope_aim_lat and scope_aim_lon:
-            params["scope_aim_lat"] = float(scope_aim_lat)
-            params["scope_aim_lon"] = float(scope_aim_lon)
+            if scope_aim_lat and scope_aim_lon:
+                params["scope_aim_lat"] = float(scope_aim_lat)
+                params["scope_aim_lon"] = float(scope_aim_lon)
 
-        output = do_action_device("action_start_up_sequence", telescope_id, params)
+            output = do_action_device("action_start_up_sequence", telescope_id, params)
+        elif action == "stop":
+            output = do_action_device("stop_scheduler", telescope_id, {})
+
         self.startup(req, resp, telescope_id, output)
 
     @staticmethod
