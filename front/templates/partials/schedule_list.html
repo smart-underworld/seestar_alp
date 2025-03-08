@@ -49,7 +49,7 @@
                   </div>
 
                   <!-- Fifth Column: Panel Time -->
-                  <div class="col align-self-start">{{ item["params"]["panel_time_sec"] }}s</div>
+                  <div class="col align-self-start">{{ seconds_to_hms(item["params"]["panel_time_sec"]) }}</div>
 
                   <!-- Sixth Column: Gain -->
                   <div class="col align-self-start">{{ item["params"]["gain"] }}</div>
@@ -92,12 +92,13 @@
               <div class="accordion-body">
                 <!-- Additional details for the "start_mosaic" action can go here -->
                 {% if current_item is defined %}
+
                   {% if current_item['item_remaining_time_s'] is defined %}
+                    {% set item_time = current_item['item_total_time_s'] %}
                     {% set item_remain = current_item['item_remaining_time_s'] %}
-                    {% set total_hours = item_remain // 3600 %}
-                    {% set total_minutes = (item_remain % 3600) // 60 %}
-                    {% set total_seconds = item_remain % 60 %}
-                    <p>Time Remaining: {{ '{:02}:{:02}:{:02}'.format(total_hours, total_minutes, total_seconds) }}</p>
+                    {% set item_elapse = item_time - item_remain %}
+                    <p>Time Elapsed: {{ seconds_to_hms(item_elapse) }}</p>
+                    <p>Time Remaining: {{ seconds_to_hms(item_remain) }}</p>
                   {% endif %}
                   {% if item["params"]["ra_num"] > 1 or item["params"]["dec_num"] > 1 %}
                     {% if current_item['cur_ra_panel_num'] and current_item['cur_dec_panel_num'] %}
@@ -105,36 +106,24 @@
                     {% endif %}
                     {% if current_item['panel_remaining_time_s'] is defined %}
                       {% set panel_remain = current_item['panel_remaining_time_s'] %}
-                      {% set panel_hours = panel_remain // 3600 %}
-                      {% set panel_minutes = (panel_remain % 3600) // 60 %}
-                      {% set panel_seconds = panel_remain % 60 %}
-                      <p>Panel Remaining Time: {{ '{:02}:{:02}:{:02}'.format(panel_hours, panel_minutes, panel_seconds) }}</p>
+                      <p>Panel Remaining Time: {{ seconds_to_hms(panel_remain) }}</p>
                     {% endif %}
                   {% endif %}
                 {% endif %}
                 {% if current_stack is defined %}
-                  {% if current_stack["lapse_ms"] is defined %}
-                    {% set lapse_ms = current_stack["lapse_ms"] %}
-                    {% set lapse_s = (current_stack["lapse_ms"] // 1000) | int %}
-                    {% set image_hours = lapse_s // 3600 %}
-                    {% set image_mins = (lapse_s % 3600) // 60 %}
-                    {% set image_secs = (lapse_s % 60) %}
-                    <p>Time on Target: {{ '{:02}:{:02}:{:02}'.format(image_hours, image_mins, image_secs) }}</p>
-                  {% endif %}
-                  {% if current_stack["dropped_frame"] is defined %}
-                    <p>Dropped Frames: {{ current_stack["dropped_frame"] }}</p>
-                  {% endif %}
                   {% if current_stack["stacked_frame"] %}
                     <p>Stacked Frames: {{ current_stack["stacked_frame"] }}</p>
-                    {% set stack_s = current_stack["stacked_frame"] * current_exp %}
-                    {% set int_hours = stack_s // 3600 %}
-                    {% set int_mins = (stack_s % 3600) // 60 %}
-                    {% set int_secs = (stack_s % 60) %}
-                    <p>Integration Time: {{ '{:02}:{:02}:{:02}'.format(int_hours, int_mins, int_secs) }}</p>
+                    {% if current_stack["dropped_frame"] is defined %}
+                      <p>Dropped Frames: {{ current_stack["dropped_frame"] }}</p>
+                    {% endif %}
+                    {% set stack_s = (current_stack["stacked_frame"] * current_exp) | int %}
+                    <p>Integration Time: {{ seconds_to_hms(stack_s) }}</p>
                   {% endif %}
                 {% endif %}
-                <p>Federation Mode: {{ item["params"]['federation_mode'] }}</p>
-                <p>Max Devices: {{ item["params"]['max_devices'] }}</p>
+                {% if item["params"]['federation_mode'] %}
+                  <p>Federation Mode: {{ item["params"]['federation_mode'] }}</p>
+                  <p>Max Devices: {{ item["params"]['max_devices'] }}</p>
+                {% endif %}
                 <p>Retries: {{ item["params"]['num_tries'] }}</p>
                 <p>Retry Wait: {{ item["params"]['retry_wait_s'] }}s</p>
               </div>
