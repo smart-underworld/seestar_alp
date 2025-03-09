@@ -187,10 +187,13 @@ def _get_context_real(telescope_id, req):
             "ip_address": get_ip()
         }
 
+
     current_item = None
+    is_stacking = False
     scheduler_state = do_action_device("get_event_state", telescope_id, {"event_name": "scheduler"})
     if scheduler_state:
         current_item = scheduler_state.get("Value", {}).get("result", {}).get("cur_scheduler_item")
+        is_stacking = bool(scheduler_state.get("Value", {}).get("result", {}).get("is_stacking"))
 
     current_stack = None
     stack_state = do_action_device("get_event_state", telescope_id, {"event_name": "Stack"})
@@ -199,13 +202,14 @@ def _get_context_real(telescope_id, req):
 
     current_exp = None
     if telescope_id > 0:
-        exp_value = method_sync("get_camera_exp_and_bin", telescope_id)
-        if exp_value:
-            current_exp = exp_value.get("exposure")
-            if current_exp is not None:
-                current_exp = int(current_exp) / 1000000
-            else: # in case we are dealing with federation with device id 0
-                current_exp = 0
+        if is_stacking:
+            exp_value = method_sync("get_camera_exp_and_bin", telescope_id)
+            if exp_value:
+                current_exp = exp_value.get("exposure")
+                if current_exp is not None:
+                    current_exp = int(current_exp) / 1000000
+                else: # in case we are dealing with federation with device id 0
+                    current_exp = 0
 
     return {"telescope": telescope, "telescopes": telescopes, "root": root, "partial_path": partial_path,
             "online": online, "imager_root": imager_root, "experimental": experimental, "confirm": confirm,
