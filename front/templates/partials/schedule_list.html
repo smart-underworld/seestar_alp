@@ -91,32 +91,34 @@
                  aria-labelledby="heading{{ item['schedule_item_id'] }}" data-bs-parent="#scheduleAccordion">
               <div class="accordion-body">
                 <!-- Additional details for the "start_mosaic" action can go here -->
-                {% if current_item is defined %}
-                  {% if current_item['item_remaining_time_s'] is defined %}
-                    {% set item_time = current_item['item_total_time_s'] %}
-                    {% set item_remain = current_item['item_remaining_time_s'] %}
-                    {% set item_elapse = item_time - item_remain %}
-                    <p>Time Elapsed: {{ seconds_to_hms(item_elapse) }}</p>
-                    <p>Time Remaining: {{ seconds_to_hms(item_remain) }}</p>
+                {% if schedule["is_stacking"] %}
+                  {% if current_item is defined %}
+                    {% if current_item['item_remaining_time_s'] is defined %}
+                      {% set item_time = current_item['item_total_time_s'] %}
+                      {% set item_remain = current_item['item_remaining_time_s'] %}
+                      {% set item_elapse = item_time - item_remain %}
+                      <p>Time Elapsed: {{ seconds_to_hms(item_elapse) }}</p>
+                      <p>Time Remaining: {{ seconds_to_hms(item_remain) }}</p>
+                    {% endif %}
+                    {% if item["params"]["ra_num"] > 1 or item["params"]["dec_num"] > 1 %}
+                      {% if current_item['cur_ra_panel_num'] and current_item['cur_dec_panel_num'] %}
+                        <p>Current Panel:  {{ current_item['cur_ra_panel_num'] }}{{ current_item['cur_dec_panel_num'] }}</p>
+                      {% endif %}
+                      {% if current_item['panel_remaining_time_s'] is defined %}
+                        {% set panel_remain = current_item['panel_remaining_time_s'] %}
+                        <p>Panel Remaining Time: {{ seconds_to_hms(panel_remain) }}</p>
+                      {% endif %}
+                    {% endif %}
                   {% endif %}
-                  {% if item["params"]["ra_num"] > 1 or item["params"]["dec_num"] > 1 %}
-                    {% if current_item['cur_ra_panel_num'] and current_item['cur_dec_panel_num'] %}
-                      <p>Current Panel:  {{ current_item['cur_ra_panel_num'] }}{{ current_item['cur_dec_panel_num'] }}</p>
+                  {% if current_stack is defined %}
+                    {% if current_stack["stacked_frame"] %}
+                      <p>Stacked Frames: {{ current_stack["stacked_frame"] }}</p>
+                      {% if current_stack["dropped_frame"] is defined %}
+                        <p>Dropped Frames: {{ current_stack["dropped_frame"] }}</p>
+                      {% endif %}
+                      {% set stack_s = (current_stack["stacked_frame"] * current_exp) | int %}
+                      <p>Integration Time: {{ seconds_to_hms(stack_s) }}</p>
                     {% endif %}
-                    {% if current_item['panel_remaining_time_s'] is defined %}
-                      {% set panel_remain = current_item['panel_remaining_time_s'] %}
-                      <p>Panel Remaining Time: {{ seconds_to_hms(panel_remain) }}</p>
-                    {% endif %}
-                  {% endif %}
-                {% endif %}
-                {% if current_stack is defined %}
-                  {% if current_stack["stacked_frame"] %}
-                    <p>Stacked Frames: {{ current_stack["stacked_frame"] }}</p>
-                    {% if current_stack["dropped_frame"] is defined %}
-                      <p>Dropped Frames: {{ current_stack["dropped_frame"] }}</p>
-                    {% endif %}
-                    {% set stack_s = (current_stack["stacked_frame"] * current_exp) | int %}
-                    <p>Integration Time: {{ seconds_to_hms(stack_s) }}</p>
                   {% endif %}
                 {% endif %}
                 {% if item["params"]['federation_mode'] %}
