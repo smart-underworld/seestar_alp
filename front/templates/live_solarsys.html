@@ -1,0 +1,123 @@
+{% extends 'live_base.html' %}
+
+{% block header %}
+  <h1 class="text-center mb-3" id="target_name">{% block title %}{{ view.target_name }}{% endblock %}</h1>
+{% endblock %}
+
+{% block live_content %}
+  <div class="container">
+    <div class="row justify-content-md-center g-3">
+      <div class="col-md-auto">
+        <img id="liveViewImg" src="{{ imager_root }}/vid" alt="Live view image"
+             style="min-height: 80vh; max-height: 80vh; max-width: 100%"/>
+      </div>
+
+      <div class="col-md-auto">
+        {# Photo controls #}
+        {#        <div class="me-3 d-flex mb-3 gap-3">#}
+        {#          <button class="btn btn-outline-secondary p-3" hx-post="{{ root }}/live/photo"#}
+        {#                  hx-swap="none">#}
+        {#            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor"#}
+        {#                 class="bi bi-record-circle" viewBox="0 0 16 16">#}
+        {#              <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>#}
+        {#              <path d="M11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/>#}
+        {#            </svg>#}
+        {#            Photo#}
+        {#          </button>#}
+        {#        </div>#}
+        {# Video controls #}
+        <div class="me-3 d-flex mb-3 gap-3">
+
+          <form>
+            <div class="d-flex py-1 align-items-center">
+              <div class="me-3 h3">
+                Video
+              </div>
+              <div id="recordButtonContent"
+                   hx-get="{{ root }}/live/video"
+                   hx-trigger="load, every 2s, sse:video_record_status"
+                   hx-swap="innerHTML"
+                   class="me-3">
+                Loading event status...
+              </div>
+              <div class="me-3">
+                <select id='timelapse' name='timelapse' class="form-select" aria-label="Speed">
+                  <option value="0" selected>Normal speed</option>
+                  <option value="1">Timelapse 1 sec</option>
+                  <option value="2">Timelapse 2 sec</option>
+                  <option value="5">Timelapse 5 sec</option>
+                  <option value="10">Timelapse 10 sec</option>
+                  <option value="20">Timelapse 20 sec</option>
+                  <option value="30">Timelapse 30 sec</option>
+                  <option value="60">Timelapse 60 sec</option>
+                </select>
+              </div>
+              <div id="raw" class="form-check form-switch me-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="rawCheckbox" name="raw">
+                <label class="form-check-label" for="rawCheckbox">Raw</label>
+              </div>
+              {#            <div class="me-3 d-flex mb-3 gap-3" id="capture_status">#}
+              <div class="me-3" id="capture_status">
+                Capture status
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="me-3 d-flex mb-3 gap-3">
+          <div class="d-flex py-1 align-items-center">
+            <div class="me-3 h3">
+              Zoom:
+            </div>
+            <div class="btn-group" role="group" aria-label="Basic radio toggle button group">
+              <input type="radio" class="btn-check" name="zoom" id="zoom1x" autocomplete="off"
+                     hx-post="{{ root }}/live/zoom"
+                     hx-vals='{"zoom": 0}'
+                     hx-swap="none">
+              <label class="btn btn-outline-primary" for="zoom1x">1x</label>
+
+              <input type="radio" class="btn-check" name="zoom" id="zoom2x" autocomplete="off"
+                     hx-post="{{ root }}/live/zoom"
+                     hx-vals='{"zoom": 1}'
+                     hx-swap="none">
+              <label class="btn btn-outline-primary" for="zoom2x">2x</label>
+
+              <input type="radio" class="btn-check" name="zoom" id="zoom4x" autocomplete="off"
+                     hx-post="{{ root }}/live/zoom"
+                     hx-vals='{"zoom": 2}'
+                     hx-swap="none">
+              <label class="btn btn-outline-primary" for="zoom4x">4x</label>
+            </div>
+          </div>
+        </div>
+
+        {% include 'partials/live_movement_control.html' with context %}
+
+
+        <div class="card card-body p-3 mb-3">
+          <div class="">
+            <div class="me-3 d-flex mb-3 gap-3">
+              {% include 'partials/live_controls_goto.html' with context %}
+            </div>
+
+            <div class="me-3 mb-3 d-flex">
+              {% include 'partials/live_controls_focus.html' with context %}
+            </div>
+
+            <div class="me-3 d-flex">
+              {% include 'partials/live_controls_exposure.html' with context %}
+            </div>
+          </div>
+        </div>
+
+        {% include 'partials/live_card_status.html' with context %}
+
+        <div id="movement-controls" class="mb-3 d-flex flex-column">
+          {% include 'partials/live_controls_mode_none.html' with context %}
+        </div>
+      </div>
+    </div>
+    <div class="row mt-3">
+      {% include 'partials/events.html' with context %}
+    </div>
+  </div>
+{% endblock %}

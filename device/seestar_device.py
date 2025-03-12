@@ -2468,8 +2468,19 @@ class Seestar:
                          json.dumps(event).encode('utf-8') +
                          b'</pre>\n\n')
                 event_name = pydash.get(event, "Event")
-                if event_name == 'FocuserMove':
-                    frame += (b'event: focusMove\ndata: ' + str(event['position']).encode('utf-8') + b'\n\n')
+                match event_name:
+                    case 'FocuserMove':
+                        frame += (b'event: focusMove\ndata: ' + str(event['position']).encode('utf-8') + b'\n\n')
+                    case 'PiStatus':
+                        if 'temp' in event:
+                            frame += (b'event: temp\ndata: ' + str(event['temp']).encode('utf-8') + b'\n\n')
+                        if 'battery_capacity' in event:
+                            frame += (b'event: battery_capacity\ndata: ' + str(event['battery_capacity']).encode('utf-8') + b'\n\n')
+                    case 'AviRecord':
+                        avi_state = event.get('state', 'cancel')
+                        frame += (b'event: video_record_status\ndata: ' + avi_state.encode('utf-8') + b'\n\n')
+
+                print(f'Event: {event_name}: {event}')
 
                 yield frame
             except GeneratorExit:

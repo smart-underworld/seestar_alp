@@ -1,6 +1,10 @@
 <div class="text-center mb-3">Events</div>
 
 <div id="events" class="card card-body overflow-auto w-100" style="height: 200px;">
-    <div sse-swap="message" hx-swap="afterbegin">
-    </div>
+  <div sse-swap="message" hx-swap="afterbegin">
+  </div>
+  <div sse-swap="temp" class="d-none"></div>
+  <div sse-swap="battery_capacity" class="d-none"></div>
+  <div sse-swap="video_record_status" class="d-none"></div>
+  {# Put other events here! #}
 </div>
