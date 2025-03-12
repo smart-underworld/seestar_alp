@@ -13,6 +13,10 @@
             </div>
 
             <div class="col-md-auto">
+              {% include 'partials/live_controls_video.html' %}
+
+              {% include 'partials/live_controls_zoom.html' %}
+
                 {% include 'partials/live_movement_control.html' with context %}
 
                 {% include 'partials/live_card_status.html' with context %}

@@ -1,0 +1,26 @@
+<div class="me-3 d-flex mb-3 gap-3">
+  <div class="d-flex py-1 align-items-center">
+    <div class="me-3 h3">
+      Zoom:
+    </div>
+    <div class="btn-group" role="group" aria-label="Basic radio toggle button group">
+      <input type="radio" class="btn-check" name="zoom" id="zoom1x" autocomplete="off"
+             hx-post="{{ root }}/live/zoom"
+             hx-vals='{"zoom": 0}'
+             hx-swap="none">
+      <label class="btn btn-outline-primary" for="zoom1x">1x</label>
+
+      <input type="radio" class="btn-check" name="zoom" id="zoom2x" autocomplete="off"
+             hx-post="{{ root }}/live/zoom"
+             hx-vals='{"zoom": 1}'
+             hx-swap="none">
+      <label class="btn btn-outline-primary" for="zoom2x">2x</label>
+
+      <input type="radio" class="btn-check" name="zoom" id="zoom4x" autocomplete="off"
+             hx-post="{{ root }}/live/zoom"
+             hx-vals='{"zoom": 2}'
+             hx-swap="none">
+      <label class="btn btn-outline-primary" for="zoom4x">4x</label>
+    </div>
+  </div>
+</div>

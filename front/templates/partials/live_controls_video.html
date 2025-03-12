@@ -1,0 +1,36 @@
+<div class="me-3 d-flex mb-3 gap-3">
+  <form>
+    <div class="d-flex py-1 align-items-center">
+      <div class="me-3 h3">
+        Video
+      </div>
+      <div id="recordButtonContent"
+           hx-get="{{ root }}/live/video"
+           hx-trigger="load, every 2s, sse:video_record_status"
+           hx-swap="innerHTML"
+           class="me-3">
+        Loading event status...
+      </div>
+      <div class="me-3">
+        <select id='timelapse' name='timelapse' class="form-select" aria-label="Speed">
+          <option value="0" selected>Normal speed</option>
+          <option value="1">Timelapse 1 sec</option>
+          <option value="2">Timelapse 2 sec</option>
+          <option value="5">Timelapse 5 sec</option>
+          <option value="10">Timelapse 10 sec</option>
+          <option value="20">Timelapse 20 sec</option>
+          <option value="30">Timelapse 30 sec</option>
+          <option value="60">Timelapse 60 sec</option>
+        </select>
+      </div>
+      <div id="raw" class="form-check form-switch me-3">
+        <input class="form-check-input" type="checkbox" role="switch" id="rawCheckbox" name="raw">
+        <label class="form-check-label" for="rawCheckbox">Raw</label>
+      </div>
+      {#            <div class="me-3 d-flex mb-3 gap-3" id="capture_status">#}
+      <div class="me-3" id="capture_status">
+        Capture status
+      </div>
+    </div>
+  </form>
+</div>

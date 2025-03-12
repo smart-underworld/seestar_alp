@@ -276,13 +276,14 @@ class SeestarImaging:
         while not self.is_idle():
             self.comm.set_exposure_mode(self.compare_set_exposure_mode())
             image, width, height = self.comm.get_image()
-            raw_image, _, _ = self.comm.get_unprocessed_image()
-            snr = SNRAnalysis().analyze(raw_image)
 
             if self.comm.is_streaming():
-                delay = 0.015
+                delay = 0.001
+                snr = -1
             else:
+                raw_image, _, _ = self.comm.get_unprocessed_image()
                 delay = 0.1
+                snr = SNRAnalysis().analyze(raw_image)
 
             if image is not None:
                 # print("get_frame image!")
