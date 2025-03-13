@@ -2632,7 +2632,7 @@ class LiveFocusResource(BaseResource):
         output = self.current_focus(telescope_id)
         # print("Current focus:", output)
 
-        self.send_text(str(output))
+        self.send_text(req, resp, telescope_id, str(output))
 
     def on_post(self, req, resp, telescope_id: int = 1):
         focus = self.current_focus(telescope_id)
@@ -2651,7 +2651,7 @@ class LiveFocusResource(BaseResource):
 
         # print("LiveFocusResource.post return", focus)
 
-        self.send_text(str(focus))
+        self.send_text(req, resp, telescope_id, str(focus))
 
     def current_focus(self, telescope_id):
         focus = pydash.get(self.focus, telescope_id)
@@ -2919,6 +2919,7 @@ class StartupResource:
     def on_post(self, req, resp, telescope_id=0):
         form = req.media
         action = form.get("action")
+        output = None
         if action == "start":
             lat = form.get("lat", "").strip()
             long = form.get("long", "").strip()
