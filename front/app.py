@@ -2463,23 +2463,18 @@ class LiveModeResource:
         resp.text = mode
 
 
-class LiveGotoResource:
+class LiveGotoResource(BaseResource):
     def on_post(self, req, resp, telescope_id=1):
         target = req.media["target"]
 
-        match target:
-            case 'moon':
-                response = do_action_device("method_async", telescope_id, {
-                    "method": "start_scan_planet",
-                })
-                print("Moon response:", response)
+        if target in ['moon', 'Moon', 'sun', 'Sun']:
+            # This will go to the current "planet"
+            response = do_action_device("method_async", telescope_id, {
+                "method": "start_scan_planet",
+            })
+            print(f"{target} response:", response)
 
-        # {  "id" : 111, "method" : "start_scan_planet"}
-        # {"id": 634, "method": "start_scan_planet"}
-
-        resp.status = falcon.HTTP_200
-        resp.content_type = 'text/plain'
-        resp.text = target
+        self.send_text(req, resp, telescope_id, target)
 
 
 # deprecated!
