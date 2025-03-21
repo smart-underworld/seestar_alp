@@ -1310,6 +1310,7 @@ class Seestar:
                 msg = "Need to park scope first for a good reference start point"
                 self.logger.info(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
+                self.mark_op_stopped("ScopeHome")
                 response = self.send_message_param_sync({"method":"scope_park"})
                 self.logger.info(f"scope park response: {response}")
                 if "error" in response:
@@ -2324,6 +2325,9 @@ class Seestar:
         else:
             return self.json_result("stop_scheduler", -5, f"scheduler is in unaccounted for state: {self.schedule['state']}")
 
+    def mark_op_stopped(self, in_op_name):
+        self.event_state[in_op_name] = {"state":"stopped"}
+
     def wait_end_op(self, in_op_name):
         self.logger.info(f"Waiting for {in_op_name} to finish.")
         if in_op_name == "goto_target":
@@ -2332,7 +2336,7 @@ class Seestar:
                 time.sleep(1)
             result = self.is_goto_completed_ok()
         else:
-            self.event_state[in_op_name] = {"state":"stopped"}
+            #self.event_state[in_op_name] = {"state":"stopped"}
             while in_op_name not in self.event_state or (self.event_state[in_op_name]["state"] != "complete" and self.event_state[in_op_name]["state"] != "fail"):
                 time.sleep(1)
                 result = self.event_state[in_op_name]["state"] == "complete"
