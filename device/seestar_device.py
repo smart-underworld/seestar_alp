@@ -421,9 +421,9 @@ class Seestar:
     def shut_down_thread(self, data):
         self.play_sound(13)
         result = self.reset_below_horizon_dec_offset()
+        self.mark_op_state("ScopeHome", "working")
         response = self.send_message_param_sync({"method":"scope_park"})
         self.logger.info(f"Parking before shutdown...{response}")
-        self.event_state["ScopeHome"] = {"state":"working"}
         result = self.wait_end_op("ScopeHome")
         self.logger.info(f"Parking result...{result}")
         self.logger.info(f"About to send shutdown or reboot command to Seestar...{response}")
@@ -615,15 +615,15 @@ class Seestar:
 
     def mark_goto_status_as_start(self):
         if self.is_below_horizon_goto_method:
-            self.event_state["ScopeGoto"] = {"state":"start"}
+            self.mark_op_state("ScopeGoto", "start")
         else:
-            self.event_state["AutoGoto"] = {"state":"start"}
+            self.mark_op_state("AutoGoto", "start")
 
     def mark_goto_status_as_stopped(self):
         if self.is_below_horizon_goto_method:
-            self.event_state["ScopeGoto"] = {"state":"stopped"}
+            self.mark_op_state("ScopeGoto", "stopped")
         else:
-            self.event_state["AutoGoto"] = {"state":"stopped"}
+            self.mark_op_state("AutoGoto", "stopped")
 
     def is_goto(self):
         try:
@@ -696,6 +696,7 @@ class Seestar:
             params['target_name'] = target_name
             params['lp_filter'] = False
             data['params'] = params
+            self.mark_op_state("goto_target", "stopped")
             self.send_message_param_sync(data)
             result = self.wait_end_op("goto_target")
             return result
@@ -724,6 +725,7 @@ class Seestar:
         data['method'] = 'scope_goto'
         params = [in_ra, in_dec + self.below_horizon_dec_offset]
         data['params'] = params
+        self.mark_op_state("goto_target", "stopped")
         result = self.send_message_param_sync(data)
         if 'error' in result:
             self.logger.warn("Error while trying to move: %s", result)
@@ -852,7 +854,7 @@ class Seestar:
         self.logger.info("trying auto_focus...")
         focus_count = 0
         result = False
-        self.event_state["AutoFocus"] = {"state":"working"}
+        self.mark_op_state("AutoFocus", "working")
         while focus_count < try_count:
             focus_count += 1
             self.logger.info("%s: focusing try %s of %s...", self.device_name, str(focus_count), str(try_count))
@@ -885,7 +887,7 @@ class Seestar:
         self.is_below_horizon_goto_method = False
         cur_count = 0
         result = False
-        self.event_state["3PPA"] = {"state":"working"}
+        self.mark_op_state("3PPA", "working")
         while cur_count < try_count:
             cur_count += 1
             self.logger.info("%s: 3PPA try %s of %s...", self.device_name, str(cur_count), str(try_count))
@@ -980,13 +982,13 @@ class Seestar:
         #override 3ppa event state to complete since we intentionally stop the go back to origin logic
         if result == True:
             time.sleep(1)
-            self.event_state["3PPA"]["state"] = "complete"
+            self.mark_op_state("3PPA", "complete")
 
         return result
 
     def try_dark_frame(self):
         self.logger.info("start dark frame measurement...")
-        self.event_state["DarkLibrary"] = {"state":"working"}
+        self.mark_op_state("DarkLibrary", "working")
         result = self.send_message_param_sync({"method": "iscope_stop_view"})
 
         # seem like there's a side effect here of autofocus state was set to "cancel" after stop view
@@ -1310,7 +1312,7 @@ class Seestar:
                 msg = "Need to park scope first for a good reference start point"
                 self.logger.info(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
-                self.mark_op_stopped("ScopeHome")
+                self.mark_op_state("ScopeHome", "stopped")
                 response = self.send_message_param_sync({"method":"scope_park"})
                 self.logger.info(f"scope park response: {response}")
                 if "error" in response:
@@ -1497,6 +1499,7 @@ class Seestar:
                 msg = "move a little bit, platesolve and sync to ensure we have a good sky model"
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
                 self.logger.info(msg)
+                self.mark_op_state("MoveByAngle", "stopped")
                 response = self.send_message_param_sync({"method":"scope_move_left_by_angle", "params":[-1]})
                 result = self.wait_end_op("MoveByAngle")
                 time.sleep(2.0)
@@ -1504,6 +1507,7 @@ class Seestar:
                 self.logger.info(f"result from start star view: {response}")
                 time.sleep(2.0)
                 #platesolve
+                self.mark_op_state("PlateSolve", "stopped")
                 response = self.send_message_param_sync({"method":"start_solve"})
                 result = self.wait_end_op("PlateSolve")
                 if result == True:
@@ -1511,6 +1515,7 @@ class Seestar:
                     self._sync_target([self.cur_solve_RA, self.cur_solve_Dec])
                 else:
                     # try one more time...
+                    self.mark_op_state("PlateSolve", "stopped")
                     response = self.send_message_param_sync({"method":"start_solve"})
                     result = self.wait_end_op("PlateSolve")
                     if result == True:
@@ -2325,8 +2330,8 @@ class Seestar:
         else:
             return self.json_result("stop_scheduler", -5, f"scheduler is in unaccounted for state: {self.schedule['state']}")
 
-    def mark_op_stopped(self, in_op_name):
-        self.event_state[in_op_name] = {"state":"stopped"}
+    def mark_op_state(self, in_op_name, state = "stopped"):
+        self.event_state[in_op_name] = {"state":state}
 
     def wait_end_op(self, in_op_name):
         self.logger.info(f"Waiting for {in_op_name} to finish.")
