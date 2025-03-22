@@ -2344,7 +2344,7 @@ class Seestar:
             #self.event_state[in_op_name] = {"state":"stopped"}
             while in_op_name not in self.event_state or (self.event_state[in_op_name]["state"] != "complete" and self.event_state[in_op_name]["state"] != "fail"):
                 time.sleep(1)
-                result = self.event_state[in_op_name]["state"] == "complete"
+            result = self.event_state[in_op_name]["state"] == "complete"
 
         self.logger.info(f"Finished waiting for {in_op_name}. Result: {result}")
         return result
