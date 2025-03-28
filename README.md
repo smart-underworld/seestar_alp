@@ -18,6 +18,7 @@ If you just want to use the GUI and commnicate with your Seestar then the standa
 ### Standalone package
 For details on running pre-built standalone packages, please see the following wiki pages for the most up-to-date details:
 - [Windows](https://github.com/smart-underworld/seestar_alp/wiki/Running-standalone:-Windows)
+- [MacOS](https://github.com/smart-underworld/seestar_alp/wiki/Running-standalone:-Mac)
 
 ### Source code
 For details on running from source, please see the following wiki pages for the most up-to-date details:
