@@ -1647,7 +1647,8 @@ class HomeTelescopeResource:
         now = datetime.now()
         telescopes = get_telescopes_state()
         context = get_context(telescope_id, req)
-        del context["telescopes"]
+        if 'telescopes' in context:
+            del context["telescopes"]
         render_template(req, resp, 'index.html', now=now, telescopes=telescopes,
                         **context)  # pylint: disable=repeated-keyword
 
