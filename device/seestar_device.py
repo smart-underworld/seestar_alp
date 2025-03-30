@@ -908,7 +908,7 @@ class Seestar:
             self.firmware_ver_int = response["result"]["device"]["firmware_ver_int"]
             self.logger.info(f"Firmware version: {self.firmware_ver_int}")
             if self.firmware_ver_int < 2427:
-                msg = f"Your firmware version is too old. Please update to at least 2.4.27"
+                msg = f"Your firmware version is too old. Please update to at least 2.4.27 or use the older version of the app (e.g., 2.5.x)"
                 self.logger.error(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
                 self.schedule['state'] = "stopping"
