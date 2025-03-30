@@ -192,7 +192,7 @@ class _Config:
         self.init_activate_LP_filter: bool = self.get_toml(section, 'activate_LP_filter', False)
         self.init_dew_heater_power: int = self.get_toml(section, 'dew_heater_power', 0)
         self.init_guest_mode: bool = self.get_toml(section, 'guest_mode_init', True)
-        self.scope_aim_lat: float = self.get_toml(section, 'scope_aim_lat', 60.0)
+        self.scope_aim_lat: float = self.get_toml(section, 'scope_aim_lat', 2.0)
         self.scope_aim_lon: float = self.get_toml(section, 'scope_aim_lon', 20.0)
         self.is_EQ_mode: bool = self.get_toml(section, 'is_EQ_mode', False)
         self.battery_low_limit: int = self.get_toml(section, 'battery_low_limit', 3)
@@ -440,14 +440,14 @@ class _Config:
         ssHTML = ''
         for seestar in self.seestars:
             if 'scope_aim_lat' in seestar:
-                lat = self.render_text('ss_scope_aim_lat','Aim Lat',seestar['scope_aim_lat'],'start up latitude in degrees -90 to 80')
+                lat = self.render_text('ss_scope_aim_lat','Aim Lat',seestar['scope_aim_lat'],'Start up raise arm setting for moving up/down from zenith in movement clock seconds, from -20 to 20')
             else:
-                lat = self.render_text('ss_scope_aim_lat','Aim Lat',60,'start up latitude in degrees -90 to 80')
+                lat = self.render_text('ss_scope_aim_lat','Aim Lat',2,'Start up raise arm setting for moving up/down from zenith in movement clock seconds, from -20 to 20')
 
             if 'scope_aim_lon' in seestar:
-                lon = self.render_text('ss_scope_aim_lon','Aim Long',seestar['scope_aim_lon'],'start up longitude in degrees 0 to 360')
+                lon = self.render_text('ss_scope_aim_lon','Aim Long',seestar['scope_aim_lon'],'Start up raise arm setting for moving counter/clockwise from zenith in movement clock seconds, from -100 to 100')
             else:
-                lon = self.render_text('ss_scope_aim_lon','Aim Long',20,'start up longitude in degrees 0 to 360')
+                lon = self.render_text('ss_scope_aim_lon','Aim Long',20,'Start up raise arm setting for moving counter/clockwise from zenith in movement clock seconds, from -100 to 100')
 
 
             c = ""
@@ -569,8 +569,8 @@ class _Config:
                 self.render_text('init_dither_frequency', 'Dither frequency:', self.init_dither_frequency, 'Number of frames between dithering movements') + \
                 self.render_checkbox('init_activate_LP_filter', 'Activate LP filter:', self.init_activate_LP_filter, 'Switch on Light Pollution Filter') + \
                 self.render_text('init_dew_heater_power', 'Dew heater power:', self.init_dew_heater_power, 'Dew heater power level, 0 - 100') + \
-                self.render_text('scope_aim_lat', 'Scope aim latitude:', self.scope_aim_lat, 'Latitude to move the scope to for the startup sequence') + \
-                self.render_text('scope_aim_lon', 'Scope aim longitude:', self.scope_aim_lon, 'Longitude to move thescope to for the startup sequence') + \
+                self.render_text('scope_aim_lat', 'Scope aim latitude:', self.scope_aim_lat, 'Start up raise arm setting for moving up/down from zenith in movement clock seconds, from -20 to 20') + \
+                self.render_text('scope_aim_lon', 'Scope aim longitude:', self.scope_aim_lon, 'Start up raise arm setting for moving counter/clockwise from zenith in movement clock seconds, from -100 to 100') + \
                 self.render_checkbox('is_EQ_mode', 'Scope in EQ Mode:', self.is_EQ_mode, 'Is the scope in equitorial mode') + \
                 self.render_checkbox('init_guest_mode', 'Claim guest mode control:', self.init_guest_mode, 'Claim guest mode on init') + \
                 self.render_text('battery_low_limit', 'Battery low limit percentage:', self.battery_low_limit, 'Lower limit for battery, before safe shutdown')
