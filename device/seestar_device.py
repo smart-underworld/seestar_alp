@@ -836,7 +836,8 @@ class Seestar:
             date_data = {}
             date_data['method'] = 'pi_set_time'
             date_data['params'] = [date_json]
-
+            failed_default_PA = False
+            
             do_raise_arm = params.get("raise_arm", False)
             do_AF = params.get("auto_focus", False)
             do_3PPA = params.get("3ppa", False)
