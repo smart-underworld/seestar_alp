@@ -132,7 +132,6 @@
 			<li>Adjust your alt/az on your wedge gradually<br>
 				Wait for the dot to move between adjustments</li>
 			<li>Once you're happy with the offset values, press the stop button</li>
-			<li>Re-run Startup Sequence with Polar Align checked</li>
 		</ol>
 	</div>
 </div>
@@ -251,7 +250,6 @@
       // no matter what, stop it anyway
       startStopButton.textContent = "Start";
       clearInterval(pa_interval);
-      alert("Make sure you re-run polar alignment in start-up sequence.");
 
     } catch (error) {
       startStopButton.textContent = "Start";

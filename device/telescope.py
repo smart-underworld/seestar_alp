@@ -239,8 +239,9 @@ class action:
                 result = cur_dev.adjust_mag_declination(params)
                 resp.text = MethodResponse(req, value = result).json
             elif action_name == "start_plate_solve_loop":
-                result = cur_dev.start_plate_solve_loop()
-                resp.text = MethodResponse(req, value = result).json
+                result = "Deprecated. No need to call start_plate_solve_loop with firmware > 2.47"
+                cur_dev.logger.warn(result)
+                resp.text = MethodResponse(req, value = {"ok":True, "error":""}).json
             elif action_name == "stop_plate_solve_loop":
                 result = cur_dev.stop_plate_solve_loop()
                 resp.text = MethodResponse(req, value = result).json

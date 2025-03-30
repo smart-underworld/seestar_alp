@@ -3424,14 +3424,15 @@ class BlindPolarAlignResource:
             resp.text = json.dumps(value)
         elif action == "data":
             result = do_action_device("get_pa_error", telescope_id, {})
-            value = result.get("Value", {})
-            pa_refine_data = {
-                "error_az": value["pa_error_az"],
-                "error_alt": value["pa_error_alt"]
-            }
-            resp.status = falcon.HTTP_200
-            resp.content_type = 'application/json'
-            resp.text = json.dumps(pa_refine_data)
+            if result is not None:
+                value = result.get("Value", {})
+                pa_data = {
+                    "error_az": value["pa_error_az"],
+                    "error_alt": value["pa_error_alt"]
+                }
+                resp.status = falcon.HTTP_200
+                resp.content_type = 'application/json'
+                resp.text = json.dumps(pa_data)
         elif action == 'runpa':
             polar_align = PostedForm.get("polar_align", "False").strip() == "on"
             raise_arm = PostedForm.get("raise_arm", "False").strip() == "on"
