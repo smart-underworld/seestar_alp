@@ -666,7 +666,8 @@ class Seestar:
 
         # seem like there's a side effect here of autofocus state was set to "cancel" after stop view
         time.sleep(1)
-        self.event_state["AutoFocus"]["state"] = "complete"
+        if "AutoFocus" in self.event_state:
+            self.event_state["AutoFocus"]["state"] = "complete"
 
         result = self.send_message_param_sync({"method": "start_create_dark"})
         if 'error' in result:
@@ -837,7 +838,7 @@ class Seestar:
             date_data['method'] = 'pi_set_time'
             date_data['params'] = [date_json]
             failed_default_PA = False
-            
+
             do_raise_arm = params.get("raise_arm", False)
             do_AF = params.get("auto_focus", False)
             do_3PPA = params.get("3ppa", False)
@@ -989,11 +990,12 @@ class Seestar:
                 else:
                     lat_angle = 90
                 while time_countdown > 0:
-                    wait_time = min(time_countdown, 5)
-                    tmp = self.send_message_param_sync({"method":"scope_speed_move","params":{"speed":5000,"angle":lat_angle,"dur_sec":wait_time}})
+                    tmp = self.send_message_param_sync({"method":"scope_speed_move","params":{"speed":5000,"angle":lat_angle,"dur_sec":2}})
                     self.logger.info(f"move scope 90 degrees: {tmp}")
-                    time.sleep(wait_time + 1)
-                    time_countdown -= wait_time
+                    time.sleep(min(1,time_countdown))
+                    time_countdown -= 1
+                self.send_message_param_sync({"method":"scope_speed_move","params":{"speed":0,"angle":lat_angle,"dur_sec":0}})
+                time.sleep(1)
 
                 time_countdown = abs(lon)
                 if lon < 0:
@@ -1001,11 +1003,12 @@ class Seestar:
                 else:
                     lon_angle = 180
                 while time_countdown > 0:
-                    wait_time = min(time_countdown, 5)
-                    tmp = self.send_message_param_sync({"method":"scope_speed_move","params":{"speed":5000,"angle":lon_angle,"dur_sec":wait_time}})
+                    tmp = self.send_message_param_sync({"method":"scope_speed_move","params":{"speed":5000,"angle":lon_angle,"dur_sec":2}})
                     self.logger.info(f"move scope 180 degrees: {tmp}")
-                    time.sleep(wait_time + 1)
-                    time_countdown -= wait_time
+                    time.sleep(min(1,time_countdown))
+                    time_countdown -= 1
+                self.send_message_param_sync({"method":"scope_speed_move","params":{"speed":0,"angle":lon_angle,"dur_sec":0}})
+                time.sleep(1)
 
             if self.schedule["state"] != "working":
                 return
