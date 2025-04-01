@@ -113,7 +113,7 @@ function setup() {
   validate_access
 
   if [ ! -e ${src_home}/../seestar_alp ]; then
-    git clone https://github.com/smart-underworld/seestar_alp.git
+    git clone -b release_2.5.x https://github.com/smart-underworld/seestar_alp.git
     cd seestar_alp
     action="setup"
   else

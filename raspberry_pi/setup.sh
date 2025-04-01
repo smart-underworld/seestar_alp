@@ -155,7 +155,7 @@ function setup() {
   fi
 
   install_apt_packages
-  git clone https://github.com/smart-underworld/seestar_alp.git
+  git clone -b release_2.5.x https://github.com/smart-underworld/seestar_alp.git
   cd  seestar_alp
 
   user=$(whoami)
