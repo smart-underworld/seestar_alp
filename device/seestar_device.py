@@ -548,7 +548,6 @@ class Seestar:
         in_dec = parsed_coord.dec.deg
         target_name = params.get("target_name", "unknown")
         self.logger.info("%s: going to target... %s %s %s", self.device_name, target_name, in_ra,in_dec)
-        result = True
 
         data = {}
         data['method'] = 'iscope_start_view'
@@ -560,9 +559,10 @@ class Seestar:
         params['lp_filter'] = False
         data['params'] = params
         self.mark_op_state("goto_target", "stopped")
-        self.send_message_param_sync(data)
-        result = self.wait_end_op("goto_target")
-        return result
+
+        result = self.send_message_param_sync(data)
+        return not 'error' in result
+
 
     # {"method":"scope_goto","params":[1.2345,75.0]}
     def _slew_to_ra_dec(self, params):
@@ -1263,6 +1263,9 @@ class Seestar:
 
     def mosaic_goto_inner_worker(self, cur_ra, cur_dec, save_target_name, is_use_autofocus, is_use_LP_filter):
         result = self.goto_target({'ra': cur_ra, 'dec': cur_dec, 'is_j2000': False, 'target_name': save_target_name})
+        if result == True:
+            result = self.wait_end_op("goto_target")
+
         self.logger.info(f"Goto operation finished with result code: {result}")
         if result == False:
             self.logger.info("Goto failed.")
