@@ -697,9 +697,8 @@ class Seestar:
             params['lp_filter'] = False
             data['params'] = params
             self.mark_op_state("goto_target", "stopped")
-            self.send_message_param_sync(data)
-            result = self.wait_end_op("goto_target")
-            return result
+            result = self.send_message_param_sync(data)
+            return not 'error' in result
 
         else:
             self.logger.info(f"going to target with below horizon logic: {self.below_horizon_dec_offset }")
