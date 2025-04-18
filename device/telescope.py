@@ -28,9 +28,9 @@ from device.seestar_util import Util    # RWR
 
 # logger: Logger = None
 
-seestar_dev = {}
-seestar_imager = {}
-seestar_logcollector = {}
+seestar_dev: dict[int, Seestar] = {}
+seestar_imager: dict[int, SeestarImaging] = {}
+seestar_logcollector: dict[int, SeestarLogging] = {}
 
 # pylint: disable=no-value-for-parameter
 

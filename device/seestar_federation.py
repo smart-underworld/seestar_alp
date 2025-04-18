@@ -1,6 +1,9 @@
 import threading
 import uuid
 from time import sleep
+from typing import Any
+
+from device.seestar_device import Schedule
 from seestar_util import Util
 import json
 import random
@@ -24,19 +27,19 @@ class Seestar_Federation:
         self.is_connected = True
         self.logger = logger
         self.seestar_devices = seestar_devices
-        self.schedule = {}
-        self.schedule['version'] = 1.0
-        self.schedule['list'] = collections.deque()
-        self.schedule['state'] = "stopped"
-        self.schedule['schedule_id'] = str(uuid.uuid4())
+        self.schedule: Schedule = {'version': 1.0,
+                                   'list': collections.deque(),
+                                   'state': "stopped",
+                                    'schedule_id': str(uuid.uuid4())
+                                   }
 
-    def disconnect(self):
+    def disconnect(self) -> None:
         return
 
-    def reconnect(self):
+    def reconnect(self) -> bool:
         return True
 
-    def get_event_state(self, params=None):
+    def get_event_state(self, params: dict | None=None):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
@@ -176,13 +179,10 @@ class Seestar_Federation:
         return result
 
     def create_schedule(self, params):
-        self.schedule = {}
-        self.schedule['list'] = collections.deque()
-        self.schedule['state'] = "stopped"
-        self.schedule['schedule_id'] = str(uuid.uuid4())
+        self.schedule = {'list': collections.deque(), 'state': "stopped", 'schedule_id': str(uuid.uuid4())}
         return self.schedule
 
-    def add_schedule_item(self, params):
+    def add_schedule_item(self, params: dict[str, Any]) -> Schedule:
         item = params.copy()
         if item['action'] == 'start_mosaic':
             mosaic_params = item['params']
@@ -265,13 +265,8 @@ class Seestar_Federation:
         if num_devices < 1:
             return {"error":"Failed: No available devices found to execute a schedule."}
 
-        self.schedule = {}
-        self.schedule['list'] = []
-        self.schedule['state'] = "stopped"
-        self.schedule['schedule_id'] = str(uuid.uuid4())
-        schedule_item = {}
-        schedule_item['action'] = "start_mosaic"
-        schedule_item['params'] = cur_params
+        self.schedule = {'list': [], 'state': "stopped", 'schedule_id': str(uuid.uuid4())}
+        schedule_item = {'action': "start_mosaic", 'params': cur_params}
         self.add_schedule_item(schedule_item)
         return self.start_scheduler(cur_params)
 
@@ -335,7 +330,7 @@ class Seestar_Federation:
 
         return self.get_schedule(params)
 
-    def stop_scheduler(self, params):
+    def stop_scheduler(self, params: dict):
         result = {}
         for key in self.seestar_devices:
             cur_device = self.seestar_devices[key]
