@@ -54,11 +54,11 @@
     {#    {% endif %}#}
     <div class="row border-bottom py-1 text-start">
         <div class="col fw-bold">RA</div>
-        <div class="col">{{ state.ra | round(4) }}</div>
+        <div class="col text-monospace">{{ state.ra | round(4) }}</div>
     </div>
     <div class="row border-bottom py-1 text-start">
         <div class="col fw-bold">Dec</div>
-        <div class="col">{{ state.dec | round(4) }}</div>
+        <div class="col text-monospace">{{ state.dec | round(4) }}</div>
     </div>
     {% if state.snr %}
     <div class="row border-bottom py-1 text-start">
@@ -69,19 +69,19 @@
     {% if state.stats %}
         <div class="row border-bottom py-1 text-start">
             <div class="col fw-bold">Integration Time</div>
-            <div class="col">{{ state.stats["integration_time"] }}</div>
+            <div class="col text-monospace">{{ state.stats["integration_time"] }}</div>
         </div>
         <div class="row border-bottom py-1 text-start">
             <div class="col fw-bold">Stacked Frames</div>
-            <div class="col">{{ state.stats["stacked_frame"] }}</div>
+            <div class="col text-monospace">{{ state.stats["stacked_frame"] }}</div>
         </div>
         <div class="row border-bottom py-1 text-start">
             <div class="col fw-bold">Dropped Frames</div>
-            <div class="col">{{ state.stats["dropped_frame"] }}</div>
+            <div class="col text-monospace">{{ state.stats["dropped_frame"] }}</div>
         </div>
         <div class="row border-bottom py-1 text-start">
             <div class="col fw-bold">Time On Target</div>
-            <div class="col">{{ state.stats["elapsed"] }}</div>
+            <div class="col text-monospace">{{ state.stats["elapsed"] }}</div>
         </div>
     {% endif %}
 </div>

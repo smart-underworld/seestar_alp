@@ -1500,7 +1500,7 @@ def get_live_status(telescope_id: int):
     def human_ts(elapsed):
         if elapsed is None:
             return ""
-        return str(timedelta(milliseconds=elapsed))[:-3]
+        return str(timedelta(seconds=int(elapsed / 1000)))
 
     while True:
         imager.update_live_status()
