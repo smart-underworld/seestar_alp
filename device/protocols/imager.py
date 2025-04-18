@@ -252,9 +252,9 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
                 self.raw_img = contents['raw_data']
                 self.raw_img_size = [width, height]
                 self.latest_image = self.convert_star_image(self.raw_img, width, height)
-                if self.latest_image == None:
+                if self.latest_image is None:
                     self.raw_img = None
-                    self.raw_img_size = [None, None]                    
+                    self.raw_img_size = [None, None]
 
             # xxx Temp hack: just disconnect for now...
             # xxx Ideally we listen for an event that stack count has increased, or we track the stack
@@ -285,4 +285,4 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
         else:
             self.logger.error(f"Unexpected raw image length: {raw_image_len}")
             return None
-            
+
