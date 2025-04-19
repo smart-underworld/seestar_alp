@@ -50,7 +50,7 @@ six==1.16.0
 ssh-import-id==5.11
 systemd-python==234
 toml==0.10.2
-tornado==6.4
+tornado==6.4.2
 typing_extensions==4.10.0
 tzlocal==5.2
 ubuntu-advantage-tools==8001
