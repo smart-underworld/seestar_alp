@@ -838,7 +838,7 @@ class Seestar:
             date_data: MessageParams = {'method': 'pi_set_time', 'params': [date_json]}
             failed_default_PA = False
 
-            do_raise_arm = params.get("raise_arm", False)
+            do_raise_arm = params.get("move_arm", False)
             do_AF = params.get("auto_focus", False)
             do_3PPA = params.get("3ppa", False)
             do_dark_frames = params.get("dark_frames", False)
@@ -964,20 +964,20 @@ class Seestar:
                     if device['device_num'] == self.device_num:
                         break
 
-                lat = Config.scope_aim_lat
-                lon = Config.scope_aim_lon
+                lat = Config.move_arm_lat_sec
+                lon = Config.move_arm_lon_sec
 
-                if 'scope_aim_lat' in params:
-                    lat = params['scope_aim_lat']
+                if 'move_arm_lat_sec' in params:
+                    lat = params['move_arm_lat_sec']
                 else:
-                    lat = device.get('scope_aim_lat', lat)
+                    lat = device.get('move_arm_lat_sec', lat)
 
-                if 'scope_aim_lon' in params:
-                    lon = params['scope_aim_lon']
+                if 'move_arm_lon_sec' in params:
+                    lon = params['move_arm_lon_sec']
                 else:
-                    lon = device.get('scope_aim_lon', lon)
+                    lon = device.get('move_arm_lon_sec', lon)
 
-                msg = f"moving scope's aim toward a clear patch of sky using scope_aim settings {lat}, {lon}"
+                msg = f"moving scope's aim toward a clear patch of sky using move_arm settings in seconds {lat}, {lon}"
                 self.logger.info(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
 
@@ -1012,8 +1012,8 @@ class Seestar:
 
 
             if do_AF:
-                if not do_raise_arm:
-                    self.logger.warn("start up sequence will put the scope in park position. Therefore, without do_raise_arm, auto focus will not be possible. Skipping.")
+                if not do_raise_arm or not do_3PPA:
+                    self.logger.warn("start up sequence will put the scope in park position. Therefore, without do_raise_arm or polar alignment, auto focus will not be possible. Skipping.")
 
                 else:
                     # need to make sure we are in star mode

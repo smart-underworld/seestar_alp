@@ -1091,17 +1091,17 @@ def do_command(req, resp, telescope_id):
             auto_focus = form.get("auto_focus", "False").strip() == "on"
             dark_frames = form.get("dark_frames", "False").strip() == "on"
             polar_align = form.get("polar_align", "False").strip() == "on"
-            raise_arm = form.get("raise_arm", "False").strip() == "on"
+            move_arm = form.get("move_arm", "False").strip() == "on"
 
             # print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
             if not lat or not long:
                 output = do_action_device("action_start_up_sequence", telescope_id,
                                           {"auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align,
-                                           "raise_arm": raise_arm})
+                                           "move_arm": move_arm})
             else:
                 output = do_action_device("action_start_up_sequence", telescope_id,
                                           {"lat": float(lat), "lon": float(long), "auto_focus": auto_focus,
-                                           "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
+                                           "dark_frames": dark_frames, "3ppa": polar_align, "move_arm": move_arm})
             return output
         case "adjust_mag_declination":
             adjust_mag_dec = form.get("adjust_mag_dec", "False").strip() == "on"
@@ -1479,7 +1479,7 @@ def import_csv_schedule(input, telescope_id):
                 do_schedule_action_device("action_set_dew_heater", {"heater": heater_value}, telescope_id)
             case "start_up_sequence":
                 startup_params = {
-                    "raise_arm": params.get("raise_arm"),
+                    "move_arm": params.get("move_arm"),
                     "auto_focus": params.get("auto_focus"),
                     "3ppa": params.get("polar_align"),
                     "dark_frames": params.get("dark_frames")
@@ -1943,7 +1943,7 @@ class ScheduleStartupResource:
     @staticmethod
     def on_post(req, resp, telescope_id=0):
         data = req.media
-        raise_arm = data.get("raise_arm") == "on"
+        move_arm = data.get("move_arm") == "on"
         auto_focus = data.get("auto_focus") == "on"
         polar_align = data.get("polar_align") == "on"
         dark_frames = data.get("dark_frames") == "on"
@@ -1957,11 +1957,11 @@ class ScheduleStartupResource:
         if action == "append":
             response = do_schedule_action_device("start_up_sequence",
                                                  {"auto_focus": auto_focus, "dark_frames": dark_frames,
-                                                  "3ppa": polar_align, "raise_arm": raise_arm}, telescope_id)
+                                                  "3ppa": polar_align, "move_arm": move_arm}, telescope_id)
         else:
             response = do_insert_schedule_item("start_up_sequence",
                                                {"auto_focus": auto_focus, "dark_frames": dark_frames,
-                                                "3ppa": polar_align, "raise_arm": raise_arm}, selected_items,
+                                                "3ppa": polar_align, "move_arm": move_arm}, selected_items,
                                                telescope_id)
 
         render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
@@ -2925,27 +2925,27 @@ class StartupResource(BaseResource):
         if action == "start":
             lat = form.get("lat", "").strip()
             long = form.get("long", "").strip()
-            scope_aim_lat = form.get("scope_aim_lat", "").strip()
-            scope_aim_lon = form.get("scope_aim_lon", "").strip()
+            move_arm_lat_sec = form.get("move_arm_lat_sec", "").strip()
+            move_arm_lon_sec = form.get("move_arm_lon_sec", "").strip()
             auto_focus = form.get("auto_focus", "False").strip() == "on"
             dark_frames = form.get("dark_frames", "False").strip() == "on"
             polar_align = form.get("polar_align", "False").strip() == "on"
-            raise_arm = form.get("raise_arm", "False").strip() == "on"
+            move_arm = form.get("move_arm", "False").strip() == "on"
 
             params = {
                 "auto_focus": auto_focus,
                 "dark_frames": dark_frames,
                 "3ppa": polar_align,
-                "raise_arm": raise_arm
+                "move_arm": move_arm
             }
 
             if lat and long:
                 params["lat"] = float(lat)
                 params["lon"] = float(long)
 
-            if scope_aim_lat and scope_aim_lon:
-                params["scope_aim_lat"] = float(scope_aim_lat)
-                params["scope_aim_lon"] = float(scope_aim_lon)
+            if move_arm_lat_sec and move_arm_lon_sec:
+                params["move_arm_lat_sec"] = float(move_arm_lat_sec)
+                params["move_arm_lon_sec"] = float(move_arm_lon_sec)
 
             output = do_action_device("action_start_up_sequence", telescope_id, params)
         elif action == "stop":
@@ -3437,8 +3437,8 @@ class BlindPolarAlignResource:
                 resp.text = json.dumps(pa_data)
         elif action == 'runpa':
             polar_align = PostedForm.get("polar_align", "False").strip() == "on"
-            raise_arm = PostedForm.get("raise_arm", "False").strip() == "on"
-            do_action_device("action_start_up_sequence", telescope_id, {"3ppa": polar_align, "raise_arm": raise_arm})
+            move_arm = PostedForm.get("move_arm", "False").strip() == "on"
+            do_action_device("action_start_up_sequence", telescope_id, {"3ppa": polar_align, "move_arm": move_arm})
             render_template(req, resp, 'pa_refine.html', **context)
 
 
