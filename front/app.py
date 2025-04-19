@@ -1,5 +1,7 @@
 import time
 from datetime import datetime, timedelta
+from typing import Any
+
 import tzlocal
 
 import falcon
@@ -34,7 +36,6 @@ import numpy as np
 import sqlite3
 import random
 
-from numpy.core.numeric import True_
 from skyfield.api import Loader
 from skyfield.data import mpc
 from skyfield.constants import GM_SUN_Pitjeva_2005_km3_s2 as GM_SUN
@@ -55,7 +56,7 @@ _last_api_state_get_time = {}
 _api_state_cached = {}
 
 
-def get_ip():
+def get_ip() -> str | None:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(0)
     try:
@@ -69,7 +70,7 @@ def get_ip():
     return IP
 
 
-def get_listening_ip():
+def get_listening_ip() -> str | None:
     if Config.ip_address == "0.0.0.0":
         # Find the ip
         ip_address = get_ip()
@@ -104,7 +105,7 @@ def get_platform():
 
 base_url = "http://" + get_listening_ip() + ":" + str(Config.port)
 simbad_url = 'https://simbad.cds.unistra.fr/simbad/sim-id?output.format=ASCII&obj.bibsel=off&Ident='
-messages = []
+messages: list[str] = []
 online = None
 client_master = True
 queue = {}
@@ -123,7 +124,7 @@ def flash(resp, message):
     messages.append(message)
 
 
-def get_messages():
+def get_messages() -> list[str]:
     if len(messages) > 0:
         resp = messages
         messages.clear()
@@ -1609,16 +1610,16 @@ def determine_file_type(file_path):
 
 
 class BaseResource:
-    def on_get(self, req, resp, telescope_id: int = 1):
+    def on_get(self, req: falcon.Request, resp: falcon.Response, telescope_id: int = 1) -> None:
         self.send_text(req, resp, telescope_id, 'placeholder on_get')
 
-    def on_post(self, req, resp, telescope_id: int = 1):
+    def on_post(self, req: falcon.Request, resp: falcon.Response, telescope_id: int = 1):
         self.send_text(req, resp, telescope_id, 'placeholder on_post')
 
-    def on_delete(self, req, resp, telescope_id: int = 1):
+    def on_delete(self, req: falcon.Request, resp: falcon.Response, telescope_id: int = 1):
         self.send_text(req, resp, telescope_id, 'placeholder on_delete')
 
-    def send_text(self, req, resp, telescope_id: int, text: str):
+    def send_text(self, req: falcon.Request, resp: falcon.Response, telescope_id: int, text: str):
         print(f'send_text {telescope_id=}: {text}')
         resp.status = falcon.HTTP_200
         resp.content_type = 'text/plain'
@@ -1653,7 +1654,7 @@ class HomeTelescopeResource:
                         **context)  # pylint: disable=repeated-keyword
 
 
-class ImageResource:
+class ImageResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         self.image(req, resp, {}, {}, telescope_id)
 
@@ -1679,7 +1680,7 @@ class ImageResource:
                         action=f"/{telescope_id}/image", **context)
 
 
-class GotoResource:
+class GotoResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         values = {}
         self.goto(req, resp, {}, {}, telescope_id)
@@ -1706,7 +1707,7 @@ class GotoResource:
                         action=f"/{telescope_id}/goto", **context)
 
 
-class CommandResource:
+class CommandResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         self.command(req, resp, telescope_id, {})
 
@@ -1730,7 +1731,7 @@ class CommandResource:
                         output=output, **context)
 
 
-class ConsoleResource:
+class ConsoleResource(BaseResource):
     def on_get(self, req, resp, telescope_id=1):
         context = get_context(telescope_id, req)
         render_template(req, resp, 'console.html', **context)
@@ -1742,7 +1743,7 @@ class ConsoleResource:
         resp.text = json.dumps(do_action_device("method_sync", telescope_id, req.media))
 
 
-class MosaicResource:
+class MosaicResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         self.mosaic(req, resp, {}, {}, telescope_id)
 
@@ -2113,7 +2114,7 @@ class ScheduleExposureResource:
         render_schedule_tab(req, resp, telescope_id, 'schedule_exposure.html', 'exposure', {}, {})
 
 
-class ScheduleToggleResource:
+class ScheduleToggleResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         self.display_state(req, resp, telescope_id)
 
@@ -2316,7 +2317,7 @@ class ScheduleUploadResource:
         redirect(f"/{telescope_id}/schedule")
 
 
-class ScheduleRefreshResource:
+class ScheduleRefreshResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         context = get_context(telescope_id, req)
         current = do_action_device("get_schedule", telescope_id, {})
@@ -2668,7 +2669,7 @@ class LiveFocusResource(BaseResource):
         return focus
 
 
-class LiveStatusResource:
+class LiveStatusResource(BaseResource):
     # deprecate?
     def __init__(self):
         self.stage = None
@@ -2748,7 +2749,7 @@ class SearchObjectResource:
             resp.media = {}
 
 
-class SettingsResource:
+class SettingsResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         self.render_settings(req, resp, telescope_id, {})
 
@@ -2913,7 +2914,7 @@ class StatsResource:
         render_template(req, resp, 'stats.html', stats=stats, now=now, **context)
 
 
-class StartupResource:
+class StartupResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         self.startup(req, resp, telescope_id, {})
 
@@ -3006,7 +3007,7 @@ class ReloadResource:
 Object = lambda **kwargs: type("Object", (), kwargs)
 
 
-class SystemResource:
+class SystemResource(BaseResource):
     def if_null(self, thread, name):
         if thread is None:
             return Object(name=name, is_alive=lambda: "n/a")
@@ -3100,7 +3101,7 @@ class SimbadResource:
 
 
 # convert decimal RA into HMS format
-def decimal_RA_to_Sexagesimal(deg):
+def decimal_RA_to_Sexagesimal(deg: float) -> str:
     # Normalize the degree value
     total_hours = deg / 15.0  # Convert degrees to total hours
     total_hours = total_hours % 24  # Wrap around to stay within 0-24 hours
@@ -3121,7 +3122,7 @@ def decimal_RA_to_Sexagesimal(deg):
 
 
 # Convert decimal DEC into DMS format
-def decimal_DEC_to_Sexagesimal(deg: float):
+def decimal_DEC_to_Sexagesimal(deg: float) -> str:
     sign = "+" if deg >= 0 else "-"
     abs_deg = abs(deg)
     degrees = int(abs_deg)
@@ -3253,7 +3254,7 @@ class StellariumResource:
 #         resp.text = ra_dec_j2000
 
 
-class TelescopePositionResource:
+class TelescopePositionResource(BaseResource):
     def on_post(self, req, resp, telescope_id=1):
         form = req.media
         # print("position", form)
@@ -3707,7 +3708,7 @@ class GetLocalSearch():
 
 class GetAAVSOSearch():
     @staticmethod
-    def on_get(req, resp):
+    def on_get(req: falcon.Request, resp: falcon.Response) -> None:
         objName = req.get_param("target")
         aavso_URL = 'https://www.aavso.org/vsx/index.php?view=api.object&format=json&ident='
         rtn = requests.get(aavso_URL + objName, timeout=10)
