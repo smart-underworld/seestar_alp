@@ -2,7 +2,7 @@ alpyca==2.0.4
 astropy==6.0.0
 astropy-iers-data==0.2024.2.19.0.28.47
 blinker==1.7.0
-certifi==2024.2.2
+certifi==2024.7.4
 charset-normalizer==3.3.2
 click==8.1.7
 command-not-found==0.3
