@@ -30,3 +30,5 @@ pyindi @ git+https://github.com/MMTObservatory/pyINDI.git@c12590fbe310c34cadb037
 geomag==0.9.2015
 sdnotify==0.3.2
 pyhocon==0.3.61
+pydantic==2.11.3
+pydantic-core==2.33.1
