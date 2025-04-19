@@ -44,7 +44,7 @@ python-apt==2.4.0+ubuntu2
 python-dateutil==2.9.0.post0
 PyYAML==5.4.1
 ratelim==0.1.6
-requests==2.31.0
+requests==2.32.2
 SecretStorage==3.3.1
 six==1.16.0
 ssh-import-id==5.11
