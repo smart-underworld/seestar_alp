@@ -17,7 +17,7 @@ Flask==3.0.2
 future==1.0.0
 geocoder==1.38.1
 httplib2==0.20.2
-idna==3.6
+idna==3.7
 importlib-metadata==4.6.4
 itsdangerous==2.1.2
 jeepney==0.7.1
