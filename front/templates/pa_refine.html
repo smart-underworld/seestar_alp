@@ -3,7 +3,7 @@
   <p id="az_err">Az Error (Degrees): </p>
 </div>
 
-<div class="slidecontainer">
+<div class="slide-container">
   <p>max error (degrees): <input type="range" min="1" max="100" value="50" class="slider" id="error_slider"> <span id="error_range"></span> </p>
 </div>
 
@@ -59,7 +59,7 @@
   }
 
 
-  .slidecontainer {
+  .slide-container {
     width: 80%; /* Width of the outside container */
   }
 
@@ -107,21 +107,22 @@
 	<div id="pa_garden" class="garden">
 		<div class="cow d-flex justify-content-center align-items-center" style="margin: unset; height: 100%">
 			<div class="row d-flex justify-content-center align-items-center" style="margin: unset; width: 100%">
-				<div id="pa_circle_inner" class="circle_inner" style="width: 10%"></div>
-				<div id="pa_circle_inner" class="circle_inner" style="width: 30%"></div>
-				<div id="pa_circle_inner" class="circle_inner" style="width: 80%"></div>
+				<div id="pa_circle_inner10" class="circle_inner" style="width: 10%"></div>
+				<div id="pa_circle_inner30" class="circle_inner" style="width: 30%"></div>
+				<div id="pa_circle_inner80" class="circle_inner" style="width: 80%"></div>
 				<div id="ball" class="ball" style="width: 3%"></div>
 			</div>
 		</div>
-	<div id="pa_target_h" class="crosshair-h"></div>
+	  <div id="pa_target_h" class="crosshair-h"></div>
     <div id="pa_target_v" class="crosshair-v"></div>
+  </div>
 </div>
 <pre class="output"></pre>
-<form method="post" action="{{ action }}" class="d-inline">
+<!-- <form method="post" action="{{ action }}" class="d-inline"> -->
 <div>
-		<button id="start_stop_btn" class="btn btn-primary btn-lg" type="reset">Start</button>
+		<button id="start_stop_btn" class="btn btn-primary btn-lg" type="button">Start</button>
 </div>
-</form>
+<!-- </form> -->
 
 <div class="card border-primary mt-3 w-50">
 	<div class="card-body">
@@ -148,10 +149,14 @@
   const startStopButton = document.getElementById("start_stop_btn");
   const alt_err = document.getElementById("alt_err")
   const az_err = document.getElementById("az_err")
+  const baseURL = `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
+  const get_pa_refine_URL = baseURL + '/pa_refine';
+
   startStopButton.textContent = "Start"
   var pa_interval
 
   function update_alignment(error_alt, error_az, max) {
+    let x,y;
     var szElement = document.getElementById("pa_garden");
     const ball = document.getElementById("ball");
     const width = szElement.clientWidth;
@@ -197,9 +202,6 @@
 
   async function startAlignment() {
     try {
-      var baseURL =
-      `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
-      get_pa_refine_URL = baseURL + '/pa_refine';
 
       var response = await fetch(get_pa_refine_URL, {
         method: "POST",
@@ -211,7 +213,6 @@
         }
       })
       data = await response.json();
-      console.info('started alignment:', data);
 
       if (data["ok"]) {
         pa_interval = setInterval(update_pa_error, 1000);
@@ -229,9 +230,6 @@
 
   async function stopAlignment() {
     try {
-      var baseURL =
-      `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
-      get_pa_refine_URL = baseURL + '/pa_refine';
 
       var response = await fetch(get_pa_refine_URL, {
         method: "POST",
@@ -243,11 +241,6 @@
         }
       })
       var data = await response.json();
-      console.info('stop alignment:', data);
-      if (!data["ok"]) {
-        alert(data["error"])
-      }
-      // no matter what, stop it anyway
       startStopButton.textContent = "Start";
       clearInterval(pa_interval);
 

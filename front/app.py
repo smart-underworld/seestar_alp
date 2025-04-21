@@ -1046,7 +1046,7 @@ def do_create_image(req, resp, schedule, telescope_id):
     return values, errors
 
 
-def do_goto_target(req, resp, schedule, telescope_id):
+def do_goto_target(req, resp, telescope_id):
     form = req.media
     targetName = form["targetName"]
     ra = form["ra"]
@@ -1685,7 +1685,7 @@ class GotoResource:
         self.goto(req, resp, {}, {}, telescope_id)
 
     def on_post(self, req, resp, telescope_id=0):
-        values, errors = do_goto_target(req, resp, True, telescope_id)
+        values, errors = do_goto_target(req, resp, telescope_id)
         self.goto(req, resp, values, errors, telescope_id)
 
     @staticmethod
@@ -1694,12 +1694,15 @@ class GotoResource:
         context = get_context(telescope_id, req)
 
         if not context["online"]:
-            telescope_id = 0
+            return
 
         current = do_action_device("get_schedule", telescope_id, {})
         if current is None:
             return
         state = current["Value"]["state"]
+
+        if state == "working":
+            flash(resp, "Scheduler is running. Cannot perform goto.")
 
         # remove values=values to stop remembering values
         render_template(req, resp, 'goto.html', state=state, schedule=schedule, values=values, errors=errors,
