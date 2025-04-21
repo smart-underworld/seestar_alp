@@ -468,14 +468,14 @@ function addSeestar(){
                                 <!-- Row -->
                                 <div class="col-sm-4 text-end">
                                     <!-- Col -->
-                                    <label for="ss_scope_aim_lat" class="form-label">
+                                    <label for="ss_move_arm_lat_sec" class="form-label">
                                     Aim Lat
                                     </label>
                                 </div>
                                 <!-- Close Col -->
                                 <div class="col-sm-8 col-md-6">
                                     <!-- Col -->
-                                    <input id="ss_scope_aim_lat" name="ss_scope_aim_lat" type="number" class="form-control" title="start up latitude in degrees -90 to 80" value="60.0" >
+                                    <input id="ss_move_arm_lat_sec" name="ss_move_arm_lat_sec" type="number" class="form-control" title="start up move latitude time in seconds -20 to 20" value="2.0" >
                                 </div>
                                 <!-- Close Col -->
                             </div>
@@ -484,14 +484,14 @@ function addSeestar(){
                                 <!-- Row -->
                                 <div class="col-sm-4 text-end">
                                     <!-- Col -->
-                                    <label for="ss_scope_aim_lon" class="form-label">
+                                    <label for="ss_move_arm_lon_sec" class="form-label">
                                     Aim Long
                                     </label>
                                 </div>
                                 <!-- Close Col -->
                                 <div class="col-sm-8 col-md-6">
                                     <!-- Col -->
-                                    <input id="ss_scope_aim_lon" name="ss_scope_aim_lon" type="number" class="form-control" title="start up longitude in degrees 0 to 360" value="20.0" >
+                                    <input id="ss_move_arm_lon_sec" name="ss_move_arm_lon_sec" type="number" class="form-control" title="start up move longitude time in seconds -100 to 100" value="20.0" >
                                 </div>
                                 <!-- Close Col -->
                             </div>

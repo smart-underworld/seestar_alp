@@ -1,5 +1,7 @@
 import time
 from datetime import datetime, timedelta
+from typing import Any
+
 import tzlocal
 
 import falcon
@@ -34,7 +36,6 @@ import numpy as np
 import sqlite3
 import random
 
-from numpy.core.numeric import True_
 from skyfield.api import Loader
 from skyfield.data import mpc
 from skyfield.constants import GM_SUN_Pitjeva_2005_km3_s2 as GM_SUN
@@ -55,7 +56,7 @@ _last_api_state_get_time = {}
 _api_state_cached = {}
 
 
-def get_ip():
+def get_ip() -> str | None:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(0)
     try:
@@ -69,7 +70,7 @@ def get_ip():
     return IP
 
 
-def get_listening_ip():
+def get_listening_ip() -> str | None:
     if Config.ip_address == "0.0.0.0":
         # Find the ip
         ip_address = get_ip()
@@ -104,7 +105,7 @@ def get_platform():
 
 base_url = "http://" + get_listening_ip() + ":" + str(Config.port)
 simbad_url = 'https://simbad.cds.unistra.fr/simbad/sim-id?output.format=ASCII&obj.bibsel=off&Ident='
-messages = []
+messages: list[str] = []
 online = None
 client_master = True
 queue = {}
@@ -123,7 +124,7 @@ def flash(resp, message):
     messages.append(message)
 
 
-def get_messages():
+def get_messages() -> list[str]:
     if len(messages) > 0:
         resp = messages
         messages.clear()
@@ -1090,17 +1091,17 @@ def do_command(req, resp, telescope_id):
             auto_focus = form.get("auto_focus", "False").strip() == "on"
             dark_frames = form.get("dark_frames", "False").strip() == "on"
             polar_align = form.get("polar_align", "False").strip() == "on"
-            raise_arm = form.get("raise_arm", "False").strip() == "on"
+            move_arm = form.get("move_arm", "False").strip() == "on"
 
             # print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
             if not lat or not long:
                 output = do_action_device("action_start_up_sequence", telescope_id,
                                           {"auto_focus": auto_focus, "dark_frames": dark_frames, "3ppa": polar_align,
-                                           "raise_arm": raise_arm})
+                                           "move_arm": move_arm})
             else:
                 output = do_action_device("action_start_up_sequence", telescope_id,
                                           {"lat": float(lat), "lon": float(long), "auto_focus": auto_focus,
-                                           "dark_frames": dark_frames, "3ppa": polar_align, "raise_arm": raise_arm})
+                                           "dark_frames": dark_frames, "3ppa": polar_align, "move_arm": move_arm})
             return output
         case "adjust_mag_declination":
             adjust_mag_dec = form.get("adjust_mag_dec", "False").strip() == "on"
@@ -1478,7 +1479,7 @@ def import_csv_schedule(input, telescope_id):
                 do_schedule_action_device("action_set_dew_heater", {"heater": heater_value}, telescope_id)
             case "start_up_sequence":
                 startup_params = {
-                    "raise_arm": params.get("raise_arm"),
+                    "move_arm": params.get("move_arm"),
                     "auto_focus": params.get("auto_focus"),
                     "3ppa": params.get("polar_align"),
                     "dark_frames": params.get("dark_frames")
@@ -1500,7 +1501,7 @@ def get_live_status(telescope_id: int):
     def human_ts(elapsed):
         if elapsed is None:
             return ""
-        return str(timedelta(milliseconds=elapsed))[:-3]
+        return str(timedelta(seconds=int(elapsed / 1000)))
 
     while True:
         imager.update_live_status()
@@ -1609,16 +1610,16 @@ def determine_file_type(file_path):
 
 
 class BaseResource:
-    def on_get(self, req, resp, telescope_id: int = 1):
+    def on_get(self, req: falcon.Request, resp: falcon.Response, telescope_id: int = 1) -> None:
         self.send_text(req, resp, telescope_id, 'placeholder on_get')
 
-    def on_post(self, req, resp, telescope_id: int = 1):
+    def on_post(self, req: falcon.Request, resp: falcon.Response, telescope_id: int = 1):
         self.send_text(req, resp, telescope_id, 'placeholder on_post')
 
-    def on_delete(self, req, resp, telescope_id: int = 1):
+    def on_delete(self, req: falcon.Request, resp: falcon.Response, telescope_id: int = 1):
         self.send_text(req, resp, telescope_id, 'placeholder on_delete')
 
-    def send_text(self, req, resp, telescope_id: int, text: str):
+    def send_text(self, req: falcon.Request, resp: falcon.Response, telescope_id: int, text: str):
         print(f'send_text {telescope_id=}: {text}')
         resp.status = falcon.HTTP_200
         resp.content_type = 'text/plain'
@@ -1653,7 +1654,7 @@ class HomeTelescopeResource:
                         **context)  # pylint: disable=repeated-keyword
 
 
-class ImageResource:
+class ImageResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         self.image(req, resp, {}, {}, telescope_id)
 
@@ -1679,7 +1680,7 @@ class ImageResource:
                         action=f"/{telescope_id}/image", **context)
 
 
-class GotoResource:
+class GotoResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         values = {}
         self.goto(req, resp, {}, {}, telescope_id)
@@ -1709,7 +1710,7 @@ class GotoResource:
                         action=f"/{telescope_id}/goto", **context)
 
 
-class CommandResource:
+class CommandResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         self.command(req, resp, telescope_id, {})
 
@@ -1733,7 +1734,7 @@ class CommandResource:
                         output=output, **context)
 
 
-class ConsoleResource:
+class ConsoleResource(BaseResource):
     def on_get(self, req, resp, telescope_id=1):
         context = get_context(telescope_id, req)
         render_template(req, resp, 'console.html', **context)
@@ -1745,7 +1746,7 @@ class ConsoleResource:
         resp.text = json.dumps(do_action_device("method_sync", telescope_id, req.media))
 
 
-class MosaicResource:
+class MosaicResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         self.mosaic(req, resp, {}, {}, telescope_id)
 
@@ -1945,7 +1946,7 @@ class ScheduleStartupResource:
     @staticmethod
     def on_post(req, resp, telescope_id=0):
         data = req.media
-        raise_arm = data.get("raise_arm") == "on"
+        move_arm = data.get("move_arm") == "on"
         auto_focus = data.get("auto_focus") == "on"
         polar_align = data.get("polar_align") == "on"
         dark_frames = data.get("dark_frames") == "on"
@@ -1959,11 +1960,11 @@ class ScheduleStartupResource:
         if action == "append":
             response = do_schedule_action_device("start_up_sequence",
                                                  {"auto_focus": auto_focus, "dark_frames": dark_frames,
-                                                  "3ppa": polar_align, "raise_arm": raise_arm}, telescope_id)
+                                                  "3ppa": polar_align, "move_arm": move_arm}, telescope_id)
         else:
             response = do_insert_schedule_item("start_up_sequence",
                                                {"auto_focus": auto_focus, "dark_frames": dark_frames,
-                                                "3ppa": polar_align, "raise_arm": raise_arm}, selected_items,
+                                                "3ppa": polar_align, "move_arm": move_arm}, selected_items,
                                                telescope_id)
 
         render_schedule_tab(req, resp, telescope_id, 'schedule_startup.html', 'startup', {}, {})
@@ -2116,7 +2117,7 @@ class ScheduleExposureResource:
         render_schedule_tab(req, resp, telescope_id, 'schedule_exposure.html', 'exposure', {}, {})
 
 
-class ScheduleToggleResource:
+class ScheduleToggleResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         self.display_state(req, resp, telescope_id)
 
@@ -2319,7 +2320,7 @@ class ScheduleUploadResource:
         redirect(f"/{telescope_id}/schedule")
 
 
-class ScheduleRefreshResource:
+class ScheduleRefreshResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         context = get_context(telescope_id, req)
         current = do_action_device("get_schedule", telescope_id, {})
@@ -2671,7 +2672,7 @@ class LiveFocusResource(BaseResource):
         return focus
 
 
-class LiveStatusResource:
+class LiveStatusResource(BaseResource):
     # deprecate?
     def __init__(self):
         self.stage = None
@@ -2751,7 +2752,7 @@ class SearchObjectResource:
             resp.media = {}
 
 
-class SettingsResource:
+class SettingsResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         self.render_settings(req, resp, telescope_id, {})
 
@@ -2916,7 +2917,7 @@ class StatsResource:
         render_template(req, resp, 'stats.html', stats=stats, now=now, **context)
 
 
-class StartupResource:
+class StartupResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         self.startup(req, resp, telescope_id, {})
 
@@ -2927,27 +2928,27 @@ class StartupResource:
         if action == "start":
             lat = form.get("lat", "").strip()
             long = form.get("long", "").strip()
-            scope_aim_lat = form.get("scope_aim_lat", "").strip()
-            scope_aim_lon = form.get("scope_aim_lon", "").strip()
+            move_arm_lat_sec = form.get("move_arm_lat_sec", "").strip()
+            move_arm_lon_sec = form.get("move_arm_lon_sec", "").strip()
             auto_focus = form.get("auto_focus", "False").strip() == "on"
             dark_frames = form.get("dark_frames", "False").strip() == "on"
             polar_align = form.get("polar_align", "False").strip() == "on"
-            raise_arm = form.get("raise_arm", "False").strip() == "on"
+            move_arm = form.get("move_arm", "False").strip() == "on"
 
             params = {
                 "auto_focus": auto_focus,
                 "dark_frames": dark_frames,
                 "3ppa": polar_align,
-                "raise_arm": raise_arm
+                "move_arm": move_arm
             }
 
             if lat and long:
                 params["lat"] = float(lat)
                 params["lon"] = float(long)
 
-            if scope_aim_lat and scope_aim_lon:
-                params["scope_aim_lat"] = float(scope_aim_lat)
-                params["scope_aim_lon"] = float(scope_aim_lon)
+            if move_arm_lat_sec and move_arm_lon_sec:
+                params["move_arm_lat_sec"] = float(move_arm_lat_sec)
+                params["move_arm_lon_sec"] = float(move_arm_lon_sec)
 
             output = do_action_device("action_start_up_sequence", telescope_id, params)
         elif action == "stop":
@@ -3009,7 +3010,7 @@ class ReloadResource:
 Object = lambda **kwargs: type("Object", (), kwargs)
 
 
-class SystemResource:
+class SystemResource(BaseResource):
     def if_null(self, thread, name):
         if thread is None:
             return Object(name=name, is_alive=lambda: "n/a")
@@ -3103,7 +3104,7 @@ class SimbadResource:
 
 
 # convert decimal RA into HMS format
-def decimal_RA_to_Sexagesimal(deg):
+def decimal_RA_to_Sexagesimal(deg: float) -> str:
     # Normalize the degree value
     total_hours = deg / 15.0  # Convert degrees to total hours
     total_hours = total_hours % 24  # Wrap around to stay within 0-24 hours
@@ -3124,7 +3125,7 @@ def decimal_RA_to_Sexagesimal(deg):
 
 
 # Convert decimal DEC into DMS format
-def decimal_DEC_to_Sexagesimal(deg: float):
+def decimal_DEC_to_Sexagesimal(deg: float) -> str:
     sign = "+" if deg >= 0 else "-"
     abs_deg = abs(deg)
     degrees = int(abs_deg)
@@ -3256,7 +3257,7 @@ class StellariumResource:
 #         resp.text = ra_dec_j2000
 
 
-class TelescopePositionResource:
+class TelescopePositionResource(BaseResource):
     def on_post(self, req, resp, telescope_id=1):
         form = req.media
         # print("position", form)
@@ -3439,8 +3440,8 @@ class BlindPolarAlignResource:
                 resp.text = json.dumps(pa_data)
         elif action == 'runpa':
             polar_align = PostedForm.get("polar_align", "False").strip() == "on"
-            raise_arm = PostedForm.get("raise_arm", "False").strip() == "on"
-            do_action_device("action_start_up_sequence", telescope_id, {"3ppa": polar_align, "raise_arm": raise_arm})
+            move_arm = PostedForm.get("move_arm", "False").strip() == "on"
+            do_action_device("action_start_up_sequence", telescope_id, {"3ppa": polar_align, "move_arm": move_arm})
             render_template(req, resp, 'pa_refine.html', **context)
 
 
@@ -3710,7 +3711,7 @@ class GetLocalSearch():
 
 class GetAAVSOSearch():
     @staticmethod
-    def on_get(req, resp):
+    def on_get(req: falcon.Request, resp: falcon.Response) -> None:
         objName = req.get_param("target")
         aavso_URL = 'https://www.aavso.org/vsx/index.php?view=api.object&format=json&ident='
         rtn = requests.get(aavso_URL + objName, timeout=10)

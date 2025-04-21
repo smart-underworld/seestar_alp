@@ -144,8 +144,8 @@ class _Config:
             {
                 'name': 'Seestar Alpha',
                 'ip_address': 'seestar.local',
-                'scope_aim_lat':  60.0,
-                'scope_aim_lon':  20.0,
+                'move_arm_lat_sec':  2.0,
+                'move_arm_lon_sec':  20.0,
                 'is_EQ_mode':  False,
                 'device_num': 1
             }
@@ -192,8 +192,8 @@ class _Config:
         self.init_activate_LP_filter: bool = self.get_toml(section, 'activate_LP_filter', False)
         self.init_dew_heater_power: int = self.get_toml(section, 'dew_heater_power', 0)
         self.init_guest_mode: bool = self.get_toml(section, 'guest_mode_init', True)
-        self.scope_aim_lat: float = self.get_toml(section, 'scope_aim_lat', 2.0)
-        self.scope_aim_lon: float = self.get_toml(section, 'scope_aim_lon', 20.0)
+        self.move_arm_lat_sec: float = self.get_toml(section, 'move_arm_lat_sec', 2.0)
+        self.move_arm_lon_sec: float = self.get_toml(section, 'move_arm_lon_sec', 20.0)
         self.is_EQ_mode: bool = self.get_toml(section, 'is_EQ_mode', False)
         self.battery_low_limit: int = self.get_toml(section, 'battery_low_limit', 3)
         self.is_frame_calibrated : bool = self.get_toml(section, 'is_frame_calibrated', True)
@@ -221,21 +221,21 @@ class _Config:
             if deviceCount > 1:
                 ss_name = req.media['ss_name'][devNum]
                 ss_ip = req.media['ss_ip_address'][devNum]
-                ss_lat = req.media['ss_scope_aim_lat'][devNum]
-                ss_lon = req.media['ss_scope_aim_lon'][devNum]
+                ss_lat = req.media['ss_move_arm_lat_sec'][devNum]
+                ss_lon = req.media['move_arm_lon_sec'][devNum]
                 ss_eq = self.strToBool(req.media['ss_is_EQ_mode'][devNum])
                 print (f'Device {devNum} EQ is : {ss_eq}')
             else:
                 ss_name = req.media['ss_name']
                 ss_ip = req.media['ss_ip_address']
-                ss_lat = req.media['ss_scope_aim_lat']
-                ss_lon = req.media['ss_scope_aim_lon']
+                ss_lat = req.media['ss_move_arm_lat_sec']
+                ss_lon = req.media['ss_move_arm_lon_sec']
                 ss_eq = self.strToBool(req.media['ss_is_EQ_mode'])
 
             # Add to local config
-            self.seestars.append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1, 'scope_aim_lat': float(ss_lat), 'scope_aim_lon': float(ss_lon), 'is_EQ_mode': ss_eq})
+            self.seestars.append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1, 'move_arm_lat_sec': float(ss_lat), 'move_arm_lon_sec': float(ss_lon), 'is_EQ_mode': ss_eq})
             # Add to toml config
-            self._dict['seestars'].append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1, 'scope_aim_lat': float(ss_lat), 'scope_aim_lon': float(ss_lon), 'is_EQ_mode': ss_eq})
+            self._dict['seestars'].append({'name': ss_name, 'ip_address': ss_ip, 'device_num': devNum + 1, 'move_arm_lat_sec': float(ss_lat), 'move_arm_lon_sec': float(ss_lon), 'is_EQ_mode': ss_eq})
 
 
         # network
@@ -286,8 +286,8 @@ class _Config:
         self.set_toml('seestar_initialization', 'dither_frequency', int(req.media['init_dither_frequency']))
         self.set_toml('seestar_initialization', 'activate_LP_filter', 'init_activate_LP_filter' in req.media)
         self.set_toml('seestar_initialization', 'dew_heater_power', int(req.media['init_dew_heater_power']))
-        self.set_toml('seestar_initialization', 'scope_aim_lat', float(req.media['scope_aim_lat']))
-        self.set_toml('seestar_initialization', 'scope_aim_lon', float(req.media['scope_aim_lon']))
+        self.set_toml('seestar_initialization', 'move_arm_lat_sec', float(req.media['move_arm_lat_sec']))
+        self.set_toml('seestar_initialization', 'move_arm_lon_sec', float(req.media['move_arm_lon_sec']))
         self.set_toml('seestar_initialization', 'is_EQ_mode', 'is_EQ_mode' in req.media)
         self.set_toml('seestar_initialization', 'guest_mode_init', 'init_guest_mode' in req.media)
         self.set_toml('seestar_initialization', 'battery_low_limit', int(req.media['battery_low_limit']))
@@ -439,15 +439,15 @@ class _Config:
         """
         ssHTML = ''
         for seestar in self.seestars:
-            if 'scope_aim_lat' in seestar:
-                lat = self.render_text('ss_scope_aim_lat','Aim Lat',seestar['scope_aim_lat'],'Start up raise arm setting for moving up/down from zenith in movement clock seconds, from -20 to 20')
+            if 'move_arm_lat_sec' in seestar:
+                lat = self.render_text('ss_move_arm_lat_sec','Aim Lat',seestar['move_arm_lat_sec'],'Start up move arm setting for moving up/down from zenith in movement clock seconds, from -20 to 20')
             else:
-                lat = self.render_text('ss_scope_aim_lat','Aim Lat',2,'Start up raise arm setting for moving up/down from zenith in movement clock seconds, from -20 to 20')
+                lat = self.render_text('ss_move_arm_lat_sec','Aim Lat',2,'Start up move arm setting for moving up/down from zenith in movement clock seconds, from -20 to 20')
 
-            if 'scope_aim_lon' in seestar:
-                lon = self.render_text('ss_scope_aim_lon','Aim Long',seestar['scope_aim_lon'],'Start up raise arm setting for moving counter/clockwise from zenith in movement clock seconds, from -100 to 100')
+            if 'move_arm_lon_sec' in seestar:
+                lon = self.render_text('ss_move_arm_lon_sec','Aim Long',seestar['move_arm_lon_sec'],'Start up move arm setting for moving counter/clockwise from zenith in movement clock seconds, from -100 to 100')
             else:
-                lon = self.render_text('ss_scope_aim_lon','Aim Long',20,'Start up raise arm setting for moving counter/clockwise from zenith in movement clock seconds, from -100 to 100')
+                lon = self.render_text('ss_move_arm_lon_sec','Aim Long',20,'Start up move arm setting for moving counter/clockwise from zenith in movement clock seconds, from -100 to 100')
 
 
             c = ""
@@ -569,8 +569,8 @@ class _Config:
                 self.render_text('init_dither_frequency', 'Dither frequency:', self.init_dither_frequency, 'Number of frames between dithering movements') + \
                 self.render_checkbox('init_activate_LP_filter', 'Activate LP filter:', self.init_activate_LP_filter, 'Switch on Light Pollution Filter') + \
                 self.render_text('init_dew_heater_power', 'Dew heater power:', self.init_dew_heater_power, 'Dew heater power level, 0 - 100') + \
-                self.render_text('scope_aim_lat', 'Scope aim latitude:', self.scope_aim_lat, 'Start up raise arm setting for moving up/down from zenith in movement clock seconds, from -20 to 20') + \
-                self.render_text('scope_aim_lon', 'Scope aim longitude:', self.scope_aim_lon, 'Start up raise arm setting for moving counter/clockwise from zenith in movement clock seconds, from -100 to 100') + \
+                self.render_text('move_arm_lat_sec', 'Scope aim latitude:', self.move_arm_lat_sec, 'Start up raise arm setting for moving up/down from zenith in movement clock seconds, from -20 to 20') + \
+                self.render_text('move_arm_lon_sec', 'Scope aim longitude:', self.move_arm_lon_sec, 'Start up raise arm setting for moving counter/clockwise from zenith in movement clock seconds, from -100 to 100') + \
                 self.render_checkbox('is_EQ_mode', 'Scope in EQ Mode:', self.is_EQ_mode, 'Is the scope in equitorial mode') + \
                 self.render_checkbox('init_guest_mode', 'Claim guest mode control:', self.init_guest_mode, 'Claim guest mode on init') + \
                 self.render_text('battery_low_limit', 'Battery low limit percentage:', self.battery_low_limit, 'Lower limit for battery, before safe shutdown')

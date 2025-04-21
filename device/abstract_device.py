@@ -1,11 +1,35 @@
+import collections
 from abc import ABC, abstractmethod
-from typing import Any, TypedDict
+from typing import Any, TypedDict, Optional, NotRequired, Literal
 
 
 class StartStackParams(TypedDict):
     """Start stack parameters"""
     gain: int
     restart: bool
+
+class MessageParams(TypedDict):
+    """Message parameter"""
+    id: NotRequired[int]
+    method: str
+    params: NotRequired[dict[str, Any] | list[Any]]
+    result: NotRequired[str]
+
+
+type ScheduleState = Literal['working', 'stopped', 'stopping', 'paused', 'complete']
+
+class Schedule(TypedDict):
+    version: float
+    Event: str
+    schedule_id: str
+    list: collections.deque
+    state: str
+    is_stacking_paused: bool
+    is_stacking: bool
+    is_skip_requested: bool
+    current_item_id: str
+    item_number: int
+
 
 
 class AbstractDevice(ABC):
