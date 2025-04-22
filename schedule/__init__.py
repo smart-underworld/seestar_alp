@@ -5,7 +5,7 @@ from typing import TypedDict, Literal
 from device.seestar_util import Util
 from pydantic import BaseModel, Field
 
-type ScheduleState = Literal['working', 'stopped', 'stopping', 'paused', 'complete']
+type ScheduleState = Literal["working", "stopped", "stopping", "paused", "complete"]
 
 
 class Schedule(TypedDict):
@@ -20,8 +20,10 @@ class Schedule(TypedDict):
     current_item_id: str
     item_number: int
 
+
 class ScheduleParams(BaseModel):
     pass
+
 
 class ScheduleItem(BaseModel):
     schedule_item_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -46,20 +48,20 @@ class Schedule2(BaseModel):
 
     def construct_schedule_item(self, params):
         item = params.copy()
-        if item['action'] == 'start_mosaic':
-            mosaic_params = item['params']
-            if isinstance(mosaic_params['ra'], str):
+        if item["action"] == "start_mosaic":
+            mosaic_params = item["params"]
+            if isinstance(mosaic_params["ra"], str):
                 # try to trim the seconds to 1 decimal
-                mosaic_params['ra'] = Util.trim_seconds(mosaic_params['ra'])
-                mosaic_params['dec'] = Util.trim_seconds(mosaic_params['dec'])
-            elif isinstance(mosaic_params['ra'], float):
-                if mosaic_params['ra'] < 0:
-                    mosaic_params['ra'] = self.ra
-                    mosaic_params['dec'] = self.dec
-                    mosaic_params['is_j2000'] = False
-                mosaic_params['ra'] = round(mosaic_params['ra'], 4)
-                mosaic_params['dec'] = round(mosaic_params['dec'], 4)
-        item['schedule_item_id'] = str(uuid.uuid4())
+                mosaic_params["ra"] = Util.trim_seconds(mosaic_params["ra"])
+                mosaic_params["dec"] = Util.trim_seconds(mosaic_params["dec"])
+            elif isinstance(mosaic_params["ra"], float):
+                if mosaic_params["ra"] < 0:
+                    mosaic_params["ra"] = self.ra
+                    mosaic_params["dec"] = self.dec
+                    mosaic_params["is_j2000"] = False
+                mosaic_params["ra"] = round(mosaic_params["ra"], 4)
+                mosaic_params["dec"] = round(mosaic_params["dec"], 4)
+        item["schedule_item_id"] = str(uuid.uuid4())
         return item
 
     def add_schedule_item(self, params: dict[str, str]):
@@ -76,6 +78,7 @@ class Schedule2(BaseModel):
 
     def import_schedule(self, params: dict[str, str]):
         return self
+
 
 # todo:
 # - add type for deque

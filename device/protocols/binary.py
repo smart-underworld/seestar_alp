@@ -17,6 +17,7 @@ from lib.trace import MessageTrace
 # - send message
 # - socket handling code
 
+
 class SeestarBinaryProtocol(SocketBase):
     def __init__(self, logger, device_name, device_num, host, port):
         super().__init__(logger, device_name, host, port)
@@ -37,13 +38,14 @@ class SeestarBinaryProtocol(SocketBase):
             pass
 
         def on_heartbeat(self):
-            #self.protocol.logger.info("send HEARTBEAT!!")
-            self.protocol.send_message('{ "id" : 2,  "method" : "test_connection"}' + "\r\n")
-            #self.protocol.logger.info("sent HEARTBEAT!!")
+            # self.protocol.logger.info("send HEARTBEAT!!")
+            self.protocol.send_message(
+                '{ "id" : 2,  "method" : "test_connection"}' + "\r\n"
+            )
+            # self.protocol.logger.info("sent HEARTBEAT!!")
 
         def on_disconnect(self):
             pass
-
 
     def send_message(self, data):
         # Minimize time holding lock
@@ -51,28 +53,30 @@ class SeestarBinaryProtocol(SocketBase):
             soc = self._s if self.is_connected() else None
 
         if soc is not None:
-           self.logger.debug(f"sending message: {data}")  # temp made info
-           try:
-               soc.sendall(data.encode())  # TODO: would utf-8 or unicode_escaped help here
-               # self.trace.save_message(data, 'send')
-               return True
-           except socket.timeout:
-               print("sending timeout")
-               return False
-           except IOError as e:
-               if e.errno == errno.EPIPE:
-                   self.disconnect()
-                   if self.reconnect():
-                       return self.send_message(data)
-           except socket.error as e:
-               self.logger.error(f"Send Socket error: {e}")
-               #self.disconnect()
-               #if self.reconnect():
-               #    return self.send_message(data)
-               return False
+            self.logger.debug(f"sending message: {data}")  # temp made info
+            try:
+                soc.sendall(
+                    data.encode()
+                )  # TODO: would utf-8 or unicode_escaped help here
+                # self.trace.save_message(data, 'send')
+                return True
+            except socket.timeout:
+                print("sending timeout")
+                return False
+            except IOError as e:
+                if e.errno == errno.EPIPE:
+                    self.disconnect()
+                    if self.reconnect():
+                        return self.send_message(data)
+            except socket.error as e:
+                self.logger.error(f"Send Socket error: {e}")
+                # self.disconnect()
+                # if self.reconnect():
+                #    return self.send_message(data)
+                return False
         else:
-           self.logger.warning(f"Send Socket error: not connected: {data}")
-           return False
+            self.logger.warning(f"Send Socket error: not connected: {data}")
+            return False
 
     def recv_exact(self, num):
         """Reads exactly num bytes from the socket, and returns the bytes, or None
@@ -99,10 +103,10 @@ class SeestarBinaryProtocol(SocketBase):
                 return None
 
             # self.logger.debug(f'{self.device_name} received : {len(data)}')
-            self.logger.debug(f'received : {len(data)}') # todo : make debug!
+            self.logger.debug(f"received : {len(data)}")  # todo : make debug!
             dl = len(data)
             if dl < 100 and dl != 80:
-                self.logger.debug(f'Message: {data}')
+                self.logger.debug(f"Message: {data}")
             # self.trace.save_message(data, 'recv')
             return data
         else:
@@ -122,7 +126,9 @@ class SeestarBinaryProtocol(SocketBase):
             self.logger.debug(f"size: {calcsize(fmt)}")
             _s1, _s2, _s3, size, _s5, _s6, code, id, width, height = unpack(fmt, header)
             if size > 100:
-                self.logger.debug(f"header: {size=} {width=} {height=} {_s1=} {_s2=} {_s3=} {code=} {id=}") # xxx trace
+                self.logger.debug(
+                    f"header: {size=} {width=} {height=} {_s1=} {_s2=} {_s3=} {code=} {id=}"
+                )  # xxx trace
 
             return size, id, width, height
         return 0, None, None, None

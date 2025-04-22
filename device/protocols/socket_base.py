@@ -13,22 +13,24 @@ from device.config import Config
 
 # todo : onstopped, onstarted?
 class SocketListener(ABC):
-   """Socket listener base class.  Implement to listen for socket events."""
-   @abstractmethod
-   def on_connect(self):
-      pass
+    """Socket listener base class.  Implement to listen for socket events."""
 
-   @abstractmethod
-   def on_heartbeat(self):
-      pass
+    @abstractmethod
+    def on_connect(self):
+        pass
 
-   @abstractmethod
-   def on_disconnect(self):
-       pass
+    @abstractmethod
+    def on_heartbeat(self):
+        pass
+
+    @abstractmethod
+    def on_disconnect(self):
+        pass
 
 
 class MessageListener(ABC):
     """Message listener base class.  Implement to listen for socket messages."""
+
     @abstractmethod
     def on_message(self, message):
         pass
@@ -45,7 +47,7 @@ class SocketBase:
         self._is_started: bool = False
         self.heartbeat_thread: Optional[threading.Thread] = None
         self.lock = threading.RLock()
-        self._listeners: List[SocketListener] = [] # todo : change to weak references!
+        self._listeners: List[SocketListener] = []  # todo : change to weak references!
 
     def start(self):
         """Starts socket. Attempts to connect, and continues to keep alive until stopped."""
@@ -57,8 +59,10 @@ class SocketBase:
             self._is_started = True
 
             if self.heartbeat_thread is None:
-                self.heartbeat_thread = threading.Thread(target=self._heartbeat_message_thread_fn, daemon=True)
-                self.heartbeat_thread.name = f"SocketHeartbeatMessageThread.{self.device_name}" # todo : tweak the name
+                self.heartbeat_thread = threading.Thread(
+                    target=self._heartbeat_message_thread_fn, daemon=True
+                )
+                self.heartbeat_thread.name = f"SocketHeartbeatMessageThread.{self.device_name}"  # todo : tweak the name
                 self.heartbeat_thread.start()
 
             self.connect()

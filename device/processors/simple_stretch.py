@@ -24,4 +24,3 @@ class SimpleStretch(ImageProcessor):
         # return stretched_image
 
         return img_rescale
-

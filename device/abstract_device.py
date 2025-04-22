@@ -5,18 +5,22 @@ from typing import Any, TypedDict, Optional, NotRequired, Literal
 
 class StartStackParams(TypedDict):
     """Start stack parameters"""
+
     gain: int
     restart: bool
 
+
 class MessageParams(TypedDict):
     """Message parameter"""
+
     id: NotRequired[int]
     method: str
     params: NotRequired[dict[str, Any] | list[Any]]
     result: NotRequired[str]
 
 
-type ScheduleState = Literal['working', 'stopped', 'stopping', 'paused', 'complete']
+type ScheduleState = Literal["working", "stopped", "stopping", "paused", "complete"]
+
 
 class Schedule(TypedDict):
     version: float
@@ -29,7 +33,6 @@ class Schedule(TypedDict):
     is_skip_requested: bool
     current_item_id: str
     item_number: int
-
 
 
 class AbstractDevice(ABC):

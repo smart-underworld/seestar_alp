@@ -76,9 +76,10 @@ from device.shr import set_shr_logger
 #########################
 from device import telescope
 
-#--------------
+# --------------
 API_VERSION = 1
-#--------------
+# --------------
+
 
 class LoggingWSGIRequestHandler(WSGIRequestHandler):
     """Subclass of  WSGIRequestHandler allowing us to control WSGI server's logging"""
@@ -114,10 +115,11 @@ class LoggingWSGIRequestHandler(WSGIRequestHandler):
 
         ##TODO## If I enable this, the server occasionally fails to respond
         ##TODO## on non-200s, per Wireshark. So crazy!
-        #if args[1] != '200':  # Log this only on non-200 responses
+        # if args[1] != '200':  # Log this only on non-200 responses
         #    log.logger.info(f'{self.client_address[0]} <- {format%args}')
 
-#-----------------------
+
+# -----------------------
 # Magic routing function
 # ----------------------
 def init_routes(app: App, devname: str, module):
@@ -152,9 +154,12 @@ def init_routes(app: App, devname: str, module):
     """
 
     memlist = inspect.getmembers(module, inspect.isclass)
-    for cname,ctype in memlist:
-        if ctype.__module__ == module.__name__:    # Only classes *defined* in the module
-            app.add_route(f'/api/v{API_VERSION}/{devname}/{{devnum:int(min=0)}}/{cname.lower()}', ctype())  # type() creates instance!
+    for cname, ctype in memlist:
+        if ctype.__module__ == module.__name__:  # Only classes *defined* in the module
+            app.add_route(
+                f"/api/v{API_VERSION}/{devname}/{{devnum:int(min=0)}}/{cname.lower()}",
+                ctype(),
+            )  # type() creates instance!
 
 
 def custom_excepthook(exc_type, exc_value, exc_traceback):
@@ -188,7 +193,7 @@ def custom_excepthook(exc_type, exc_value, exc_traceback):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
 
-    log.logger.error(f'An uncaught {exc_type.__name__} exception occurred:')
+    log.logger.error(f"An uncaught {exc_type.__name__} exception occurred:")
     log.logger.error(exc_value)
 
     if Config.verbose_driver_exceptions and exc_traceback:
@@ -197,28 +202,35 @@ def custom_excepthook(exc_type, exc_value, exc_traceback):
             log.logger.error(repr(line))
 
 
-def falcon_uncaught_exception_handler(req: Request, resp: Response, ex: BaseException, params):
+def falcon_uncaught_exception_handler(
+    req: Request, resp: Response, ex: BaseException, params
+):
     """Handle Uncaught Exceptions while in a Falcon Responder
 
-        This catches unhandled exceptions within the Falcon responder,
-        logging the info to our log file instead of it being lost to
-        stdout. Then it logs and responds with a 500 Internal Server Error.
+    This catches unhandled exceptions within the Falcon responder,
+    logging the info to our log file instead of it being lost to
+    stdout. Then it logs and responds with a 500 Internal Server Error.
 
     """
     exc = sys.exc_info()
     custom_excepthook(exc[0], exc[1], exc[2])
-    raise HTTPInternalServerError(title='Internal Server Error', description='Alpaca endpoint responder failed. See logfile.')
+    raise HTTPInternalServerError(
+        title="Internal Server Error",
+        description="Alpaca endpoint responder failed. See logfile.",
+    )
+
 
 # ===========
 # APP STARTUP
 # ===========
+
 
 class DeviceMain:
     def __init__(self):
         self.httpd = None
 
     def start(self):
-        """ Application startup"""
+        """Application startup"""
         Config.load_toml()
 
         logger = log.init_logging()
@@ -233,10 +245,31 @@ class DeviceMain:
         telescope.start_seestar_federation(logger)
 
         for dev in Config.seestars:
-            is_EQ_mode = dev.get('is_EQ_mode', Config.is_EQ_mode)
-            controller = telescope.start_seestar_device(logger, dev['name'], dev['ip_address'], 4700, dev['device_num'], is_EQ_mode)
-            telescope.start_seestar_imaging(logger, dev['name'], dev['ip_address'], 4800, dev['device_num'], controller)
-            telescope.start_seestar_logcollector(logger, dev['name'], dev['ip_address'], 4801, dev['device_num'], controller)
+            is_EQ_mode = dev.get("is_EQ_mode", Config.is_EQ_mode)
+            controller = telescope.start_seestar_device(
+                logger,
+                dev["name"],
+                dev["ip_address"],
+                4700,
+                dev["device_num"],
+                is_EQ_mode,
+            )
+            telescope.start_seestar_imaging(
+                logger,
+                dev["name"],
+                dev["ip_address"],
+                4800,
+                dev["device_num"],
+                controller,
+            )
+            telescope.start_seestar_logcollector(
+                logger,
+                dev["name"],
+                dev["ip_address"],
+                4801,
+                dev["device_num"],
+                controller,
+            )
 
         #########################
         # FOR EACH ASCOM DEVICE #
@@ -264,14 +297,21 @@ class DeviceMain:
         #########################
         # FOR EACH ASCOM DEVICE #
         #########################
-        init_routes(falc_app, 'telescope', telescope)
+        init_routes(falc_app, "telescope", telescope)
         #
         # Initialize routes for Alpaca support endpoints
-        falc_app.add_route('/management/apiversions', management.apiversions())
-        falc_app.add_route(f'/management/v{API_VERSION}/description', management.description())
-        falc_app.add_route(f'/management/v{API_VERSION}/configureddevices', management.configureddevices())
-        falc_app.add_route('/setup', setup.svrsetup())
-        falc_app.add_route(f'/setup/v{API_VERSION}/rotator/{{devnum}}/setup', setup.devsetup())
+        falc_app.add_route("/management/apiversions", management.apiversions())
+        falc_app.add_route(
+            f"/management/v{API_VERSION}/description", management.description()
+        )
+        falc_app.add_route(
+            f"/management/v{API_VERSION}/configureddevices",
+            management.configureddevices(),
+        )
+        falc_app.add_route("/setup", setup.svrsetup())
+        falc_app.add_route(
+            f"/setup/v{API_VERSION}/rotator/{{devnum}}/setup", setup.devsetup()
+        )
 
         #
         # Install the unhandled exception processor. See above,
@@ -283,22 +323,29 @@ class DeviceMain:
         # ------------------
         # Using the lightweight built-in Python wsgi.simple_server
         try:
-            self.httpd = make_server(Config.ip_address, Config.port, falc_app, handler_class=LoggingWSGIRequestHandler)
-            logger.info(f'==STARTUP== Serving on {Config.ip_address}:{Config.port}. Time stamps are UTC.')
+            self.httpd = make_server(
+                Config.ip_address,
+                Config.port,
+                falc_app,
+                handler_class=LoggingWSGIRequestHandler,
+            )
+            logger.info(
+                f"==STARTUP== Serving on {Config.ip_address}:{Config.port}. Time stamps are UTC."
+            )
             # Serve until process is killed
             self.httpd.serve_forever()
         except KeyboardInterrupt:
             logger.warn("Keyboard interrupt. Server shutting down.")
 
         for dev in Config.seestars:
-            telescope.end_seestar_device(dev['device_num'])
+            telescope.end_seestar_device(dev["device_num"])
         if self.httpd:
             self.httpd.server_close()
-        logger.info('Server stopped')
+        logger.info("Server stopped")
 
     def stop(self):
         for dev in Config.seestars:
-            telescope.end_seestar_device(dev['device_num'])
+            telescope.end_seestar_device(dev["device_num"])
         if self.httpd:
             self.httpd.shutdown()
 
@@ -309,15 +356,22 @@ class DeviceMain:
     def get_imager(self, device_num):
         return telescope.get_seestar_imager(device_num)
 
-class style():
-    YELLOW = '\033[33m'
-    RESET = '\033[0m'
+
+class style:
+    YELLOW = "\033[33m"
+    RESET = "\033[0m"
+
 
 # ========================
-if __name__ == '__main__':
+if __name__ == "__main__":
     print(style.YELLOW + "WARN")
     print(style.YELLOW + "WARN" + style.RESET + ": Deprecated app launch detected.")
-    print(style.YELLOW + "WARN" + style.RESET + ": We recommend launching from the top level root_app.py, instead of ./device/app.py")
+    print(
+        style.YELLOW
+        + "WARN"
+        + style.RESET
+        + ": We recommend launching from the top level root_app.py, instead of ./device/app.py"
+    )
     print(style.YELLOW + "WARN" + style.RESET)
     device = DeviceMain()
     device.start()

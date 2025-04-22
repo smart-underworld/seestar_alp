@@ -20,8 +20,16 @@ class MTFStretchParameters:
     highlight_clipping: float = 1.0
 
 
-StretchParameter = Enum('StretchParameter',
-                        ["No Stretch", "10% Bg, 3 sigma", "15% Bg, 3 sigma", "20% Bg, 3 sigma", "30% Bg, 2 sigma"])
+StretchParameter = Enum(
+    "StretchParameter",
+    [
+        "No Stretch",
+        "10% Bg, 3 sigma",
+        "15% Bg, 3 sigma",
+        "20% Bg, 3 sigma",
+        "30% Bg, 2 sigma",
+    ],
+)
 
 
 class StretchParameters:
@@ -32,7 +40,12 @@ class StretchParameters:
     channels_linked: bool = False
     images_linked: bool = False
 
-    def __init__(self, stretch_option: StretchParameter, channels_linked: bool = False, images_linked: bool = False):
+    def __init__(
+        self,
+        stretch_option: StretchParameter,
+        channels_linked: bool = False,
+        images_linked: bool = False,
+    ):
         self.stretch_option = stretch_option
         self.channels_linked = channels_linked
         self.images_linked = images_linked
@@ -93,12 +106,16 @@ def stretch_all(datas, mtf_stretch_params: list[MTFStretchParameters]):
 
 def calculate_mtf_stretch_parameters_for_image(stretch_params, image):
     if stretch_params.channels_linked:
-        mtf_stretch_param = calculate_mtf_stretch_parameters_for_channel(stretch_params, image)
+        mtf_stretch_param = calculate_mtf_stretch_parameters_for_channel(
+            stretch_params, image
+        )
         return [mtf_stretch_param] * image.shape[-1]
 
     else:
-        return [calculate_mtf_stretch_parameters_for_channel(stretch_params, image[:, :, i]) for i in
-                range(image.shape[-1])]
+        return [
+            calculate_mtf_stretch_parameters_for_channel(stretch_params, image[:, :, i])
+            for i in range(image.shape[-1])
+        ]
 
 
 def calculate_mtf_stretch_parameters_for_channel(stretch_params, channel):
@@ -110,7 +127,10 @@ def calculate_mtf_stretch_parameters_for_channel(stretch_params, channel):
 
     shadow_clipping = np.clip(median - stretch_params.sigma * mad, 0, 1.0)
     highlight_clipping = 1.0
-    midtone = MTF((median - shadow_clipping) / (highlight_clipping - shadow_clipping), stretch_params.bg)
+    midtone = MTF(
+        (median - shadow_clipping) / (highlight_clipping - shadow_clipping),
+        stretch_params.bg,
+    )
 
     return MTFStretchParameters(midtone, shadow_clipping)
 
@@ -125,11 +145,14 @@ def stretch_channel(shm_name, c, mtf_stretch_params, shape, dtype):
         channel[channel <= mtf_stretch_params.shadow_clipping] = 0.0
         channel[channel >= mtf_stretch_params.highlight_clipping] = 1.0
 
-        indx_inside = np.logical_and(channel > mtf_stretch_params.shadow_clipping,
-                                     channel < mtf_stretch_params.highlight_clipping)
+        indx_inside = np.logical_and(
+            channel > mtf_stretch_params.shadow_clipping,
+            channel < mtf_stretch_params.highlight_clipping,
+        )
 
-        channel[indx_inside] = (channel[indx_inside] - mtf_stretch_params.shadow_clipping) / (
-            mtf_stretch_params.highlight_clipping - mtf_stretch_params.shadow_clipping)
+        channel[indx_inside] = (
+            channel[indx_inside] - mtf_stretch_params.shadow_clipping
+        ) / (mtf_stretch_params.highlight_clipping - mtf_stretch_params.shadow_clipping)
 
         channel = MTF(channel, mtf_stretch_params.midtone)
     except:

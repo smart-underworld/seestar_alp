@@ -39,16 +39,16 @@
 from falcon import Request, Response
 from device.shr import PropertyResponse, DeviceMetadata, log_request
 
+
 class svrsetup:
     def on_get(self, req: Request, resp: Response):
         log_request(req)
-        resp.content_type = 'text/html'
-        resp.text = '<!DOCTYPE html><html><body><h2>Server setup is in config.toml</h2></body></html>'
+        resp.content_type = "text/html"
+        resp.text = "<!DOCTYPE html><html><body><h2>Server setup is in config.toml</h2></body></html>"
+
 
 class devsetup:
     def on_get(self, req: Request, resp: Response, devnum: str):
-        resp.content_type = 'text/html'
+        resp.content_type = "text/html"
         log_request(req)
-        resp.text = '<!DOCTYPE html><html><body><h2>Device setup is in config.toml</h2></body></html>'
-
-
+        resp.text = "<!DOCTYPE html><html><body><h2>Device setup is in config.toml</h2></body></html>"
