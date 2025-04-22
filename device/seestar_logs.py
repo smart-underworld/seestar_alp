@@ -19,12 +19,15 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "."))
 
 import log
 
+
 class SeestarLogging:
     def __new__(cls, *args, **kwargs):
         return super().__new__(cls)
 
     def __init__(self, logger, host, port, device_name, device_num, device=None):
-        logger.info(f"Initialize new instance of Seestar imager: {host}:{port}, name:{device_name}")
+        logger.info(
+            f"Initialize new instance of Seestar imager: {host}:{port}, name:{device_name}"
+        )
 
         self.host = host
         self.port = port
@@ -74,7 +77,9 @@ class SeestarLogging:
     def send_message(self, data):
         self.logger.debug(f"sending message: {data}")  # temp made info
         try:
-            self.s.sendall(data.encode())  # TODO: would utf-8 or unicode_escaped help here
+            self.s.sendall(
+                data.encode()
+            )  # TODO: would utf-8 or unicode_escaped help here
             return True
         except socket.timeout:
             return False
@@ -128,7 +133,9 @@ class SeestarLogging:
             fmt = ">HHHIHHBBHH"
             self.logger.debug(f"size: {calcsize(fmt)}")
             _s1, _s2, _s3, size, _s5, _s6, code, id, width, height = unpack(fmt, header)
-            self.logger.debug(f"header: {size=} {width=} {height=} {_s1=} {_s2=} {_s3=} {code=} {id=}")
+            self.logger.debug(
+                f"header: {size=} {width=} {height=} {_s1=} {_s2=} {_s3=} {code=} {id=}"
+            )
 
             return size, id
         return 0, None
@@ -153,20 +160,22 @@ class SeestarLogging:
             return None
 
         # self.logger.debug(f'{self.device_name} received : {len(data)}')
-        self.logger.debug(f'{self.device_name} received : {len(data)}')
+        self.logger.debug(f"{self.device_name} received : {len(data)}")
         dl = len(data)
         if dl < 100 and dl != 80:
-            self.logger.debug(f'Message: {data}')
+            self.logger.debug(f"Message: {data}")
         return data
 
     def start(self):
         self.reconnect()
-        self.get_logging_thread = threading.Thread(target=self.receive_message_thread_fn, daemon=True)
+        self.get_logging_thread = threading.Thread(
+            target=self.receive_message_thread_fn, daemon=True
+        )
         self.get_logging_thread.name = f"LoggingReceiveImageThread.{self.device_name}"
         self.get_logging_thread.start()
 
     def stop(self):
-        #self.get_logging_thread.join()
+        # self.get_logging_thread.join()
         self.disconnect()
 
     def get_logs_sync(self):
@@ -179,22 +188,30 @@ class SeestarLogging:
         self.stop()
         return self.raw_log
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     app = Flask(__name__)
 
-    host, port, device_num, listen_port = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+    host, port, device_num, listen_port = (
+        sys.argv[1],
+        int(sys.argv[2]),
+        int(sys.argv[3]),
+        int(sys.argv[4]),
+    )
     logger = log.init_logging()
-    dev_log = SeestarLogging(logger, host, port, 'SeestarB', device_num)
+    dev_log = SeestarLogging(logger, host, port, "SeestarB", device_num)
 
     dev_log.start()
 
-    @app.route('/getlogs')
+    @app.route("/getlogs")
     def getlogs():
         f = open("test.zip", "wb+")
         f.write(dev_log.raw_log)
         f.close()
 
-        return Response(dev_log.get_logs_sync(), mimetype='multipart/x-mixed-replace; boundary=frame')
+        return Response(
+            dev_log.get_logs_sync(),
+            mimetype="multipart/x-mixed-replace; boundary=frame",
+        )
 
-
-    app.run(host='localhost', port=listen_port, debug=True)  # , threaded=True)
+    app.run(host="localhost", port=listen_port, debug=True)  # , threaded=True)

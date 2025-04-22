@@ -65,34 +65,40 @@ from falcon import Request, Response, HTTPBadRequest
 from logging import Logger
 
 logger: Logger = None
-#logger = None                   # Safe on Python 3.7 but no intellisense in VSCode etc.
+# logger = None                   # Safe on Python 3.7 but no intellisense in VSCode etc.
 
-_bad_title = 'Bad Alpaca Request'
+_bad_title = "Bad Alpaca Request"
+
 
 def set_shr_logger(lgr):
     global logger
     logger = lgr
+
 
 # --------------------------
 # Alpaca Device/Server Info
 # --------------------------
 # Static metadata not subject to configuration changes
 class DeviceMetadata:
-    """ Metadata describing the Alpaca Device/Server """
-    Version = '0.2'
-    Description = 'Alpaca Sample Rotator '
-    Manufacturer = 'ASCOM Initiative'
+    """Metadata describing the Alpaca Device/Server"""
+
+    Version = "0.2"
+    Description = "Alpaca Sample Rotator "
+    Manufacturer = "ASCOM Initiative"
 
 
 # ---------------
 # Data Validation
 # ---------------
-_bools = ['true', 'false']                               # Only valid JSON bools allowed
+_bools = ["true", "false"]  # Only valid JSON bools allowed
+
+
 def to_bool(str: str) -> bool:
     val = str.lower()
     if val not in _bools:
         raise HTTPBadRequest(title=_bad_title, description=f'Bad boolean value "{val}"')
     return val == _bools[0]
+
 
 # ---------------------------------------------------------
 # Get parameter/field from query string or body "form" data
@@ -101,51 +107,60 @@ def to_bool(str: str) -> bool:
 # missing. In any case, raise a 400 BAD REQUEST. Optional
 # caseless (mostly for the ClientID and ClientTransactionID)
 # ---------------------------------------------------------
-def get_request_field(name: str, req: Request, caseless: bool = False, default: str = None) -> str:
+def get_request_field(
+    name: str, req: Request, caseless: bool = False, default: str = None
+) -> str:
     bad_desc = f'Missing, empty, or misspelled parameter "{name}"'
     lcName = name.lower()
-    if req.method == 'GET':
-        for param in req.params.items():        # [name,value] tuples
+    if req.method == "GET":
+        for param in req.params.items():  # [name,value] tuples
             if param[0].lower() == lcName:
                 return param[1]
         if default is None:
-            raise HTTPBadRequest(title=_bad_title, description=bad_desc)                # Missing or incorrect casing
-        return default                          # not in args, return default
-    else:                                       # Assume PUT since we never route other methods
+            raise HTTPBadRequest(
+                title=_bad_title, description=bad_desc
+            )  # Missing or incorrect casing
+        return default  # not in args, return default
+    else:  # Assume PUT since we never route other methods
         formdata = req.get_media()
         if caseless:
             for fn in formdata.keys():
                 if fn.lower() == lcName:
                     return formdata[fn]
         else:
-            if name in formdata and formdata[name] != '':
+            if name in formdata and formdata[name] != "":
                 return formdata[name]
         if default is None:
-            raise HTTPBadRequest(title=_bad_title, description=bad_desc)                # Missing or incorrect casing
+            raise HTTPBadRequest(
+                title=_bad_title, description=bad_desc
+            )  # Missing or incorrect casing
         return default
+
 
 #
 # Log the request as soon as the resource handler gets it so subsequent
 # logged messages are in the right order. Logs PUT body as well.
 #
 def log_request(req: Request):
-    msg = f'{req.remote_addr} -> {req.method} {req.path}'
-    if req.query_string != '':
-        msg += f'?{req.query_string}'
+    msg = f"{req.remote_addr} -> {req.method} {req.path}"
+    if req.query_string != "":
+        msg += f"?{req.query_string}"
     logger.debug(msg)
-    if req.method == 'PUT' and req.content_length != 0:
-        logger.debug(f'{req.remote_addr} -> {req.media}')
+    if req.method == "PUT" and req.content_length != 0:
+        logger.debug(f"{req.remote_addr} -> {req.media}")
+
 
 # ------------------------------------------------
 # Incoming Pre-Logging and Request Quality Control
 # ------------------------------------------------
-class PreProcessRequest():
+class PreProcessRequest:
     """Decorator for responders that quality-checks an incoming request
 
     If there is a problem, this causes a ``400 Bad Request`` to be returned
     to the client, and logs the problem.
 
     """
+
     def __init__(self, maxdev):
         self.maxdev = maxdev
         """Initialize a ``PreProcessRequest`` decorator object.
@@ -171,21 +186,21 @@ class PreProcessRequest():
 
     def _check_request(self, req: Request, devnum: int):  # Raise on failure
         if devnum > self.maxdev:
-            msg = f'Device number {str(devnum)} does not exist. Maximum device number is {self.maxdev}.'
+            msg = f"Device number {str(devnum)} does not exist. Maximum device number is {self.maxdev}."
             logger.error(msg)
             raise HTTPBadRequest(title=_bad_title, description=msg)
-        test: str = get_request_field('ClientID', req, True)        # Caseless
+        test: str = get_request_field("ClientID", req, True)  # Caseless
         if test is None:
-            msg = 'Request has missing Alpaca ClientID value'
+            msg = "Request has missing Alpaca ClientID value"
             logger.error(msg)
             raise HTTPBadRequest(title=_bad_title, description=msg)
         if not self._pos_or_zero(test):
-            msg = f'Request has bad Alpaca ClientID value {test}'
+            msg = f"Request has bad Alpaca ClientID value {test}"
             logger.error(msg)
             raise HTTPBadRequest(title=_bad_title, description=msg)
-        test: str = get_request_field('ClientTransactionID', req, True)
+        test: str = get_request_field("ClientTransactionID", req, True)
         if not self._pos_or_zero(test):
-            msg = f'Request has bad Alpaca ClientTransactionID value {test}'
+            msg = f"Request has bad Alpaca ClientTransactionID value {test}"
             logger.error(msg)
             raise HTTPBadRequest(title=_bad_title, description=msg)
 
@@ -194,15 +209,19 @@ class PreProcessRequest():
     # and format converter. This is the device number from the URI
     #
     def __call__(self, req: Request, resp: Response, resource, params):
-        log_request(req)                            # Log even a bad request
-        self._check_request(req, params['devnum'])   # Raises to 400 error on check failure
+        log_request(req)  # Log even a bad request
+        self._check_request(
+            req, params["devnum"]
+        )  # Raises to 400 error on check failure
+
 
 # ------------------
 # PropertyResponse
 # ------------------
-class PropertyResponse():
+class PropertyResponse:
     """JSON response for an Alpaca Property (GET) Request"""
-    def __init__(self, value, req: Request, err = Success()):
+
+    def __init__(self, value, req: Request, err=Success()):
         """Initialize a ``PropertyResponse`` object.
 
         Args:
@@ -216,10 +235,12 @@ class PropertyResponse():
             * Bumps the ServerTransactionID value and returns it in sequence
         """
         self.ServerTransactionID = getNextTransId()
-        self.ClientTransactionID = int(get_request_field('ClientTransactionID', req, False, 0))  #Caseless on GET
+        self.ClientTransactionID = int(
+            get_request_field("ClientTransactionID", req, False, 0)
+        )  # Caseless on GET
         if err.number == 0 and value is not None:
             self.Value = value
-            logger.debug(f'{req.remote_addr} <- {str(value)}')
+            logger.debug(f"{req.remote_addr} <- {str(value)}")
         self.ErrorNumber = err.number
         if "message" in err.__dict__:
             self.ErrorMessage = err.message
@@ -229,21 +250,27 @@ class PropertyResponse():
         """Return the JSON for the Property Response"""
         return json.dumps(self.__dict__)
 
+
 from json import JSONEncoder
 from collections import deque
 
+
 class DequeEncoder(JSONEncoder):
     def default(self, obj):
-       if isinstance(obj, deque):
-          return list(obj)
-       return JSONEncoder.default(self, obj)
+        if isinstance(obj, deque):
+            return list(obj)
+        return JSONEncoder.default(self, obj)
+
 
 # --------------
 # MethodResponse
 # --------------
-class MethodResponse():
+class MethodResponse:
     """JSON response for an Alpaca Method (PUT) Request"""
-    def __init__(self, req: Request, err = Success(), value = None): # value useless unless Success
+
+    def __init__(
+        self, req: Request, err=Success(), value=None
+    ):  # value useless unless Success
         """Initialize a MethodResponse object.
 
         Args:
@@ -258,13 +285,14 @@ class MethodResponse():
         self.ServerTransactionID = getNextTransId()
         # This is crazy ... if casing is incorrect here, we're supposed to return the default 0
         # even if the caseless check coming in returned a valid number. This is for PUT only.
-        self.ClientTransactionID = int(get_request_field('ClientTransactionID', req, False, 0))
+        self.ClientTransactionID = int(
+            get_request_field("ClientTransactionID", req, False, 0)
+        )
         if err.number == 0 and value is not None:
             self.Value = value
-            logger.debug(f'{req.remote_addr} <- {str(value)}')
+            logger.debug(f"{req.remote_addr} <- {str(value)}")
         self.ErrorNumber = err.number
         self.ErrorMessage = err.message
-
 
     @property
     def json(self) -> str:
@@ -277,6 +305,7 @@ class MethodResponse():
 # -------------------------------
 _lock = Lock()
 _stid = 0
+
 
 def getNextTransId() -> int:
     with _lock:

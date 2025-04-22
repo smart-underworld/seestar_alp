@@ -17,10 +17,11 @@ from device.protocols.binary import SeestarBinaryProtocol
 from device.protocols.socket_base import SocketListener
 from device.rtspclient import RtspClient
 
-ExposureModes = Enum('ExposureModes', ['stream', 'preview', 'stacking'])
+ExposureModes = Enum("ExposureModes", ["stream", "preview", "stacking"])
 
 # todo : run processors here, since this is independent of UI
 # todo : make saving code some kind of listener?
+
 
 class SeestarImagerProtocol(SeestarBinaryProtocol):
     def __init__(self, logger, device_name, device_num, host, port):
@@ -74,13 +75,19 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
         super().start()
         if self.receiving_thread is None or not self.receiving_thread.is_alive():
             self.logger.info("Starting ImagingReceiverImagingThread")
-            self.receiving_thread = threading.Thread(target=self.receiving_thread_fn, daemon=True)
+            self.receiving_thread = threading.Thread(
+                target=self.receiving_thread_fn, daemon=True
+            )
             self.receiving_thread.name = f"ImagingReceiveStarThread.{self.device_name}"
             self.receiving_thread.start()
         if self.streaming_thread is None or not self.streaming_thread.is_alive():
             self.logger.info("Starting ImagingReceiverStreamingThread")
-            self.streaming_thread = threading.Thread(target=self.streaming_thread_fn, daemon=True)
-            self.streaming_thread.name = f"ImagingReceiveStreamingThread.{self.device_name}"
+            self.streaming_thread = threading.Thread(
+                target=self.streaming_thread_fn, daemon=True
+            )
+            self.streaming_thread.name = (
+                f"ImagingReceiveStreamingThread.{self.device_name}"
+            )
             self.streaming_thread.start()
 
     def stop(self):
@@ -112,7 +119,9 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
                     image = process.process(image)
             return image, self.raw_img_size[0], self.raw_img_size[1]
 
-    def get_unprocessed_image(self) -> Tuple[Optional[np.ndarray], Optional[int], Optional[int]]:
+    def get_unprocessed_image(
+        self,
+    ) -> Tuple[Optional[np.ndarray], Optional[int], Optional[int]]:
         with self.lock:
             return self.latest_image, self.raw_img_size[0], self.raw_img_size[1]
 
@@ -166,7 +175,7 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
                 return
 
             if data is not None:
-                if _id == 21: # Preview frame
+                if _id == 21:  # Preview frame
                     # print("HANDLE preview frame")
                     self.handle_preview_frame(width, height, data)
                 elif _id == 23:
@@ -186,15 +195,20 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
     def _run_streaming_loop(self):
         try:
             empty_images = 0
-            with RtspClient(rtsp_server_uri=f'rtsp://{self.host}:4554/stream', logger=self.logger,
-                            verbose=True) as client:
+            with RtspClient(
+                rtsp_server_uri=f"rtsp://{self.host}:4554/stream",
+                logger=self.logger,
+                verbose=True,
+            ) as client:
                 # self.raw_img = np.copy(client.read(raw=True))
                 # self.received_frame += 1
 
                 while self.is_streaming():
                     image = client.read(raw=True)
                     with self.lock:
-                        if image is not None and not np.array_equal(image, self.raw_img):
+                        if image is not None and not np.array_equal(
+                            image, self.raw_img
+                        ):
                             # print("received frame")
                             # RTSP is async, so when we read we might get the same frame back.
                             # We could adjust the Rtsp code, but for now just going to brute force compare
@@ -205,7 +219,9 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
                             empty_images = 0  # Reset counter...
 
                             if self._received_frame % 100 == 0:
-                                self.logger.debug(f"Read {self._received_frame} images {self.is_streaming=}")
+                                self.logger.debug(
+                                    f"Read {self._received_frame} images {self.is_streaming=}"
+                                )
                         else:
                             empty_images += 1
                             sleep(0.1)
@@ -214,7 +230,9 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
 
                     # Let it fail for a few seconds before attempting a reconnect...
                     if empty_images > 200:
-                        self.logger.info("empty image threshold exceeded.  reconnecting")
+                        self.logger.info(
+                            "empty image threshold exceeded.  reconnecting"
+                        )
                         break
         except Exception as e:
             self.logger.error(f"Exception in stream thread... {e=}")
@@ -249,7 +267,7 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
             zip_file = BytesIO(data)
             with zipfile.ZipFile(zip_file) as zip:
                 contents = {name: zip.read(name) for name in zip.namelist()}
-                self.raw_img = contents['raw_data']
+                self.raw_img = contents["raw_data"]
                 self.raw_img_size = [width, height]
                 self.latest_image = self.convert_star_image(self.raw_img, width, height)
                 if self.latest_image is None:
@@ -267,16 +285,18 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
             self.raw_img = None
             self.raw_img_size = [None, None]
 
-    def convert_star_image(self, raw_image: np.array, width: int, height: int) -> np.array:
+    def convert_star_image(
+        self, raw_image: np.array, width: int, height: int
+    ) -> np.array:
         # if self.exposure_mode == "stack" or len(self.raw_img) == 1920 * 1080 * 6:
         w = width or 1080
         h = height or 1920
         raw_image_len = len(raw_image)
         if raw_image_len == w * h * 6:
-             # print("raw buffer size:", len(self.raw_img))
-             img = np.frombuffer(raw_image, dtype=np.uint16).reshape(h, w, 3)
-             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-             return img
+            # print("raw buffer size:", len(self.raw_img))
+            img = np.frombuffer(raw_image, dtype=np.uint16).reshape(h, w, 3)
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            return img
 
         elif raw_image_len == w * h * 2:
             img = np.frombuffer(raw_image, np.uint16).reshape(h, w)
@@ -285,4 +305,3 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
         else:
             self.logger.error(f"Unexpected raw image length: {raw_image_len}")
             return None
-

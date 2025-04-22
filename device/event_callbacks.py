@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 
 from device.config import Config
 
+
 class EventCallback(ABC):
     """
     An event callback can be initialized from
@@ -16,6 +17,7 @@ class EventCallback(ABC):
     This is meant to be a passive callback system that reacts to the events
     being reported by the scope.
     """
+
     @abstractmethod
     def __init__(self, device, initial_state):
         pass
@@ -29,12 +31,12 @@ class EventCallback(ABC):
         pass
 
 
-
 class BatteryWatch(EventCallback):
     """
     A callback class to watch battery levels, so we can do a safe shutdown
     if the battery gets too low
     """
+
     def __init__(self, device, initial_state):
         self.triggered = False
         self.logger = device.logger
@@ -42,7 +44,9 @@ class BatteryWatch(EventCallback):
 
         # In case initial_state errors out
         if "pi_status" in initial_state:
-            self.discharging = initial_state["pi_status"]["charger_status"] == "Discharging"
+            self.discharging = (
+                initial_state["pi_status"]["charger_status"] == "Discharging"
+            )
             self.charge_online = initial_state["pi_status"]["charge_online"]
             self.battery_capacity = initial_state["pi_status"]["battery_capacity"]
         else:
@@ -53,25 +57,29 @@ class BatteryWatch(EventCallback):
         return
 
     def fireOnEvents(self):
-        return ['PiStatus']
+        return ["PiStatus"]
 
     def eventFired(self, device, event_data):
-        #self.logger.info("XXX BatteryWatch - eventFired")
-        if 'charger_status' in event_data:
-            self.discharging = event_data['charger_status'] == "Discharging"
-        if 'charge_online' in event_data:
-            self.charge_online = event_data['charge_online']
-        if 'battery_capacity' in event_data:
-            self.battery_capacity = event_data['battery_capacity']
+        # self.logger.info("XXX BatteryWatch - eventFired")
+        if "charger_status" in event_data:
+            self.discharging = event_data["charger_status"] == "Discharging"
+        if "charge_online" in event_data:
+            self.charge_online = event_data["charge_online"]
+        if "battery_capacity" in event_data:
+            self.battery_capacity = event_data["battery_capacity"]
 
-        if self.discharging and \
-           not self.charge_online and \
-           self.battery_capacity <= Config.battery_low_limit and \
-           not self.triggered:
-            self.logger.info("BatteryWatch: Shutting down due to battery capacity lower limit reached")
-            device.send_message_param_sync({"method":"pi_shutdown"})
+        if (
+            self.discharging
+            and not self.charge_online
+            and self.battery_capacity <= Config.battery_low_limit
+            and not self.triggered
+        ):
+            self.logger.info(
+                "BatteryWatch: Shutting down due to battery capacity lower limit reached"
+            )
+            device.send_message_param_sync({"method": "pi_shutdown"})
             self.triggered = True
-        #else:
+        # else:
         #    self.logger.info(f"BatteryWatch Ignoring event {event_data}")
 
 
@@ -79,11 +87,14 @@ class SensorTempWatch(EventCallback):
     """
     A callback class to watch the sensor temp, and take action if if changes more than a set value
     """
+
     def __init__(self, device, initial_state):
         self.triggered = False
         self.logger = device.logger
         self.logger.info("SensorTempWatch - init")
-        self.max_change = 6.0 # TODO: move this to a Config value once we use it for the scheduler
+        self.max_change = (
+            6.0  # TODO: move this to a Config value once we use it for the scheduler
+        )
 
         if "pi_status" in initial_state:
             self.temp = initial_state["pi_status"]["temp"]
@@ -91,26 +102,30 @@ class SensorTempWatch(EventCallback):
             self.temp = -1
 
     def fireOnEvents(self):
-        return ['PiStatus']
+        return ["PiStatus"]
 
     def eventFired(self, device, event_data):
-        if 'temp' in event_data:
-            curr_temp = event_data['temp']
+        if "temp" in event_data:
+            curr_temp = event_data["temp"]
             if self.temp < 0:
                 self.temp = curr_temp
             if abs(self.temp - curr_temp) > self.max_change and not self.eventFired:
-                self.logger.warn("SensorTempWatch: temp changed more than {self.max_change} degrees")
+                self.logger.warn(
+                    "SensorTempWatch: temp changed more than {self.max_change} degrees"
+                )
                 #
                 # TODO: tell scheduler to pause, and re-take darks
                 #
                 self.triggered = True
-        #else:
+        # else:
         #    self.logger.info("SensorTempWatch Ignoring event {event_data}")
+
 
 class UserScriptEvent(EventCallback):
     """
     A callback class to watch for GotoComplete events, that executes a script
     """
+
     def __init__(self, device, initial_state, user_script):
         self.logger = device.logger
         self.logger.info("UserScriptEvent - init")
@@ -124,10 +139,13 @@ class UserScriptEvent(EventCallback):
 
     def eventFired(self, device, event_data):
         self.logger.info(f"UserScriptGoto - event fired, execute {self.user_script}")
-        subprocess.run(self.user_script["execute"], env={
-            'DEVNUM': str(device.device_num),
-            'DEVICENAME': device.device_name,
-            'NAME': event_data["Event"],
-            # 'DEVICE': json.dumps(device.__dict__),
-            'EVENT_DATA': json.dumps(event_data)
-        })
+        subprocess.run(
+            self.user_script["execute"],
+            env={
+                "DEVNUM": str(device.device_num),
+                "DEVICENAME": device.device_name,
+                "NAME": event_data["Event"],
+                # 'DEVICE': json.dumps(device.__dict__),
+                "EVENT_DATA": json.dumps(event_data),
+            },
+        )

@@ -47,8 +47,9 @@ from device.config import Config
 from logging import Logger
 
 global logger
-#logger: Logger = None
-logger = None                   # Safe on Python 3.7 but no intellisense in VSCode etc.
+# logger: Logger = None
+logger = None  # Safe on Python 3.7 but no intellisense in VSCode etc.
+
 
 class Success:
     """Default err input to response classes, indicates success"""
@@ -61,8 +62,7 @@ class Success:
             message (str):  ''
         """
         self.number: int = 0
-        self.message: str = ''
-
+        self.message: str = ""
 
     @property
     def Number(self) -> int:
@@ -72,12 +72,13 @@ class Success:
     def Message(self) -> str:
         return self.message
 
+
 class ActionNotImplementedException:
     """Requested ``Action()`` is not implemented"""
+
     def __init__(
-            self,
-            message: str = 'The requested action is not implemented in this driver.'
-        ):
+        self, message: str = "The requested action is not implemented in this driver."
+    ):
         """Initialize the ``ActionNotImplementedException`` object
 
         Args:
@@ -89,7 +90,7 @@ class ActionNotImplementedException:
         self.number = 0x40C
         self.message = message
         cname = self.__class__.__name__
-        logger.error(f'{cname}: {message}')
+        logger.error(f"{cname}: {message}")
 
     @property
     def Number(self) -> int:
@@ -106,6 +107,7 @@ class ActionNotImplementedException:
 #
 # args:
 
+
 class DevDriverException:
     """
     **Exception Class for Driver Internal Errors**
@@ -114,12 +116,13 @@ class DevDriverException:
         the Alpaca error message to include line number/module or optionally a
         complete traceback of the exception (a config option).
     """
+
     def __init__(
-            self,
-            number: int = 0x500,
-            message: str = 'Internal driver error - this should be more specific.',
-            exc = None  # Python exception info
-        ):
+        self,
+        number: int = 0x500,
+        message: str = "Internal driver error - this should be more specific.",
+        exc=None,  # Python exception info
+    ):
         """Initialize the DeviceException object
 
         Args:
@@ -141,17 +144,19 @@ class DevDriverException:
             * Logs the constructed ``DriverException`` message
         """
         if number <= 0x500 and number >= 0xFFF:
-            logger.error(f'Programmer error, bad DriverException number {hex(number)}, substituting 0x500')
+            logger.error(
+                f"Programmer error, bad DriverException number {hex(number)}, substituting 0x500"
+            )
             number = 0x500
         self.number = number
         cname = self.__class__.__name__
         if exc is not None:
             if Config.verbose_driver_exceptions:
-                self.message = f'{cname}: {message}\n{traceback.format_exc()}'  # TODO Safe if not explicitly using exc?
+                self.message = f"{cname}: {message}\n{traceback.format_exc()}"  # TODO Safe if not explicitly using exc?
             else:
-                self.message = f'{cname}: {message}\n{type(exc).__name__}: {str(exc)}'
+                self.message = f"{cname}: {message}\n{type(exc).__name__}: {str(exc)}"
         else:
-            self.message = f'{cname}: {message}'
+            self.message = f"{cname}: {message}"
         logger.error(self.message)
 
     @property
@@ -165,10 +170,11 @@ class DevDriverException:
 
 class InvalidOperationException:
     """The client asked for something that can't be done"""
+
     def __init__(
-            self,
-            message: str = 'The requested operation cannot be undertaken at this time.'
-        ):
+        self,
+        message: str = "The requested operation cannot be undertaken at this time.",
+    ):
         """Initialize the ``InvalidOperationException`` object
 
         Args:
@@ -180,7 +186,7 @@ class InvalidOperationException:
         self.number = 0x40B
         self.message = message
         cname = self.__class__.__name__
-        logger.error(f'{cname}: {message}')
+        logger.error(f"{cname}: {message}")
 
     @property
     def Number(self) -> int:
@@ -193,10 +199,8 @@ class InvalidOperationException:
 
 class InvalidValueException:
     """A value given is invalid or out of range"""
-    def __init__(
-            self,
-            message: str = 'Invalid value given.'
-        ):
+
+    def __init__(self, message: str = "Invalid value given."):
         """Initialize the ``InvalidValueException`` object
 
         Args:
@@ -208,7 +212,7 @@ class InvalidValueException:
         self.number = 0x401
         self.message = message
         cname = self.__class__.__name__
-        logger.error(f'{cname}: {message}')
+        logger.error(f"{cname}: {message}")
 
     @property
     def Number(self) -> int:
@@ -220,10 +224,7 @@ class InvalidValueException:
 
 
 class DevNotConnectedException:
-    def __init__(
-            self,
-            msg: str = 'The device is not connected.'
-        ):
+    def __init__(self, msg: str = "The device is not connected."):
         """Initialize the ``NotConnectedException`` object
 
         Args:
@@ -235,7 +236,7 @@ class DevNotConnectedException:
         self.number = 0x407
         self.message = msg
         cname = self.__class__.__name__
-        logger.error(f'{cname}: {msg}')
+        logger.error(f"{cname}: {msg}")
 
     @property
     def Number(self) -> int:
@@ -245,12 +246,11 @@ class DevNotConnectedException:
     def Message(self) -> str:
         return self.message
 
+
 class NotImplementedException:
     """The requested property or method is not implemented"""
-    def __init__(
-            self,
-            message: str = 'Property or method not implemented.'
-        ):
+
+    def __init__(self, message: str = "Property or method not implemented."):
         """Initialize the ``NotImplementedException`` object
 
         Args:
@@ -262,7 +262,7 @@ class NotImplementedException:
         self.number = 0x400
         self.message = message
         cname = self.__class__.__name__
-        logger.error(f'{cname}: {message}')
+        logger.error(f"{cname}: {message}")
 
     @property
     def Number(self) -> int:
@@ -272,12 +272,11 @@ class NotImplementedException:
     def Message(self) -> str:
         return self.message
 
+
 class ParkedException:
     """Cannot do this while the device is parked"""
-    def __init__(
-            self,
-            message: str = 'Illegal operation while parked.'
-        ):
+
+    def __init__(self, message: str = "Illegal operation while parked."):
         """Initialize the ``ParkedException`` object
 
         Args:
@@ -289,7 +288,7 @@ class ParkedException:
         self.number = 0x408
         self.message = message
         cname = self.__class__.__name__
-        logger.error(f'{cname}: {message}')
+        logger.error(f"{cname}: {message}")
 
     @property
     def Number(self) -> int:
@@ -299,12 +298,11 @@ class ParkedException:
     def Message(self) -> str:
         return self.message
 
+
 class SlavedException:
     """Cannot do this while the device is slaved"""
-    def __init__(
-            self,
-            message: str = 'Illegal operation while slaved.'
-        ):
+
+    def __init__(self, message: str = "Illegal operation while slaved."):
         """Initialize the ``SlavedException`` object
 
         Args:
@@ -316,7 +314,7 @@ class SlavedException:
         self.number = 0x409
         self.message = message
         cname = self.__class__.__name__
-        logger.error(f'{cname}: {message}')
+        logger.error(f"{cname}: {message}")
 
     @property
     def Number(self) -> int:
@@ -329,10 +327,8 @@ class SlavedException:
 
 class ValueNotSetException:
     """The requested vzalue has not yet een set"""
-    def __init__(
-            self,
-            message: str = 'The value has not yet been set.'
-        ):
+
+    def __init__(self, message: str = "The value has not yet been set."):
         """Initialize the ``ValueNotSetException`` object
 
         Args:
@@ -344,7 +340,7 @@ class ValueNotSetException:
         self.number = 0x402
         self.message = message
         cname = self.__class__.__name__
-        logger.error(f'{cname}: {message}')
+        logger.error(f"{cname}: {message}")
 
     @property
     def Number(self) -> int:
@@ -353,4 +349,3 @@ class ValueNotSetException:
     @property
     def Message(self) -> str:
         return self.message
-

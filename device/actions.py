@@ -2,8 +2,10 @@
 # A collection of actions to perform
 #
 
+
 def goto_sun(telescope):
     pass
+
 
 # method: get_device_state, params: { keys: [ balance_sensor, compass_sensor ] }
 

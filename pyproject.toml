@@ -58,3 +58,10 @@ exclude = [
     "scripts/*",
     "indi/*"
 ]
+
+[tool.ruff.format]
+exclude = [
+    "templates/*",
+    "scripts/*",
+    "indi/*"
+]

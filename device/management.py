@@ -48,23 +48,27 @@ from falcon import Request, Response
 from device.shr import PropertyResponse, DeviceMetadata
 from device.config import Config
 from logging import Logger
+
 # For each *type* of device served
 from device.telescope import TelescopeMetadata
 
 logger: Logger = None
-#logger = None                   # Safe on Python 3.7 but no intellisense in VSCode etc.
+# logger = None                   # Safe on Python 3.7 but no intellisense in VSCode etc.
+
 
 def set_management_logger(lgr):
     global logger
     logger = lgr
+
 
 # -----------
 # APIVersions
 # -----------
 class apiversions:
     def on_get(self, req: Request, resp: Response):
-        apis = [ 1 ]                            # TODO MAKE CONFIG OR GLOBAL
+        apis = [1]  # TODO MAKE CONFIG OR GLOBAL
         resp.text = PropertyResponse(apis, req).json
+
 
 # -------------------------
 # Alpaca Server Description
@@ -72,24 +76,26 @@ class apiversions:
 class description:
     def on_get(self, req: Request, resp: Response):
         desc = {
-            'ServerName'   : DeviceMetadata.Description,
-            'Manufacturer' : DeviceMetadata.Manufacturer,
-            'Version'      : DeviceMetadata.Version,
-            'Location'     : Config.location
-            }
+            "ServerName": DeviceMetadata.Description,
+            "Manufacturer": DeviceMetadata.Manufacturer,
+            "Version": DeviceMetadata.Version,
+            "Location": Config.location,
+        }
         resp.text = PropertyResponse(desc, req).json
+
 
 # -----------------
 # ConfiguredDevices
 # -----------------
-class configureddevices():
+class configureddevices:
     def on_get(self, req: Request, resp: Response):
-        confarray = [    # TODO ADD ONE FOR EACH DEVICE TYPE AND INSTANCE SERVED
+        confarray = [  # TODO ADD ONE FOR EACH DEVICE TYPE AND INSTANCE SERVED
             {
-            'DeviceName'    : dev['name'],
-            'DeviceType'    : TelescopeMetadata.DeviceType,
-            'DeviceNumber'  : dev['device_num'],
-            'UniqueID'      : str(uuid.uuid4()),
-            } for dev in Config.seestars
+                "DeviceName": dev["name"],
+                "DeviceType": TelescopeMetadata.DeviceType,
+                "DeviceNumber": dev["device_num"],
+                "UniqueID": str(uuid.uuid4()),
+            }
+            for dev in Config.seestars
         ]
         resp.text = PropertyResponse(confarray, req).json

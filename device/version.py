@@ -3,7 +3,7 @@ import os
 import subprocess
 import logging
 
-if getattr(sys, "frozen",  False):
+if getattr(sys, "frozen", False):
     search_path = sys._MEIPASS
 else:
     search_path = os.path.join(os.path.dirname(__file__))
@@ -11,37 +11,53 @@ else:
 logger = logging.getLogger()
 
 _version = None
+
+
 class Version:
     # https://stackoverflow.com/questions/14989858/get-the-current-git-hash-in-a-python-script
     # Return the git revision as a string
     @staticmethod
     def git_version():
         global _version
+
         def _minimal_ext_cmd(cmd):
             # construct minimal environment
             env = {}
-            for k in ['SYSTEMROOT', 'PATH']:
+            for k in ["SYSTEMROOT", "PATH"]:
                 v = os.environ.get(k)
                 if v is not None:
                     env[k] = v
             # LANGUAGE is used on win32
-            env['LANGUAGE'] = 'C'
-            env['LANG'] = 'C'
-            env['LC_ALL'] = 'C'
-            out = subprocess.Popen(cmd, stdout = subprocess.PIPE, stderr=subprocess.DEVNULL, env=env).communicate()[0]
+            env["LANGUAGE"] = "C"
+            env["LANG"] = "C"
+            env["LC_ALL"] = "C"
+            out = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env
+            ).communicate()[0]
             return out
 
         if _version:
             return _version
         else:
             try:
-                _minimal_ext_cmd(['git', 'fetch', '--tags'])
+                _minimal_ext_cmd(["git", "fetch", "--tags"])
             except OSError:
                 logger.warning("unable to get git tags")
 
             try:
-                out = _minimal_ext_cmd(['git', 'describe', '--tags', '--always', '--exclude', '*[0-9]-g*', '--match', 'v*'])
-                GIT_REVISION = out.strip().decode('ascii')
+                out = _minimal_ext_cmd(
+                    [
+                        "git",
+                        "describe",
+                        "--tags",
+                        "--always",
+                        "--exclude",
+                        "*[0-9]-g*",
+                        "--match",
+                        "v*",
+                    ]
+                )
+                GIT_REVISION = out.strip().decode("ascii")
             except OSError:
                 GIT_REVISION = "Unknown"
 
@@ -54,9 +70,8 @@ class Version:
         if not os.path.exists(path_to_ver):
             return Version.git_version()
         else:
-            with open(path_to_ver, 'r') as file:
-                return file.read().replace('\n', '')
-
+            with open(path_to_ver, "r") as file:
+                return file.read().replace("\n", "")
 
 
 if __name__ == "__main__":

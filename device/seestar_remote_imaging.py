@@ -17,12 +17,12 @@ class SeestarRemoteImaging(AbstractImager):
         self.base_url = f"http://{self.host}:{self.port}/{self.remote_id}"
 
     def get_frame(self):
-        with requests.get(f'{self.base_url}/vid', stream=True) as r:
+        with requests.get(f"{self.base_url}/vid", stream=True) as r:
             for chunk in r.iter_content(chunk_size=None):
                 self.logger.info("SeestarRemoteImaging.get_frame")
                 yield chunk
 
     def get_live_status(self):
-        r = requests.get(f'{self.base_url}/live/status', stream=True)
+        r = requests.get(f"{self.base_url}/live/status", stream=True)
         for line in r.iter_lines():
-            yield line + b'\n'
+            yield line + b"\n"

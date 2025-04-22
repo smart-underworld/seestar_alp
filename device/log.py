@@ -47,7 +47,7 @@ logger = None  # Safe on Python 3.7 but no intellisense in VSCode etc.
 
 
 def init_logging():
-    """ Create the logger - called at app startup
+    """Create the logger - called at app startup
 
         **MASTER LOGGER**
 
@@ -73,16 +73,22 @@ def init_logging():
     if logger is None:
         logging.basicConfig(level=Config.log_level)  # This creates the default handler
         logger = logging.getLogger()  # Root logger, see above
-        formatter = logging.Formatter('%(asctime)s.%(msecs)03d %(levelname)s %(threadName)s %(message)s',
-                                      '%Y-%m-%dT%H:%M:%S')
+        formatter = logging.Formatter(
+            "%(asctime)s.%(msecs)03d %(levelname)s %(threadName)s %(message)s",
+            "%Y-%m-%dT%H:%M:%S",
+        )
         formatter.converter = time.gmtime  # UTC time
-        logger.handlers[0].setFormatter(formatter)  # This is the stdout handler, level set above
+        logger.handlers[0].setFormatter(
+            formatter
+        )  # This is the stdout handler, level set above
         # Add a logfile handler, same formatter and level
-        handler = logging.handlers.RotatingFileHandler(Config.log_prefix + 'alpyca.log',
-                                                       mode='w',
-                                                       delay=True,  # Prevent creation of empty logs
-                                                       maxBytes=Config.max_size_mb * 1000000,
-                                                       backupCount=Config.num_keep_logs)
+        handler = logging.handlers.RotatingFileHandler(
+            Config.log_prefix + "alpyca.log",
+            mode="w",
+            delay=True,  # Prevent creation of empty logs
+            maxBytes=Config.max_size_mb * 1000000,
+            backupCount=Config.num_keep_logs,
+        )
         handler.setLevel(Config.log_level)
         handler.setFormatter(formatter)
         handler.doRollover()  # Always start with fresh log
@@ -94,9 +100,10 @@ def init_logging():
                 handler list. It's always handler[0] as created
                 by logging.basicConfig()
             """
-            logger.debug('Logging to stdout disabled in settings')
+            logger.debug("Logging to stdout disabled in settings")
             logger.removeHandler(logger.handlers[0])  # This is the stdout handler
     return logger
+
 
 def reinit_logging():
     global logger
@@ -104,6 +111,7 @@ def reinit_logging():
     for handler in logger.handlers:
         handler.setLevel(Config.log_level)
     return logger
+
 
 def get_logger():
     global logger

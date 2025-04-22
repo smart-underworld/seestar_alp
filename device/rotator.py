@@ -57,13 +57,23 @@
 #
 from falcon import Request, Response, HTTPBadRequest, before
 from logging import Logger
-from device.shr import PropertyResponse, MethodResponse, PreProcessRequest, \
-                get_request_field, to_bool
-from device.exceptions import DriverException, NotConnectedException, NotImplementedException, InvalidValueException  # Nothing but exception classes
+from device.shr import (
+    PropertyResponse,
+    MethodResponse,
+    PreProcessRequest,
+    get_request_field,
+    to_bool,
+)
+from device.exceptions import (
+    DriverException,
+    NotConnectedException,
+    NotImplementedException,
+    InvalidValueException,
+)  # Nothing but exception classes
 from rotatordevice import RotatorDevice
 
 logger: Logger = None
-#logger = None                   # Safe on Python 3.7 but no intellisense in VSCode etc.
+# logger = None                   # Safe on Python 3.7 but no intellisense in VSCode etc.
 
 # ----------------------
 # MULTI-INSTANCE SUPPORT
@@ -73,56 +83,67 @@ logger: Logger = None
 # which instance of the device (0-based) is being called by the client. Leave this
 # set to 0 for the simple case of controlling only one instance of this device type.
 #
-maxdev = 0                      # Single instance
+maxdev = 0  # Single instance
+
 
 # -------------------
 # ROTATOR DEVICE INFO
 # -------------------
 # Static metadata not subject to configuration changes
 class RotatorMetadata:
-    """ Metadata describing the Rotator Device. Edit for your device"""
-    Name = 'Sample Rotator'
-    Version = '0.2'
-    Description = 'Sample ASCOM Rotator'
-    DeviceType = 'Rotator'
-    DeviceID = '1892ED30-92F3-4236-843E-DA8EEEF2D1CC' # https://guidgenerator.com/online-guid-generator.aspx
-    Info = 'Alpaca Sample Device\nImplements Rotator\nASCOM Initiative'
+    """Metadata describing the Rotator Device. Edit for your device"""
+
+    Name = "Sample Rotator"
+    Version = "0.2"
+    Description = "Sample ASCOM Rotator"
+    DeviceType = "Rotator"
+    DeviceID = "1892ED30-92F3-4236-843E-DA8EEEF2D1CC"  # https://guidgenerator.com/online-guid-generator.aspx
+    Info = "Alpaca Sample Device\nImplements Rotator\nASCOM Initiative"
     MaxDeviceNumber = maxdev
-    InterfaceVersion = 3        # IRotatorV3
+    InterfaceVersion = 3  # IRotatorV3
+
 
 # --------------------
 # SIMULATED ROTATOR ()
 # --------------------
 rot_dev = None
+
+
 # At app init not import :-)
-def start_rot_device(logger: logger): # type: ignore
+def start_rot_device(logger: logger):  # type: ignore
     logger = logger
     global rot_dev
     rot_dev = RotatorDevice(logger)
 
+
 # --------------------
 # RESOURCE CONTROLLERS
 # --------------------
+
 
 @before(PreProcessRequest(maxdev))
 class action:
     def on_put(self, req: Request, resp: Response, devnum: int):
         resp.text = MethodResponse(req, NotImplementedException()).json
 
+
 @before(PreProcessRequest(maxdev))
 class commandblind:
     def on_put(self, req: Request, resp: Response, devnum: int):
         resp.text = MethodResponse(req, NotImplementedException()).json
+
 
 @before(PreProcessRequest(maxdev))
 class commandbool:
     def on_put(self, req: Request, resp: Response, devnum: int):
         resp.text = MethodResponse(req, NotImplementedException()).json
 
+
 @before(PreProcessRequest(maxdev))
 class commandstring:
     def on_put(self, req: Request, resp: Response, devnum: int):
         resp.text = MethodResponse(req, NotImplementedException()).json
+
 
 # Connected, though common, is implemented in rotator.py
 @before(PreProcessRequest(maxdev))
@@ -130,30 +151,36 @@ class description:
     def on_get(self, req: Request, resp: Response, devnum: int):
         resp.text = PropertyResponse(RotatorMetadata.Description, req).json
 
+
 @before(PreProcessRequest(maxdev))
 class driverinfo:
     def on_get(self, req: Request, resp: Response, devnum: int):
         resp.text = PropertyResponse(RotatorMetadata.Info, req).json
+
 
 @before(PreProcessRequest(maxdev))
 class interfaceversion:
     def on_get(self, req: Request, resp: Response, devnum: int):
         resp.text = PropertyResponse(RotatorMetadata.InterfaceVersion, req).json
 
+
 @before(PreProcessRequest(maxdev))
 class driverversion:
     def on_get(self, req: Request, resp: Response, devnum: int):
         resp.text = PropertyResponse(RotatorMetadata.Version, req).json
+
 
 @before(PreProcessRequest(maxdev))
 class name:
     def on_get(self, req: Request, resp: Response, devnum: int):
         resp.text = PropertyResponse(RotatorMetadata.Name, req).json
 
+
 @before(PreProcessRequest(maxdev))
 class supportedactions:
     def on_get(self, req: Request, resp: Response, devnum: int):
         resp.text = PropertyResponse([], req).json  # Not PropertyNotImplemented
+
 
 @before(PreProcessRequest(maxdev))
 class canreverse:
@@ -161,8 +188,12 @@ class canreverse:
 
     Always True for IRotatorV3 (InterfaceVersion >= 3).
     """
+
     def on_get(self, req: Request, resp: Response, devnum: int):
-        resp.text = PropertyResponse(True, req).json    # IRotatorV3, CanReverse must be True
+        resp.text = PropertyResponse(
+            True, req
+        ).json  # IRotatorV3, CanReverse must be True
+
 
 @before(PreProcessRequest(maxdev))
 class connected:
@@ -175,12 +206,13 @@ class connected:
       an error.
 
     """
+
     def on_get(self, req: Request, resp: Response, devnum: int):
         resp.text = PropertyResponse(rot_dev.connected, req).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
-        conn_str = get_request_field('Connected', req)
-        conn = to_bool(conn_str)              # Raises 400 Bad Request if str to bool fails
+        conn_str = get_request_field("Connected", req)
+        conn = to_bool(conn_str)  # Raises 400 Bad Request if str to bool fails
 
         try:
             # ----------------------
@@ -188,8 +220,11 @@ class connected:
             # ----------------------
             resp.text = MethodResponse(req).json
         except Exception as ex:
-            resp.text = MethodResponse(req, # Put is actually like a method :-(
-                            DriverException(0x500, 'Rotator.Connected failed', ex)).json
+            resp.text = MethodResponse(
+                req,  # Put is actually like a method :-(
+                DriverException(0x500, "Rotator.Connected failed", ex),
+            ).json
+
 
 @before(PreProcessRequest(maxdev))
 class ismoving:
@@ -210,10 +245,10 @@ class ismoving:
         DriverException
             see :ref:`driver-exception`
     """
+
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not rot_dev.connected:
-            resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+            resp.text = PropertyResponse(None, req, NotConnectedException()).json
             return
         try:
             # ---------------------
@@ -221,8 +256,10 @@ class ismoving:
             # ---------------------
             resp.text = PropertyResponse(moving, req).json
         except Exception as ex:
-            resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Rotator.IsMovingfailed', ex)).json
+            resp.text = PropertyResponse(
+                None, req, DriverException(0x500, "Rotator.IsMovingfailed", ex)
+            ).json
+
 
 @before(PreProcessRequest(maxdev))
 class mechanicalposition:
@@ -236,10 +273,10 @@ class mechanicalposition:
 
     * Value is in degrees counterclockwise from the rotator's mechanical index.
     """
+
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not rot_dev.connected:
-            resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+            resp.text = PropertyResponse(None, req, NotConnectedException()).json
             return
         try:
             # -------------------------------
@@ -247,8 +284,12 @@ class mechanicalposition:
             # -------------------------------
             resp.text = PropertyResponse(pos, req).json
         except Exception as ex:
-            resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Rotator.MechanicalPosition failed', ex)).json
+            resp.text = PropertyResponse(
+                None,
+                req,
+                DriverException(0x500, "Rotator.MechanicalPosition failed", ex),
+            ).json
+
 
 @before(PreProcessRequest(maxdev))
 class position:
@@ -265,10 +306,10 @@ class position:
       effect of the last ``Sync()``
 
     """
+
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not rot_dev.connected:
-            resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+            resp.text = PropertyResponse(None, req, NotConnectedException()).json
             return
         try:
             # -------------------------------
@@ -276,8 +317,10 @@ class position:
             # -------------------------------
             resp.text = PropertyResponse(pos, req).json
         except Exception as ex:
-            resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Rotator.Position failed', ex)).json
+            resp.text = PropertyResponse(
+                None, req, DriverException(0x500, "Rotator.Position failed", ex)
+            ).json
+
 
 @before(PreProcessRequest(maxdev))
 class reverse:
@@ -295,10 +338,10 @@ class reverse:
       to cause rotation opposite to equatorial PositionAngle, i.e. clockwise.
 
     """
+
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not rot_dev.connected:
-            resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+            resp.text = PropertyResponse(None, req, NotConnectedException()).json
             return
         try:
             # -------------------
@@ -306,24 +349,27 @@ class reverse:
             # -------------------
             resp.text = PropertyResponse(rev, req).json
         except Exception as ex:
-            resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Rotator.Reverse failed', ex)).json
+            resp.text = PropertyResponse(
+                None, req, DriverException(0x500, "Rotator.Reverse failed", ex)
+            ).json
 
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not rot_dev.connected:
-            resp.text = MethodResponse(req,
-                            NotConnectedException()).json
+            resp.text = MethodResponse(req, NotConnectedException()).json
             return
-        rev_str = get_request_field('Reverse', req)
-        rev = to_bool(rev_str)              # Raises 400 Bad Request if str to bool fails
+        rev_str = get_request_field("Reverse", req)
+        rev = to_bool(rev_str)  # Raises 400 Bad Request if str to bool fails
         try:
             # ----------------------
             rot_dev.reverse = rev
             # ----------------------
             resp.text = MethodResponse(req).json
         except Exception as ex:
-            resp.text = MethodResponse(req, # Put is actually like a method :-(
-                            DriverException(0x500, 'Rotator.Reverse failed', ex)).json
+            resp.text = MethodResponse(
+                req,  # Put is actually like a method :-(
+                DriverException(0x500, "Rotator.Reverse failed", ex),
+            ).json
+
 
 @before(PreProcessRequest(maxdev))
 class stepsize:
@@ -338,10 +384,10 @@ class stepsize:
             see :ref:`driver-exception`
 
     """
+
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not rot_dev.connected:
-            resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+            resp.text = PropertyResponse(None, req, NotConnectedException()).json
             return
         try:
             # ---------------------
@@ -349,8 +395,10 @@ class stepsize:
             # ---------------------
             resp.text = PropertyResponse(steps, req).json
         except Exception as ex:
-            resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Rotator.StepSize failed', ex)).json
+            resp.text = PropertyResponse(
+                None, req, DriverException(0x500, "Rotator.StepSize failed", ex)
+            ).json
+
 
 @before(PreProcessRequest(maxdev))
 class targetposition:
@@ -367,10 +415,10 @@ class targetposition:
       ``MoveAbsolute()``.
 
     """
+
     def on_get(self, req: Request, resp: Response, devnum: int):
         if not rot_dev.connected:
-            resp.text = PropertyResponse(None, req,
-                            NotConnectedException()).json
+            resp.text = PropertyResponse(None, req, NotConnectedException()).json
             return
         try:
             # ---------------------------
@@ -378,8 +426,10 @@ class targetposition:
             # ---------------------------
             resp.text = PropertyResponse(pos, req).json
         except Exception as ex:
-            resp.text = PropertyResponse(None, req,
-                            DriverException(0x500, 'Rotator.TargetPosition failed', ex)).json
+            resp.text = PropertyResponse(
+                None, req, DriverException(0x500, "Rotator.TargetPosition failed", ex)
+            ).json
+
 
 @before(PreProcessRequest(maxdev))
 class halt:
@@ -393,10 +443,10 @@ class halt:
 
     * Halting the rotator must not cause an error on subsequent operations.
     """
+
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not rot_dev.connected:
-            resp.text = MethodResponse(req,
-                            NotConnectedException()).json
+            resp.text = MethodResponse(req, NotConnectedException()).json
             return
         try:
             # ------------
@@ -404,8 +454,9 @@ class halt:
             # ------------
             resp.text = MethodResponse(req).json
         except Exception as ex:
-            resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Rotator.Halt failed', ex)).json
+            resp.text = MethodResponse(
+                req, DriverException(0x500, "Rotator.Halt failed", ex)
+            ).json
 
 
 @before(PreProcessRequest(maxdev))
@@ -435,34 +486,37 @@ class move:
             see :ref:`driver-exception`
 
     """
+
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not rot_dev.connected:
-            resp.text = MethodResponse(req,
-                            NotConnectedException()).json
+            resp.text = MethodResponse(req, NotConnectedException()).json
             return
-        pos_str = get_request_field('Position', req)    # May raise 400 bad request
+        pos_str = get_request_field("Position", req)  # May raise 400 bad request
         try:
             newpos = origpos = float(pos_str)
         except:
-            resp.text = MethodResponse(req,
-                            InvalidValueException(f'Position {pos_str} not a valid integer.')).json
+            resp.text = MethodResponse(
+                req, InvalidValueException(f"Position {pos_str} not a valid integer.")
+            ).json
             return
         # The spec calls for "anything goes" requires you to range the
         # final value modulo 360 degrees.
         if newpos >= 360.0:
             newpos -= 360.0
-            logger.debug('Result would be >= 360, setting to {newpos}')
+            logger.debug("Result would be >= 360, setting to {newpos}")
         if newpos < 0:
             newpos += 360
-            logger.debug('Result would be < 0, setting to {newpos}')
+            logger.debug("Result would be < 0, setting to {newpos}")
         try:
             # ------------------
-            rot_dev.Move(newpos)    # async
+            rot_dev.Move(newpos)  # async
             # ------------------
             resp.text = MethodResponse(req).json
         except Exception as ex:
-            resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Rotator.Move failed', ex)).json
+            resp.text = MethodResponse(
+                req, DriverException(0x500, "Rotator.Move failed", ex)
+            ).json
+
 
 @before(PreProcessRequest(maxdev))
 class moveabsolute:
@@ -491,30 +545,37 @@ class moveabsolute:
             see :ref:`driver-exception`
 
     """
+
     def on_put(self, req: Request, resp: Response, devnum: int):
         if not rot_dev.connected:
-            resp.text = MethodResponse(req,
-                            NotConnectedException()).json
+            resp.text = MethodResponse(req, NotConnectedException()).json
             return
-        pos_str = get_request_field('Position', req)
+        pos_str = get_request_field("Position", req)
         try:
             newpos = float(pos_str)
         except:
-            resp.text = MethodResponse(req,
-                            InvalidValueException(f'Position {pos_str} not a valid integer.')).json
+            resp.text = MethodResponse(
+                req, InvalidValueException(f"Position {pos_str} not a valid integer.")
+            ).json
             return
         if newpos < 0.0 or newpos >= 360.0:
-            resp.text = MethodResponse(req,
-                            InvalidValueException(f'Invalid position {str(newpos)} outside range 0 <= pos < 360.')).json
+            resp.text = MethodResponse(
+                req,
+                InvalidValueException(
+                    f"Invalid position {str(newpos)} outside range 0 <= pos < 360."
+                ),
+            ).json
             return
         try:
             # --------------------------
-            rot_dev.MoveAbsolute(newpos)    # async
+            rot_dev.MoveAbsolute(newpos)  # async
             # --------------------------
             resp.text = MethodResponse(req).json
         except Exception as ex:
-            resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Rotator.MoveAbsolute failed', ex)).json
+            resp.text = MethodResponse(
+                req, DriverException(0x500, "Rotator.MoveAbsolute failed", ex)
+            ).json
+
 
 @before(PreProcessRequest(maxdev))
 class movemechanical:
@@ -544,31 +605,41 @@ class movemechanical:
             see :ref:`driver-exception`
 
     """
+
     def on_put(self, req: Request, resp: Response, devnum: int):
         formdata = req.get_media()
         if not rot_dev.connected:
-            resp.text = MethodResponse(req,
-                            NotConnectedException()).json
+            resp.text = MethodResponse(req, NotConnectedException()).json
             return
-        pos_str = get_request_field('Position', req)
+        pos_str = get_request_field("Position", req)
         try:
             newpos = float(pos_str)
         except:
-            resp.text = MethodResponse(req,
-                            InvalidValueException(f'Position {formdata["Position"]} not a valid integer.')).json
+            resp.text = MethodResponse(
+                req,
+                InvalidValueException(
+                    f"Position {formdata['Position']} not a valid integer."
+                ),
+            ).json
             return
         if newpos < 0.0 or newpos >= 360.0:
-            resp.text = MethodResponse(req,
-                            InvalidValueException(f'Invalid position {str(newpos)} outside range 0 <= pos < 360.')).json
+            resp.text = MethodResponse(
+                req,
+                InvalidValueException(
+                    f"Invalid position {str(newpos)} outside range 0 <= pos < 360."
+                ),
+            ).json
             return
         try:
             # ----------------------------
-            rot_dev.MoveMechanical(newpos)    # async
+            rot_dev.MoveMechanical(newpos)  # async
             # ----------------------------
             resp.text = MethodResponse(req).json
         except Exception as ex:
-            resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Rotator.MoveMechanical failed', ex)).json
+            resp.text = MethodResponse(
+                req, DriverException(0x500, "Rotator.MoveMechanical failed", ex)
+            ).json
+
 
 @before(PreProcessRequest(maxdev))
 class sync:
@@ -594,22 +665,30 @@ class sync:
         The sync offset must persist across driver starts and device reboots.
 
     """
+
     def on_put(self, req: Request, resp: Response, devnum: int):
         formdata = req.get_media()
         if not rot_dev.connected:
-            resp.text = MethodResponse(req,
-                            NotConnectedException()).json
+            resp.text = MethodResponse(req, NotConnectedException()).json
             return
-        pos_str = get_request_field('Position', req)
+        pos_str = get_request_field("Position", req)
         try:
             newpos = float(pos_str)
         except:
-            resp.text = MethodResponse(req,
-                            InvalidValueException(f'Position {formdata["Position"]} not a valid integer.')).json
+            resp.text = MethodResponse(
+                req,
+                InvalidValueException(
+                    f"Position {formdata['Position']} not a valid integer."
+                ),
+            ).json
             return
         if newpos < 0.0 or newpos >= 360.0:
-            resp.text = MethodResponse(req,
-                            InvalidValueException(f'Invalid position {str(newpos)} outside range 0 <= pos < 360.')).json
+            resp.text = MethodResponse(
+                req,
+                InvalidValueException(
+                    f"Invalid position {str(newpos)} outside range 0 <= pos < 360."
+                ),
+            ).json
             return
         try:
             # ------------------
@@ -617,5 +696,6 @@ class sync:
             # ------------------
             resp.text = MethodResponse(req).json
         except Exception as ex:
-            resp.text = MethodResponse(req,
-                            DriverException(0x500, 'Rotator.Sync failed', ex)).json
+            resp.text = MethodResponse(
+                req, DriverException(0x500, "Rotator.Sync failed", ex)
+            ).json
