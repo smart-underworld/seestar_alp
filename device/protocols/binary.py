@@ -100,8 +100,8 @@ class SeestarBinaryProtocol(SocketBase):
 
             # self.logger.debug(f'{self.device_name} received : {len(data)}')
             self.logger.debug(f'received : {len(data)}') # todo : make debug!
-            l = len(data)
-            if l < 100 and l != 80:
+            dl = len(data)
+            if dl < 100 and dl != 80:
                 self.logger.debug(f'Message: {data}')
             # self.trace.save_message(data, 'recv')
             return data

@@ -154,8 +154,8 @@ class SeestarLogging:
 
         # self.logger.debug(f'{self.device_name} received : {len(data)}')
         self.logger.debug(f'{self.device_name} received : {len(data)}')
-        l = len(data)
-        if l < 100 and l != 80:
+        dl = len(data)
+        if dl < 100 and dl != 80:
             self.logger.debug(f'Message: {data}')
         return data
 
@@ -172,7 +172,7 @@ class SeestarLogging:
     def get_logs_sync(self):
         self.start()
         self.send_get_server_log()
-        while self.raw_log == None:
+        while self.raw_log is None:
             self.logger.info("waiting...")
             sleep(2)
 

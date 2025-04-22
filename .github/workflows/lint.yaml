@@ -30,4 +30,4 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run linting tests
-        run: ./lint/lint.sh
+        run: ruff check

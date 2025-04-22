@@ -108,7 +108,7 @@ def get_request_field(name: str, req: Request, caseless: bool = False, default: 
         for param in req.params.items():        # [name,value] tuples
             if param[0].lower() == lcName:
                 return param[1]
-        if default == None:
+        if default is None:
             raise HTTPBadRequest(title=_bad_title, description=bad_desc)                # Missing or incorrect casing
         return default                          # not in args, return default
     else:                                       # Assume PUT since we never route other methods
@@ -120,7 +120,7 @@ def get_request_field(name: str, req: Request, caseless: bool = False, default: 
         else:
             if name in formdata and formdata[name] != '':
                 return formdata[name]
-        if default == None:
+        if default is None:
             raise HTTPBadRequest(title=_bad_title, description=bad_desc)                # Missing or incorrect casing
         return default
 
@@ -217,7 +217,7 @@ class PropertyResponse():
         """
         self.ServerTransactionID = getNextTransId()
         self.ClientTransactionID = int(get_request_field('ClientTransactionID', req, False, 0))  #Caseless on GET
-        if err.number == 0 and not value is None:
+        if err.number == 0 and value is not None:
             self.Value = value
             logger.debug(f'{req.remote_addr} <- {str(value)}')
         self.ErrorNumber = err.number
@@ -237,7 +237,7 @@ class DequeEncoder(JSONEncoder):
        if isinstance(obj, deque):
           return list(obj)
        return JSONEncoder.default(self, obj)
-    
+
 # --------------
 # MethodResponse
 # --------------
@@ -259,7 +259,7 @@ class MethodResponse():
         # This is crazy ... if casing is incorrect here, we're supposed to return the default 0
         # even if the caseless check coming in returned a valid number. This is for PUT only.
         self.ClientTransactionID = int(get_request_field('ClientTransactionID', req, False, 0))
-        if err.number == 0 and not value is None:
+        if err.number == 0 and value is not None:
             self.Value = value
             logger.debug(f'{req.remote_addr} <- {str(value)}')
         self.ErrorNumber = err.number

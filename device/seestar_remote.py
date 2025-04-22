@@ -122,7 +122,7 @@ class SeestarRemote(AbstractDevice):
         self.logger.info(result)
         result = self.send_message_param_sync({"method": "set_control_value", "params": ["gain", stack_gain]})
         self.logger.info(result)
-        return not "error" in result
+        return "error" not in result
 
     def action_set_dew_heater(self, params):
         return self._do_action_device('action_set_dew_heater', params)

@@ -1,9 +1,0 @@
-[MAIN]
-errors-only=true
-persistent=no
-verbose=yes
-jobs=0 # autodetect number of cpus for parallel processing
-py-version=3.12
-disable=
-    E1101, # no-member              https://pylint.pycqa.org/en/v2.15.3/user_guide/messages/error/no-member.html
-    E0611  # no-name-in-module      https://pylint.pycqa.org/en/v2.15.3/user_guide/messages/error/no-name-in-module.html

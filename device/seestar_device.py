@@ -3,7 +3,8 @@ import json
 import time
 from datetime import datetime
 import threading
-import sys, os
+import sys
+import os
 import math
 import uuid
 from time import sleep
@@ -584,7 +585,7 @@ class Seestar:
         self.mark_op_state("goto_target", "stopped")
 
         result = self.send_message_param_sync(data)
-        return not 'error' in result
+        return 'error' not in result
 
 
     # {"method":"scope_goto","params":[1.2345,75.0]}
@@ -782,7 +783,7 @@ class Seestar:
             stack_gain = params["gain"]
             result = self.send_message_param_sync({"method": "set_control_value", "params": ["gain", stack_gain]})
             self.logger.info(result)
-        return not "error" in result
+        return "error" not in result
 
     def get_last_image(self, params):
         album_result = self.send_message_param_sync({"method": "get_albums"})
@@ -943,7 +944,7 @@ class Seestar:
 
                 self.mark_op_state("EqModePA", "working")
                 result = self.wait_end_op("EqModePA")
-                if result == False:
+                if not result:
                     msg = "Failed to perform polar alignment. Will try again after we adjust the arm by scope_aim parameters"
                     self.logger.warn(msg)
                     self.event_state["scheduler"]["cur_scheduler_item"]["action"]=msg
@@ -1111,7 +1112,7 @@ class Seestar:
 
     def skip_scheduler_cur_item(self, params):
         self.logger.info("skipping scheduler item...")
-        if self.schedule['state'] == "working" and self.schedule['is_skip_requested'] == False:
+        if self.schedule['state'] == "working" and not self.schedule['is_skip_requested']:
             cur_item_num = self.schedule["item_number"]
             self.logger.info(f"confirmed scheduler is working, so skip current item {cur_item_num} by stopping the scheduler first.")
             self.schedule['is_skip_requested'] = True
@@ -1364,7 +1365,7 @@ class Seestar:
                                     time.sleep(5)
 
                     # if we failed goto
-                    if result != True:
+                    if not result:
                         msg = f"Failed to goto target after {num_tries} tries."
                         self.logger.warn(msg)
                         self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
@@ -1447,7 +1448,7 @@ class Seestar:
             is_use_autofocus = params['is_use_autofocus']
         else:
             is_use_autofocus = False
-        if not 'selected_panels' in params:
+        if 'selected_panels' not in params:
             selected_panels = ""
         else:
             selected_panels = params['selected_panels']
