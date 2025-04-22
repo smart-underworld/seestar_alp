@@ -2332,9 +2332,7 @@ class ScheduleShutdownResource:
         if action == "append":
             do_schedule_action_device("shutdown", {}, telescope_id)
         else:
-            do_insert_schedule_item(
-                "shutdown", {}, selected_items, telescope_id
-            )
+            do_insert_schedule_item("shutdown", {}, selected_items, telescope_id)
 
         render_schedule_tab(
             req, resp, telescope_id, "schedule_shutdown.html", "shutdown", {}, {}
@@ -2364,9 +2362,7 @@ class ScheduleParkResource:
         if action == "append":
             do_schedule_action_device("scope_park", {}, telescope_id)
         else:
-            do_insert_schedule_item(
-                "scope_park", {}, selected_items, telescope_id
-            )
+            do_insert_schedule_item("scope_park", {}, selected_items, telescope_id)
 
         render_schedule_tab(
             req, resp, telescope_id, "schedule_park.html", "park", {}, {}
@@ -2397,9 +2393,7 @@ class ScheduleLpfResource:
             telescope_id = 0
 
         if action == "append":
-            do_schedule_action_device(
-                "set_wheel_position", cmd_vals, telescope_id
-            )
+            do_schedule_action_device("set_wheel_position", cmd_vals, telescope_id)
         else:
             do_insert_schedule_item(
                 "set_wheel_position", cmd_vals, selected_items, telescope_id
@@ -3110,9 +3104,9 @@ class LiveFocusResource(BaseResource):
         focus = pydash.get(self.focus, telescope_id)
 
         if focus is None:
-            #ts = time.time()
+            # ts = time.time()
             focus = method_sync("get_focuser_position", telescope_id)
-            #te = time.time()
+            # te = time.time()
             # print(f'get_focuser_position elapsed {te - ts:2.4f} seconds')
 
             self.focus[telescope_id] = focus
