@@ -25,10 +25,10 @@ dependencies = [
     "pydash==8.0.3",
     "pyhocon==0.3.61",
     "pyindi",
-    "pylint==3.2.7",
     "pytz==2022.7.1",
     "pyyaml~=6.0.1",
     "requests~=2.32.3",
+    "ruff==0.11.6",
     "scikit-image==0.24.0",
     "scipy~=1.14.0",
     "sdnotify==0.3.2",
@@ -42,3 +42,19 @@ dependencies = [
 
 [tool.uv.sources]
 pyindi = { git = "https://github.com/MMTObservatory/pyINDI.git", rev = "c12590fbe310c34cadb03713051789a4d76d80c7" }
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [ "E4", "E7", "E9" ]
+ignore = [
+    "E722",  # Do not use bare `except`
+    "E402",  # Module level import not at top of file
+    "E731",  # Do not assign a `lambda` expression, use a `def`
+]
+exclude = [
+    "templates/*",
+    "scripts/*",
+    "indi/*"
+]

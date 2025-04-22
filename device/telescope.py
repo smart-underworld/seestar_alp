@@ -32,7 +32,6 @@ seestar_dev: dict[int, Seestar] = {}
 seestar_imager: dict[int, SeestarImaging] = {}
 seestar_logcollector: dict[int, SeestarLogging] = {}
 
-# pylint: disable=no-value-for-parameter
 
 # ----------------------
 # MULTI-INSTANCE SUPPORT
@@ -951,7 +950,7 @@ class rightascension:
 
     def on_get(self, req: Request, resp: Response, devnum: int):
 
-        if not devnum in seestar_dev or not seestar_dev[devnum].is_connected:
+        if devnum not in seestar_dev or not seestar_dev[devnum].is_connected:
             resp.text = PropertyResponse(None, req,
                             NotConnectedException("Not connected.")).json
             return

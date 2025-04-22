@@ -70,7 +70,7 @@ class _Config:
 
     @staticmethod
     def strToBool(inputString: str):
-        if inputString in ["True", "true", "on"] or inputString == True:
+        if inputString in ["True", "true", "on"] or inputString:
             return True
         else:
             return False
@@ -79,7 +79,7 @@ class _Config:
         """
         Helper method for getting a toml value out of the dict representation
         """
-        if not self._dict is {} and sect in self._dict and item in self._dict[sect]:
+        if self._dict is not {} and sect in self._dict and item in self._dict[sect]:
             return self._dict[sect][item]
         else:
             return default
@@ -296,7 +296,7 @@ class _Config:
         """
         Load a specific path to a toml file into this Config object
         """
-        if load_name == None:
+        if load_name is None:
             load_name = self.path_to_dat
         self.load(load_name)
 
@@ -310,7 +310,7 @@ class _Config:
         """
         Save the in-memory toml dict out to disk in toml format
         """
-        if save_name == None:
+        if save_name is None:
             save_name = self.path_to_dat
         print(f"save_toml: writing toml to {save_name}")
         with open(save_name, "w") as toml_file:

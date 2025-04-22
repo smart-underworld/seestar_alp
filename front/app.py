@@ -549,7 +549,7 @@ def get_client_master(telescope_id):
     client_master = True  # Assume master for older firmware
     if telescope_id > 0:
         event_state = do_action_device("get_event_state", telescope_id, {})
-        if event_state != None:
+        if event_state is not None:
             result = event_state['Value']['result']
             if 'Client' in result:
                 client_master = result['Client'].get('is_master', True)
@@ -567,7 +567,7 @@ def get_guestmode_state(telescope_id):
         fw = 0
 
         result = method_sync("get_device_state", telescope_id)
-        if result != None:
+        if result is not None:
             device = result.get("device", {})
             fw = device.get("firmware_ver_int", 0)
 
@@ -1378,12 +1378,12 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
     context = get_context(telescope_id, req)
     if context["online"]:
         get_schedule = do_action_device("get_schedule", telescope_id, {})
-        if get_schedule == None:
+        if get_schedule is None:
             return
         schedule = get_schedule["Value"]
     else:
         get_schedule = do_action_device("get_schedule", 0, {})
-        if get_schedule == None:
+        if get_schedule is None:
             return
         schedule = get_schedule["Value"]
     state = schedule.get("state", "stopped")
@@ -1639,7 +1639,7 @@ class HomeResource:
         else:
             root = get_root(telescope['device_num'])
             render_template(req, resp, 'index.html', now=now, telescopes=telescopes,
-                            **context)  # pylint: disable=repeated-keyword
+                            **context)
 
 
 class HomeTelescopeResource:
@@ -1651,7 +1651,7 @@ class HomeTelescopeResource:
         if 'telescopes' in context:
             del context["telescopes"]
         render_template(req, resp, 'index.html', now=now, telescopes=telescopes,
-                        **context)  # pylint: disable=repeated-keyword
+                        **context)
 
 
 class ImageResource(BaseResource):
@@ -3092,7 +3092,7 @@ class SimbadResource:
                 lpFilter = True
                 break
         lpStr = " off"
-        if (lpFilter == True):
+        if lpFilter:
             lpStr = " on"
 
         ra_dec_j2000 += lpStr
@@ -3385,7 +3385,7 @@ class ConfigResource:
     def on_get(req, resp, telescope_id=1):
         now = datetime.now()
         context = get_context(telescope_id, req)
-        render_template(req, resp, 'config.html', now=now, config=Config, **context)  # pylint: disable=repeated-keyword
+        render_template(req, resp, 'config.html', now=now, config=Config, **context)
 
     @staticmethod
     def on_post(req, resp, telescope_id=1):
@@ -3396,7 +3396,7 @@ class ConfigResource:
         Config.load_from_form(req)
         Config.save_toml()
 
-        render_template(req, resp, 'config.html', now=now, config=Config, **context)  # pylint: disable=repeated-keyword
+        render_template(req, resp, 'config.html', now=now, config=Config, **context)
 
 
 class BlindPolarAlignResource:
@@ -3404,7 +3404,7 @@ class BlindPolarAlignResource:
     def on_get(req, resp, telescope_id=1):
         now = datetime.now()
         context = get_context(telescope_id, req)
-        render_template(req, resp, 'pa_refine.html', now=now, **context)  # pylint: disable=repeated-keyword
+        render_template(req, resp, 'pa_refine.html', now=now, **context)
 
     @staticmethod
     def on_post(req, resp, telescope_id=1):
@@ -3519,7 +3519,7 @@ class GetPlanetCoordinates():
 
 
 def checkFileAge():
-    if (os.path.exists('data/CometEls.txt') == False):
+    if not os.path.exists('data/CometEls.txt'):
         redownload = True
     else:
         creation_date = datetime.fromtimestamp(os.path.getctime('data/CometEls.txt'))

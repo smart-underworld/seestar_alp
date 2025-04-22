@@ -145,7 +145,7 @@ class DevDriverException:
             number = 0x500
         self.number = number
         cname = self.__class__.__name__
-        if not exc is None:
+        if exc is not None:
             if Config.verbose_driver_exceptions:
                 self.message = f'{cname}: {message}\n{traceback.format_exc()}'  # TODO Safe if not explicitly using exc?
             else:
