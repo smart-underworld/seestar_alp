@@ -1,6 +1,6 @@
 import collections
 from abc import ABC, abstractmethod
-from typing import Any, TypedDict, Optional, NotRequired, Literal
+from typing import Any, TypedDict, NotRequired, Literal
 
 
 class StartStackParams(TypedDict):

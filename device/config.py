@@ -84,7 +84,7 @@ class _Config:
         """
         Helper method for getting a toml value out of the dict representation
         """
-        if self._dict is not {} and sect in self._dict and item in self._dict[sect]:
+        if self._dict != {} and sect in self._dict and item in self._dict[sect]:
             return self._dict[sect][item]
         else:
             return default
@@ -230,7 +230,7 @@ class _Config:
         Save the config html form into a toml file
         """
 
-        form_data = req.get_media()
+        req.get_media()
 
         # Reset arrays
         self.seestars = []

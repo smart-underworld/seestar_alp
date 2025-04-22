@@ -3,7 +3,6 @@
 # Adapted from https://github.com/dactylroot/rtsp/tree/master
 
 import cv2
-from io import BytesIO
 from PIL import Image
 
 from threading import Thread

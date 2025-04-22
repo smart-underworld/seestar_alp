@@ -1,6 +1,5 @@
 import threading
 import uuid
-from time import sleep
 from typing import Any
 
 from device.seestar_device import Schedule
