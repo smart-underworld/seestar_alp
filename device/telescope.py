@@ -1,4 +1,3 @@
-import time
 # -*- coding: utf-8 -*-
 #
 # -----------------------------------------------------------------------------
@@ -12,8 +11,7 @@ import time
 #
 # 02-Mar-2024   kcy Initial edit
 
-from falcon import Request, Response, HTTPBadRequest, HTTPTemporaryRedirect, before
-from logging import Logger
+from falcon import Request, Response, before
 
 from device.seestar_logs import SeestarLogging
 from device.seestar_imaging import SeestarImaging
@@ -911,7 +909,7 @@ class declinationrate:
             "DeclinationRate", req
         )  # Raises 400 bad request if missing
         try:
-            declinationrate = float(declinationratestr)
+            declinationrate = float(declinationratestr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -961,7 +959,7 @@ class doesrefraction:
         doesrefractionstr = get_request_field(
             "DoesRefraction", req
         )  # Raises 400 bad request if missing
-        doesrefraction = to_bool(doesrefractionstr)  # Same here
+        doesrefraction = to_bool(doesrefractionstr)  # Same here # noqa: F841
 
         try:
             # -----------------------------
@@ -1044,7 +1042,7 @@ class guideratedeclination:
             "GuideRateDeclination", req
         )  # Raises 400 bad request if missing
         try:
-            guideratedeclination = float(guideratedeclinationstr)
+            guideratedeclination = float(guideratedeclinationstr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -1098,7 +1096,7 @@ class guideraterightascension:
             "GuideRateRightAscension", req
         )  # Raises 400 bad request if missing
         try:
-            guideraterightascension = float(guideraterightascensionstr)
+            guideraterightascension = float(guideraterightascensionstr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -1194,7 +1192,7 @@ class rightascensionrate:
             "RightAscensionRate", req
         )  # Raises 400 bad request if missing
         try:
-            rightascensionrate = float(rightascensionratestr)
+            rightascensionrate = float(rightascensionratestr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -1244,7 +1242,7 @@ class sideofpier:
             "SideOfPier", req
         )  # Raises 400 bad request if missing
         try:
-            sideofpier = int(sideofpierstr)
+            sideofpier = int(sideofpierstr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -1504,7 +1502,7 @@ class slewsettletime:
             "SlewSettleTime", req
         )  # Raises 400 bad request if missing
         try:
-            slewsettletime = float(slewsettletimestr)
+            slewsettletime = float(slewsettletimestr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -1655,7 +1653,7 @@ class tracking:
         trackingstr = get_request_field(
             "Tracking", req
         )  # Raises 400 bad request if missing
-        tracking = to_bool(trackingstr)  # Same here
+        tracking = to_bool(trackingstr)  # Same here # noqa: F841
 
         try:
             # -----------------------------
@@ -1698,7 +1696,7 @@ class trackingrate:
             "TrackingRate", req
         )  # Raises 400 bad request if missing
         try:
-            trackingrate = float(trackingratestr)
+            trackingrate = float(trackingratestr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -1765,11 +1763,11 @@ class utcdate:
                 None, req, NotConnectedException("Not Connected.")
             ).json
             return
-        utcdatestr = get_request_field(
+        utcdatestr = get_request_field(  # noqa: F841
             "UTCDate", req
         )  # Raises 400 bad request if missing
         try:
-            utcdate = 0  #  {cvtfunc}(utcdatestr)
+            utcdate = 0  #  {cvtfunc}(utcdatestr) # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -1955,7 +1953,7 @@ class pulseguide:
             "Direction", req
         )  # Raises 400 bad request if missing
         try:
-            direction = int(directionstr)
+            direction = int(directionstr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -1969,7 +1967,7 @@ class pulseguide:
             "Duration", req
         )  # Raises 400 bad request if missing
         try:
-            duration = float(durationstr)
+            duration = float(durationstr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -2021,7 +2019,7 @@ class slewtoaltaz:
             "Azimuth", req
         )  # Raises 400 bad request if missing
         try:
-            azimuth = float(azimuthstr)
+            azimuth = float(azimuthstr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -2035,7 +2033,7 @@ class slewtoaltaz:
             "Altitude", req
         )  # Raises 400 bad request if missing
         try:
-            altitude = float(altitudestr)
+            altitude = float(altitudestr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -2068,7 +2066,7 @@ class slewtoaltazasync:
             "Azimuth", req
         )  # Raises 400 bad request if missing
         try:
-            azimuth = float(azimuthstr)
+            azimuth = float(azimuthstr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -2082,7 +2080,7 @@ class slewtoaltazasync:
             "Altitude", req
         )  # Raises 400 bad request if missing
         try:
-            altitude = float(altitudestr)
+            altitude = float(altitudestr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -2115,7 +2113,7 @@ class slewtocoordinates:
             "RightAscension", req
         )  # Raises 400 bad request if missing
         try:
-            rightascension = float(rightascensionstr)
+            rightascension = float(rightascensionstr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -2278,7 +2276,7 @@ class synctoaltaz:
             "Azimuth", req
         )  # Raises 400 bad request if missing
         try:
-            azimuth = float(azimuthstr)
+            azimuth = float(azimuthstr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,
@@ -2292,7 +2290,7 @@ class synctoaltaz:
             "Altitude", req
         )  # Raises 400 bad request if missing
         try:
-            altitude = float(altitudestr)
+            altitude = float(altitudestr)  # noqa: F841
         except:
             resp.text = MethodResponse(
                 req,

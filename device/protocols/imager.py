@@ -3,8 +3,7 @@ import zipfile
 from datetime import datetime
 from enum import Enum
 from io import BytesIO
-from struct import unpack, calcsize
-from time import sleep, time
+from time import sleep
 from typing import Optional, Tuple, List
 
 import cv2

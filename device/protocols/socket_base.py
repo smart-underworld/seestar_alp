@@ -129,7 +129,7 @@ class SocketBase:
             try:
                 self.disconnect()
                 return self.connect()
-            except socket.error as e:
+            except socket.error:
                 # Let's just delay a fraction of a second to avoid reconnecting too quickly
                 self._is_connected = False
                 time.sleep(0.1)

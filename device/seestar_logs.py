@@ -5,15 +5,12 @@
 import datetime
 import socket
 import threading
-import zipfile
-from io import BytesIO
 from struct import unpack, calcsize
-from time import sleep, time
+from time import sleep
 import sys
 import os
-from flask import Flask, render_template, Response
+from flask import Flask, Response
 
-import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "."))
 
@@ -57,7 +54,7 @@ class SeestarLogging:
             self.is_connected = True
             self.logger.info("connected")
             return True
-        except socket.error as e:
+        except socket.error:
             # Let's just delay a fraction of a second to avoid reconnecting too quickly
             self.is_connected = False
             sleep(0.1)

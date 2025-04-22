@@ -3,7 +3,6 @@ import json
 import time
 from datetime import datetime
 import threading
-import sys
 import os
 import math
 import uuid
@@ -16,13 +15,10 @@ from blinker import signal
 import geomag
 
 import numpy as np
-import random
 from json import JSONEncoder
 
 
 import tzlocal
-import queue
-import pydash
 from pyhocon import ConfigFactory
 
 from device.abstract_device import MessageParams, StartStackParams, Schedule
@@ -33,8 +29,7 @@ from device.event_callbacks import *
 
 from collections import OrderedDict
 
-from astropy.coordinates import SkyCoord, EarthLocation, AltAz
-from astropy.time import Time
+from astropy.coordinates import EarthLocation, AltAz
 import astropy.units as u
 
 
@@ -281,12 +276,12 @@ class Seestar:
             # self.s.settimeout(None)
             self.is_connected = True
             return True
-        except socket.error as e:
+        except socket.error:
             # Let's just delay a fraction of a second to avoid reconnecting too quickly
             self.is_connected = False
             sleep(1)
             return False
-        except Exception as ex:
+        except Exception:
             self.is_connected = False
             sleep(1)
             return False
@@ -454,7 +449,7 @@ class Seestar:
         self.logger.info(
             f"About to send shutdown or reboot command to Seestar...{response}"
         )
-        cur_cmdid = self.send_message_param(data)
+        self.send_message_param(data)
 
     def send_message_param_sync(self, data: MessageParams):
         if data["method"] == "pi_shutdown" or data["method"] == "pi_reboot":
@@ -959,7 +954,7 @@ class Seestar:
 
     def stop_plate_solve_loop(self):
         self.logger.info("stop plate solve loop...")
-        response = self.send_message_param_sync({"method": "stop_polar_align"})
+        self.send_message_param_sync({"method": "stop_polar_align"})
         return True
 
     # move to a good starting point position specified by lat and lon
@@ -2136,7 +2131,7 @@ class Seestar:
         self.logger.info(
             f"Adjusting focus by {num_steps} steps from current value of {cur_step_value}"
         )
-        resposne = self.send_message_param_sync(
+        response = self.send_message_param_sync(
             {
                 "method": "move_focuser",
                 "params": {"step": cur_step_value + num_steps, "ret_step": True},
@@ -2474,7 +2469,7 @@ class Seestar:
                 filepath = os.path.join("user_hooks", filename)
                 try:
                     user_hooks.append(ConfigFactory.parse_file(filepath))
-                except Exception as e:
+                except Exception:
                     self.logger.warn(
                         "Unable to decode user_hooks/{filename} - parsing error"
                     )
@@ -2526,7 +2521,7 @@ class Seestar:
                 self.guest_mode_init()
                 self.event_callbacks_init(initial_state["result"])
 
-            except Exception as ex:
+            except Exception:
                 # todo : Disconnect socket and set is_watch_events false
                 # print(f"XXXX Exception {ex}")
                 pass

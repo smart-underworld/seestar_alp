@@ -47,16 +47,19 @@ pyindi = { git = "https://github.com/MMTObservatory/pyINDI.git", rev = "c12590fb
 target-version = "py312"
 
 [tool.ruff.lint]
-select = [ "E4", "E7", "E9" ]
 ignore = [
     "E722",  # Do not use bare `except`
     "E402",  # Module level import not at top of file
     "E731",  # Do not assign a `lambda` expression, use a `def`
+    "F541",  # f-string without any placeholders
+    "F405",  # may be undefined, or defined from star imports
+    "F403",  # * used; unable to detect undefined names
 ]
 exclude = [
     "templates/*",
     "scripts/*",
-    "indi/*"
+    "indi/*",
+    "device/rotator.py",
 ]
 
 [tool.ruff.format]

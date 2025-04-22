@@ -219,7 +219,7 @@ class SeestarRemote(AbstractDevice):
                 f"Telescope {telescope_id} API is not online. (ConnectionError) {url=}"
             )
             return None
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.RequestException:
             self.logger.warn(
                 f"Telescope {telescope_id} API is not online. (RequestException) {url=}"
             )
@@ -239,7 +239,7 @@ class SeestarRemote(AbstractDevice):
                 f"Telescope {telescope_id} API is not online. (ConnectionError) {url=}"
             )
             return None
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.RequestException:
             self.logger.warn(
                 f"Telescope {telescope_id} API is not online. (RequestException) {url=}"
             )

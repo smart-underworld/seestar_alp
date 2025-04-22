@@ -1,15 +1,12 @@
 #
 # Defines binary protocol handlers
 #
-import threading
 import socket
 import errno
 from struct import calcsize, unpack
 
-from networkx.algorithms.components import is_connected
 
 from device.protocols.socket_base import SocketBase, SocketListener
-from lib import timing
 from lib.trace import MessageTrace
 
 

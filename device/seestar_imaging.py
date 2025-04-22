@@ -11,7 +11,7 @@ import datetime
 import os
 import threading
 from time import sleep, time
-from typing import List, Optional
+from typing import Optional
 
 from flask import Flask, Response
 import numpy as np
@@ -24,7 +24,6 @@ from device import log
 from device.analysis.snr_analysis import SNRAnalysis
 from device.protocols.imager import SeestarImagerProtocol, ExposureModes
 from device.config import Config
-from lib.trace import MessageTrace
 
 
 # view modes:
@@ -155,7 +154,7 @@ class SeestarImaging:
                     gif_data = gif_file.read()
 
                     return b"Content-Type: image/gif\r\n\r\n" + gif_data + self.BOUNDARY
-            except Exception as e:
+            except Exception:
                 pass
 
         blank_image = np.ones((1920, 1080, 3), dtype=np.uint8)

@@ -55,7 +55,7 @@
 #               messages with actual text. Just a clarification. Remove
 #               superfluous () on class declarations.
 #
-from falcon import Request, Response, HTTPBadRequest, before
+from falcon import Request, Response, before
 from logging import Logger
 from device.shr import (
     PropertyResponse,

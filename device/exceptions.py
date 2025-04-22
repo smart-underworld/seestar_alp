@@ -44,7 +44,6 @@
 #
 import traceback
 from device.config import Config
-from logging import Logger
 
 global logger
 # logger: Logger = None

@@ -1,21 +1,17 @@
 import time
 from datetime import datetime, timedelta
-from typing import Any
 
 import tzlocal
 
 import falcon
 from falcon import (
-    HTTPTemporaryRedirect,
     HTTPFound,
     HTTPInternalServerError,
     HTTPNotFound,
 )
-from falcon import CORSMiddleware
 from astroquery.simbad import Simbad
-from jinja2 import Template, Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader
 from wsgiref.simple_server import WSGIRequestHandler, make_server
-from collections import defaultdict
 from pathlib import Path
 import urllib.parse
 import requests
@@ -30,7 +26,6 @@ import sys
 import ephem
 import geocoder
 import pytz
-import re
 import zipfile
 import subprocess
 import platform
@@ -39,13 +34,11 @@ import signal
 import math
 import numpy as np
 import sqlite3
-import random
 
 from skyfield.api import Loader
 from skyfield.data import mpc
 from skyfield.constants import GM_SUN_Pitjeva_2005_km3_s2 as GM_SUN
 
-from device.seestar_logs import SeestarLogging
 from device.config import Config  # type: ignore
 from device.log import init_logging, get_logger  # type: ignore
 from device.version import Version  # type: ignore
@@ -495,7 +488,7 @@ def _check_api_state_cached(telescope_id):
             f"Telescope {telescope_id} API is not online. (ConnectionError) {url=}"
         )
         return False
-    except requests.exceptions.RequestException as e:
+    except requests.exceptions.RequestException:
         logger.warn(
             f"Telescope {telescope_id} API is not online. (RequestException) {url=}"
         )
@@ -1882,7 +1875,6 @@ class HomeResource:
         if len(telescopes) > 1:
             redirect(f"/{telescope['device_num']}/")
         else:
-            root = get_root(telescope["device_num"])
             render_template(
                 req, resp, "index.html", now=now, telescopes=telescopes, **context
             )
@@ -1938,7 +1930,6 @@ class ImageResource(BaseResource):
 
 class GotoResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
-        values = {}
         self.goto(req, resp, {}, {}, telescope_id)
 
     def on_post(self, req, resp, telescope_id=0):
@@ -2150,7 +2141,7 @@ class ScheduleAutoFocusResource:
     def on_get(req, resp, telescope_id=0):
         online = check_api_state(telescope_id)
         if not online:
-            telecope_id = 0
+            telescope_id = 0
         render_schedule_tab(
             req, resp, telescope_id, "schedule_auto_focus.html", "auto-focus", {}, {}
         )
@@ -2189,7 +2180,7 @@ class ScheduleFocusResource:
     def on_get(req, resp, telescope_id=0):
         online = check_api_state(telescope_id)
         if not online:
-            telecope_id = 0
+            telescope_id = 0
         render_schedule_tab(
             req, resp, telescope_id, "schedule_focus.html", "focus", {}, {}
         )
@@ -2290,7 +2281,7 @@ class ScheduleStartupResource:
             telescope_id = 0
 
         if action == "append":
-            response = do_schedule_action_device(
+            do_schedule_action_device(
                 "start_up_sequence",
                 {
                     "auto_focus": auto_focus,
@@ -2301,7 +2292,7 @@ class ScheduleStartupResource:
                 telescope_id,
             )
         else:
-            response = do_insert_schedule_item(
+            do_insert_schedule_item(
                 "start_up_sequence",
                 {
                     "auto_focus": auto_focus,
@@ -2339,11 +2330,9 @@ class ScheduleShutdownResource:
             telescope_id = 0
 
         if action == "append":
-            response = do_schedule_action_device("shutdown", {}, telescope_id)
+            do_schedule_action_device("shutdown", {}, telescope_id)
         else:
-            response = do_insert_schedule_item(
-                "shutdown", {}, selected_items, telescope_id
-            )
+            do_insert_schedule_item("shutdown", {}, selected_items, telescope_id)
 
         render_schedule_tab(
             req, resp, telescope_id, "schedule_shutdown.html", "shutdown", {}, {}
@@ -2371,11 +2360,9 @@ class ScheduleParkResource:
             telescope_id = 0
 
         if action == "append":
-            response = do_schedule_action_device("scope_park", {}, telescope_id)
+            do_schedule_action_device("scope_park", {}, telescope_id)
         else:
-            response = do_insert_schedule_item(
-                "scope_park", {}, selected_items, telescope_id
-            )
+            do_insert_schedule_item("scope_park", {}, selected_items, telescope_id)
 
         render_schedule_tab(
             req, resp, telescope_id, "schedule_park.html", "park", {}, {}
@@ -2406,11 +2393,9 @@ class ScheduleLpfResource:
             telescope_id = 0
 
         if action == "append":
-            response = do_schedule_action_device(
-                "set_wheel_position", cmd_vals, telescope_id
-            )
+            do_schedule_action_device("set_wheel_position", cmd_vals, telescope_id)
         else:
-            response = do_insert_schedule_item(
+            do_insert_schedule_item(
                 "set_wheel_position", cmd_vals, selected_items, telescope_id
             )
 
@@ -2439,11 +2424,11 @@ class ScheduleDewHeaterResource:
             telescope_id = 0
 
         if action == "append":
-            response = do_schedule_action_device(
+            do_schedule_action_device(
                 "action_set_dew_heater", {"heater": int(dewHeaterValue)}, telescope_id
             )
         else:
-            response = do_insert_schedule_item(
+            do_insert_schedule_item(
                 "action_set_dew_heater",
                 {"heater": int(dewHeaterValue)},
                 selected_items,
@@ -2483,11 +2468,11 @@ class ScheduleExposureResource:
             telescope_id = 0
 
         if action == "append":
-            response = do_schedule_action_device(
+            do_schedule_action_device(
                 "action_set_exposure", {"exp": int(expValue)}, telescope_id
             )
         else:
-            response = do_insert_schedule_item(
+            do_insert_schedule_item(
                 "action_set_exposure",
                 {"exp": int(expValue)},
                 selected_items,
@@ -2650,10 +2635,6 @@ class ScheduleImportResource:
         file_path = os.path.join(directory, selected_file)
         file_type = determine_file_type(file_path)
 
-        data = req.get_param("schedule_file")
-        if not selected_file:
-            raise falcon.HTTPBadRequest("Missing Parameter", "No file selected")
-
         if file_type == "csv":
             with open(file_path, "r", encoding="utf-8") as file:
                 string_data = file.read().splitlines()
@@ -2781,7 +2762,6 @@ class EventStatus:
             ]
         else:
             eventlist = ["WheelMove", "AutoFocus", "AutoGoto", "PlateSolve"]
-        telescopes = get_telescopes()
         context = get_context(telescope_id, req)
         now = datetime.now()
         event_state = do_action_device("get_event_state", telescope_id, {})
@@ -2883,7 +2863,7 @@ class LiveModeResource:
         mode = req.media["mode"]
         params = req.media
         # xxx: If mode is none, need to cancel things
-        response = do_action_device(
+        do_action_device(
             "method_async",
             telescope_id,
             {"method": "iscope_start_view", "params": params},
@@ -3124,9 +3104,9 @@ class LiveFocusResource(BaseResource):
         focus = pydash.get(self.focus, telescope_id)
 
         if focus is None:
-            ts = time.time()
+            # ts = time.time()
             focus = method_sync("get_focuser_position", telescope_id)
-            te = time.time()
+            # te = time.time()
             # print(f'get_focuser_position elapsed {te - ts:2.4f} seconds')
 
             self.focus[telescope_id] = focus
@@ -3756,7 +3736,7 @@ class StellariumResource:
                 if StelJSON["localized-name"] != "":
                     objName = StelJSON["localized-name"]
                 elif StelJSON["name"] != "":
-                    objname = StelJSON["localized-name"]
+                    objName = StelJSON["localized-name"]
                 elif StelJSON["designations"] != "":
                     tmpObj = StelJSON["designations"]
                     objName = tmpObj.split(" - ")[0]
@@ -4004,7 +3984,6 @@ class BlindPolarAlignResource:
 
     @staticmethod
     def on_post(req, resp, telescope_id=1):
-        now = datetime.now()
         context = get_context(telescope_id, req)
         referer = req.get_header("Referer")
         referersplit = referer.split("/")[-2:]
