@@ -3520,9 +3520,8 @@ class ReloadResource:
         resp.status = falcon.HTTP_200
 
 
-# stackoverflow-fu
-Object = lambda **kwargs: type("Object", (), kwargs)
-
+def Object(**kwargs):
+    return type("Object", (), kwargs)
 
 class SystemResource(BaseResource):
     def if_null(self, thread, name):
