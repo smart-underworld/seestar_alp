@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 multiprocessing.freeze_support()
 
+
 @dataclass
 class MTFStretchParameters:
     midtone: float

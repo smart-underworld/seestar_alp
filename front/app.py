@@ -3523,6 +3523,7 @@ class ReloadResource:
 def Object(**kwargs):
     return type("Object", (), kwargs)
 
+
 class SystemResource(BaseResource):
     def if_null(self, thread, name):
         if thread is None:

@@ -253,7 +253,6 @@ class PropertyResponse:
         return json.dumps(self.__dict__)
 
 
-
 class DequeEncoder(JSONEncoder):
     def default(self, obj):
         if isinstance(obj, deque):
