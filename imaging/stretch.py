@@ -3,15 +3,14 @@
 #
 
 import multiprocessing
-from enum import Enum
-
-multiprocessing.freeze_support()
-
 import logging
-from multiprocessing import shared_memory
 import numpy as np
+
+from enum import Enum
+from multiprocessing import shared_memory
 from dataclasses import dataclass
 
+multiprocessing.freeze_support()
 
 @dataclass
 class MTFStretchParameters:

@@ -63,6 +63,8 @@ from device.exceptions import Success
 import json
 from falcon import Request, Response, HTTPBadRequest
 from logging import Logger
+from json import JSONEncoder
+from collections import deque
 
 logger: Logger = None
 # logger = None                   # Safe on Python 3.7 but no intellisense in VSCode etc.
@@ -250,9 +252,6 @@ class PropertyResponse:
         """Return the JSON for the Property Response"""
         return json.dumps(self.__dict__)
 
-
-from json import JSONEncoder
-from collections import deque
 
 
 class DequeEncoder(JSONEncoder):

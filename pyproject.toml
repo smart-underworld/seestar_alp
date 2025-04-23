@@ -49,7 +49,6 @@ target-version = "py312"
 [tool.ruff.lint]
 ignore = [
     "E722",  # Do not use bare `except`
-    "E402",  # Module level import not at top of file
     "E731",  # Do not assign a `lambda` expression, use a `def`
     "F541",  # f-string without any placeholders
     "F405",  # may be undefined, or defined from star imports
