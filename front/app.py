@@ -144,7 +144,7 @@ def get_telescope(telescope_id):
 
 def get_root(telescope_id):
     if telescope_id == 0:
-        root = f"/0"
+        root = "/0"
         return root
     else:
         telescopes = get_telescopes()
@@ -342,7 +342,7 @@ def update_twilight_times(latitude=None, longitude=None):
         )
 
     with open(twilight_times_file, "w") as outfile:
-        logger.info(f"Twilight times: Writing cache file.")
+        logger.info("Twilight times: Writing cache file.")
         json.dump(twilight_times, outfile)
 
     return twilight_times
@@ -364,16 +364,16 @@ def get_twilight_times():
 
     # Check to see if there is cached infromation for today
     if os.path.isfile(twilight_times_file):
-        logger.info(f"Twilight times: Cache file exists.")
+        logger.info("Twilight times: Cache file exists.")
 
         with open(twilight_times_file, "r") as openfile:
             twilight_times = json.load(openfile)
 
         # Check if cached data is for today.
         if twilight_times["Today's Date"] == current_date_formatted:
-            logger.info(f"Twilight times: Cache file is current, using cache file.")
+            logger.info("Twilight times: Cache file is current, using cache file.")
         else:
-            logger.info(f"Twilight times: Cache file out of date, updating cache file.")
+            logger.info("Twilight times: Cache file out of date, updating cache file.")
 
             # Use lat and lon from the cache file
             latitude = str(twilight_times["Latitude"])
@@ -382,7 +382,7 @@ def get_twilight_times():
             # Update the cache file
             twilight_times = update_twilight_times(latitude, longitude)
     else:
-        logger.info(f"Twilight times: Cache file doesn't exists, creating cache file.")
+        logger.info("Twilight times: Cache file doesn't exists, creating cache file.")
         # Update the cache file
         twilight_times = update_twilight_times()
 
@@ -515,10 +515,10 @@ def check_internet_connection():
     sock.settimeout(2)
     try:
         sock.connect((remote_server, port))
-        logger.info(f"Internet connection detected.")
+        logger.info("Internet connection detected.")
         return True
     except socket.error:
-        logger.info(f"Unable to detect Internet connection.")  # or google is down...
+        logger.info("Unable to detect Internet connection.")  # or google is down...
         return False
     finally:
         sock.close()
@@ -769,9 +769,9 @@ def get_device_state(telescope_id):
                 ):  # sig_lev is only there while in station mode.
                     wifi_signal = f"{wifi_status['sig_lev']} dBm"
                 elif guestmode:
-                    wifi_signal = f"Unavailable in Guest mode."
+                    wifi_signal = "Unavailable in Guest mode."
                 else:
-                    wifi_signal = f"Unavailable in AP mode."
+                    wifi_signal = "Unavailable in AP mode."
             stats = {
                 "Firmware Version": device.get("firmware_ver_string", ""),
                 "Focal Position": focuser.get("step", ""),
@@ -803,7 +803,7 @@ def get_device_state(telescope_id):
                 stats["Client list"] = client_list
 
         else:
-            logger.info(f"Stats: Unable to get data.")
+            logger.info("Stats: Unable to get data.")
             stats = {
                 "Info": "Unable to get stats."
             }  # Display information for the stats page VS blank page.
@@ -2571,7 +2571,7 @@ class ScheduleClearResource:
             # queue = {}
             do_action_device("create_schedule", 0, {})
             flash(resp, "Created New Schedule")
-            redirect(f"/0/schedule")
+            redirect("/0/schedule")
 
         flash(resp, "Created New Schedule")
         redirect(f"/{telescope_id}/schedule")
@@ -3520,8 +3520,8 @@ class ReloadResource:
         resp.status = falcon.HTTP_200
 
 
-# stackoverflow-fu
-Object = lambda **kwargs: type("Object", (), kwargs)
+def Object(**kwargs):
+    return type("Object", (), kwargs)
 
 
 class SystemResource(BaseResource):

@@ -37,7 +37,7 @@ if __name__ == "__main__":
     coordinates = get_current_gps_coordinates()
     if coordinates is not None:
         latitude, longitude = coordinates
-        print(f"Your current GPS coordinates are:")
+        print("Your current GPS coordinates are:")
         print(f"Latitude: {latitude}")
         print(f"Longitude: {longitude}")
 

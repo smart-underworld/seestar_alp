@@ -127,7 +127,7 @@ class SeestarImaging:
                         and self.is_live_viewing
                     ):
                         self.logger.debug(
-                            f"Received Stack event.  Fetching stacked image"
+                            "Received Stack event.  Fetching stacked image"
                         )  # xxx trace
                         # If we get a stack event, we're going to assume we're stacking!
                         self.request_stacked_image()
