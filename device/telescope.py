@@ -914,7 +914,7 @@ class declinationrate:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'DeclinationRate " + declinationratestr + " not a valid number.'
+                    'DeclinationRate " + declinationratestr + " not a valid number.'
                 ),
             ).json
             return
@@ -1047,7 +1047,7 @@ class guideratedeclination:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'GuideRateDeclination " + guideratedeclinationstr + " not a valid number.'
+                    'GuideRateDeclination " + guideratedeclinationstr + " not a valid number.'
                 ),
             ).json
             return
@@ -1101,7 +1101,7 @@ class guideraterightascension:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'GuideRateRightAscension " + guideraterightascensionstr + " not a valid number.'
+                    'GuideRateRightAscension " + guideraterightascensionstr + " not a valid number.'
                 ),
             ).json
             return
@@ -1197,7 +1197,7 @@ class rightascensionrate:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'RightAscensionRate " + rightascensionratestr + " not a valid number.'
+                    'RightAscensionRate " + rightascensionratestr + " not a valid number.'
                 ),
             ).json
             return
@@ -1247,7 +1247,7 @@ class sideofpier:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'SideOfPier " + sideofpierstr + " not a valid number.'
+                    'SideOfPier " + sideofpierstr + " not a valid number.'
                 ),
             ).json
             return
@@ -1319,7 +1319,7 @@ class siteelevation:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'SiteElevation " + siteelevationstr + " not a valid number.'
+                    'SiteElevation " + siteelevationstr + " not a valid number.'
                 ),
             ).json
             return
@@ -1377,7 +1377,7 @@ class sitelatitude:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'SiteLatitude " + sitelatitudestr + " not a valid number.'
+                    'SiteLatitude " + sitelatitudestr + " not a valid number.'
                 ),
             ).json
             return
@@ -1437,7 +1437,7 @@ class sitelongitude:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'SiteLongitude " + sitelongitudestr + " not a valid number.'
+                    'SiteLongitude " + sitelongitudestr + " not a valid number.'
                 ),
             ).json
             return
@@ -1507,7 +1507,7 @@ class slewsettletime:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'SlewSettleTime " + slewsettletimestr + " not a valid number.'
+                    'SlewSettleTime " + slewsettletimestr + " not a valid number.'
                 ),
             ).json
             return
@@ -1558,7 +1558,7 @@ class targetdeclination:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'TargetDeclination " + targetdeclinationstr + " not a valid number.'
+                    'TargetDeclination " + targetdeclinationstr + " not a valid number.'
                 ),
             ).json
             return
@@ -1609,7 +1609,7 @@ class targetrightascension:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'TargetRightAscension " + targetrightascensionstr + " not a valid number.'
+                    'TargetRightAscension " + targetrightascensionstr + " not a valid number.'
                 ),
             ).json
             return
@@ -1701,7 +1701,7 @@ class trackingrate:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'TrackingRate " + trackingratestr + " not a valid number.'
+                    'TrackingRate " + trackingratestr + " not a valid number.'
                 ),
             ).json
             return
@@ -1771,9 +1771,7 @@ class utcdate:
         except:
             resp.text = MethodResponse(
                 req,
-                InvalidValueException(
-                    f'UTCDate " + utcdatestr + " not a valid number.'
-                ),
+                InvalidValueException('UTCDate " + utcdatestr + " not a valid number.'),
             ).json
             return
 
@@ -1898,7 +1896,7 @@ class moveaxis:
             axis = int(axisstr)
         except:
             resp.text = MethodResponse(
-                req, InvalidValueException(f'Axis " + axisstr + " not a valid number.')
+                req, InvalidValueException('Axis " + axisstr + " not a valid number.')
             ).json
             return
         ### RANGE CHECK AS NEEDED ###          # Raise Alpaca InvalidValueException with details!
@@ -1907,7 +1905,7 @@ class moveaxis:
             rate = float(ratestr)
         except:
             resp.text = MethodResponse(
-                req, InvalidValueException(f'Rate " + ratestr + " not a valid number.')
+                req, InvalidValueException('Rate " + ratestr + " not a valid number.')
             ).json
             return
         ### RANGE CHECK AS NEEDED ###         # Raise Alpaca InvalidValueException with details!
@@ -1958,7 +1956,7 @@ class pulseguide:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'Direction " + directionstr + " not a valid number.'
+                    'Direction " + directionstr + " not a valid number.'
                 ),
             ).json
             return
@@ -1972,7 +1970,7 @@ class pulseguide:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'Duration " + durationstr + " not a valid number.'
+                    'Duration " + durationstr + " not a valid number.'
                 ),
             ).json
             return
@@ -2023,9 +2021,7 @@ class slewtoaltaz:
         except:
             resp.text = MethodResponse(
                 req,
-                InvalidValueException(
-                    f'Azimuth " + azimuthstr + " not a valid number.'
-                ),
+                InvalidValueException('Azimuth " + azimuthstr + " not a valid number.'),
             ).json
             return
         ### RANGE CHECK AS NEEDED ###       # Raise Alpaca InvalidValueException with details!
@@ -2038,7 +2034,7 @@ class slewtoaltaz:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'Altitude " + altitudestr + " not a valid number.'
+                    'Altitude " + altitudestr + " not a valid number.'
                 ),
             ).json
             return
@@ -2070,9 +2066,7 @@ class slewtoaltazasync:
         except:
             resp.text = MethodResponse(
                 req,
-                InvalidValueException(
-                    f'Azimuth " + azimuthstr + " not a valid number.'
-                ),
+                InvalidValueException('Azimuth " + azimuthstr + " not a valid number.'),
             ).json
             return
         ### RANGE CHECK AS NEEDED ###       # Raise Alpaca InvalidValueException with details!
@@ -2085,7 +2079,7 @@ class slewtoaltazasync:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'Altitude " + altitudestr + " not a valid number.'
+                    'Altitude " + altitudestr + " not a valid number.'
                 ),
             ).json
             return
@@ -2118,7 +2112,7 @@ class slewtocoordinates:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'RightAscension " + rightascensionstr + " not a valid number.'
+                    'RightAscension " + rightascensionstr + " not a valid number.'
                 ),
             ).json
             return
@@ -2132,7 +2126,7 @@ class slewtocoordinates:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'Declination " + declinationstr + " not a valid number.'
+                    'Declination " + declinationstr + " not a valid number.'
                 ),
             ).json
             return
@@ -2172,7 +2166,7 @@ class slewtocoordinatesasync:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'RightAscension " + rightascensionstr + " not a valid number.'
+                    'RightAscension " + rightascensionstr + " not a valid number.'
                 ),
             ).json
             return
@@ -2186,7 +2180,7 @@ class slewtocoordinatesasync:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'Declination " + declinationstr + " not a valid number.'
+                    'Declination " + declinationstr + " not a valid number.'
                 ),
             ).json
             return
@@ -2280,9 +2274,7 @@ class synctoaltaz:
         except:
             resp.text = MethodResponse(
                 req,
-                InvalidValueException(
-                    f'Azimuth " + azimuthstr + " not a valid number.'
-                ),
+                InvalidValueException('Azimuth " + azimuthstr + " not a valid number.'),
             ).json
             return
         ### RANGE CHECK AS NEEDED ###       # Raise Alpaca InvalidValueException with details!
@@ -2295,7 +2287,7 @@ class synctoaltaz:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'Altitude " + altitudestr + " not a valid number.'
+                    'Altitude " + altitudestr + " not a valid number.'
                 ),
             ).json
             return
@@ -2328,7 +2320,7 @@ class synctocoordinates:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'RightAscension " + rightascensionstr + " not a valid number.'
+                    'RightAscension " + rightascensionstr + " not a valid number.'
                 ),
             ).json
             return
@@ -2342,7 +2334,7 @@ class synctocoordinates:
             resp.text = MethodResponse(
                 req,
                 InvalidValueException(
-                    f'Declination " + declinationstr + " not a valid number.'
+                    'Declination " + declinationstr + " not a valid number.'
                 ),
             ).json
             return

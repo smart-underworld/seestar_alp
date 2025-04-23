@@ -90,7 +90,7 @@ class SeestarLogging:
             return False
 
     def send_get_server_log(self):
-        self.logger.info(f"sending get_server_log")
+        self.logger.info("sending get_server_log")
         self.send_message('{"id": 44, "method": "get_server_log"}' + "\r\n")
 
     def receive_message_thread_fn(self):

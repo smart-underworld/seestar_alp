@@ -49,7 +49,6 @@ target-version = "py312"
 [tool.ruff.lint]
 ignore = [
     "E722",  # Do not use bare `except`
-    "F541",  # f-string without any placeholders
     "F405",  # may be undefined, or defined from star imports
     "F403",  # * used; unable to detect undefined names
 ]

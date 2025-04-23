@@ -247,7 +247,7 @@ class SeestarRemote(AbstractDevice):
 
     def _is_remote_connected(self):
         telescope_id = self.device_num
-        response = self.get_remote(f"connected?ClientID=1&ClientTransactionID=999")
+        response = self.get_remote("connected?ClientID=1&ClientTransactionID=999")
         if response:
             if response.get("ErrorNumber") == 1031 or not response.get("Value"):
                 self.logger.warn(f"Telescope {telescope_id} API is not connected.")

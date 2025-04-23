@@ -204,7 +204,7 @@ class Seestar:
                 return self.send_message(data)
             return False
         except:
-            self.logger.error(f"General error trying to send message: ", data)
+            self.logger.error("General error trying to send message: ", data)
             return False
 
     def socket_force_close(self) -> None:
@@ -889,7 +889,7 @@ class Seestar:
                 "y12": y12,
             }
         }
-        self.logger.info(f"sending adjusted compass sensor data:", params)
+        self.logger.info("sending adjusted compass sensor data:", params)
         response = self.send_message_param_sync(
             {"method": "set_sensor_calibration", "params": params}
         )
@@ -1017,7 +1017,7 @@ class Seestar:
                     coordinates = Util.get_current_gps_coordinates()
                     if coordinates is not None:
                         latitude, longitude = coordinates
-                        self.logger.info(f"Your current GPS coordinates are:")
+                        self.logger.info("Your current GPS coordinates are:")
                         self.logger.info(f"Latitude: {latitude}")
                         self.logger.info(f"Longitude: {longitude}")
                         Config.init_lat = latitude
@@ -1102,7 +1102,7 @@ class Seestar:
             self.firmware_ver_int = response["result"]["device"]["firmware_ver_int"]
             self.logger.info(f"Firmware version: {self.firmware_ver_int}")
             if self.firmware_ver_int < 2427:
-                msg = f"Your firmware version is too old. Please update to at least 4.27 or use the older version of the app (e.g., 2.5.x)"
+                msg = "Your firmware version is too old. Please update to at least 4.27 or use the older version of the app (e.g., 2.5.x)"
                 self.logger.error(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
                 self.schedule["state"] = "stopping"
@@ -1246,7 +1246,7 @@ class Seestar:
                         )
                         self.logger.info(f"start star mode: {result}")
                         time.sleep(2)
-                    msg = f"auto focus"
+                    msg = "auto focus"
                     self.logger.info(msg)
                     self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
                     result = self.try_auto_focus(2)
@@ -1263,7 +1263,7 @@ class Seestar:
                 return
 
             if do_dark_frames:
-                msg = f"dark frame measurement"
+                msg = "dark frame measurement"
                 self.logger.info(msg)
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
                 result = self._try_dark_frame()
@@ -2367,7 +2367,7 @@ class Seestar:
             self.schedule["state"] = "stopped"
             self.schedule["is_stacking"] = False
             return self.json_result(
-                "stop_scheduler", 0, f"Scheduler stopped successfully."
+                "stop_scheduler", 0, "Scheduler stopped successfully."
             )
 
         elif self.schedule["state"] == "complete":
@@ -2438,7 +2438,7 @@ class Seestar:
         return dec_decimal
 
     def guest_mode_init(self):
-        self.logger.info(f"guest_mode_init")
+        self.logger.info("guest_mode_init")
         if self.firmware_ver_int > 2300:
             # Indiscriminately try to grab the master cli
             self.send_message_param_sync(
