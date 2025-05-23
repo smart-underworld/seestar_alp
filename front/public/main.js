@@ -32,7 +32,7 @@ async function fetchCoordinates() {
                             document.getElementById('ra').value = selectedObject.ra;
                             document.getElementById('dec').value = selectedObject.dec;
                             document.getElementById("useJ2000").checked = true;
-                            document.getElementById("useLpFilter").checked = selectedObject.lp;
+                            document.getElementById("useLpFilter").checked = (selectedObject.lp === 'true');
                             if (selectedObject.name != '') {
                                 document.getElementById("targetName").value = selectedObject.objectName;
                             };
@@ -42,7 +42,7 @@ async function fetchCoordinates() {
                         document.getElementById('ra').value = selectedObject.ra;
                         document.getElementById('dec').value = selectedObject.dec;
                         document.getElementById("useJ2000").checked = true;
-                        document.getElementById("useLpFilter").checked = selectedObject.lp;
+                        document.getElementById("useLpFilter").checked = (selectedObject.lp === 'true');
                         if (selectedObject.name != '') {
                             document.getElementById("targetName").value = selectedObject.objectName;
                         };
