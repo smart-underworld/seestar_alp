@@ -1546,14 +1546,19 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
     if context["online"]:
         get_schedule = do_action_device("get_schedule", telescope_id, {})
         if get_schedule is None:
-            return
-        schedule = get_schedule["Value"]
+             schedule = {}
+             state = "stopped"
+        else:
+            schedule = get_schedule["Value"]
+            state = schedule.get("state", "stopped")
     else:
         get_schedule = do_action_device("get_schedule", 0, {})
         if get_schedule is None:
-            return
-        schedule = get_schedule["Value"]
-    state = schedule.get("state", "stopped")
+            schedule = {}
+            state = "stopped"
+        else:
+            schedule = get_schedule["Value"]
+            state = schedule.get("state", "stopped")
     nearest_csc = get_nearest_csc()
     if nearest_csc["status_msg"] != "SUCCESS":
         nearest_csc["href"] = ""
@@ -1939,18 +1944,16 @@ class GotoResource(BaseResource):
     @staticmethod
     def goto(req, resp, values, errors, telescope_id):
         schedule = {}
+        state = {}
         context = get_context(telescope_id, req)
 
-        if not context["online"]:
-            return
+        if context["online"]:
+            current = do_action_device("get_schedule", telescope_id, {})
+            if not current is None:
+                state = current["Value"]["state"]
 
-        current = do_action_device("get_schedule", telescope_id, {})
-        if current is None:
-            return
-        state = current["Value"]["state"]
-
-        if state == "working":
-            flash(resp, "Scheduler is running. Cannot perform goto.")
+                if state == "working":
+                    flash(resp, "Scheduler is running. Cannot perform goto.")
 
         # remove values=values to stop remembering values
         render_template(
@@ -1981,10 +1984,12 @@ class CommandResource(BaseResource):
             telescope_id = 0
 
         current = do_action_device("get_schedule", telescope_id, {})
-        if current is None:
-            return
-        schedule = current["Value"]
-        state = schedule["state"]
+        if not current is None:
+            schedule = current["Value"]
+            state = schedule["state"]
+        else:   
+            schedule = {}
+            state = "stopped"
 
         render_template(
             req,
@@ -2709,8 +2714,12 @@ class ScheduleRefreshResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         context = get_context(telescope_id, req)
         current = do_action_device("get_schedule", telescope_id, {})
-        schedule = current.get("Value", {})
-        state = schedule.get("state", "")
+        if current is not None:
+            schedule = current.get("Value", {})
+            state = schedule.get("state", "")
+        else:
+            schedule = {}
+            state = "stopped"
 
         html = self.render_schedule_list_html(req, resp, schedule, context)
 
@@ -2807,12 +2816,19 @@ class LivePage:
     @staticmethod
     def on_get(req, resp, telescope_id=1, mode=None):
         status = method_sync("get_view_state", telescope_id)
-        if status is None:
-            return
-
-        logger.info(status)
         context = get_context(telescope_id, req)
         now = datetime.now()
+        if status is None:
+            render_template(
+                req,
+                resp,
+                "live.html",
+                now=now,
+                action=f"/{telescope_id}/goto",
+                **context,
+            )
+            return
+        logger.info(status)
         view = pydash.get(status, "View")
         match mode:
             case "solar_sys":
@@ -3464,9 +3480,11 @@ class StartupResource(BaseResource):
 
         current = do_action_device("get_schedule", telescope_id, {})
         if current is None:
-            return
-        schedule = current["Value"]
-        state = schedule["state"]
+            schedule = {}
+            state = "stopped"
+        else:   
+            schedule = current["Value"]
+            state = schedule["state"]
 
         render_template(
             req,
@@ -3483,12 +3501,12 @@ class StartupResource(BaseResource):
 class GuestModeResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
-        if telescope_id == 0:
+        context = get_context(telescope_id, req)
+        if telescope_id == 0 or not context["online"]:
             state = {}
         else:
             state = get_guestmode_state(telescope_id)
         now = datetime.now()
-        context = get_context(telescope_id, req)
 
         render_template(
             req,
