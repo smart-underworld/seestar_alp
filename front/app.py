@@ -1949,7 +1949,7 @@ class GotoResource(BaseResource):
 
         if context["online"]:
             current = do_action_device("get_schedule", telescope_id, {})
-            if not current is None:
+            if current is not None:
                 state = current["Value"]["state"]
 
                 if state == "working":
@@ -1984,7 +1984,7 @@ class CommandResource(BaseResource):
             telescope_id = 0
 
         current = do_action_device("get_schedule", telescope_id, {})
-        if not current is None:
+        if current is not None:
             schedule = current["Value"]
             state = schedule["state"]
         else:   
