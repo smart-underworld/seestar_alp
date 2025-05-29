@@ -199,7 +199,35 @@ class Seestar_Federation:
         }
         return self.schedule
 
+    def construct_schedule_item(self, params):
+        item = params.copy()
+        if item["action"] == "start_mosaic":
+            mosaic_params = item["params"]
+            if isinstance(mosaic_params["ra"], str):
+                # try to trim the seconds to 1 decimal
+                mosaic_params["ra"] = Util.trim_seconds(mosaic_params["ra"])
+                mosaic_params["dec"] = Util.trim_seconds(mosaic_params["dec"])
+            elif isinstance(mosaic_params["ra"], float):
+                if mosaic_params["ra"] < 0:
+                    self.logger.warn(
+                        "Failed. Must specify an proper coordinate for a federated schedule."
+                    )
+                    raise Exception(
+                        "Failed. Must specify an proper coordinate for a federated schedule."
+                    )
+                    #mosaic_params["ra"] = self.ra
+                    #mosaic_params["dec"] = self.dec
+                    #mosaic_params["is_j2000"] = False
+                mosaic_params["ra"] = round(mosaic_params["ra"], 4)
+                mosaic_params["dec"] = round(mosaic_params["dec"], 4)
+        item["schedule_item_id"] = str(uuid.uuid4())
+        return item
+
     def add_schedule_item(self, params: dict[str, Any]) -> Schedule:
+        new_item = self.construct_schedule_item(params)
+        self.schedule["list"].append(new_item)
+        return self.schedule
+ ###   
         item = params.copy()
         if item["action"] == "start_mosaic":
             mosaic_params = item["params"]
@@ -217,8 +245,66 @@ class Seestar_Federation:
                     )
                 mosaic_params["ra"] = round(mosaic_params["ra"], 4)
                 mosaic_params["dec"] = round(mosaic_params["dec"], 4)
+        item["schedule_item_id"] = str(uuid.uuid4())
         self.schedule["list"].append(item)
         return self.schedule
+    ###
+
+    def remove_schedule_item(self, params):
+        targeted_item_id = params["schedule_item_id"]
+        index = 0
+        if self.schedule["state"] == "working":
+            active_schedule_item_id = self.schedule["current_item_id"]
+            reached_cur_item = False
+            while index < len(self.schedule["list"]) and not reached_cur_item:
+                item_id = self.schedule["list"][index].get(
+                    "schedule_item_id", "UNKNOWN"
+                )
+                if item_id == targeted_item_id:
+                    self.logger.warn(
+                        "Cannot remove schedule item that has already been executed"
+                    )
+                    return self.schedule
+                if item_id == active_schedule_item_id:
+                    reached_cur_item = True
+                index += 1
+        while index < len(self.schedule["list"]):
+            item = self.schedule["list"][index]
+            item_id = item.get("schedule_item_id", "UNKNOWN")
+            if item_id == targeted_item_id:
+                self.schedule["list"].remove(item)
+                break
+            index += 1
+        return self.schedule
+
+    def insert_schedule_item_before(self, params):
+        targeted_item_id = params["before_id"]
+        index = 0
+        if self.schedule["state"] == "working":
+            active_schedule_item_id = self.schedule["current_item_id"]
+            reached_cur_item = False
+            while index < len(self.schedule["list"]) and not reached_cur_item:
+                item_id = self.schedule["list"][index].get(
+                    "schedule_item_id", "UNKNOWN"
+                )
+                if item_id == targeted_item_id:
+                    self.logger.warn(
+                        "Cannot insert schedule item that has already been executed"
+                    )
+                    return self.schedule
+                if item_id == active_schedule_item_id:
+                    reached_cur_item = True
+                index += 1
+        while index < len(self.schedule["list"]):
+            item = self.schedule["list"][index]
+            item_id = item.get("schedule_item_id", "UNKNOWN")
+            if item_id == targeted_item_id:
+                new_item = self.construct_schedule_item(params)
+                self.schedule["list"].insert(index, new_item)
+                break
+            index += 1
+        return self.schedule
+
 
     def export_schedule(self, params):
         filepath = params["filepath"]
