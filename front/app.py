@@ -1546,8 +1546,8 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
     if context["online"]:
         get_schedule = do_action_device("get_schedule", telescope_id, {})
         if get_schedule is None:
-             schedule = {}
-             state = "stopped"
+            schedule = {}
+            state = "stopped"
         else:
             schedule = get_schedule["Value"]
             state = schedule.get("state", "stopped")
@@ -1987,7 +1987,7 @@ class CommandResource(BaseResource):
         if current is not None:
             schedule = current["Value"]
             state = schedule["state"]
-        else:   
+        else:
             schedule = {}
             state = "stopped"
 
@@ -3482,7 +3482,7 @@ class StartupResource(BaseResource):
         if current is None:
             schedule = {}
             state = "stopped"
-        else:   
+        else:
             schedule = current["Value"]
             state = schedule["state"]
 

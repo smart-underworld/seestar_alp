@@ -215,9 +215,9 @@ class Seestar_Federation:
                     raise Exception(
                         "Failed. Must specify an proper coordinate for a federated schedule."
                     )
-                    #mosaic_params["ra"] = self.ra
-                    #mosaic_params["dec"] = self.dec
-                    #mosaic_params["is_j2000"] = False
+                    # mosaic_params["ra"] = self.ra
+                    # mosaic_params["dec"] = self.dec
+                    # mosaic_params["is_j2000"] = False
                 mosaic_params["ra"] = round(mosaic_params["ra"], 4)
                 mosaic_params["dec"] = round(mosaic_params["dec"], 4)
         item["schedule_item_id"] = str(uuid.uuid4())
@@ -227,7 +227,7 @@ class Seestar_Federation:
         new_item = self.construct_schedule_item(params)
         self.schedule["list"].append(new_item)
         return self.schedule
- ###   
+        ###
         item = params.copy()
         if item["action"] == "start_mosaic":
             mosaic_params = item["params"]
@@ -248,6 +248,7 @@ class Seestar_Federation:
         item["schedule_item_id"] = str(uuid.uuid4())
         self.schedule["list"].append(item)
         return self.schedule
+
     ###
 
     def remove_schedule_item(self, params):
@@ -304,7 +305,6 @@ class Seestar_Federation:
                 break
             index += 1
         return self.schedule
-
 
     def export_schedule(self, params):
         filepath = params["filepath"]
