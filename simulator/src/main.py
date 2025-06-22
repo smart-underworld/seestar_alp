@@ -1,8 +1,4 @@
-import socket
-import threading
 from listener import SocketListener
-import config
-from config import Config
 import logging
 import log
 

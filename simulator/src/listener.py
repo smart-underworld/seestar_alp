@@ -3,8 +3,6 @@ import socket
 import select
 import json  # Added import for JSON handling
 from seestar_simulator import SeestarSimulator
-import time  # Added import for time handling
-# from time import sleep
 
 
 class SocketListener:
@@ -172,7 +170,7 @@ class SocketListener:
         if "scope_get_equ_coord" not in command:
             self.logger.debug(f"Processing command: {command}")
         else:
-            self.logger.debug(f"Processing command: scope_get_equ_coord")
+            self.logger.debug("Processing command: scope_get_equ_coord")
 
         response = self.simulator.send_message_param_sync(command)
 

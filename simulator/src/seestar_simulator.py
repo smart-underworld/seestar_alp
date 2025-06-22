@@ -3,7 +3,6 @@ import time
 import collections
 import uuid
 import json
-import socket
 
 
 class SeestarSimulator:
@@ -174,7 +173,7 @@ class SeestarSimulator:
         self.scope_time = {
             "year": 0,
             "mon": 0,
-            "mon": 0,
+            "day": 0,
             "hour": 0,
             "ha": 0,
             "sec": 0,
