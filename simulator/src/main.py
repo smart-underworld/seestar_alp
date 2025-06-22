@@ -1,4 +1,5 @@
 from listener import SocketListener
+from config import Config
 import logging
 import log
 
