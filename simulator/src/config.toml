@@ -2,7 +2,7 @@ title = "SeeStar Simulator"
 
 [network]
 # ip_address should not have to be changed
-ip_address = '127.0.0.1'           # Any address
+ip_address = '127.0.0.1'
 tcp_port = 4700        # Port to listen on
 udp_port = 4720
 
