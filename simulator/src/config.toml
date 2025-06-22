@@ -1,0 +1,16 @@
+title = "SeeStar Simulator"
+
+[network]
+# ip_address should not have to be changed
+ip_address = '127.0.0.1'           # Any address
+tcp_port = 4700        # Port to listen on
+udp_port = 4720
+
+
+[logging]
+log_level = 'DEBUG'   #'WARN' only if trouble    #'INFO' to output more logging      #'DEBUG' still more output
+log_prefix = ''
+log_to_stdout = false
+max_size_mb = 5
+num_keep_logs = 10
+log_events_in_info = true

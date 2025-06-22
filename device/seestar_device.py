@@ -1142,6 +1142,7 @@ class Seestar:
 
                 self.mark_op_state("EqModePA", "working")
                 result = self.wait_end_op("EqModePA")
+                self.mark_op_state("EqModePA", "complete")
                 if not result:
                     msg = "Failed to perform polar alignment. Will try again after we adjust the arm by scope_aim parameters"
                     self.logger.warn(msg)
@@ -2513,11 +2514,14 @@ class Seestar:
                 self.heartbeat_msg_thread.name = (
                     f"HeartbeatMsgThread:{self.device_name}"
                 )
-                self.heartbeat_msg_thread.start()
+                #self.heartbeat_msg_thread.start()
 
                 initial_state = self.send_message_param_sync(
                     {"method": "get_device_state"}
                 )
+                #move start of heartbeat thread to here to avoid error with simulator
+                self.heartbeat_msg_thread.start()
+
                 self.guest_mode_init()
                 self.event_callbacks_init(initial_state["result"])
 
