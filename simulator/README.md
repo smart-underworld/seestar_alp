@@ -7,7 +7,7 @@ The purpose is to allow parts of the main programs to be worked on during the da
 ## Project Structure
 
 ```
-seestar-s50-socket-listener
+simulator
 ├── src
 │   ├── main.py              # Entry point of the application
 │   ├── listener.py          # Socket listener implementation
