@@ -2514,12 +2514,12 @@ class Seestar:
                 self.heartbeat_msg_thread.name = (
                     f"HeartbeatMsgThread:{self.device_name}"
                 )
-                #self.heartbeat_msg_thread.start()
+                # self.heartbeat_msg_thread.start()
 
                 initial_state = self.send_message_param_sync(
                     {"method": "get_device_state"}
                 )
-                #move start of heartbeat thread to here to avoid error with simulator
+                # move start of heartbeat thread to here to avoid error with simulator
                 self.heartbeat_msg_thread.start()
 
                 self.guest_mode_init()

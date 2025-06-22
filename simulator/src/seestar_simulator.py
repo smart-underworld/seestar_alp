@@ -205,7 +205,7 @@ class SeestarSimulator:
         # print(f'Received data in send_message_parm_sync: {data}')
         method = data.get("method")
         cur_cmdid = data.get("id", self.cmdid)
-        #self.logger.debug(f"Method called: {method}")
+        # self.logger.debug(f"Method called: {method}")
         # Simulate responses for some methods
         timestamp = f"{time.time() - self.start_time:2.9f}"
 
