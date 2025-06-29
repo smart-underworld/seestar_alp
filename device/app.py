@@ -252,22 +252,25 @@ class DeviceMain:
                 dev["device_num"],
                 is_EQ_mode,
             )
-            telescope.start_seestar_imaging(
-                logger,
-                dev["name"],
-                dev["ip_address"],
-                4800,
-                dev["device_num"],
-                controller,
-            )
-            telescope.start_seestar_logcollector(
-                logger,
-                dev["name"],
-                dev["ip_address"],
-                4801,
-                dev["device_num"],
-                controller,
-            )
+            # Don't start the imaging or log collector if this is a simulator
+            simulator = dev.get("simulator", False)
+            if not simulator:
+                telescope.start_seestar_imaging(
+                    logger,
+                    dev["name"],
+                    dev["ip_address"],
+                    4800,
+                    dev["device_num"],
+                    controller,
+                )
+                telescope.start_seestar_logcollector(
+                    logger,
+                    dev["name"],
+                    dev["ip_address"],
+                    4801,
+                    dev["device_num"],
+                    controller,
+                )
 
         #########################
         # FOR EACH ASCOM DEVICE #
