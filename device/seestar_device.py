@@ -2149,8 +2149,8 @@ class Seestar:
         self.event_state["scheduler"] = {
             "cur_scheduler_item": {"type": "", "schedule_item_id": "", "action": ""}
         }
-        return 
-    
+        return
+
     def start_scheduler(self, params):
         if (
             "schedule_id" in params

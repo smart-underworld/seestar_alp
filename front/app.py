@@ -2711,12 +2711,15 @@ class ScheduleUploadResource:
 
         redirect(f"/{telescope_id}/schedule")
 
+
 class ScheduleReStartResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
-        do_action_device("reset_scheduler_cur_item", telescope_id, {}  )
+        do_action_device("reset_scheduler_cur_item", telescope_id, {})
         context = get_context(telescope_id, req)
         current = do_action_device("get_schedule", telescope_id, {})
-        context.get('current_item')['schedule_item_id']= ""  # context may have been cached, so reset current item id
+        context.get("current_item")["schedule_item_id"] = (
+            ""  # context may have been cached, so reset current item id
+        )
         if current is not None:
             schedule = current.get("Value", {})
             state = schedule.get("state", "")
@@ -2762,6 +2765,7 @@ class ScheduleReStartResource(BaseResource):
 
         return html
 
+
 class ScheduleRefreshResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         context = get_context(telescope_id, req)
@@ -2793,6 +2797,7 @@ class ScheduleRefreshResource(BaseResource):
         )
 
         return html
+
 
 class EventStatus:
     @staticmethod
@@ -4550,7 +4555,9 @@ class FrontMain:
             "/{telescope_id:int}/schedule/dew-heater", ScheduleDewHeaterResource()
         )
         app.add_route("/{telescope_id:int}/schedule/refresh", ScheduleRefreshResource())
-        app.add_route("/{telescope_id:int}/schedule/restart_schedule", ScheduleReStartResource())
+        app.add_route(
+            "/{telescope_id:int}/schedule/restart_schedule", ScheduleReStartResource()
+        )
         app.add_route("/{telescope_id:int}/schedule/state", ScheduleToggleResource())
         app.add_route(
             "/{telescope_id:int}/schedule/wait-until", ScheduleWaitUntilResource()
