@@ -2145,6 +2145,12 @@ class Seestar:
         self.logger.info(result)
         return result
 
+    def reset_scheduler_cur_item(self, params=None):
+        self.event_state["scheduler"] = {
+            "cur_scheduler_item": {"type": "", "schedule_item_id": "", "action": ""}
+        }
+        return 
+    
     def start_scheduler(self, params):
         if (
             "schedule_id" in params

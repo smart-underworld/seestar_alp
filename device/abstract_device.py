@@ -53,6 +53,10 @@ class AbstractDevice(ABC):
         pass
 
     @abstractmethod
+    def reset_scheduler_cur_item(self, params=None):
+        pass
+
+    @abstractmethod
     def send_message_param_sync(self, data: dict[str, Any]):
         pass
 

@@ -1279,6 +1279,8 @@ def do_command(req, resp, telescope_id):
         case "get_event_state":
             output = do_action_device("get_event_state", telescope_id, {})
             return output
+        case "reset_scheduler_cur_item":
+            output = do_action_device("reset_scheduler_cur_item", telescope_id, {})
         case "scope_park":
             output = method_sync("scope_park", telescope_id)
             return output
@@ -2709,11 +2711,12 @@ class ScheduleUploadResource:
 
         redirect(f"/{telescope_id}/schedule")
 
-
-class ScheduleRefreshResource(BaseResource):
+class ScheduleReStartResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
+        do_action_device("reset_scheduler_cur_item", telescope_id, {}  )
         context = get_context(telescope_id, req)
         current = do_action_device("get_schedule", telescope_id, {})
+        context.get('current_item')['schedule_item_id']= ""  # context may have been cached, so reset current item id
         if current is not None:
             schedule = current.get("Value", {})
             state = schedule.get("state", "")
@@ -2722,8 +2725,8 @@ class ScheduleRefreshResource(BaseResource):
             state = "stopped"
 
         html = self.render_schedule_list_html(req, resp, schedule, context)
-
-        resp.media = {"state": state, "html": html}
+        state_html = self.render_schedule_state_html(req, resp, state, context)
+        resp.media = {"state": state, "html": html, "state_html": state_html}
         resp.content_type = "application/json"
         resp.status = falcon.HTTP_200
 
@@ -2743,6 +2746,53 @@ class ScheduleRefreshResource(BaseResource):
 
         return html
 
+    def render_schedule_state_html(self, req, resp, state, context):
+        template = fetch_template("partials/schedule_state.html")
+        webui_theme = Config.uitheme
+        version = Version.app_version()
+
+        html = template.render(
+            flashed_messages=get_flash_cookie(req, resp),
+            messages=get_messages(),
+            webui_theme=webui_theme,
+            version=version,
+            state=state,
+            **context,
+        )
+
+        return html
+
+class ScheduleRefreshResource(BaseResource):
+    def on_get(self, req, resp, telescope_id=0):
+        context = get_context(telescope_id, req)
+        current = do_action_device("get_schedule", telescope_id, {})
+        if current is not None:
+            schedule = current.get("Value", {})
+            state = schedule.get("state", "")
+        else:
+            schedule = {}
+            state = "stopped"
+
+        html = self.render_schedule_list_html(req, resp, schedule, context)
+        resp.media = {"state": state, "html": html}
+        resp.content_type = "application/json"
+        resp.status = falcon.HTTP_200
+
+    def render_schedule_list_html(self, req, resp, schedule, context):
+        template = fetch_template("partials/schedule_list.html")
+        webui_theme = Config.uitheme
+        version = Version.app_version()
+
+        html = template.render(
+            flashed_messages=get_flash_cookie(req, resp),
+            messages=get_messages(),
+            webui_theme=webui_theme,
+            version=version,
+            schedule=schedule,
+            **context,
+        )
+
+        return html
 
 class EventStatus:
     @staticmethod
@@ -4500,6 +4550,7 @@ class FrontMain:
             "/{telescope_id:int}/schedule/dew-heater", ScheduleDewHeaterResource()
         )
         app.add_route("/{telescope_id:int}/schedule/refresh", ScheduleRefreshResource())
+        app.add_route("/{telescope_id:int}/schedule/restart_schedule", ScheduleReStartResource())
         app.add_route("/{telescope_id:int}/schedule/state", ScheduleToggleResource())
         app.add_route(
             "/{telescope_id:int}/schedule/wait-until", ScheduleWaitUntilResource()
