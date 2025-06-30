@@ -1,0 +1,175 @@
+<style>
+  #container {
+    position: relative;
+    width: 400px;
+    height: 400px;
+    padding: 0;
+    margins: 0 auto;
+    border: none;
+    box-sizing: border-box;
+  }
+
+  #container label {
+    position: absolute;
+    cursor: pointer;
+    color: white;
+    font-weight: bold;
+    transform: translate(-50%, -50%);
+    user-select: none;
+  }
+
+  #container label input[type="radio"]:checked + span {
+    color: red; /* your selected color */
+    font-weight: bold;
+  }
+
+  .arc-image {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    transform-origin: 50% 100%;
+    transform: translateX(-50%) rotate(0deg);
+    transition: transform 0.3s ease;
+    pointer-events: none;
+    left: 50%;
+	  top: 55%;
+  }
+
+  input[type="radio"] {
+    margin-right: 6px;
+  }
+
+  #arrow {
+    position: absolute;
+    left: 50%;
+    transform-origin: 50% 90%; /* or adjust based on arrow shape */
+    transform: translateX(-50%) rotate(0deg);
+  }
+
+  .direction-label {
+    position: absolute;
+    bottom: 10px;
+    color: white;
+    font-size: 18px;
+    font-family: sans-serif;
+    user-select: none;
+  }
+
+  .left-label {
+    left: 10px;
+    text-align: left;
+  }
+
+  .right-label {
+    right: 10px;
+    text-align: right;
+  }
+
+</style>
+
+<!-- <div id="container">
+  <img id="arrow" src="/public/S50.png" class="arc-image" />
+
+  <div class="direction-label left-label">← South</div>
+  <div class="direction-label right-label">North →</div>
+</div>
+-->
+<div class="modal fade" id="decOffsetModal" tabindex="-1" aria-labelledby="decOffsetModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document" style="max-width: 400px; width: 400px;">
+    <div class="modal-content bg-dark text-white" style="height: 400px; overflow: visible;">
+      <div class="modal-header">
+        <h5 class="modal-title" id="decOffsetModalLabel">DEC Offset</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-0" style="height: calc(400px - 56px); position: relative; overflow: visible;">
+        <div id="container" style="width: 400px; height: 344px; position: relative;">
+          <img id="arrow" src="/public/S50.png" class="arc-image" />
+          <div class="direction-label left-label">← South</div>
+          <div class="direction-label right-label">North →</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const container = document.getElementById('container');
+const arrow = document.getElementById('arrow');
+
+let radios = [];
+
+function setupRadios() {
+  const total = 5;
+  const radius = 180;
+  const centerX = container.clientWidth / 2;
+  const centerY = container.clientHeight / 2 + 20;
+
+  radios = [];
+
+  // Clear previous radios if any
+  container.querySelectorAll('label').forEach(label => label.remove());
+
+  for (let i = 0; i < total; i++) {
+    const angle = -60 + (i * (120 / (total - 1)));
+    const rad = angle * (Math.PI / 180);
+
+    const x = centerX + radius * Math.sin(rad);
+    const y = centerY - radius * Math.cos(rad);
+
+    const label = document.createElement('label');
+    label.style.position = 'absolute';
+    label.style.left = `${x}px`;
+    label.style.top = `${y}px`;
+    label.style.transform = 'translate(-50%, -50%)';
+    label.style.color = 'white';
+    label.style.cursor = 'pointer';
+
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'dec-offset';
+    radio.value = `${i+1}`;
+    radio.id = `option${i + 1}`;
+
+    label.appendChild(radio);
+    const textSpan = document.createElement('span');
+    textSpan.textContent = `${i + 1}`;
+    label.appendChild(textSpan);
+
+    container.appendChild(label);
+
+    radios.push({ radio, x, y });
+  }
+
+  arrow.style.position = 'absolute';
+  arrow.style.left = '50%';
+  arrow.style.top = (centerY + radius - 150) + 'px'; // tweak if needed
+  arrow.style.transformOrigin = '50% 90%';
+  arrow.style.transform = 'translateX(-50%) rotate(0deg)';
+}
+
+function rotateToRadio(selectedRadio) {
+  const radiosArray = radios.map(r => r.radio);
+  const index = radiosArray.indexOf(selectedRadio);
+  if (index === -1) return;
+
+  const angle = (index * 30) - 60;
+  arrow.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+}
+
+container.addEventListener('change', (e) => {
+  if (e.target && e.target.name === 'dec-offset') {
+    rotateToRadio(e.target);
+  }
+});
+
+// Wait for modal to show, then setup radios
+const modal = document.getElementById('decOffsetModal');
+modal.addEventListener('shown.bs.modal', () => {
+  setupRadios();
+
+  // Default select #3
+  radios[2].radio.checked = true;
+  rotateToRadio(radios[2].radio);
+});
+
+</script>

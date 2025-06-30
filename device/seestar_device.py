@@ -998,6 +998,7 @@ class Seestar:
             do_AF = params.get("auto_focus", False)
             do_3PPA = params.get("3ppa", False)
             do_dark_frames = params.get("dark_frames", False)
+            dec_pos_index = params.get("dec_pos_index", 3)
 
             if do_3PPA and not self.is_EQ_mode:
                 self.logger.warn("Cannot do 3PPA without EQ mode. Will skip 3PPA.")
@@ -1110,26 +1111,34 @@ class Seestar:
 
             result = True
 
-            if self.is_EQ_mode:
-                msg = "park the scope in preparation for EQ mode"
-            else:
-                msg = "park the scope in preparation for AltAz mode"
-
-            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
-            self.logger.info(msg)
-
-            response = self.send_message_param_sync(
-                {"method": "scope_park", "params": {"equ_mode": self.is_EQ_mode}}
-            )
-            result = self.wait_end_op("ScopeHome")
-            if not result:
-                msg = "Failed to park the mount."
-                self.logger.warn(msg)
-                self.schedule["state"] = "stopping"
-                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
-                return
-
-            time.sleep(2)
+            #
+            # This park is superfluous and is not needed for the native EQ Polar Align.
+            # Native Polar Align knows exactly where the scope is and you can restart
+            # from any open position. It will open to the expected starting point and initiate
+            # the PA routine.  If this is needed for the 'move arm' workaround, feel free to relocate
+            # it there.  Running multiple PA routines is still beneficial  Waiting for the scope to park
+            # and then rotate 270 degrees counter-clockwise is unproductive and a waste of time.
+            #
+            #if self.is_EQ_mode:
+            #    msg = "park the scope in preparation for EQ mode"
+            #else:
+            #    msg = "park the scope in preparation for AltAz mode"
+            #
+            #self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+            #self.logger.info(msg)
+            #
+            #response = self.send_message_param_sync(
+            #    {"method": "scope_park", "params": {"equ_mode": self.is_EQ_mode}}
+            #)
+            #result = self.wait_end_op("ScopeHome")
+            #if not result:
+            #    msg = "Failed to park the mount."
+            #    self.logger.warn(msg)
+            #    self.schedule["state"] = "stopping"
+            #    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+            #    return
+            #
+            #time.sleep(2)
 
             if do_3PPA:
                 msg = "perform PA Alignment"
@@ -1137,7 +1146,7 @@ class Seestar:
                 self.logger.info(msg)
                 time.sleep(1.0)
                 response = self.send_message_param_sync(
-                    {"method": "start_polar_align", "params": {"restart": True}}
+                    {"method": "start_polar_align", "params": {"restart": True, "dec_pos_index": dec_pos_index}}
                 )
 
                 self.mark_op_state("EqModePA", "working")
@@ -1284,7 +1293,7 @@ class Seestar:
                 response = self.send_message_param_sync(
                     {
                         "method": "start_polar_align",
-                        "params": {"restart": do_raise_arm is False},
+                        "params": {"restart": do_raise_arm is False, "dec_pos_index": dec_pos_index},
                     }
                 )
 
