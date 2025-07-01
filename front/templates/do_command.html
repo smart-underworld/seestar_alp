@@ -50,6 +50,7 @@
 							<label for="dropdown1">Startup / Shutdown</label>
 						</div>
 						<select id="dropdown1" name="command">
+              <option value="" disable selected>Select an Option</option>
 							<option value="scope_move_to_horizon">Scope Move to Horizon</option>
 							<option value="scope_park">Scope Park</option>
 							<option value="pi_reboot">Scope Reboot</option>
@@ -67,6 +68,7 @@
 							<label for="dropdown3">AutoFocus</label>
 						</div>
 						<select id="dropdown3" name="command">
+              <option value="" disable selected>Select an Option</option>
 							<option value="start_auto_focus">Start AutoFocus</option>
 							<option value="stop_auto_focus">Stop AutoFocus</option>
 							<option value="get_focuser_position">Get Current Focuser Position</option>
@@ -77,19 +79,54 @@
 				</div>
 
       <div class ="col">
-				<form method="post" action="{{ action }}">
+				<form method="post" action="{{ action }}" id="calibrationForm">
 					<div style="margin-bottom:5px;font-weight:bold">
-						<label for="dropdown4">Dark Frame Generation</label>
+						<label for="dropdown4">Calibration Frame Generation</label>
 					</div>
 					<select id="dropdown4" name="command">
-						<option value="start_create_dark">Start Create Dark</option>
-						<option value="stop_create_dark">Stop Create Dark</option>
+            <option value="" disable selected>Select an Option</option>
+            <optgroup label="Dark Frames">
+						  <option value="start_create_dark">Create Dark Frames</option>
+            </optgroup>
+            <optgroup label="Hot Pixel Correction">
+              <option value="start_create_hpc">Hot Pixel Correction</option>
+            </optgroup>
+            <optgroup label="Flat Frames">
+              <option value="start_create_calib_frame">Create Flat Frames</option>
+            </optgroup>
 					</select>
 				  <button type="submit" class="btn btn-primary">Execute</button>
 			  </form>
   		</div>
 
     </div>
+
+<script>
+  const form = document.getElementById('calibrationForm');
+  const dropdown = document.getElementById('dropdown4');
+  let shouldSubmit = false;
+
+  form.addEventListener('submit', function (e) {
+    if (shouldSubmit) {
+      // allow normal submission after confirmation
+      shouldSubmit = false;
+      return;
+    }
+
+    if (dropdown.value === 'start_create_calib_frame') {
+      e.preventDefault();
+      const modal = new bootstrap.Modal(document.getElementById('flatFrameModal'));
+      modal.show();
+    }
+  });
+
+  document.getElementById('confirmFlatFrame').addEventListener('click', function () {
+    shouldSubmit = true;
+    const modal = bootstrap.Modal.getInstance(document.getElementById('flatFrameModal'));
+    modal.hide();
+    form.requestSubmit(); // submit the form programmatically
+  });
+</script>
 
     <div class="row mb-2">
 
@@ -99,6 +136,7 @@
             <label for="dropdown5">Filter</label>
           </div>
           <select id="dropdown5" name="command">
+            <option value="" disable selected>Select an Option</option>
             <option value="set_wheel_position_LP">Use LP Filter</option>
             <option value="set_wheel_position_IR_Cut">Use IR Cut Filter</option>
             <option value="set_wheel_position_Dark">Use Dark Filter</option>
@@ -115,6 +153,7 @@
             <label for="dropdown6">Plate Solve</label>
           </div>
           <select id="dropdown6" name="command">
+            <option value="" disable selected>Select an Option</option>
             <option value="start_solve">Start Plate Solve</option>
             <option value="get_solve_result">Get Current Plate Solve Result</option>
             <option value="get_last_solve_result">Get Last Plate Solve Result</option>
@@ -129,6 +168,7 @@
             <label for="dropdown8">Imaging</label>
           </div>
           <select id="dropdown8" name="command">
+            <option value="" disable selected>Select an Option</option>
             <option value="iscope_start_stack">Start Imaging</option>
             <option value="iscope_stop_view">Stop Imaging</option>
             <option value="get_view_state">Get View State</option>
@@ -151,6 +191,7 @@
             <label for="dropdown7">Get Infomation / Settings</label>
           </div>
           <select id="dropdown7" name="command">
+            <option value="" disable selected>Select an Option</option>
             <option value="iscope_get_app_state">Get App State</option>
             <option value="get_event_state">Get Event State</option>
             <option value="pi_get_ap">Get AP (WiFi) Info</option>
@@ -170,6 +211,24 @@
 
       <div class="col-2"></div>
 
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="flatFrameModal" tabindex="-1" aria-labelledby="flatFrameModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="flatFrameModalLabel">Confirm Flat Frame Generation</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        Please ensure that your Seestar is open and pointing at a white light source.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" id="confirmFlatFrame" class="btn btn-primary">Confirm</button>
+      </div>
     </div>
   </div>
 </div>

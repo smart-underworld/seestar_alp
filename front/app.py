@@ -847,6 +847,7 @@ def get_device_settings(telescope_id):
             "heater_enable": settings_result["heater_enable"],
             "auto_power_off": settings_result["auto_power_off"],
             "stack_lenhance": settings_result["stack_lenhance"],
+            "dark_mode": settings_result["dark_mode"],
         }
 
     return settings
@@ -1220,40 +1221,6 @@ def do_command(req, resp, telescope_id):
     value = form.get("command", "").strip()
     # print ("Selected command: ", value)
     match value:
-        case "start_up_sequence":
-            lat = form.get("lat", "").strip()
-            long = form.get("long", "").strip()
-            auto_focus = form.get("auto_focus", "False").strip() == "on"
-            dark_frames = form.get("dark_frames", "False").strip() == "on"
-            polar_align = form.get("polar_align", "False").strip() == "on"
-            move_arm = form.get("move_arm", "False").strip() == "on"
-
-            # print(f"action_start_up_sequence - Latitude {lat} Longitude {long}")
-            if not lat or not long:
-                output = do_action_device(
-                    "action_start_up_sequence",
-                    telescope_id,
-                    {
-                        "auto_focus": auto_focus,
-                        "dark_frames": dark_frames,
-                        "3ppa": polar_align,
-                        "move_arm": move_arm,
-                    },
-                )
-            else:
-                output = do_action_device(
-                    "action_start_up_sequence",
-                    telescope_id,
-                    {
-                        "lat": float(lat),
-                        "lon": float(long),
-                        "auto_focus": auto_focus,
-                        "dark_frames": dark_frames,
-                        "3ppa": polar_align,
-                        "move_arm": move_arm,
-                    },
-                )
-            return output
         case "adjust_mag_declination":
             adjust_mag_dec = form.get("adjust_mag_dec", "False").strip() == "on"
             fudge_angle = form.get("fudge_angle", "").strip()
@@ -1341,8 +1308,11 @@ def do_command(req, resp, telescope_id):
         case "start_create_dark":
             output = method_sync("start_create_dark", telescope_id)
             return output
-        case "stop_create_dark":
-            output = method_sync("stop_create_dark", telescope_id)
+        case "start_create_calib_frame":
+            output = method_sync("start_create_calib_frame")
+            return output
+        case "start_create_hpc":
+            output = method_sync("start_create_hpc")
             return output
         case "pi_get_ap":
             output = method_sync("pi_get_ap", telescope_id)
@@ -3304,6 +3274,7 @@ class SettingsResource(BaseResource):
             # "stack_masic": str2bool(PostedSettings["stack_masic"]),
             # "rec_stablzn": str2bool(PostedSettings["rec_stablzn"]),
             "manual_exp": str2bool(PostedSettings["manual_exp"]),
+            "dark_mode": str2bool(PostedSettings["dark_mode"]),
         }
 
         FormattedNewStackSettings = {
@@ -3398,6 +3369,7 @@ class SettingsResource(BaseResource):
             "heater_enable": "Dew Heater",
             "auto_power_off": "Auto Power Off",
             "stack_lenhance": "Light Pollution (LP) Filter",
+            "dark_mode": "Dark Mode",
         }
         # Maybe we can store this better?
         settings_helper_text = {
@@ -3423,6 +3395,7 @@ class SettingsResource(BaseResource):
             "heater_enable": "Enable or disable dew heater.",
             "auto_power_off": "Enable or disable auto power off",
             "stack_lenhance": "Enable or disable light pollution (LP) Filter.",
+            "dark_mode": "Enable or disable LEDs while imaging.",
         }
         render_template(
             req,
@@ -3505,12 +3478,14 @@ class StartupResource(BaseResource):
             dark_frames = form.get("dark_frames", "False").strip() == "on"
             polar_align = form.get("polar_align", "False").strip() == "on"
             move_arm = form.get("move_arm", "False").strip() == "on"
+            dec_pos_index = form.get("dec-offset", "3").strip()
 
             params = {
                 "auto_focus": auto_focus,
                 "dark_frames": dark_frames,
                 "3ppa": polar_align,
                 "move_arm": move_arm,
+                "dec_pos_index": int(dec_pos_index),
             }
 
             if lat and long:
