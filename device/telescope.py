@@ -199,6 +199,9 @@ class action:
             if action_name == "get_event_state":
                 result = cur_dev.get_event_state(params)
                 resp.text = MethodResponse(req, value=result).json
+            elif action_name == "reset_scheduler_cur_item":
+                result = cur_dev.reset_scheduler_cur_item(params)
+                resp.text = MethodResponse(req, value=result).json
             elif action_name == "play_sound":
                 result = cur_dev.play_sound(params["id"])
                 resp.text = MethodResponse(req, value=result).json

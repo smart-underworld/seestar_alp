@@ -13,7 +13,7 @@
 
     <div id="schedule-status" class="mb-3">
       <div class="container mb-3">
-        <span> {% include 'partials/schedule_state.html' %}</span>
+        <span id="state_span"> {% include 'partials/schedule_state.html' %}</span>
       </div>
     </div>
 
@@ -101,6 +101,9 @@
         });
     });
 
+// Track previous state
+let previousScheduleState = null;
+
 document.addEventListener("DOMContentLoaded", function () {
     function checkScheduleState() {
         fetch("{{ root }}/schedule/refresh")
@@ -111,9 +114,22 @@ document.addEventListener("DOMContentLoaded", function () {
                     document.getElementById("schedule-body").innerHTML = data.html;
                     setTimeout(checkScheduleState, 5000);  // Keep checking every 5s
                 } else {
-                    console.log("Schedule is stopped");
+                    // Detect transition from 'working' to 'complete'
+                    if (previousScheduleState === "working" && data.state === "complete") {
+                        console.log("Schedule is complete!");
+                        fetch("{{ root }}/schedule/restart_schedule")
+                            .then(response => response.json())
+                            .then(restartData => {
+                                  document.getElementById("schedule-body").innerHTML = restartData.html;
+                                  document.getElementById("state_span").innerHTML = restartData.state_html;
+                                  htmx.process(document.getElementById("schedule-status"));
+                                  console.log("Schedule restarted successfully.");
+                            })
+                            .catch(error => console.error("Error restarting schedule:", error));  
+                    }
                     setTimeout(checkScheduleState, 5000);  // Keep polling
                 }
+                previousScheduleState = data.state;
             })
             .catch(error => console.error("Error refreshing schedule:", error));
     }
