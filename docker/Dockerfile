@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ARG ASTRO_PLATFORM="ALPACA"
 
@@ -6,9 +6,9 @@ ARG ASTRO_PLATFORM="ALPACA"
 ### Create seestar user.
 ###
 
-ARG SEESTAR_UID=1000
+ARG SEESTAR_UID=1001
 ENV SEESTAR_UID=${SEESTAR_UID}
-ARG SEESTAR_GID=1000
+ARG SEESTAR_GID=1001
 ENV SEESTAR_GID=${SEESTAR_GID}
 
 SHELL ["/bin/bash", "-c"]
@@ -39,8 +39,8 @@ WORKDIR ${SEESTAR_ALP_DIR}
 
 COPY --chown=${SEESTAR_USER}:${SEESTAR_USER} ./requirements.txt ${SEESTAR_ALP_DIR}/requirements.txt
 
-RUN python3 -m pip install -U pip && \
-    python3 -m pip install -r requirements.txt
+RUN python3 -m pip install --break-system-packages -U pip && \
+    python3 -m pip install --break-system-packages -r requirements.txt
 
 
 COPY --chown=${SEESTAR_USER}:${SEESTAR_USER} . ${SEESTAR_ALP_DIR}
