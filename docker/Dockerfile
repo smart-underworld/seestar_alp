@@ -2,23 +2,11 @@ FROM ubuntu:24.04
 
 ARG ASTRO_PLATFORM="ALPACA"
 
-###
-### Create seestar user.
-###
-
-ARG SEESTAR_UID=1001
-ENV SEESTAR_UID=${SEESTAR_UID}
-ARG SEESTAR_GID=1001
-ENV SEESTAR_GID=${SEESTAR_GID}
-
 SHELL ["/bin/bash", "-c"]
 
-ENV SEESTAR_USER=seestar
-ENV SEESTAR_USER_HOME=/home/seestar
+ENV SEESTAR_USER=ubuntu
+ENV SEESTAR_USER_HOME=/home/${SEESTAR_USER}
 ENV ROOT=root
-
-RUN groupadd -g ${SEESTAR_UID} ${SEESTAR_USER} && \
-    useradd ${SEESTAR_USER} -u ${SEESTAR_UID} -g ${SEESTAR_GID} -r -m -d ${SEESTAR_USER_HOME} -s /bin/bash
 
 ###
 ### Install dependencies.
@@ -62,4 +50,6 @@ RUN if [ "$ASTRO_PLATFORM" = "ALPACA" ]; then \
 	
 USER ${SEESTAR_USER}
 
-ENTRYPOINT ["/home/seestar/entrypoint.sh"]
+# use bash if you want to debug the container
+# ENTRYPOINT ["/bin/bash"]
+ENTRYPOINT ${SEESTAR_USER_HOME}"/entrypoint.sh"

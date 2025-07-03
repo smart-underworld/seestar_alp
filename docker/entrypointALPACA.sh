@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 
-cd /home/seestar/seestar_alp
+cd $SEESTAR_ALP_DIR
 python3 root_app.py

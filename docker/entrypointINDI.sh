@@ -4,8 +4,8 @@ mkfifo /tmp/seestar
 
 indiserver -f /tmp/seestar &
 
-cd /home/seestar/seestar_alp/indi
+cd $SEESTAR_ALP_DIR/indi
 python3 start_indi_devices.py
 
-cd /home/seestar/seestar_alp
+cd $SEESTAR_ALP_DIR
 python3 ./root_app.py
