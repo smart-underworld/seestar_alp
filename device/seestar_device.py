@@ -2074,7 +2074,17 @@ class Seestar:
         with open(filepath, "r") as f:
             self.schedule = json.load(f)
         self.schedule["list"] = collections.deque(self.schedule["list"])
-
+        
+        # ensure all required fields are present and set to default values
+        self.schedule["version"] = "1.0"
+        self.schedule["Event"] = "Scheduler"
+        self.schedule["state"] = "stopped"
+        self.schedule["is_stacking_paused"] = False
+        self.schedule["is_stacking"] = False
+        self.schedule["is_skip_requested"] = False
+        self.schedule["current_item_id"] = ""
+        self.schedule["item_number"] = 9999
+    
         if not is_retain_state:
             self.schedule["schedule_id"] = str(uuid.uuid4())
             for item in self.schedule["list"]:
