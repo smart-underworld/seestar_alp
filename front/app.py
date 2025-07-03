@@ -2756,6 +2756,7 @@ class ScheduleRefreshResource(BaseResource):
         template = fetch_template("partials/schedule_list.html")
         webui_theme = Config.uitheme
         version = Version.app_version()
+        open_accordion_id = req.get_param("open_accordion_id", default="")
 
         html = template.render(
             flashed_messages=get_flash_cookie(req, resp),
@@ -2763,6 +2764,7 @@ class ScheduleRefreshResource(BaseResource):
             webui_theme=webui_theme,
             version=version,
             schedule=schedule,
+            open_accordion_id=open_accordion_id,
             **context,
         )
 

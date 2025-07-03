@@ -10,9 +10,13 @@
           <!-- Current item, button for start_mosaic -->
           <div class="accordion-item">
             <div class="accordion-header" id="heading{{ item['schedule_item_id'] }}">
-              <button class="btn btn-link fw-bold text-white text-decoration-none text-start w-100"
-                      type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ item['schedule_item_id'] }}"
-                      aria-expanded="false" aria-controls="collapse{{ item['schedule_item_id'] }}">
+              <button
+                class="btn btn-link fw-bold text-white text-decoration-none text-start w-100"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#collapse{{ item['schedule_item_id'] }}"
+                aria-expanded="{% if open_accordion_id == 'collapse' ~ item['schedule_item_id'] %}true{% else %}false{% endif %}"
+                aria-controls="collapse{{ item['schedule_item_id'] }}">
                 <div class="row w-100">
                   <!-- First Column: Target Name -->
                   <div class="col-2 align-self-start text-break">{{ item["params"]["target_name"] }}</div>
@@ -87,7 +91,8 @@
             </div>
 
             <!-- Accordion content, collapsible body -->
-            <div id="collapse{{ item['schedule_item_id'] }}" class="accordion-collapse collapse"
+            <div id="collapse{{ item['schedule_item_id'] }}"
+                 class="accordion-collapse collapse{% if open_accordion_id == 'collapse' ~ item['schedule_item_id'] %} show{% endif %}"
                  aria-labelledby="heading{{ item['schedule_item_id'] }}" data-bs-parent="#scheduleAccordion">
               <div class="accordion-body">
                 <!-- Additional details for the "start_mosaic" action can go here -->
