@@ -91,13 +91,27 @@ main() {
         return 1
     fi
 
-    read -d '' DOCKER_RUN_OPTIONS <<EOM
-        --mount type=bind,source="${SCRIPT_DIR}/config.toml",target="/home/seestar/seestar_alp/device/config.toml" \
+    # config options
+    CONFIG_OPTION="--mount type=bind,source=\"${SCRIPT_DIR}/config.toml\",target=\"/home/seestar/seestar_alp/device/config.toml\""
+
+    if [[ "$(uname -s)" == "Linux" ]]; then
+        # For Linux, we can use host networking and bind mount D-Bus and Avahi sockets - this lets mDNS work from inside the guest
+        read -d '' DOCKER_RUN_OPTIONS <<EOM
+        ${CONFIG_OPTION} \
+        --network host \
+        -v /var/run/dbus:/var/run/dbus \
+        -v /var/run/avahi-daemon/socket:/var/run/avahi-daemon/socket
+EOM
+    else
+        # For macOS and Windows, we do the old-school slirp based networking (and I bet mDNS won't work)
+        read -d '' DOCKER_RUN_OPTIONS <<EOM
+        ${CONFIG_OPTION} \
         -p 5432:5432 \
         -p 5555:5555 \
         -p 7624:7624 \
         -p 7556:7556
 EOM
+    fi
 
     docker_run \
         SEESTAR_ALP_IMAGE_NAME \
