@@ -13,7 +13,7 @@
 
     <div id="schedule-status" class="mb-3">
       <div class="container mb-3">
-        <span> {% include 'partials/schedule_state.html' %}</span>
+        <span id="state_span"> {% include 'partials/schedule_state.html' %}</span>
       </div>
     </div>
 
@@ -79,6 +79,9 @@
   <script>
     document.addEventListener("DOMContentLoaded", function () {
         const form = document.getElementById("scheduleForm");
+        
+        // Clear any previously stored accordion state on form load
+        localStorage.removeItem('openAccordionId');
 
         form.addEventListener("submit", function (event) {
             const checkboxes = document.querySelectorAll('input[name="selected_items"]:checked');
@@ -101,9 +104,13 @@
         });
     });
 
+// Track previous state
+let previousScheduleState = null;
+
 document.addEventListener("DOMContentLoaded", function () {
     function checkScheduleState() {
-        fetch("{{ root }}/schedule/refresh")
+        const openAccordionId = localStorage.getItem('openAccordionId') || '';
+        fetch(`{{ root }}/schedule/refresh?open_accordion_id=${encodeURIComponent(openAccordionId)}`)
             .then(response => response.json())
             .then(data => {
                 if (data.state === "working") {
@@ -111,15 +118,61 @@ document.addEventListener("DOMContentLoaded", function () {
                     document.getElementById("schedule-body").innerHTML = data.html;
                     setTimeout(checkScheduleState, 5000);  // Keep checking every 5s
                 } else {
-                    console.log("Schedule is stopped");
+                    // Detect transition from 'working' to 'complete'
+                    if (previousScheduleState === "working" && data.state === "complete") {
+                        console.log("Schedule is complete!");
+                        fetch("{{ root }}/schedule/restart_schedule")
+                            .then(response => response.json())
+                            .then(restartData => {
+                                  document.getElementById("schedule-body").innerHTML = restartData.html;
+                                  document.getElementById("state_span").innerHTML = restartData.state_html;
+                                  htmx.process(document.getElementById("schedule-status"));
+                                  // Clear any stored accordion state when schedule is complete
+                                  localStorage.removeItem('openAccordionId');
+                                  console.log("Schedule restarted successfully.");
+                            })
+                            .catch(error => console.error("Error restarting schedule:", error));  
+                    }
                     setTimeout(checkScheduleState, 5000);  // Keep polling
                 }
+                previousScheduleState = data.state;
             })
             .catch(error => console.error("Error refreshing schedule:", error));
     }
 
     // Start checking state on page load
     checkScheduleState();
+});
+
+
+
+
+//  This script manages the persistence of the open state for Bootstrap accordions using localStorage.
+//  - On page load, if an 'openAccordionId' exists in localStorage, it is removed to reset the accordion state.
+//  This ensures that the accordion's open state does not persist across page reloads.
+
+
+// Accordion open state persistence
+document.addEventListener("DOMContentLoaded", function () {
+  // Listen for accordion open events
+  document.body.addEventListener('show.bs.collapse', function (event) {
+    if (event.target.classList.contains('accordion-collapse')) {
+      localStorage.setItem('openAccordionId', event.target.id);
+    }
+  });
+
+  // Listen for accordion close events
+  document.body.addEventListener('hide.bs.collapse', function (event) {
+    if (event.target.classList.contains('accordion-collapse')) {
+      localStorage.removeItem('openAccordionId');
+    }
+  });
+
+  // On page load, remove the saved accordion if present
+  const openAccordionId = localStorage.getItem('openAccordionId');
+  if (openAccordionId) {
+    localStorage.removeItem('openAccordionId');
+  }
 });
 
   </script>
