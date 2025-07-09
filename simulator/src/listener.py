@@ -3,6 +3,7 @@ import socket
 import select
 import json  # Added import for JSON handling
 from seestar_simulator import SeestarSimulator
+from config import Config
 
 
 class SocketListener:
@@ -169,15 +170,15 @@ class SocketListener:
         # 'scope_get_equ_coord' is the heartbeat message and creates a bunch of clutter in the logs
         if "scope_get_equ_coord" not in command:
             self.logger.debug(f"Processing command: {command}")
-        else:
+        elif Config.log_heartbeat_msgs:
             self.logger.debug("Processing command: scope_get_equ_coord")
 
         response = self.simulator.send_message_param_sync(command)
 
-        if response["method"] == "scope_get_equ_coord":
-            self.logger.debug(f"Response: {response['method']}")
-        else:
+        if response["method"] != "scope_get_equ_coord":
             self.logger.debug(f"Response: {response} ")
+        elif Config.log_heartbeat_msgs:
+            self.logger.debug(f"Response: {response['method']}")
 
         return json.dumps(response) + "\r\n"  # print(response)
 

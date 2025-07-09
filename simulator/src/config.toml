@@ -14,3 +14,7 @@ log_to_stdout = false
 max_size_mb = 5
 num_keep_logs = 10
 log_events_in_info = true
+log_heartbeat_msg = true
+
+[options]
+dropped_frame_ratio = 0   # how often to simulate dropping a frame, 0 means never drop frames 
