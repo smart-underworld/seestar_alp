@@ -299,13 +299,13 @@ def update_twilight_times(latitude=None, longitude=None):
         loc_sunset = pytz.utc.localize(
             observer.next_setting(sun).datetime()
         ).astimezone(local_timezone)
-    except Exception as e:
+    except Exception:
         loc_sunset = "Error"
     try:
         loc_next_sunrise = pytz.utc.localize(
             observer.next_rising(sun).datetime()
         ).astimezone(local_timezone)
-    except Exception as e:
+    except Exception:
         loc_next_sunrise = "Error"
 
     # Civil Beginning and End
@@ -314,13 +314,13 @@ def update_twilight_times(latitude=None, longitude=None):
         loc_end_civil = pytz.utc.localize(
             observer.next_setting(sun, use_center=True).datetime()
         ).astimezone(local_timezone)
-    except Exception as e:
+    except Exception:
         loc_end_civil = "Error"
     try:
         loc_next_beg_civil = pytz.utc.localize(
             observer.next_rising(sun, use_center=True).datetime()
         ).astimezone(local_timezone)
-    except Exception as e:
+    except Exception:
         loc_next_beg_civil = "Error"
 
     # Astronomical Beginning and End
@@ -329,13 +329,13 @@ def update_twilight_times(latitude=None, longitude=None):
         loc_beg_astronomical = pytz.utc.localize(
             observer.next_setting(sun, use_center=True).datetime()
         ).astimezone(local_timezone)
-    except Exception as e:
+    except Exception:
         loc_beg_astronomical = "Error"
     try:
         loc_next_end_astronomical = pytz.utc.localize(
             observer.next_rising(sun, use_center=True).datetime()
         ).astimezone(local_timezone)
-    except Exception as e:
+    except Exception:
         loc_next_end_astronomical = "Error"
 
     twilight_times = {
