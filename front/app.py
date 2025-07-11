@@ -291,31 +291,52 @@ def update_twilight_times(latitude=None, longitude=None):
         observer.lat = str(latitude)  # ephem likes str
         observer.lon = str(longitude)  # ephem likes str
 
+    # ephim lib erroneously raises an exception at times saying the Sun is above horizon
+    # when it is not.  This is a bug in the ephem library.  This is a workaround.
+
     # Sunrise & Sunset
-    loc_sunset = pytz.utc.localize(observer.next_setting(sun).datetime()).astimezone(
-        local_timezone
-    )
-    loc_next_sunrise = pytz.utc.localize(
-        observer.next_rising(sun).datetime()
-    ).astimezone(local_timezone)
+    try:
+        loc_sunset = pytz.utc.localize(
+            observer.next_setting(sun).datetime()
+        ).astimezone(local_timezone)
+    except Exception as e:
+        loc_sunset = "Error"
+    try:
+        loc_next_sunrise = pytz.utc.localize(
+            observer.next_rising(sun).datetime()
+        ).astimezone(local_timezone)
+    except Exception as e:
+        loc_next_sunrise = "Error"
 
     # Civil Beginning and End
     observer.horizon = "-6"  # -6=civil twilight, -12=nautical, -18=astronomical
-    loc_end_civil = pytz.utc.localize(
-        observer.next_setting(sun, use_center=True).datetime()
-    ).astimezone(local_timezone)
-    loc_next_beg_civil = pytz.utc.localize(
-        observer.next_rising(sun, use_center=True).datetime()
-    ).astimezone(local_timezone)
+    try:
+        loc_end_civil = pytz.utc.localize(
+            observer.next_setting(sun, use_center=True).datetime()
+        ).astimezone(local_timezone)
+    except Exception as e:
+        loc_end_civil = "Error"
+    try:
+        loc_next_beg_civil = pytz.utc.localize(
+            observer.next_rising(sun, use_center=True).datetime()
+        ).astimezone(local_timezone)
+    except Exception as e:
+        loc_next_beg_civil = "Error"
 
     # Astronomical Beginning and End
     observer.horizon = "-18"  # -6=civil twilight, -12=nautical, -18=astronomical
-    loc_beg_astronomical = pytz.utc.localize(
-        observer.next_setting(sun, use_center=True).datetime()
-    ).astimezone(local_timezone)
-    loc_next_end_astronomical = pytz.utc.localize(
-        observer.next_rising(sun, use_center=True).datetime()
-    ).astimezone(local_timezone)
+    try:
+        loc_beg_astronomical = pytz.utc.localize(
+            observer.next_setting(sun, use_center=True).datetime()
+        ).astimezone(local_timezone)
+    except Exception as e:
+        loc_beg_astronomical = "Error"
+    try:
+        loc_next_end_astronomical = pytz.utc.localize(
+            observer.next_rising(sun, use_center=True).datetime()
+        ).astimezone(local_timezone)
+    except Exception as e:
+        loc_next_end_astronomical = "Error"
 
     twilight_times = {
         "Today's Date": current_date_formatted,
