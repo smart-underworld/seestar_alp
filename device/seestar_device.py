@@ -403,6 +403,19 @@ class Seestar:
                             elif parsed_data["state"] == "complete":
                                 self.cur_pa_error_x = parsed_data["x"]
                                 self.cur_pa_error_y = parsed_data["y"]
+                        elif (
+                            event_name == "Simu_Stack"
+                        ):  # The stack event is normally received in the imaging code, but the simulator will send them here
+                            # Stack event is used to update the stack status from the simulator
+                            if "stack_status" in parsed_data:
+                                self.event_state["Stack"] = {
+                                    "Event": "Stack",
+                                    "stacked_frame": parsed_data["stacked_frame"],
+                                    "dropped_frame": parsed_data["dropped_frame"],
+                                }
+                            self.event_state.pop(
+                                "Simu_Stack", None
+                            )  # Remove the Simu_Stack event to avoid confusion
 
                         for cb in self.event_callbacks:
                             if (

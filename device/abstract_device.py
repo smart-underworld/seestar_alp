@@ -19,7 +19,7 @@ class MessageParams(TypedDict):
     result: NotRequired[str]
 
 
-type ScheduleState = Literal["working", "stopped", "stopping", "paused", "complete"]
+ScheduleState = Literal["working", "stopped", "stopping", "paused", "complete"]
 
 
 class Schedule(TypedDict):
