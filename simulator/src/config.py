@@ -122,6 +122,13 @@ class _Config:
         self.log_events_in_info: bool = self.get_toml(
             "logging", "log_events_in_info", False
         )
+        self.log_heartbeat_msgs: bool = self.get_toml(
+            "logging", "log_heartbeat_msgs", False
+        )
+
+        self.dropped_frame_ratio: int = self.get_toml(
+            "options", "dropped_frame_ratio", 0
+        )
 
     def load_toml(self, load_name=None):
         """

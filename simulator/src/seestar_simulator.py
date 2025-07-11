@@ -3,6 +3,7 @@ import time
 import collections
 import uuid
 import json
+from config import Config
 
 
 class SeestarSimulator:
@@ -328,6 +329,7 @@ class SeestarSimulator:
                 # Update the state based on the parameters
                 if params[0] == "exposure":
                     self.state["setting"]["isp_exp_ms"] = params[1]
+                    self.state["setting"]["exp_ms"]["stack_l"] = params[1] / 1000
                 elif params[0] == "gain":
                     self.state["setting"]["isp_gain"] = params[1]
             return {
@@ -352,6 +354,7 @@ class SeestarSimulator:
         elif method == "iscope_start_stack":
             self.schedule["is_stacking"] = True
             self.stack_start_time = time.time()
+            self.start_stack()
             return {
                 "jsonrpc": "2.0",
                 "Timestamp": timestamp,
@@ -360,6 +363,7 @@ class SeestarSimulator:
                 "code": 0,
                 "id": cur_cmdid,
             }
+
         elif method == "iscope_stop_view":
             self.schedule["is_stacking"] = False
             self.image_mode = "none"
@@ -533,7 +537,10 @@ class SeestarSimulator:
                 "jsonrpc": "2.0",
                 "Timestamp": timestamp,
                 "method": "get_camera_exp_and_bin",
-                "result": {"exposure": self.state["setting"]["isp_exp_ms"], "bin": 1},
+                "result": {
+                    "exposure": self.state["setting"]["exp_ms"]["stack_l"] * 1000,
+                    "bin": 1,
+                },
                 "id": cur_cmdid,
             }
         elif method == "get_img_name_field":
@@ -603,6 +610,49 @@ class SeestarSimulator:
                 "result": 0,
                 "id": cur_cmdid,
             }
+
+    def start_stack(self):
+        self.stack_response_thread = threading.Thread(target=self._stack_response)
+        self.stack_response_thread.start()
+        return True
+
+    def _stack_response(self):
+        # Simulate stacking process
+        stacked_frames = 0
+        dropped_frames = 0
+
+        while self.schedule["is_stacking"]:
+            timestamp = f"{time.time() - self.start_time:2.9f}"
+            event = {
+                "Event": "Simu_Stack",
+                "Timestamp": timestamp,
+                "state": "working",
+                "stack_status": "stacking",
+                "stacked_frame": stacked_frames,
+                "dropped_frame": dropped_frames,
+            }
+            self.send_unsolicited_message(
+                self.socket, (self.host, self.port), json.dumps(event) + "\r\n"
+            )
+            if (
+                Config.dropped_frame_ratio == 0
+            ):  # if dropped frame ratio is 0, never drop frames
+                stacked_frames += 1
+            elif (stacked_frames + dropped_frames) == 0:  # always stack the first frame
+                stacked_frames += 1
+            else:
+                if (
+                    stacked_frames + dropped_frames
+                ) % Config.dropped_frame_ratio != 0:  # drop every nth frame
+                    stacked_frames += 1
+                else:
+                    dropped_frames += 1
+
+            time.sleep(
+                (self.state.get("setting").get("exp_ms")["stack_l"] / 1000.0)
+            )  # Simulate exposure time
+
+        return
 
     def start_pa_enhance(self):
         self.pa_enhance_response_thread = threading.Thread(target=self._pa_enhance)
@@ -708,7 +758,6 @@ class SeestarSimulator:
 
         # Send unsolicited TCP message to the main seestar program
         try:
-            # Connect to the main seestar program's TCP server
             event = {
                 "Event": "AutoGoto",
                 "Timestamp": f"{time.time():2.9f}",
