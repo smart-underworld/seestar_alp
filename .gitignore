@@ -6,6 +6,7 @@
 __pycache__
 device/__pycache__
 device/config.toml
+device/config.toml.kai
 dist
 build
 seestar_alp.spec
@@ -19,6 +20,12 @@ alpyca.log*
 docker/config.toml
 docker/getopts_long
 front/twilight_times.json
+front/planning.json
 
 Seestar Alpaca API.json:Zone.Identifier
 CometEls.txt
+messages*.db
+
+test_schedule_1.json
+test_schedule.json
+alpyca_EQFirmware.log
