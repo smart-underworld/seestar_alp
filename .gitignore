@@ -6,7 +6,7 @@
 __pycache__
 device/__pycache__
 device/config.toml
-device/config.toml.kai
+
 dist
 build
 seestar_alp.spec
