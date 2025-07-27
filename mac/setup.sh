@@ -124,7 +124,7 @@ function setup() {
   fi
 
   config_toml_setup
-  #setup_brew
+  setup_brew
   python_virtualenv_setup
   print_banner "${action}"
 }
