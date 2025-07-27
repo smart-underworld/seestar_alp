@@ -63,7 +63,7 @@ _EOF
     eval "$(pyenv virtualenv-init -)"
 
     pyenv install 3.13.5
-    pyenv virtualenv 3.13.5 ssc-3.12.5
+    pyenv virtualenv 3.13.5 ssc-3.13.5
 
     pyenv global ssc-3.13.5
 
@@ -95,7 +95,7 @@ function systemd_service_setup {
   cat systemd/seestar.service | sed \
   -e "s|/home/.*/seestar_alp|$src_home|g" \
   -e "s|^User=.*|User=${user}|g" \
-  -e "s|^ExecStart=.*|ExecStart=$HOME/.pyenv/versions/ssc-3.12.5/bin/python3 $src_home/root_app.py|" > /tmp/seestar.service
+  -e "s|^ExecStart=.*|ExecStart=$HOME/.pyenv/versions/ssc-3.13.5/bin/python3 $src_home/root_app.py|" > /tmp/seestar.service
 
   cat systemd/INDI.service | sed \
   -e "s|/home/.*/seestar_alp|$src_home|g" \
