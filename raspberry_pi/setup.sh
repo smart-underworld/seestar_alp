@@ -79,6 +79,11 @@ _EOF
     else
       echo "python 3.13.5 exists, skipping install"
     fi
+    if [ ! -e ~/.pyenv/versions/ssc-3.13.5 ]; then
+      pyenv virtualenv 3.13.5 ssc-3.13.5
+    else
+      echo "Python virtual environment for SSC exists - skipping install"
+    fi
     if  [ "$(cat ~/.pyenv/version)" != "ssc-3.13.5" ]; then
       pyenv global ssc-3.13.5
     fi
