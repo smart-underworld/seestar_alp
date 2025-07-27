@@ -62,16 +62,26 @@ _EOF
     eval "$(pyenv init -)"
     eval "$(pyenv virtualenv-init -)"
 
-    pyenv install 3.12.5
-    pyenv virtualenv 3.12.5 ssc-3.12.5
+    pyenv install 3.13.5
+    pyenv virtualenv 3.13.5 ssc-3.12.5
 
-    pyenv global ssc-3.12.5
+    pyenv global ssc-3.13.5
 
   else
     export PYENV_ROOT="$HOME/.pyenv"
     [[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
     eval "$(pyenv init -)"
     eval "$(pyenv virtualenv-init -)"
+
+    pyenv update
+    if [ ! -e ~/.pyenv/versions/3.13.5 ]; then
+      pyenv install 3.13.5
+    else
+      echo "python 3.13.5 exists, skipping install"
+    fi
+    if  [ "$(cat ./.python-version)" != "ssc-3.13.5" ]; then
+      pyenv global ssc-3.13.5
+    fi
   fi
 
   pip install -r requirements.txt
