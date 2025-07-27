@@ -3,14 +3,14 @@ name = "seestar-alp-upstream"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "alpyca==2.0.4",
     "astropy==6.0.0",
     "astroquery==0.4.8.dev9321",
     "blinker==1.8.2",
     "ephem==4.1.5",
-    "falcon==3.1.3",
+    "falcon==4.0.2",
     "flask==3.0.3",
     "flask-cors==5.0.0",
     "geocoder==1.38.1",
