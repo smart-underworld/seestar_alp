@@ -1099,6 +1099,17 @@ class Seestar:
                 }
             )
 
+            # Put this here for people not running PA
+            self.set_setting(
+                Config.init_expo_stack_ms,
+                Config.init_expo_preview_ms,
+                Config.init_dither_length_pixel,
+                Config.init_dither_frequency,
+                Config.init_dither_enabled,
+                Config.init_activate_LP_filter,
+                Config.is_frame_calibrated,
+            )
+
             response = self.send_message_param_sync({"method": "get_device_state"})
             # make sure we have the right firmware version here
             self.firmware_ver_int = response["result"]["device"]["firmware_ver_int"]
@@ -1111,35 +1122,6 @@ class Seestar:
                 return
 
             result = True
-
-            #
-            # This park is superfluous and is not needed for the native EQ Polar Align.
-            # Native Polar Align knows exactly where the scope is and you can restart
-            # from any open position. It will open to the expected starting point and initiate
-            # the PA routine.  If this is needed for the 'move arm' workaround, feel free to relocate
-            # it there.  Running multiple PA routines is still beneficial  Waiting for the scope to park
-            # and then rotate 270 degrees counter-clockwise is unproductive and a waste of time.
-            #
-            # if self.is_EQ_mode:
-            #    msg = "park the scope in preparation for EQ mode"
-            # else:
-            #    msg = "park the scope in preparation for AltAz mode"
-            #
-            # self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
-            # self.logger.info(msg)
-            #
-            # response = self.send_message_param_sync(
-            #    {"method": "scope_park", "params": {"equ_mode": self.is_EQ_mode}}
-            # )
-            # result = self.wait_end_op("ScopeHome")
-            # if not result:
-            #    msg = "Failed to park the mount."
-            #    self.logger.warn(msg)
-            #    self.schedule["state"] = "stopping"
-            #    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
-            #    return
-            #
-            # time.sleep(2)
 
             if do_3PPA:
                 msg = "perform PA Alignment"

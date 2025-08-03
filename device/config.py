@@ -515,7 +515,6 @@ class _Config:
         """
         ssHTML = ""
         for seestar in self.seestars:
-
             c = ""
             h = "False"
 
