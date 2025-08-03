@@ -939,31 +939,31 @@ def check_dec_value(decString):
 
 
 def hms_to_sec(timeString):
-    hms_search = re.search(
-        r"^(?!\s*$)\s*(?:(\d+)\s*h\s*)?(?:(\d+)\s*m\s*)?(?:(\d+)\s*s)?\s*$",
-        timeString.lower(),
+    timeString = timeString.strip().lower()
+
+    # Case 1: Pure number (int or float) = seconds
+    if re.fullmatch(r"\d+(\.\d+)?", timeString):
+        return int(float(timeString))  # Convert to float then int
+
+    # Case 2: Match h/m/s with optional decimals
+    match = re.match(
+        r"""^
+            (?:(\d+(?:\.\d+)?)\s*h\s*)?   # Hours (optional)
+            (?:(\d+(?:\.\d+)?)\s*m\s*)?   # Minutes (optional)
+            (?:(\d+(?:\.\d+)?)\s*s\s*)?   # Seconds (optional)
+        $""",
+        timeString,
+        re.VERBOSE,
     )
 
-    # Check if convertion is needed.
-    if hms_search:
-        seconds = 0
-        # Convert to sec
-        hms_split = re.split(
-            r"^(?!\s*$)\s*(?:(\d+)\s*h\s*)?(?:(\d+)\s*m\s*)?(?:(\d+)\s*s)?\s*$",
-            timeString.lower(),
-        )
-        if hms_split[1] is not None:
-            # h
-            seconds = int(hms_split[1]) * 3600
-        if hms_split[2] is not None:
-            # m
-            seconds = seconds + int(hms_split[2]) * 60
-        if hms_split[3] is not None:
-            # s
-            seconds = seconds + int(hms_split[3])
-        return seconds
-    else:
-        return timeString
+    if match:
+        hours = float(match.group(1)) if match.group(1) else 0
+        minutes = float(match.group(2)) if match.group(2) else 0
+        seconds = float(match.group(3)) if match.group(3) else 0
+        return int(hours * 3600 + minutes * 60 + seconds)
+
+    # Case 3: Invalid format
+    return timeString
 
 
 def lat_lng_distance_in_km(lat1, lng1, lat2, lng2):

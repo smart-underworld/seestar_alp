@@ -173,7 +173,7 @@
                   </div>
 
                   <!-- Fifth Column: Panel Time -->
-                  <div class="col align-self-start">{{ item["params"]["panel_time_sec"] }}s</div>
+                  <div class="col align-self-start">{{ seconds_to_hms(item["params"]["panel_time_sec"]) }}</div>
 
                   <!-- Sixth Column: Gain -->
                   <div class="col align-self-start">{{ item["params"]["gain"] }}</div>
