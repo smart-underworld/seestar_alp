@@ -1159,9 +1159,7 @@ class Seestar:
                 result = self.wait_end_op("EqModePA")
                 self.mark_op_state("EqModePA", "complete")
                 # Take us out of view mode. Can prevent successive polar alignments.
-                self.send_message_param_sync(
-                    {"method": "iscope_stop_view"}
-                )
+                self.send_message_param_sync({"method": "iscope_stop_view"})
                 if not result:
                     msg = "Failed to perform polar alignment. Will try again after we adjust the arm by scope_aim parameters"
                     self.logger.warn(msg)
