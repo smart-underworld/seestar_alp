@@ -48,6 +48,11 @@
                                         <input type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" min="5" max="90000" required aria-describedby="numberHelp">
                                         <div id="numberHelp" class="form-text">Numbers Only (5ms-90000ms)</div>
                                     </td>
+                                {% elif key == "stack_dither_pix" %}
+                                    <td>
+                                        <input type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" min="10" max="200" required aria-describedby="numberHelp">
+                                        <div id="numberHelp" class="form-text">Numbers only 10 - 200 pixels)</div>
+                                    </td>
                                 {% else %}
                                     <td>
                                         <input type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" required aria-describedby="numberHelp">

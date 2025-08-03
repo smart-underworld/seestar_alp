@@ -1077,16 +1077,6 @@ class Seestar:
                 self.logger.info(f"response from set location: {response}")
             self.send_message_param_sync(lang_data)
 
-            self.set_setting(
-                Config.init_expo_stack_ms,
-                Config.init_expo_preview_ms,
-                Config.init_dither_length_pixel,
-                Config.init_dither_frequency,
-                Config.init_dither_enabled,
-                Config.init_activate_LP_filter,
-                Config.is_frame_calibrated,
-            )
-
             is_dew_on = Config.init_dew_heater_power > 0
             self.send_message_param_sync(
                 {
@@ -1168,6 +1158,10 @@ class Seestar:
                 self.mark_op_state("EqModePA", "working")
                 result = self.wait_end_op("EqModePA")
                 self.mark_op_state("EqModePA", "complete")
+                # Take us out of view mode. Can prevent successive polar alignments.
+                self.send_message_param_sync(
+                    {"method": "iscope_stop_view"}
+                )
                 if not result:
                     msg = "Failed to perform polar alignment. Will try again after we adjust the arm by scope_aim parameters"
                     self.logger.warn(msg)
@@ -1178,6 +1172,17 @@ class Seestar:
 
             if self.schedule["state"] != "working":
                 return
+
+            # This needs to be after polar align.  Some values are reset by the polar align routine.
+            self.set_setting(
+                Config.init_expo_stack_ms,
+                Config.init_expo_preview_ms,
+                Config.init_dither_length_pixel,
+                Config.init_dither_frequency,
+                Config.init_dither_enabled,
+                Config.init_activate_LP_filter,
+                Config.is_frame_calibrated,
+            )
 
             if do_raise_arm:
                 # move the arm up using a thread runner
@@ -1255,23 +1260,18 @@ class Seestar:
                 return
 
             if do_AF:
-                if not do_raise_arm or not do_3PPA:
+                if not do_raise_arm and not do_3PPA:
                     self.logger.warn(
                         "start up sequence will put the scope in park position. Therefore, without do_raise_arm or polar alignment, auto focus will not be possible. Skipping."
                     )
 
                 else:
                     # need to make sure we are in star mode
-                    if (
-                        "View" not in self.event_state
-                        or "mode" not in self.event_state["View"]
-                        or self.event_state["View"]["mode"] != "star"
-                    ):
-                        result = self.send_message_param_sync(
-                            {"method": "iscope_start_view", "params": {"mode": "star"}}
-                        )
-                        self.logger.info(f"start star mode: {result}")
-                        time.sleep(2)
+                    result = self.send_message_param_sync(
+                        {"method": "iscope_start_view", "params": {"mode": "star"}}
+                    )
+                    self.logger.info(f"start star mode: {result}")
+                    time.sleep(2)
                     msg = "auto focus"
                     self.logger.info(msg)
                     self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
