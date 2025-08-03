@@ -869,6 +869,7 @@ def get_device_settings(telescope_id):
             "auto_power_off": settings_result["auto_power_off"],
             "stack_lenhance": settings_result["stack_lenhance"],
             "dark_mode": settings_result["dark_mode"],
+            "stack_cont_capt": settings_result["stack"]["cont_capt"],
         }
 
     return settings
@@ -3290,14 +3291,10 @@ class SettingsResource(BaseResource):
                 "continuous": int(PostedSettings["exp_ms_continuous"]),
             },
             "focal_pos": int(PostedSettings["focal_pos"]),
-            # "factory_focal_pos": int(PostedSettings["factory_focal_pos"]),
             "auto_power_off": str2bool(PostedSettings["auto_power_off"]),
             "auto_3ppa_calib": str2bool(PostedSettings["auto_3ppa_calib"]),
             "frame_calib": str2bool(PostedSettings["frame_calib"]),
-            # "stack_masic": str2bool(PostedSettings["stack_masic"]),
-            # "rec_stablzn": str2bool(PostedSettings["rec_stablzn"]),
             "manual_exp": str2bool(PostedSettings["manual_exp"]),
-            "dark_mode": str2bool(PostedSettings["dark_mode"]),
         }
 
         FormattedNewStackSettings = {
@@ -3333,13 +3330,37 @@ class SettingsResource(BaseResource):
             telescope_id,
             {"method": "set_setting", "params": FormattedNewSettings},
         )
+        # For some stupid reason known only to ZWO, dark_mode is returned by get_setting as a boolean.
+        # However when you set_setting it expects an integer representation of that boolean
+        # Also, it doesn't like to be lumped in with the rest of the set_setting values.
+        # It needs to be on its own.
+        dark_mode_bool = str2bool(PostedSettings["dark_mode"])
+        dark_mode_value = int(dark_mode_bool)
+        dark_mode_output = do_action_device(
+            "method_async",
+            telescope_id,
+            {"method": "set_setting", "params": {"dark_mode": dark_mode_value}},
+        )
+        # Live Stack Mode is another one like dark_mode.
+        cont_capt = str2bool(PostedSettings["stack_cont_capt"])
+        LiveModeSettings = {"stack": {"cont_capt": cont_capt}}
+        live_mode_output = do_action_device(
+            "method_sync",
+            telescope_id,
+            {"method": "set_setting", "params": LiveModeSettings},
+        )
         stack_settings_output = do_action_device(
             "method_async",
             telescope_id,
             {"method": "set_stack_setting", "params": FormattedNewStackSettings},
         )
 
-        if settings_output["ErrorNumber"] or stack_settings_output["ErrorNumber"]:
+        if (
+            settings_output["ErrorNumber"]
+            or stack_settings_output["ErrorNumber"]
+            or live_mode_output["ErrorNumber"]
+            or dark_mode_output["ErrorNumber"]
+        ):
             output = "Error Updating Settings."
         else:
             output = "Successfully Updated Settings."
@@ -3393,6 +3414,7 @@ class SettingsResource(BaseResource):
             "auto_power_off": "Auto Power Off",
             "stack_lenhance": "Light Pollution (LP) Filter",
             "dark_mode": "Dark Mode",
+            "stack_cont_capt": "Continuous Capture Mode",
         }
         # Maybe we can store this better?
         settings_helper_text = {
@@ -3419,6 +3441,7 @@ class SettingsResource(BaseResource):
             "auto_power_off": "Enable or disable auto power off",
             "stack_lenhance": "Enable or disable light pollution (LP) Filter.",
             "dark_mode": "Enable or disable LEDs while imaging.",
+            "stack_cont_capt": "Enabling continuous capture mode disables live stacking",
         }
         render_template(
             req,
