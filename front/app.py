@@ -3355,7 +3355,12 @@ class SettingsResource(BaseResource):
             {"method": "set_stack_setting", "params": FormattedNewStackSettings},
         )
 
-        if settings_output["ErrorNumber"] or stack_settings_output["ErrorNumber"] or live_mode_output["ErrorNumber"] or dark_mode_output["ErrorNumber"]:
+        if (
+            settings_output["ErrorNumber"]
+            or stack_settings_output["ErrorNumber"]
+            or live_mode_output["ErrorNumber"]
+            or dark_mode_output["ErrorNumber"]
+        ):
             output = "Error Updating Settings."
         else:
             output = "Successfully Updated Settings."
