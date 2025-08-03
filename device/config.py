@@ -155,8 +155,6 @@ class _Config:
                 {
                     "name": "Seestar Alpha",
                     "ip_address": "seestar.local",
-                    "move_arm_lat_sec": 2.0,
-                    "move_arm_lon_sec": 20.0,
                     "is_EQ_mode": False,
                     "device_num": 1,
                 }
@@ -217,8 +215,6 @@ class _Config:
         )
         self.init_dew_heater_power: int = self.get_toml(section, "dew_heater_power", 0)
         self.init_guest_mode: bool = self.get_toml(section, "guest_mode_init", True)
-        self.move_arm_lat_sec: float = self.get_toml(section, "move_arm_lat_sec", 2.0)
-        self.move_arm_lon_sec: float = self.get_toml(section, "move_arm_lon_sec", 20.0)
         self.is_EQ_mode: bool = self.get_toml(section, "is_EQ_mode", False)
         self.battery_low_limit: int = self.get_toml(section, "battery_low_limit", 3)
         self.is_frame_calibrated: bool = self.get_toml(
@@ -247,15 +243,11 @@ class _Config:
             if deviceCount > 1:
                 ss_name = req.media["ss_name"][devNum]
                 ss_ip = req.media["ss_ip_address"][devNum]
-                ss_lat = req.media["ss_move_arm_lat_sec"][devNum]
-                ss_lon = req.media["move_arm_lon_sec"][devNum]
                 ss_eq = self.strToBool(req.media["ss_is_EQ_mode"][devNum])
                 print(f"Device {devNum} EQ is : {ss_eq}")
             else:
                 ss_name = req.media["ss_name"]
                 ss_ip = req.media["ss_ip_address"]
-                ss_lat = req.media["ss_move_arm_lat_sec"]
-                ss_lon = req.media["ss_move_arm_lon_sec"]
                 ss_eq = self.strToBool(req.media["ss_is_EQ_mode"])
 
             # Add to local config
@@ -264,8 +256,6 @@ class _Config:
                     "name": ss_name,
                     "ip_address": ss_ip,
                     "device_num": devNum + 1,
-                    "move_arm_lat_sec": float(ss_lat),
-                    "move_arm_lon_sec": float(ss_lon),
                     "is_EQ_mode": ss_eq,
                 }
             )
@@ -275,8 +265,6 @@ class _Config:
                     "name": ss_name,
                     "ip_address": ss_ip,
                     "device_num": devNum + 1,
-                    "move_arm_lat_sec": float(ss_lat),
-                    "move_arm_lon_sec": float(ss_lon),
                     "is_EQ_mode": ss_eq,
                 }
             )
@@ -370,16 +358,6 @@ class _Config:
             "seestar_initialization",
             "dew_heater_power",
             int(req.media["init_dew_heater_power"]),
-        )
-        self.set_toml(
-            "seestar_initialization",
-            "move_arm_lat_sec",
-            float(req.media["move_arm_lat_sec"]),
-        )
-        self.set_toml(
-            "seestar_initialization",
-            "move_arm_lon_sec",
-            float(req.media["move_arm_lon_sec"]),
         )
         self.set_toml("seestar_initialization", "is_EQ_mode", "is_EQ_mode" in req.media)
         self.set_toml(
@@ -537,35 +515,6 @@ class _Config:
         """
         ssHTML = ""
         for seestar in self.seestars:
-            if "move_arm_lat_sec" in seestar:
-                lat = self.render_text(
-                    "ss_move_arm_lat_sec",
-                    "Aim Lat",
-                    seestar["move_arm_lat_sec"],
-                    "Start up move arm setting for moving up/down from zenith in movement clock seconds, from -20 to 20",
-                )
-            else:
-                lat = self.render_text(
-                    "ss_move_arm_lat_sec",
-                    "Aim Lat",
-                    2,
-                    "Start up move arm setting for moving up/down from zenith in movement clock seconds, from -20 to 20",
-                )
-
-            if "move_arm_lon_sec" in seestar:
-                lon = self.render_text(
-                    "ss_move_arm_lon_sec",
-                    "Aim Long",
-                    seestar["move_arm_lon_sec"],
-                    "Start up move arm setting for moving counter/clockwise from zenith in movement clock seconds, from -100 to 100",
-                )
-            else:
-                lon = self.render_text(
-                    "ss_move_arm_lon_sec",
-                    "Aim Long",
-                    20,
-                    "Start up move arm setting for moving counter/clockwise from zenith in movement clock seconds, from -100 to 100",
-                )
 
             c = ""
             h = "False"
@@ -583,8 +532,6 @@ class _Config:
                                 </div>
                                 {self.render_text("ss_name", "Name", seestar["name"], required=True)}
                                 {self.render_text("ss_ip_address", "IP Address", seestar["ip_address"], required=True)}
-                                {lat}
-                                {lon}
                                 <input id="ss_is_EQ_mode_hidden_{seestar["device_num"]}" name="ss_is_EQ_mode" type="hidden" value="{h}">
 
                                 <div class="row mb-3 align-items-center"> <!-- Checkbox Row -->
@@ -876,18 +823,6 @@ class _Config:
                     "Dew heater power:",
                     self.init_dew_heater_power,
                     "Dew heater power level, 0 - 100",
-                )
-                + self.render_text(
-                    "move_arm_lat_sec",
-                    "Scope aim latitude:",
-                    self.move_arm_lat_sec,
-                    "Start up raise arm setting for moving up/down from zenith in movement clock seconds, from -20 to 20",
-                )
-                + self.render_text(
-                    "move_arm_lon_sec",
-                    "Scope aim longitude:",
-                    self.move_arm_lon_sec,
-                    "Start up raise arm setting for moving counter/clockwise from zenith in movement clock seconds, from -100 to 100",
                 )
                 + self.render_checkbox(
                     "is_EQ_mode",
