@@ -51,19 +51,20 @@ _EOF
   eval "$(pyenv init -)"
   eval "$(pyenv virtualenv-init -)"
 
-  if [ ! -e ~/.pyenv/versions/3.12.5 ]; then
-    pyenv install 3.12.5
+  pyenv update
+  if [ ! -e ~/.pyenv/versions/3.13.5 ]; then
+    pyenv install 3.13.5
   else
-    echo "python 3.12.5 exists, skipping install"
+    echo "python 3.13.5 exists, skipping install"
   fi
 
-  if [ ! -e ~/.pyenv/versions/ssc-3.12.5 ]; then
-    pyenv virtualenv 3.12.5 ssc-3.12.5
+  if [ ! -e ~/.pyenv/versions/ssc-3.13.5 ]; then
+    pyenv virtualenv 3.13.5 ssc-3.13.5
   else
     echo "Python virtual environment for SSC exists - skipping install"
   fi
-  if  [ ! -e ./.python-version ]; then
-    pyenv local ssc-3.12.5
+  if  [ "$(cat ./.python-version)" != "ssc-3.13.5" ]; then
+    pyenv local ssc-3.13.5
   else
     echo "Python local virtual environment already configured"
   fi
