@@ -464,38 +464,6 @@ function addSeestar(){
                                 <!-- Close Col -->
                             </div>
                             <!-- Close Row -->
-                            <div class="row mb-3 align-items-center">
-                                <!-- Row -->
-                                <div class="col-sm-4 text-end">
-                                    <!-- Col -->
-                                    <label for="ss_move_arm_lat_sec" class="form-label">
-                                    Aim Lat
-                                    </label>
-                                </div>
-                                <!-- Close Col -->
-                                <div class="col-sm-8 col-md-6">
-                                    <!-- Col -->
-                                    <input id="ss_move_arm_lat_sec" name="ss_move_arm_lat_sec" type="number" class="form-control" title="start up move latitude time in seconds -20 to 20" value="2.0" >
-                                </div>
-                                <!-- Close Col -->
-                            </div>
-                            <!-- Close Row -->
-                            <div class="row mb-3 align-items-center">
-                                <!-- Row -->
-                                <div class="col-sm-4 text-end">
-                                    <!-- Col -->
-                                    <label for="ss_move_arm_lon_sec" class="form-label">
-                                    Aim Long
-                                    </label>
-                                </div>
-                                <!-- Close Col -->
-                                <div class="col-sm-8 col-md-6">
-                                    <!-- Col -->
-                                    <input id="ss_move_arm_lon_sec" name="ss_move_arm_lon_sec" type="number" class="form-control" title="start up move longitude time in seconds -100 to 100" value="20.0" >
-                                </div>
-                                <!-- Close Col -->
-                            </div>
-                            <!-- Close Row -->
                             <input id="ss_is_EQ_mode_hidden_${devicecount}" name="ss_is_EQ_mode" type="hidden" value="False">
                             <div class="row mb-3 align-items-center">
                                 <!-- Checkbox Row -->

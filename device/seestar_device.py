@@ -1005,9 +1005,7 @@ class Seestar:
                 "time_zone": tz_name,
             }
             date_data: MessageParams = {"method": "pi_set_time", "params": [date_json]}
-            failed_default_PA = False
 
-            do_raise_arm = params.get("move_arm", False)
             do_AF = params.get("auto_focus", False)
             do_3PPA = params.get("3ppa", False)
             do_dark_frames = params.get("dark_frames", False)
@@ -1101,6 +1099,17 @@ class Seestar:
                 }
             )
 
+            # Put this here for people not running PA
+            self.set_setting(
+                Config.init_expo_stack_ms,
+                Config.init_expo_preview_ms,
+                Config.init_dither_length_pixel,
+                Config.init_dither_frequency,
+                Config.init_dither_enabled,
+                Config.init_activate_LP_filter,
+                Config.is_frame_calibrated,
+            )
+
             response = self.send_message_param_sync({"method": "get_device_state"})
             # make sure we have the right firmware version here
             self.firmware_ver_int = response["result"]["device"]["firmware_ver_int"]
@@ -1113,35 +1122,6 @@ class Seestar:
                 return
 
             result = True
-
-            #
-            # This park is superfluous and is not needed for the native EQ Polar Align.
-            # Native Polar Align knows exactly where the scope is and you can restart
-            # from any open position. It will open to the expected starting point and initiate
-            # the PA routine.  If this is needed for the 'move arm' workaround, feel free to relocate
-            # it there.  Running multiple PA routines is still beneficial  Waiting for the scope to park
-            # and then rotate 270 degrees counter-clockwise is unproductive and a waste of time.
-            #
-            # if self.is_EQ_mode:
-            #    msg = "park the scope in preparation for EQ mode"
-            # else:
-            #    msg = "park the scope in preparation for AltAz mode"
-            #
-            # self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
-            # self.logger.info(msg)
-            #
-            # response = self.send_message_param_sync(
-            #    {"method": "scope_park", "params": {"equ_mode": self.is_EQ_mode}}
-            # )
-            # result = self.wait_end_op("ScopeHome")
-            # if not result:
-            #    msg = "Failed to park the mount."
-            #    self.logger.warn(msg)
-            #    self.schedule["state"] = "stopping"
-            #    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
-            #    return
-            #
-            # time.sleep(2)
 
             if do_3PPA:
                 msg = "perform PA Alignment"
@@ -1161,12 +1141,9 @@ class Seestar:
                 # Take us out of view mode. Can prevent successive polar alignments.
                 self.send_message_param_sync({"method": "iscope_stop_view"})
                 if not result:
-                    msg = "Failed to perform polar alignment. Will try again after we adjust the arm by scope_aim parameters"
+                    msg = "Failed to perform polar alignment."
                     self.logger.warn(msg)
                     self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
-                    failed_default_PA = True
-                else:
-                    failed_default_PA = False
 
             if self.schedule["state"] != "working":
                 return
@@ -1182,85 +1159,10 @@ class Seestar:
                 Config.is_frame_calibrated,
             )
 
-            if do_raise_arm:
-                # move the arm up using a thread runner
-                # move 10 degrees from polaris
-                # first check if a device specific setting is available
-
-                for device in Config.seestars:
-                    if device["device_num"] == self.device_num:
-                        break
-
-                lat = Config.move_arm_lat_sec
-                lon = Config.move_arm_lon_sec
-
-                if "move_arm_lat_sec" in params:
-                    lat = params["move_arm_lat_sec"]
-                else:
-                    lat = device.get("move_arm_lat_sec", lat)
-
-                if "move_arm_lon_sec" in params:
-                    lon = params["move_arm_lon_sec"]
-                else:
-                    lon = device.get("move_arm_lon_sec", lon)
-
-                msg = f"moving scope's aim toward a clear patch of sky using move_arm settings in seconds {lat}, {lon}"
-                self.logger.info(msg)
-                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
-
-                time_countdown = abs(lat)
-                if lat < 0:
-                    lat_angle = 270
-                else:
-                    lat_angle = 90
-                while time_countdown > 0:
-                    tmp = self.send_message_param_sync(
-                        {
-                            "method": "scope_speed_move",
-                            "params": {"speed": 5000, "angle": lat_angle, "dur_sec": 2},
-                        }
-                    )
-                    self.logger.info(f"move scope 90 degrees: {tmp}")
-                    time.sleep(min(1, time_countdown))
-                    time_countdown -= 1
-                self.send_message_param_sync(
-                    {
-                        "method": "scope_speed_move",
-                        "params": {"speed": 0, "angle": lat_angle, "dur_sec": 0},
-                    }
-                )
-                time.sleep(1)
-
-                time_countdown = abs(lon)
-                if lon < 0:
-                    lon_angle = 0
-                else:
-                    lon_angle = 180
-                while time_countdown > 0:
-                    tmp = self.send_message_param_sync(
-                        {
-                            "method": "scope_speed_move",
-                            "params": {"speed": 5000, "angle": lon_angle, "dur_sec": 2},
-                        }
-                    )
-                    self.logger.info(f"move scope 180 degrees: {tmp}")
-                    time.sleep(min(1, time_countdown))
-                    time_countdown -= 1
-                self.send_message_param_sync(
-                    {
-                        "method": "scope_speed_move",
-                        "params": {"speed": 0, "angle": lon_angle, "dur_sec": 0},
-                    }
-                )
-                time.sleep(1)
-
-            if self.schedule["state"] != "working":
-                return
-
             if do_AF:
-                if not do_raise_arm and not do_3PPA:
+                if not do_3PPA:
                     self.logger.warn(
-                        "start up sequence will put the scope in park position. Therefore, without do_raise_arm or polar alignment, auto focus will not be possible. Skipping."
+                        "Seestar starts in a parked position. Performing Auto Focus without Polar Alignment will result in a failed Auto Focus. Skipping."
                     )
 
                 else:
@@ -1299,32 +1201,6 @@ class Seestar:
                     return
                 else:
                     time.sleep(1)
-
-            if do_3PPA and do_raise_arm and failed_default_PA:
-                msg = "perform PA Alignment"
-                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
-                self.logger.info(msg)
-                time.sleep(1.0)
-                response = self.send_message_param_sync(
-                    {
-                        "method": "start_polar_align",
-                        "params": {
-                            "restart": do_raise_arm is False,
-                            "dec_pos_index": dec_pos_index,
-                        },
-                    }
-                )
-
-                self.mark_op_state("EqModePA", "working")
-                result = self.wait_end_op("EqModePA")
-                if not result:
-                    msg = "Failed to perform polar alignment."
-                    self.logger.warn(msg)
-                    self.schedule["state"] = "stopping"
-                    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
-                    return
-
-            # TODO: need to go to PA refinement mode, and then wait until stop_PA is called
 
             if self.schedule["state"] != "working":
                 return
