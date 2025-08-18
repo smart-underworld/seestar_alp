@@ -62,16 +62,31 @@ _EOF
     eval "$(pyenv init -)"
     eval "$(pyenv virtualenv-init -)"
 
-    pyenv install 3.12.5
-    pyenv virtualenv 3.12.5 ssc-3.12.5
+    pyenv install 3.13.5
+    pyenv virtualenv 3.13.5 ssc-3.13.5
 
-    pyenv global ssc-3.12.5
+    pyenv global ssc-3.13.5
 
   else
     export PYENV_ROOT="$HOME/.pyenv"
     [[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
     eval "$(pyenv init -)"
     eval "$(pyenv virtualenv-init -)"
+
+    pyenv update
+    if [ ! -e ~/.pyenv/versions/3.13.5 ]; then
+      pyenv install 3.13.5
+    else
+      echo "python 3.13.5 exists, skipping install"
+    fi
+    if [ ! -e ~/.pyenv/versions/ssc-3.13.5 ]; then
+      pyenv virtualenv 3.13.5 ssc-3.13.5
+    else
+      echo "Python virtual environment for SSC exists - skipping install"
+    fi
+    if  [ "$(cat ~/.pyenv/version)" != "ssc-3.13.5" ]; then
+      pyenv global ssc-3.13.5
+    fi
   fi
 
   pip install -r requirements.txt
@@ -85,7 +100,7 @@ function systemd_service_setup {
   cat systemd/seestar.service | sed \
   -e "s|/home/.*/seestar_alp|$src_home|g" \
   -e "s|^User=.*|User=${user}|g" \
-  -e "s|^ExecStart=.*|ExecStart=$HOME/.pyenv/versions/ssc-3.12.5/bin/python3 $src_home/root_app.py|" > /tmp/seestar.service
+  -e "s|^ExecStart=.*|ExecStart=$HOME/.pyenv/versions/ssc-3.13.5/bin/python3 $src_home/root_app.py|" > /tmp/seestar.service
 
   cat systemd/INDI.service | sed \
   -e "s|/home/.*/seestar_alp|$src_home|g" \
