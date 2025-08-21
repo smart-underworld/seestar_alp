@@ -1009,7 +1009,7 @@ class Seestar:
             do_AF = params.get("auto_focus", False)
             do_3PPA = params.get("3ppa", False)
             do_dark_frames = params.get("dark_frames", False)
-            dec_pos_index = params.get("dec_pos_index", 3)
+            dec_pos_index = params.get("dec_pos_index", Config.dec_pos_index)
 
             if do_3PPA and not self.is_EQ_mode:
                 self.logger.warn("Cannot do 3PPA without EQ mode. Will skip 3PPA.")

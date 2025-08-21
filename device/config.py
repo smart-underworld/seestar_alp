@@ -217,6 +217,7 @@ class _Config:
         self.init_guest_mode: bool = self.get_toml(section, "guest_mode_init", True)
         self.is_EQ_mode: bool = self.get_toml(section, "is_EQ_mode", False)
         self.battery_low_limit: int = self.get_toml(section, "battery_low_limit", 3)
+        self.dec_pos_index: int = self.get_toml(section, "dec_pos_index", 3)
         self.is_frame_calibrated: bool = self.get_toml(
             section, "is_frame_calibrated", True
         )
@@ -362,6 +363,11 @@ class _Config:
         self.set_toml("seestar_initialization", "is_EQ_mode", "is_EQ_mode" in req.media)
         self.set_toml(
             "seestar_initialization", "guest_mode_init", "init_guest_mode" in req.media
+        )
+        self.set_toml(
+            "seestar_initialization",
+            "dec_pos_index",
+            int(req.media["dec_pos_index"]),
         )
         self.set_toml(
             "seestar_initialization",
@@ -834,6 +840,12 @@ class _Config:
                     "Claim guest mode control:",
                     self.init_guest_mode,
                     "Claim guest mode on init",
+                )
+                + self.render_text(
+                    "dec_pos_index",
+                    "Dec Offset:",
+                    self.dec_pos_index,
+                    "Set Dec Offset for EQ Polar Alignment, 1-5",
                 )
                 + self.render_text(
                     "battery_low_limit",

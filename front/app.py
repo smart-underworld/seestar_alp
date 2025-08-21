@@ -3395,7 +3395,7 @@ class SettingsResource(BaseResource):
             "save_discrete_ok_frame": "Save Sub Frames",
             "save_discrete_frame": "Save Failed Sub Frames",
             "light_duration_min": "Light Duration Min",
-            "auto_3ppa_calib": "Auto 3 Point Calibration",
+            "auto_3ppa_calib": "Horizontal Calibration",
             "frame_calib": "Frame Calibration",
             "stack_masic": "Stack Mosaic",
             "rec_stablzn": "Record Stabilization",
@@ -3422,7 +3422,7 @@ class SettingsResource(BaseResource):
             "save_discrete_ok_frame": "Save sub frames. (Doesn't include failed.)",
             "save_discrete_frame": 'Save failed sub frames. (Failed sub frames will have "_failed" added to their filename.)',
             "light_duration_min": "Light Duration Min.",
-            "auto_3ppa_calib": "Enable or disable 3 point calibration.",
+            "auto_3ppa_calib": "In AltAz mode, enable/disable automatic horizontal calibration at the start of an imaging session",
             "frame_calib": "Frame Calibration",
             "stack_masic": "Stack Mosaic",
             "rec_stablzn": "Record Stabilization",
@@ -3517,7 +3517,7 @@ class StartupResource(BaseResource):
             auto_focus = form.get("auto_focus", "False").strip() == "on"
             dark_frames = form.get("dark_frames", "False").strip() == "on"
             polar_align = form.get("polar_align", "False").strip() == "on"
-            dec_pos_index = form.get("dec-offset", "3").strip()
+            dec_pos_index = form.get("dec-offset", Config.dec_pos_index)
 
             params = {
                 "auto_focus": auto_focus,
