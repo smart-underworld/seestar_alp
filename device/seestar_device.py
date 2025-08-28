@@ -1754,14 +1754,8 @@ class Seestar:
         nDec = params["dec_num"]
         overlap_percent = params["panel_overlap_percent"]
         gain = params["gain"]
-        if "is_use_autofocus" in params:
-            is_use_autofocus = params["is_use_autofocus"]
-        else:
-            is_use_autofocus = False
-        if "selected_panels" not in params:
-            selected_panels = ""
-        else:
-            selected_panels = params["selected_panels"]
+        is_use_autofocus = params.get("is_use_autofocus", False)
+        selected_panels = params.get("selected_panels", "")
         num_tries = params.get("num_tries", 1)
         retry_wait_s = params.get("retry_wait_s", 300)
 
