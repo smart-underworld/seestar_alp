@@ -209,7 +209,21 @@
         </form>
       </div>
 
-      <div class="col-2"></div>
+      <div class="col">
+        <form method="post" action="{{ action }}">
+          <div style="margin-bottom:5px;font-weight:bold">
+            <label for="dropdown8">Set Mount Mode</label>
+          </div>
+          <select id="dropdown8" name="command">
+            <option value="" disable selected>Select an Option</option>
+            <option value="set_eq_mode">Equitorial</option>
+            <option value="set_alt_az_mode">Alt Azimuth</option>
+           </select>
+          <button type="submit" class="btn btn-primary">Execute</button>
+        </form>
+      </div>
+
+      <div class="col"></div>
 
     </div>
   </div>
