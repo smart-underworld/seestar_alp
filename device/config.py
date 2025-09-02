@@ -243,7 +243,7 @@ class _Config:
             if deviceCount > 1:
                 ss_name = req.media["ss_name"][devNum]
                 ss_ip = req.media["ss_ip_address"][devNum]
-                key = f"ss_is_EQ_mode{devNum+1}"
+                key = f"ss_is_EQ_mode{devNum + 1}"
                 ss_eq = key in req.media
                 print(f"Device {devNum} EQ is : {ss_eq}")
             else:
@@ -527,7 +527,7 @@ class _Config:
                 if self.strToBool(seestar["is_EQ_mode"]):
                     c = "checked"
 
-            ssHTML += f'''<div id="device_div_{seestar["device_num"]}">
+            ssHTML += f"""<div id="device_div_{seestar["device_num"]}">
                                 <div class="col-sm-4 text-end">
                                     <label class="form-label">
                                     <h3>Device number {seestar["device_num"]}</h3>
@@ -550,7 +550,7 @@ class _Config:
 
                             </div>
 
-                        '''
+                        """
 
         ret = f"""
                 <div class="row mb-3 align-items-center">

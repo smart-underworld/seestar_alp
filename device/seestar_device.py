@@ -1779,7 +1779,6 @@ class Seestar:
         result = response["result"]
         self.logger.info(f"get_setting response: {result}")
 
-
         # print input requests
         self.logger.info("received parameters:")
         self.logger.info(f"Firmware version: {self.firmware_ver_int}")
@@ -1794,9 +1793,16 @@ class Seestar:
         self.logger.info("  Dec num panels: %s", nDec)
         self.logger.info("  overlap %%    : %s", overlap_percent)
         self.logger.info("  gain          : %s", gain)
-        self.logger.info("  exposure time : %s", result.get("exp_ms",{}).get("stack_l", "N/A"))
-        self.logger.info("  dither pixLen : %s", result.get("stack_dither", {}).get("pix", "N/A"))
-        self.logger.info("  dither interv : %s", result.get("stack_dither", {}).get("interval", "N/A"))
+        self.logger.info(
+            "  exposure time : %s", result.get("exp_ms", {}).get("stack_l", "N/A")
+        )
+        self.logger.info(
+            "  dither pixLen : %s", result.get("stack_dither", {}).get("pix", "N/A")
+        )
+        self.logger.info(
+            "  dither interv : %s",
+            result.get("stack_dither", {}).get("interval", "N/A"),
+        )
         self.logger.info("  use autofocus : %s", is_use_autofocus)
         self.logger.info("  select panels : %s", selected_panels)
         self.logger.info("  # goto tries  : %s", num_tries)
