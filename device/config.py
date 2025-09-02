@@ -527,7 +527,6 @@ class _Config:
             if "is_EQ_mode" in seestar:
                 if self.strToBool(seestar["is_EQ_mode"]):
                     c = "checked"
-                    h = "True"
 
             ssHTML += f'''<div id="device_div_{seestar["device_num"]}">
                                 <div class="col-sm-4 text-end">
