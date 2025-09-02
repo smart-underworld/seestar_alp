@@ -74,11 +74,10 @@ class _Config:
         self.load_toml(self.path_to_dat)
 
     @staticmethod
-    def strToBool(inputString: str):
-        if inputString in ["True", "true", "on"] or inputString:
-            return True
-        else:
-            return False
+    def strToBool(s) -> bool:
+        if isinstance(s, bool):
+            return s
+        return str(s).strip().lower() in {"1", "true", "on", "yes", "y"}
 
     def get_toml(self, sect: str, item: str, default: typing.Any):
         """
@@ -244,12 +243,13 @@ class _Config:
             if deviceCount > 1:
                 ss_name = req.media["ss_name"][devNum]
                 ss_ip = req.media["ss_ip_address"][devNum]
-                ss_eq = self.strToBool(req.media["ss_is_EQ_mode"][devNum])
+                key = f"ss_is_EQ_mode{devNum + 1}"
+                ss_eq = key in req.media
                 print(f"Device {devNum} EQ is : {ss_eq}")
             else:
                 ss_name = req.media["ss_name"]
                 ss_ip = req.media["ss_ip_address"]
-                ss_eq = self.strToBool(req.media["ss_is_EQ_mode"])
+                ss_eq = "ss_is_EQ_mode_1" in req.media
 
             # Add to local config
             self.seestars.append(
@@ -522,14 +522,12 @@ class _Config:
         ssHTML = ""
         for seestar in self.seestars:
             c = ""
-            h = "False"
 
             if "is_EQ_mode" in seestar:
                 if self.strToBool(seestar["is_EQ_mode"]):
                     c = "checked"
-                    h = "True"
 
-            ssHTML += f'''<div id="device_div_{seestar["device_num"]}">
+            ssHTML += f"""<div id="device_div_{seestar["device_num"]}">
                                 <div class="col-sm-4 text-end">
                                     <label class="form-label">
                                     <h3>Device number {seestar["device_num"]}</h3>
@@ -537,7 +535,6 @@ class _Config:
                                 </div>
                                 {self.render_text("ss_name", "Name", seestar["name"], required=True)}
                                 {self.render_text("ss_ip_address", "IP Address", seestar["ip_address"], required=True)}
-                                <input id="ss_is_EQ_mode_hidden_{seestar["device_num"]}" name="ss_is_EQ_mode" type="hidden" value="{h}">
 
                                 <div class="row mb-3 align-items-center"> <!-- Checkbox Row -->
                                     <div class="col-sm-4 text-end"> <!-- Checkbox label -->
@@ -546,14 +543,14 @@ class _Config:
                                         </label>
                                     </div> <!-- Close checkbox label -->
                                     <div class="col-sm-8 col-md-6"> <!-- Checkbox -->
-                                        <input id="ss_is_EQ_mode_{seestar["device_num"]}" class="form-check-input" title="Is device in EQ mode" type="checkbox" {c}>
+                                        <input id="ss_is_EQ_mode_{seestar["device_num"]}" name="ss_is_EQ_mode_{seestar["device_num"]}" class="form-check-input" title="Is device in EQ mode" type="checkbox" {c}>
                                     </div> <!--Close checkbox -->
                                 </div> <!-- Close checkbox row -->
                                 {self.render_checkbox(f"delete_{seestar['device_num']}", "Delete device", False)}
 
                             </div>
 
-                        '''
+                        """
 
         ret = f"""
                 <div class="row mb-3 align-items-center">
