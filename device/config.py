@@ -243,7 +243,7 @@ class _Config:
             if deviceCount > 1:
                 ss_name = req.media["ss_name"][devNum]
                 ss_ip = req.media["ss_ip_address"][devNum]
-                key = f"ss_is_EQ_mode{devNum + 1}"
+                key = f"ss_is_EQ_mode_{devNum + 1}"
                 ss_eq = key in req.media
                 print(f"Device {devNum} EQ is : {ss_eq}")
             else:
