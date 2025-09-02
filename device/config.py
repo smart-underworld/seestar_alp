@@ -256,19 +256,23 @@ class _Config:
                 ss_eq = "ss_is_EQ_mode_1" in req.media
 
             # Add to local config with new sequential device number
-            self.seestars.append({
-                "name": ss_name,
-                "ip_address": ss_ip,
-                "device_num": new_device_num,
-                "is_EQ_mode": ss_eq,
-            })
+            self.seestars.append(
+                {
+                    "name": ss_name,
+                    "ip_address": ss_ip,
+                    "device_num": new_device_num,
+                    "is_EQ_mode": ss_eq,
+                }
+            )
             # Add to toml config
-            self._dict["seestars"].append({
-                "name": ss_name,
-                "ip_address": ss_ip,
-                "device_num": new_device_num,
-                "is_EQ_mode": ss_eq,
-            })
+            self._dict["seestars"].append(
+                {
+                    "name": ss_name,
+                    "ip_address": ss_ip,
+                    "device_num": new_device_num,
+                    "is_EQ_mode": ss_eq,
+                }
+            )
 
             new_device_num += 1
 
