@@ -522,7 +522,6 @@ class _Config:
         ssHTML = ""
         for seestar in self.seestars:
             c = ""
-            h = "False"
 
             if "is_EQ_mode" in seestar:
                 if self.strToBool(seestar["is_EQ_mode"]):
