@@ -225,7 +225,6 @@ class _Config:
         """
         Save the config html form into a toml file
         """
-
         req.get_media()
 
         # Reset arrays
@@ -238,37 +237,40 @@ class _Config:
         else:
             deviceCount = 1
 
-        # Iterate through the devices and add them to the lists
+        # Iterate through the devices and add them to the lists, skipping deleted ones
+        new_device_num = 1
         for devNum in range(deviceCount):
+            # Check if this device is marked for deletion
+            delete_key = f"delete_{devNum + 1}"
+            if delete_key in req.media and self.strToBool(req.media[delete_key]):
+                continue  # Skip this device
+
             if deviceCount > 1:
                 ss_name = req.media["ss_name"][devNum]
                 ss_ip = req.media["ss_ip_address"][devNum]
                 key = f"ss_is_EQ_mode_{devNum + 1}"
                 ss_eq = key in req.media
-                print(f"Device {devNum} EQ is : {ss_eq}")
             else:
                 ss_name = req.media["ss_name"]
                 ss_ip = req.media["ss_ip_address"]
                 ss_eq = "ss_is_EQ_mode_1" in req.media
 
-            # Add to local config
-            self.seestars.append(
-                {
-                    "name": ss_name,
-                    "ip_address": ss_ip,
-                    "device_num": devNum + 1,
-                    "is_EQ_mode": ss_eq,
-                }
-            )
+            # Add to local config with new sequential device number
+            self.seestars.append({
+                "name": ss_name,
+                "ip_address": ss_ip,
+                "device_num": new_device_num,
+                "is_EQ_mode": ss_eq,
+            })
             # Add to toml config
-            self._dict["seestars"].append(
-                {
-                    "name": ss_name,
-                    "ip_address": ss_ip,
-                    "device_num": devNum + 1,
-                    "is_EQ_mode": ss_eq,
-                }
-            )
+            self._dict["seestars"].append({
+                "name": ss_name,
+                "ip_address": ss_ip,
+                "device_num": new_device_num,
+                "is_EQ_mode": ss_eq,
+            })
+
+            new_device_num += 1
 
         # network
         self.set_toml("network", "ip_address", req.media["ip_address"])
