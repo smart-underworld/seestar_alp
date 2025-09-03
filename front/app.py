@@ -3339,7 +3339,7 @@ class SettingsResource(BaseResource):
             )
 
         settings_output = do_action_device(
-            "method_async",
+            "method_sync",
             telescope_id,
             {"method": "set_setting", "params": FormattedNewSettings},
         )
@@ -3371,7 +3371,7 @@ class SettingsResource(BaseResource):
             {"method": "set_setting", "params": DrizzleModeSettings},
         )
         stack_settings_output = do_action_device(
-            "method_async",
+            "method_sync",
             telescope_id,
             {"method": "set_stack_setting", "params": FormattedNewStackSettings},
         )
