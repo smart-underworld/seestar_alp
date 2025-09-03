@@ -96,7 +96,7 @@ async function fetchCoordinates() {
             }
             // Grab request text
             planet = document.getElementById('targetName').value;
-            queryURL = '/getplanetcoordinates?planetname=' + planet;
+            queryURL = '/getplanetcoordinates?planetname=' + encodeURIComponent(planet);
             // Moon / Sun doesn't have 'BARYCENTER' after it but more checks needed for Sun first so just do Moon
             if (planet.toLowerCase() != 'moon') {queryURL += " BARYCENTER"};
             fetch(queryURL)
@@ -133,7 +133,7 @@ async function fetchCoordinates() {
                 return;
             }
             minorname = document.getElementById('targetName').value;
-            queryURL = '/getminorplanetcoordinates?minorname=' + minorname;
+            queryURL = '/getminorplanetcoordinates?minorname=' + encodeURIComponent(minorname);
             fetch(queryURL)
             .then(response => {
                 // If a server error or object not found
@@ -168,7 +168,7 @@ async function fetchCoordinates() {
                 return;
             }
             cometname = document.getElementById('targetName').value;
-            queryURL = '/getcometcoordinates?cometname=' + cometname;
+            queryURL = '/getcometcoordinates?cometname=' + encodeURIComponent(cometname);
             fetch(queryURL)
             .then(response => {
                 // If a server error or object not found
@@ -214,7 +214,7 @@ async function fetchCoordinates() {
                 return;
             }
             starName = document.getElementById('targetName').value;
-            queryURL = '/getaavsocoordinates?target=' + starName;
+            queryURL = '/getaavsocoordinates?target=' + encodeURIComponent(starName);
             fetch(queryURL)
             .then(response => {
                 // If a server error or object not found
