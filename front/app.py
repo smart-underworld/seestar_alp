@@ -710,107 +710,111 @@ def get_guestmode_state(telescope_id):
 
 def get_device_state(telescope_id):
     if check_api_state(telescope_id):
-        # print("Device is online", telescope_id)
         result = method_sync("get_device_state", telescope_id)
         status = method_sync("get_view_state", telescope_id)
         wifi_status = method_sync("pi_station_state", telescope_id)
-        view_state = "Idle"
-        mode = ""
-        stage = ""
+
+        # Initialize variables with defaults using pydash.get
+        view_state = pydash.get(status, "View.state", "Idle")
+        mode = pydash.get(status, "View.mode", "")
+        stage = pydash.get(status, "View.stage", "")
+        target = pydash.get(status, "View.target_name", "")
+
+        # Simplify stack info access
+        stack_state = pydash.get(status, "View.Stack.state")
+        stacked = (
+            pydash.get(status, "View.Stack.stacked_frame", "")
+            if stack_state == "working"
+            else ""
+        )
+        failed = (
+            pydash.get(status, "View.Stack.dropped_frame", "")
+            if stack_state == "working"
+            else ""
+        )
+
         wifi_signal = ""
-        device = ""
-        focuser = ""
-        settings = ""
-        pi_status = ""
-        free_storage = ""
-        target = ""
-        stacked = ""
-        failed = ""
+        free_storage = "Unknown"
+        guestmode = False
+        is_master = False
         client_master = True
         client_list = ""
-        if status is not None:
-            view_info = status.get("View", {})
-            view_state = view_info.get("state", "Idle")
-            mode = view_info.get("mode", "")
-
-            target = view_info.get("target_name", "")
-            stage = view_info.get("stage", "")
-            stack_info = view_info.get("Stack", {})
-
-            if stack_info.get("state") == "working":
-                stacked = stack_info.get("stacked_frame", "")
-                failed = stack_info.get("dropped_frame", "")
+        mount_mode = "Unknown"
 
         # Check for bad data
         if status is not None and result is not None:
-            guestmode = False
-            is_master = False
-            master_idx = -1
-            client_list = []
             schedule = do_action_device("get_schedule", telescope_id, {})
+
             if result is not None:
-                device = result.get("device", {})
-                focuser = result.get("focuser", {})
-                settings = result.get("setting", {})
-                pi_status = result.get("pi_status", {})
-                storage = result.get("storage", {}).get("storage_volume", [{}])[0]
-                if storage.get("state") == "mounted":
-                    free_storage = humanize.naturalsize(
-                        storage.get("freeMB", 0) * 1024 * 1024
-                    )
-                elif storage.get("state") == "connected":
+                # Get Mount Mode
+                eq_mode = pydash.get(result, "mount.equ_mode", False)
+                mount_mode = "Equatorial" if eq_mode else "Alt Azimuth"
+
+                # Get storage information directly
+                storage_state = pydash.get(
+                    result, "storage.storage_volume[0].state", ""
+                )
+
+                if storage_state == "mounted":
+                    free_mb = pydash.get(result, "storage.storage_volume[0].freeMB", 0)
+                    free_storage = humanize.naturalsize(free_mb * 1024 * 1024)
+                elif storage_state == "connected":
                     free_storage = "Unavailable while in USB storage mode."
 
-                fw = device.get("firmware_ver_int", 0)
+                # Get firmware version directly
+                fw = pydash.get(result, "device.firmware_ver_int", 0)
+
                 if fw > 2300:
-                    if fw >= 2400:
-                        guestmode = settings.get("guest_mode", False)
-                    else:
-                        guestmode = True
+                    # Get guest mode setting directly
+                    guestmode = (
+                        pydash.get(result, "setting.guest_mode", False)
+                        if fw >= 2400
+                        else True
+                    )
 
                     if guestmode:
-                        client_master = result.get("client", {"is_master": False}).get(
-                            "is_master", False
-                        )
-                        clients = result.get("client", {"connected": []}).get(
-                            "connected", []
-                        )
-                        master_idx = result.get("client", {"master_index": -1}).get(
-                            "master_index", -1
-                        )
-                        if master_idx >= 0:
+                        # Get client information directly
+                        client_master = pydash.get(result, "client.is_master", False)
+                        clients = pydash.get(result, "client.connected", [])
+                        master_idx = pydash.get(result, "client.master_index", -1)
+
+                        if 0 <= master_idx < len(clients):
                             clients[master_idx] = "master:" + clients[master_idx]
                         client_list = "<br>".join(clients)
 
+            # Safely access wifi_status
             if wifi_status is not None:
-                if (
-                    wifi_status.get("server", False)
-                    and not guestmode
-                    or guestmode
-                    and is_master
-                ):  # sig_lev is only there while in station mode.
-                    wifi_signal = f"{wifi_status['sig_lev']} dBm"
+                is_server = pydash.get(wifi_status, "server", False)
+                sig_lev = pydash.get(wifi_status, "sig_lev", "N/A")
+
+                if (is_server and not guestmode) or (guestmode and is_master):
+                    wifi_signal = f"{sig_lev} dBm"
                 elif guestmode:
                     wifi_signal = "Unavailable in Guest mode."
                 else:
                     wifi_signal = "Unavailable in AP mode."
+
+            # Build stats dictionary using direct pydash.get access
             stats = {
-                "Firmware Version": device.get("firmware_ver_string", ""),
-                "Focal Position": focuser.get("step", ""),
-                "Auto Power Off": settings.get("auto_power_off", ""),
-                "Heater?": settings.get("heater_enable", ""),
+                "Firmware Version": pydash.get(
+                    result, "device.firmware_ver_string", ""
+                ),
+                "Focal Position": pydash.get(result, "focuser.step", ""),
+                "Auto Power Off": pydash.get(result, "setting.auto_power_off", ""),
+                "Heater?": pydash.get(result, "setting.heater_enable", ""),
                 "Free Storage": free_storage,
-                "Balance Sensor (angle)": result.get("balance_sensor", {})
-                .get("data", {})
-                .get("angle"),
-                "Compass Sensor (direction)": result.get("compass_sensor", {})
-                .get("data", {})
-                .get("direction"),
-                "Temperature Sensor": pi_status.get("temp", ""),
-                "Charge Status": pi_status.get("charger_status", ""),
-                "Battery %": pi_status.get("battery_capacity", ""),
-                "Battery Temp": pi_status.get("battery_temp", ""),
-                "Scheduler Status": schedule.get("Value", {}).get("state"),
+                "Balance Sensor (angle)": pydash.get(
+                    result, "balance_sensor.data.angle"
+                ),
+                "Compass Sensor (direction)": pydash.get(
+                    result, "compass_sensor.data.direction"
+                ),
+                "Temperature Sensor": pydash.get(result, "pi_status.temp", ""),
+                "Charge Status": pydash.get(result, "pi_status.charger_status", ""),
+                "Battery %": pydash.get(result, "pi_status.battery_capacity", ""),
+                "Battery Temp": pydash.get(result, "pi_status.battery_temp", ""),
+                "Mount Mode": mount_mode,
+                "Scheduler Status": pydash.get(schedule, "Value.state"),
                 "View State": view_state,
                 "View Mode": mode,
                 "View Stage": stage,
@@ -820,17 +824,15 @@ def get_device_state(telescope_id):
                 "Wi-Fi Signal": wifi_signal,
             }
 
-            if device.get("firmware_ver_int", 0) > 2300:
+            # Add guest mode stats if firmware supports it
+            if fw > 2300:
                 stats["Master client"] = client_master
                 stats["Client list"] = client_list
 
         else:
             logger.info("Stats: Unable to get data.")
-            stats = {
-                "Info": "Unable to get stats."
-            }  # Display information for the stats page VS blank page.
+            stats = {"Info": "Unable to get stats."}
     else:
-        # print("Device is OFFLINE", telescope_id)
         stats = {}
     return stats
 
@@ -847,32 +849,33 @@ def get_device_settings(telescope_id):
         stack_settings_result = method_sync("get_stack_setting", telescope_id)
 
         settings = {
-            "stack_dither_pix": settings_result["stack_dither"]["pix"],
-            "stack_dither_interval": settings_result["stack_dither"]["interval"],
-            "stack_dither_enable": settings_result["stack_dither"]["enable"],
-            "exp_ms_stack_l": settings_result["exp_ms"]["stack_l"],
-            "exp_ms_continuous": settings_result["exp_ms"]["continuous"],
-            "save_discrete_ok_frame": stack_settings_result["save_discrete_ok_frame"],
-            "save_discrete_frame": stack_settings_result["save_discrete_frame"],
-            "light_duration_min": stack_settings_result["light_duration_min"],
-            "auto_3ppa_calib": settings_result["auto_3ppa_calib"],
-            "frame_calib": settings_result["frame_calib"],
-            # "stack_masic": settings_result["stack_masic"],
-            # "rec_stablzn": settings_result["rec_stablzn"], # Unavailable for firmware 3.11
-            "manual_exp": settings_result["manual_exp"],
-            # "isp_exp_ms": settings_result["isp_exp_ms"],
-            # "calib_location": settings_result["calib_location"],
-            # "wide_cam": settings_result["wide_cam"],
-            # "temp_unit": settings_result["temp_unit"],
-            "focal_pos": settings_result["focal_pos"],
-            # "factory_focal_pos": settings_result["factory_focal_pos"],
-            "heater_enable": settings_result["heater_enable"],
-            "auto_power_off": settings_result["auto_power_off"],
-            "stack_lenhance": settings_result["stack_lenhance"],
-            "dark_mode": settings_result["dark_mode"],
-            "stack_cont_capt": settings_result["stack"]["cont_capt"],
+            "stack_dither_pix": pydash.get(settings_result, "stack_dither.pix"),
+            "stack_dither_interval": pydash.get(
+                settings_result, "stack_dither.interval"
+            ),
+            "stack_dither_enable": pydash.get(settings_result, "stack_dither.enable"),
+            "exp_ms_stack_l": pydash.get(settings_result, "exp_ms.stack_l"),
+            "exp_ms_continuous": pydash.get(settings_result, "exp_ms.continuous"),
+            "save_discrete_ok_frame": pydash.get(
+                stack_settings_result, "save_discrete_ok_frame"
+            ),
+            "save_discrete_frame": pydash.get(
+                stack_settings_result, "save_discrete_frame"
+            ),
+            "light_duration_min": pydash.get(
+                stack_settings_result, "light_duration_min"
+            ),
+            "auto_3ppa_calib": pydash.get(settings_result, "auto_3ppa_calib"),
+            "frame_calib": pydash.get(settings_result, "frame_calib"),
+            "manual_exp": pydash.get(settings_result, "manual_exp"),
+            "focal_pos": pydash.get(settings_result, "focal_pos"),
+            "heater_enable": pydash.get(settings_result, "heater_enable"),
+            "auto_power_off": pydash.get(settings_result, "auto_power_off"),
+            "stack_lenhance": pydash.get(settings_result, "stack_lenhance"),
+            "dark_mode": pydash.get(settings_result, "dark_mode"),
+            "stack_cont_capt": pydash.get(settings_result, "stack.cont_capt"),
+            "stack_drizzle2x": pydash.get(settings_result, "stack.drizzle2x"),
         }
-
     return settings
 
 
@@ -1407,6 +1410,20 @@ def do_command(req, resp, telescope_id):
                 "method_sync",
                 telescope_id,
                 {"method": "set_setting", "params": {"master_cli": False}},
+            )
+            return output
+        case "set_eq_mode":
+            output = do_action_device(
+                "method_sync",
+                telescope_id,
+                {"method": "scope_park", "params": {"equ_mode": True}},
+            )
+            return output
+        case "set_alt_az_mode":
+            output = do_action_device(
+                "method_sync",
+                telescope_id,
+                {"method": "scope_park", "params": {"equ_mode": False}},
             )
             return output
         case _:
@@ -3323,7 +3340,7 @@ class SettingsResource(BaseResource):
             )
 
         settings_output = do_action_device(
-            "method_async",
+            "method_sync",
             telescope_id,
             {"method": "set_setting", "params": FormattedNewSettings},
         )
@@ -3346,8 +3363,16 @@ class SettingsResource(BaseResource):
             telescope_id,
             {"method": "set_setting", "params": LiveModeSettings},
         )
+        # 4k Mode is another one like cont_capt
+        drizzle2x = str2bool(PostedSettings["stack_drizzle2x"])
+        DrizzleModeSettings = {"stack": {"drizzle2x": drizzle2x}}
+        drizzle_mode_output = do_action_device(
+            "method_sync",
+            telescope_id,
+            {"method": "set_setting", "params": DrizzleModeSettings},
+        )
         stack_settings_output = do_action_device(
-            "method_async",
+            "method_sync",
             telescope_id,
             {"method": "set_stack_setting", "params": FormattedNewStackSettings},
         )
@@ -3357,6 +3382,7 @@ class SettingsResource(BaseResource):
             or stack_settings_output["ErrorNumber"]
             or live_mode_output["ErrorNumber"]
             or dark_mode_output["ErrorNumber"]
+            or drizzle_mode_output["ErrorNumber"]
         ):
             output = "Error Updating Settings."
         else:
@@ -3412,6 +3438,7 @@ class SettingsResource(BaseResource):
             "stack_lenhance": "Light Pollution (LP) Filter",
             "dark_mode": "Dark Mode",
             "stack_cont_capt": "Continuous Capture Mode",
+            "stack_drizzle2x": "4k Live Stack Mode (2x Drizzle)",
         }
         # Maybe we can store this better?
         settings_helper_text = {
@@ -3439,6 +3466,7 @@ class SettingsResource(BaseResource):
             "stack_lenhance": "Enable or disable light pollution (LP) Filter.",
             "dark_mode": "Enable or disable LEDs while imaging.",
             "stack_cont_capt": "Enabling continuous capture mode disables live stacking",
+            "stack_drizzle2x": "Enables 2x drizzle on Live Stack for 4k Mode",
         }
         render_template(
             req,

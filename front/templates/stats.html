@@ -2,63 +2,74 @@
 
 {% block header %}
     <div class="container mt-3">
-		<p class="h1">{% block title %}Stats{% endblock %}</p>
-	</div>
+        <p class="h1">{% block title %}Stats{% endblock %}</p>
+    </div>
 {% endblock %}
 
 {% block content %}
 
-	{% if online %}	
-		<div class="container mt-3">
-			{% if stats %}
-				{% for key, value in stats.items() %}
-					<div class="row border-bottom py-1">
-						<div class="col fw-bold"><p>{{ key }}</p></div>
-						{% if key == "Balance Sensor (angle)" %}
-							<div class="col"><p class="text-end">{{ value }}</p><p>{% include 'partials/bubble_level.html' with context %}</p></div>
-						{% elif key == "Free Storage" %}
-							{% if (value[:2]|int <= 5) or (value.split(" ")[1] != "GB") %}
-								<div class="col"><p class="text-end text-danger">{{ value }}</p></div>
-							{% elif (value[:2]|int <= 10) and (value[:2]|int >= 6) %}
-								<div class="col"><p class="text-end text-warning">{{ value }}</p></div>
-							{% else %}
-								<div class="col"><p class="text-end text-success">{{ value }}</p></div>
-							{% endif %}
-						{% elif key == "Wi-Fi Signal" %}
-							{% if value[:3]|int >= -69 %}
-								<div class="col"><p class="text-end text-success">{{ value }}</p></div>
-							{% elif (value[:3]|int <= -70) and (value[:3]|int >= -79) %}
-								<div class="col"><p class="text-end text-warning">{{ value }}</p></div>
-							{% else %}
-								<div class="col"><p class="text-end text-danger">{{ value }}</p></div>
-							{% endif %}
-						{% elif key == "Battery %" %}
-                            {% if value|int <= 5 %}
-                                <div class="col"><p class="text-end text-danger">{{ value }}</p></div>
-                            {% elif (value|int <= 15) and (value|int > 6) %}
-                                <div class="col"><p class="text-end text-warning">{{ value }}</p></div>
-                            {% else %}
-                                <div class="col"><p class="text-end text-success">{{ value }}</p></div>
-                            {% endif %} 
-						{% else %}
-							<div class="col"><p class="text-end">{{ value }}</p></div>
-						{% endif %}
-					</div>
-				{% endfor %}
-			{% else %}
-				<div class="mb-3">
-					<p>You have the Seestar Federation Device selected. Please select an actual telescope from the dropdown.</p>
-			{% endif %}
-		</div>
-	{% else %}
-		<div class="container mt-3">
-			<p>You are currently in offline mode</p>
-		</div>
-	{% endif %}
+    {% if online %}
+        <div class="container mt-3">
+            {% if stats %}
+                {# First, check if we need to show view details #}
+                {% set show_view_details = stats.get('View State', 'Idle') != 'Idle' %}
 
-	<footer class="bg-body-tertiary text-center mt-3">
-		Version: {{ version }} | Last updated: {{ now }}
-	</footer>
+                {% for key, value in stats.items() %}
+                    {# Skip view detail keys if we're not showing them or if value is empty #}
+                    {% if not show_view_details and key in ['View Mode', 'View Stage', 'Target Name', 'Successful Frames', 'Failed Frames'] %}
+                        {# Skip this iteration - don't display these keys #}
+                    {% elif show_view_details and key in ['View Mode', 'View Stage', 'Target Name', 'Successful Frames', 'Failed Frames'] and not value %}
+                        {# Skip view detail keys with empty values #}
+                    {% else %}
+                        <div class="row border-bottom py-1">
+                            <div class="col fw-bold"><p>{{ key }}</p></div>
+                            {% if key == "Balance Sensor (angle)" %}
+                                <div class="col"><p class="text-end">{{ value }}</p><p>{% include 'partials/bubble_level.html' with context %}</p></div>
+                            {% elif key == "Free Storage" %}
+                                {% if (value[:2]|int <= 5) or (value.split(" ")[1] != "GB") %}
+                                    <div class="col"><p class="text-end text-danger">{{ value }}</p></div>
+                                {% elif (value[:2]|int <= 10) and (value[:2]|int >= 6) %}
+                                    <div class="col"><p class="text-end text-warning">{{ value }}</p></div>
+                                {% else %}
+                                    <div class="col"><p class="text-end text-success">{{ value }}</p></div>
+                                {% endif %}
+                            {% elif key == "Wi-Fi Signal" %}
+                                {% if value[:3]|int >= -69 %}
+                                    <div class="col"><p class="text-end text-success">{{ value }}</p></div>
+                                {% elif (value[:3]|int <= -70) and (value[:3]|int >= -79) %}
+                                    <div class="col"><p class="text-end text-warning">{{ value }}</p></div>
+                                {% else %}
+                                    <div class="col"><p class="text-end text-danger">{{ value }}</p></div>
+                                {% endif %}
+                            {% elif key == "Battery %" %}
+                                {% if value|int <= 5 %}
+                                    <div class="col"><p class="text-end text-danger">{{ value }}</p></div>
+                                {% elif (value|int <= 15) and (value|int > 6) %}
+                                    <div class="col"><p class="text-end text-warning">{{ value }}</p></div>
+                                {% else %}
+                                    <div class="col"><p class="text-end text-success">{{ value }}</p></div>
+                                {% endif %}
+                            {% else %}
+                                <div class="col"><p class="text-end">{{ value }}</p></div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            {% else %}
+                <div class="mb-3">
+                    <p>You have the Seestar Federation Device selected. Please select an actual telescope from the dropdown.</p>
+                </div>
+            {% endif %}
+        </div>
+    {% else %}
+        <div class="container mt-3">
+            <p>You are currently in offline mode</p>
+        </div>
+    {% endif %}
+
+    <footer class="bg-body-tertiary text-center mt-3">
+        Version: {{ version }} | Last updated: {{ now }}
+    </footer>
 
 {% endblock %}
 
