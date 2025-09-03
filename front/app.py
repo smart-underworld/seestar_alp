@@ -4421,7 +4421,7 @@ def searchLocal(object):
 class GetCometCoordinates:
     @staticmethod
     def on_get(req, resp):
-        cometName = req.get_param("cometname")
+        cometName = urllib.parse.quote_plus(req.get_param("cometname"))
         rtn = searchComet(cometName)
         if len(rtn) == 0:
             resp.status = falcon.HTTP_404
@@ -4437,7 +4437,7 @@ class GetCometCoordinates:
 class GetMinorPlanetCoordinates:
     @staticmethod
     def on_get(req, resp):
-        minorname = req.get_param("minorname")
+        minorname = urllib.parse.quote_plus(req.get_param("minorname"))
         rtn = searchMinorPlanet(minorname)
         if len(rtn) == 0:
             resp.status = falcon.HTTP_404
@@ -4453,7 +4453,7 @@ class GetMinorPlanetCoordinates:
 class GetLocalSearch:
     @staticmethod
     def on_get(req, resp):
-        searchText = req.get_param("target")
+        searchText = urllib.parse.quote_plus(req.get_param("target"))
         rtn = searchLocal(searchText)
         if len(rtn) == 0:
             resp.status = falcon.HTTP_404
@@ -4469,7 +4469,7 @@ class GetLocalSearch:
 class GetAAVSOSearch:
     @staticmethod
     def on_get(req: falcon.Request, resp: falcon.Response) -> None:
-        objName = req.get_param("target")
+        objName = urllib.parse.quote_plus(req.get_param("target"))
         aavso_URL = (
             "https://www.aavso.org/vsx/index.php?view=api.object&format=json&ident="
         )
