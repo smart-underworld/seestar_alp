@@ -24,7 +24,7 @@ from device.shr import (
 )
 from device.exceptions import *  # Nothing but exception classes
 from device.seestar_device import Seestar
-from seestar_federation import Seestar_Federation
+from device.seestar_federation import Seestar_Federation
 from alpaca.telescope import *
 import json
 from device.seestar_util import Util  # RWR
@@ -320,7 +320,7 @@ class action:
             resp.text = MethodResponse(
                 req, DevDriverException(0x500, "\n".join(ex.args), ex)
             ).json
-            cur_dev.logger.warn("Error making request: {ex}")
+            cur_dev.logger.warn(f"Error making request: {ex}")
 
 
 @before(PreProcessRequest(maxdev))

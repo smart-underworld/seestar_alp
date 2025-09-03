@@ -493,7 +493,7 @@ class move:
             return
         pos_str = get_request_field("Position", req)  # May raise 400 bad request
         try:
-            newpos = origpos = float(pos_str)
+            newpos = float(pos_str)
         except:
             resp.text = MethodResponse(
                 req, InvalidValueException(f"Position {pos_str} not a valid integer.")
@@ -503,10 +503,10 @@ class move:
         # final value modulo 360 degrees.
         if newpos >= 360.0:
             newpos -= 360.0
-            logger.debug("Result would be >= 360, setting to {newpos}")
+            logger.debug(f"Result would be >= 360, setting to {newpos}")
         if newpos < 0:
             newpos += 360
-            logger.debug("Result would be < 0, setting to {newpos}")
+            logger.debug(f"Result would be < 0, setting to {newpos}")
         try:
             # ------------------
             rot_dev.Move(newpos)  # async

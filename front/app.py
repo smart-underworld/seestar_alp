@@ -124,9 +124,10 @@ def flash(resp, message):
 
 def get_messages() -> list[str]:
     if len(messages) > 0:
-        resp = messages
+        # Return a snapshot to avoid returning a reference to the cleared list
+        out = messages[:]
         messages.clear()
-        return resp
+        return out
     return []
 
 
