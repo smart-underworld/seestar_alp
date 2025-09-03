@@ -2459,11 +2459,9 @@ class ScheduleExposureResource:
         online = check_api_state(telescope_id)
         if not online:
             telescope_id = 0
+
         settings = method_sync("get_setting", telescope_id)
-        if settings:
-            defexp = settings["exp_ms"]["stack_l"]
-        else:
-            defexp = Config.init_expo_stack_ms
+        defexp = pydash.get(settings, "exp_ms.stack_l", Config.init_expo_stack_ms)
         values = {"defexp": int(defexp)}
         render_schedule_tab(
             req, resp, telescope_id, "schedule_exposure.html", "exposure", values, {}
@@ -2472,9 +2470,9 @@ class ScheduleExposureResource:
     @staticmethod
     def on_post(req, resp, telescope_id=0):
         data = req.media
-        expValue = data.get("exposure")
-        action = data.get("action", "")
-        selected_items = data.get("selected_items", [])
+        expValue = pydash.get(data, "exposure", 10000)
+        action = pydash.get(data, "action", "")
+        selected_items = pydash.get(data, "selected_items", [])
 
         online = check_api_state(telescope_id)
         if not online:
