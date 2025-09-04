@@ -16,10 +16,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Set up Python 3.12
+      - name: Set up Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: 3.13
 
       - name: Install dependencies
         run: |
@@ -33,7 +33,7 @@ jobs:
           echo $git_version > ./version.txt
           pyinstaller --name="seestar_alp" `
           --add-data="device/config.toml.example;." --add-data="./version.txt;." --add-data="front/citation;astroquery" --add-data="front/templates;front/templates" --add-data="front/public;front/public" `
-          --add-data="front/planning.json.example;." --add-data="front/csc_sites.json;." --add-data="data/de440s.bsp;data/de440s.bsp" --add-data="data/alp.dat"`
+          --add-data="front/planning.json.example;." --add-data="front/csc_sites.json;." --add-data="data/de440s.bsp;data/de440s.bsp" --add-data="data/alp.dat:data/alp.dat" `
           --paths=./front --paths=./device `
           --collect-all=geomag `
           root_app.py
@@ -68,10 +68,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Set up Python 3.12
+      - name: Set up Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: 3.13
 
       - name: Install dependencies
         run: |
@@ -85,7 +85,7 @@ jobs:
           echo $git_version > ./version.txt
           pyinstaller --name="seestar_alp" \
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
-          --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat" \
+          --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat:data/alp.dat" \
           --paths=./front --paths=./device \
           --collect-all=geomag \
           root_app.py
@@ -123,10 +123,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Set up Python 3.12
+      - name: Set up Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: 3.13
 
       - name: Install dependencies
         run: |
@@ -140,7 +140,7 @@ jobs:
           echo $git_version > ./version.txt
           pyinstaller --name="seestar_alp" --target-arch arm64 --onedir \
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
-          --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat" \
+          --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat:data/alp.dat" \
           --paths=./front --paths=./device \
           --collect-all=geomag \
           root_app.py
@@ -175,10 +175,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Set up Python 3.12
+      - name: Set up Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: 3.13
 
       - name: Install dependencies
         run: |
@@ -192,7 +192,7 @@ jobs:
           echo $git_version > ./version.txt
           pyinstaller --name="seestar_alp" --target-arch x86_64 --onedir \
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
-          --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat" \
+          --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat:data/alp.dat" \
           --paths=./front --paths=./device \
           --collect-all=geomag \
           root_app.py
