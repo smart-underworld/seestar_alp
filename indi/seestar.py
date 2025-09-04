@@ -6,6 +6,7 @@ import random
 import requests
 import json
 import toml
+import logging
 sys.path.insert(0, str(Path.cwd().parent))
 from pyindi.device import device
 from pyindi import device as INDIDevice
@@ -220,6 +221,10 @@ class SeeStarDevice(device):
         
         except Exception as error:
             self.IDMessage(f"IUUpdate error: {error}")
+
+# PyIndi is very spammy at the default level.
+# Lets only capture errors
+logging.getLogger().setLevel(logging.ERROR)
 
 name = os.environ['INDIDEV']
 number = int(os.environ['INDICONFIG'])  #hijack to obtain device number
