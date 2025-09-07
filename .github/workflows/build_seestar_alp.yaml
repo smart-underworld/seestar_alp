@@ -91,8 +91,8 @@ jobs:
         run: |
           $url = "https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
           $outputDir = "downloaded_data/astroquery/simbad/data"
-          New-Item -ItemType Directory -Path $outputDir -Force
-          Invoke-WebRequest -Uri $url -OutFile "$outputDir/query_criteria_fields.json"
+          mkdir -p "$outputDir"
+          curl -s -o "$outputDir/query_criteria_fields.json" "$url"
           echo "Downloaded latest data file"
 
       - name: run pyinstaller for device
@@ -155,8 +155,8 @@ jobs:
         run: |
           $url = "https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
           $outputDir = "downloaded_data/astroquery/simbad/data"
-          New-Item -ItemType Directory -Path $outputDir -Force
-          Invoke-WebRequest -Uri $url -OutFile "$outputDir/query_criteria_fields.json"
+          mkdir -p "$outputDir"
+          curl -s -o "$outputDir/query_criteria_fields.json" "$url"
           echo "Downloaded latest data file"
 
       - name: run pyinstaller for device
@@ -216,8 +216,8 @@ jobs:
         run: |
           $url = "https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
           $outputDir = "downloaded_data/astroquery/simbad/data"
-          New-Item -ItemType Directory -Path $outputDir -Force
-          Invoke-WebRequest -Uri $url -OutFile "$outputDir/query_criteria_fields.json"
+          mkdir -p "$outputDir"
+          curl -s -o "$outputDir/query_criteria_fields.json" "$url"
           echo "Downloaded latest data file"
 
       - name: run pyinstaller for device
