@@ -89,10 +89,10 @@ jobs:
 
       - name: Download astroquery data
         run: |
-          $url = "https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
-          $outputDir = "downloaded_data/astroquery/simbad/data"
-          mkdir -p "$outputDir"
-          curl -s -o "$outputDir/query_criteria_fields.json" "$url"
+          url="https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
+          outputDir="downloaded_data/astroquery/simbad/data"
+          mkdir -p "${outputDir}"
+          curl -s -o "${outputDir}/query_criteria_fields.json" "${url}"
           echo "Downloaded latest data file"
 
       - name: run pyinstaller for device
@@ -153,10 +153,10 @@ jobs:
 
       - name: Download astroquery data
         run: |
-          $url = "https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
-          $outputDir = "downloaded_data/astroquery/simbad/data"
-          mkdir -p "$outputDir"
-          curl -s -o "$outputDir/query_criteria_fields.json" "$url"
+          url="https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
+          outputDir="downloaded_data/astroquery/simbad/data"
+          mkdir -p "${outputDir}"
+          curl -s -o "${outputDir}/query_criteria_fields.json" "${url}"
           echo "Downloaded latest data file"
 
       - name: run pyinstaller for device
@@ -214,10 +214,10 @@ jobs:
 
       - name: Download astroquery data
         run: |
-          $url = "https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
-          $outputDir = "downloaded_data/astroquery/simbad/data"
-          mkdir -p "$outputDir"
-          curl -s -o "$outputDir/query_criteria_fields.json" "$url"
+          url="https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
+          outputDir="downloaded_data/astroquery/simbad/data"
+          mkdir -p "${outputDir}"
+          curl -s -o "${outputDir}/query_criteria_fields.json" "${url}"
           echo "Downloaded latest data file"
 
       - name: run pyinstaller for device
