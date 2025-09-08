@@ -26,6 +26,14 @@ jobs:
           pip install -r requirements.txt
           python -m pip install pyinstaller
 
+      - name: Download astroquery data
+        run: |
+          $url = "https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
+          $outputDir = "downloaded_data/astroquery/simbad/data"
+          New-Item -ItemType Directory -Path $outputDir -Force
+          Invoke-WebRequest -Uri $url -OutFile "$outputDir/query_criteria_fields.json"
+          echo "Downloaded latest data file"
+
       - name: run pyinstaller for seestar_alp
         id: create_seestar_alp
         run: |
@@ -34,6 +42,7 @@ jobs:
           pyinstaller --name="seestar_alp" `
           --add-data="device/config.toml.example;." --add-data="./version.txt;." --add-data="front/citation;astroquery" --add-data="front/templates;front/templates" --add-data="front/public;front/public" `
           --add-data="front/planning.json.example;." --add-data="front/csc_sites.json;." --add-data="data/de440s.bsp;data/de440s.bsp" --add-data="data/alp.dat:data/alp.dat" `
+          --add-data="downloaded_data/astroquery/simbad/data/query_criteria_fields.json;astroquery/simbad/data" `
           --paths=./front --paths=./device `
           --collect-all=geomag `
           root_app.py
@@ -78,6 +87,14 @@ jobs:
           pip install -r requirements.txt
           python -m pip install pyinstaller
 
+      - name: Download astroquery data
+        run: |
+          url="https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
+          outputDir="downloaded_data/astroquery/simbad/data"
+          mkdir -p "${outputDir}"
+          curl -s -o "${outputDir}/query_criteria_fields.json" "${url}"
+          echo "Downloaded latest data file"
+
       - name: run pyinstaller for device
         id: create_device
         run: |
@@ -86,6 +103,7 @@ jobs:
           pyinstaller --name="seestar_alp" \
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
           --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat:data/alp.dat" \
+          --add-data="downloaded_data/astroquery/simbad/data/query_criteria_fields.json:astroquery/simbad/data" \
           --paths=./front --paths=./device \
           --collect-all=geomag \
           root_app.py
@@ -133,6 +151,14 @@ jobs:
           pip install -r requirements.txt
           python -m pip install pyinstaller
 
+      - name: Download astroquery data
+        run: |
+          url="https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
+          outputDir="downloaded_data/astroquery/simbad/data"
+          mkdir -p "${outputDir}"
+          curl -s -o "${outputDir}/query_criteria_fields.json" "${url}"
+          echo "Downloaded latest data file"
+
       - name: run pyinstaller for device
         id: create_device
         run: |
@@ -141,6 +167,7 @@ jobs:
           pyinstaller --name="seestar_alp" --target-arch arm64 --onedir \
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
           --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat:data/alp.dat" \
+          --add-data="downloaded_data/astroquery/simbad/data/query_criteria_fields.json:astroquery/simbad/data" \
           --paths=./front --paths=./device \
           --collect-all=geomag \
           root_app.py
@@ -185,6 +212,14 @@ jobs:
           pip install -r requirements.txt
           python -m pip install pyinstaller
 
+      - name: Download astroquery data
+        run: |
+          url="https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
+          outputDir="downloaded_data/astroquery/simbad/data"
+          mkdir -p "${outputDir}"
+          curl -s -o "${outputDir}/query_criteria_fields.json" "${url}"
+          echo "Downloaded latest data file"
+
       - name: run pyinstaller for device
         id: create_device
         run: |
@@ -193,6 +228,7 @@ jobs:
           pyinstaller --name="seestar_alp" --target-arch x86_64 --onedir \
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
           --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat:data/alp.dat" \
+          --add-data="downloaded_data/astroquery/simbad/data/query_criteria_fields.json:astroquery/simbad/data" \
           --paths=./front --paths=./device \
           --collect-all=geomag \
           root_app.py
