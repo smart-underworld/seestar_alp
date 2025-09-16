@@ -126,6 +126,21 @@ class _Config:
         self.loading_gif: str = self.get_toml(
             "webui_settings", "loading_gif", "loading.gif"
         )
+        self.webui_text_color: str = self.get_toml(
+            "webui_settings", "text_color", ""
+        )
+        self.webui_font_family: str = self.get_toml(
+            "webui_settings", "font_family", ""
+        )
+        self.webui_font_url: str = self.get_toml(
+            "webui_settings", "font_url", ""
+        )
+        self.webui_link_color: str = self.get_toml(
+            "webui_settings", "link_color", ""
+        )
+        self.webui_accent_color: str = self.get_toml(
+            "webui_settings", "accent_color", ""
+        )
 
         # Fixup bad configs
         if f"{self.save_frames_dir}" == "True" or f"{self.save_frames_dir}" == "False":
@@ -293,6 +308,11 @@ class _Config:
         self.set_toml("webui_settings", "save_frames", "save_frames" in req.media)
         self.set_toml("webui_settings", "save_frames_dir", req.media["save_frames_dir"])
         self.set_toml("webui_settings", "loading_gif", req.media["loading_gif"])
+        self.set_toml("webui_settings", "text_color", req.media["text_color"])
+        self.set_toml("webui_settings", "font_family", req.media["font_family"])
+        self.set_toml("webui_settings", "font_url", req.media["font_url"])
+        self.set_toml("webui_settings", "link_color", req.media["link_color"])
+        self.set_toml("webui_settings", "accent_color", req.media["accent_color"])
 
         # server
         self.set_toml("server", "location", req.media["location"])
@@ -683,6 +703,36 @@ class _Config:
                     "Loading gif:",
                     self.loading_gif,
                     "Filename of loading gif to use on live view page",
+                )
+                + self.render_text(
+                    "text_color",
+                    "UI text color:",
+                    self.webui_text_color,
+                    "CSS color value for text (leave blank to use theme default)",
+                )
+                + self.render_text(
+                    "font_family",
+                    "UI font family:",
+                    self.webui_font_family,
+                    "CSS font-family stack, e.g. 'Roboto, sans-serif'",
+                )
+                + self.render_text(
+                    "font_url",
+                    "UI font URL:",
+                    self.webui_font_url,
+                    "Optional stylesheet URL for web fonts (e.g. Google Fonts)",
+                )
+                + self.render_text(
+                    "link_color",
+                    "UI link color:",
+                    self.webui_link_color,
+                    "CSS color value for links (leave blank to use theme default)",
+                )
+                + self.render_text(
+                    "accent_color",
+                    "UI accent color:",
+                    self.webui_accent_color,
+                    "CSS color value for primary UI accents (buttons, switches, highlights)",
                 ),
             )
             + self.render_config_section(
