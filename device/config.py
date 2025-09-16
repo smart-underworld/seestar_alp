@@ -126,18 +126,10 @@ class _Config:
         self.loading_gif: str = self.get_toml(
             "webui_settings", "loading_gif", "loading.gif"
         )
-        self.webui_text_color: str = self.get_toml(
-            "webui_settings", "text_color", ""
-        )
-        self.webui_font_family: str = self.get_toml(
-            "webui_settings", "font_family", ""
-        )
-        self.webui_font_url: str = self.get_toml(
-            "webui_settings", "font_url", ""
-        )
-        self.webui_link_color: str = self.get_toml(
-            "webui_settings", "link_color", ""
-        )
+        self.webui_text_color: str = self.get_toml("webui_settings", "text_color", "")
+        self.webui_font_family: str = self.get_toml("webui_settings", "font_family", "")
+        self.webui_font_url: str = self.get_toml("webui_settings", "font_url", "")
+        self.webui_link_color: str = self.get_toml("webui_settings", "link_color", "")
         self.webui_accent_color: str = self.get_toml(
             "webui_settings", "accent_color", ""
         )
