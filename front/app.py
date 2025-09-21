@@ -187,6 +187,11 @@ def _get_context_real(telescope_id, req):
     experimental = Config.experimental
     confirm = Config.confirm
     uitheme = Config.uitheme
+    webui_text_color = Config.webui_text_color
+    webui_font_family = Config.webui_font_family
+    webui_font_url = Config.webui_font_url
+    webui_link_color = Config.webui_link_color
+    webui_accent_color = Config.webui_accent_color
     defgain = Config.init_gain
     if telescope_id > 0:
         telescope = get_telescope(telescope_id)
@@ -238,6 +243,11 @@ def _get_context_real(telescope_id, req):
         "experimental": experimental,
         "confirm": confirm,
         "uitheme": uitheme,
+        "webui_text_color": webui_text_color,
+        "webui_font_family": webui_font_family,
+        "webui_font_url": webui_font_url,
+        "webui_link_color": webui_link_color,
+        "webui_accent_color": webui_accent_color,
         "client_master": client_master,
         "current_item": current_item,
         "current_stack": current_stack,
@@ -1535,15 +1545,20 @@ def render_template(req, resp, template_name, **context):
     template = fetch_template(template_name)
     resp.status = falcon.HTTP_200
     resp.content_type = "text/html"
-    webui_theme = Config.uitheme
     version = Version.app_version()
+    merged_context = dict(context)
+    merged_context.setdefault("webui_theme", Config.uitheme)
+    merged_context.setdefault("webui_text_color", Config.webui_text_color)
+    merged_context.setdefault("webui_font_family", Config.webui_font_family)
+    merged_context.setdefault("webui_font_url", Config.webui_font_url)
+    merged_context.setdefault("webui_link_color", Config.webui_link_color)
+    merged_context.setdefault("webui_accent_color", Config.webui_accent_color)
+    merged_context.setdefault("version", version)
 
     resp.text = template.render(
         flashed_messages=get_flash_cookie(req, resp),
         messages=get_messages(),
-        webui_theme=webui_theme,
-        version=version,
-        **context,
+        **merged_context,
     )
 
 
