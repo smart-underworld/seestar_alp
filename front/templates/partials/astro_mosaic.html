@@ -14,7 +14,7 @@
 
         .aladin-projection-control button {
             position: relative;
-            z-index: 9; 
+            z-index: 9;
         }
 
         .aladin-stack-control button {
@@ -35,7 +35,7 @@
 
         .aladin-fullScreen-control button {
             position: relative;
-            z-index: 9; 
+            z-index: 9;
         }
     </style>
 {% endblock %}
@@ -52,12 +52,20 @@
                     <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
                 </svg>
             </button>
+            <label for="seestar" class="form-label">Seestar</label>
+           <select id="seestar" name="seestar" onchange="update_astro_mosaic()">
+              <option value="S50">S50</option>
+              <option value="S30">S30</option>
+              <option value="S30 Pro">S30 Pro</option>
+            </select>
             <label for="astro_mosaic_grid_x" class="form-label">Grid Size</label>
             <input type="number" id="astro_mosaic_grid_x" min="1" max="100" value="1" size="1" onchange="update_astro_mosaic()">
             <input type="number" id="astro_mosaic_grid_y" min="1" max="100" value="1" size="1" onchange="update_astro_mosaic()">
             <label for="astro_mosaic_overlap" class="form-label">Overlap</label>
             <input type="number" id="astro_mosaic_overlap" min="1" max="100" value="20" size="2" onchange="update_astro_mosaic()">
-            <label for="send_to_schedule" class="form-label">Send to Schedule</label>
+            <label for "repositionCheckbox" class="form-label">Reposition</label>
+            <input type="checkbox" id="repositionCheckbox" name="repositionCheckbox">
+            <label for="open_send_to_schedule_modal_btn" class="form-label">Send to Schedule</label>
              <button type="button" id="open_send_to_schedule_modal_btn" class="btn btn-primary" title="Send to Schedule">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-journal-arrow-up" viewBox="0 0 16 16">
                     <path fill-rule="evenodd" d="M8 11a.5.5 0 0 0 .5-.5V6.707l1.146 1.147a.5.5 0 0 0 .708-.708l-2-2a.5.5 0 0 0-.708 0l-2 2a.5.5 0 1 0 .708.708L7.5 6.707V10.5a.5.5 0 0 0 .5.5"/>
@@ -72,12 +80,16 @@
 <div id="radec-div" style="width:300px;"></div>
 <div id="day-div" style="height:300px; width: 100%; max-width: 100% !important;"></div>
 <div id="year-div" style="height:300px; width: 100%; max-width: 100% !important;"></div>
+<div id="dayvisibility-panel-text" style="display: none;"></div>
+<div id="yearvisibility-panel-text" style="display: none;"></div>
+<div id="status-text" style="display: none;"></div>
+<div id="error-text" style="display: none;"></div>
 <dialog id="send_to_schedule_modal">
     <form method="post" action="/{{ telescope["device_num"] }}/schedule/mosaic">
         <div class="card border-primary mb-3">
             <div class="card-body">
                 <h5 class="card-title">Target</h5>
-    
+
                 <div class="mb-3 row">
                     <div class="col">
                         <label for="targetName" class="form-label">Target Name</label>
@@ -100,13 +112,13 @@
                         <div class="form-text">Enter target name, select type, and press the button to retrieve RA/Dec from Simbad / Planet Server.</div>
                     </div>
                 </div>
-    
+
                 <div class="mb-3 row">
                     <div class="col">
                         <label for="ra" class="form-label">Right Ascension</label>
                         <input type="text" class="form-control" id="ra" name="ra" aria-describedby="raHelp" required>
                         <div id="raHelp" class="form-text">Mosaic center in decimal hours or hours/minutes/seconds (e.g. -1.2 or
-                            6h32m32.5s)						
+                            6h32m32.5s)
                         </div>
                     </div>
                     <div class="col">
@@ -115,10 +127,10 @@
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard-fill" viewBox="0 0 16 16">
                                 <path fill-rule="evenodd" d="M10 1.5a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5zm-5 0A1.5 1.5 0 0 1 6.5 0h3A1.5 1.5 0 0 1 11 1.5v1A1.5 1.5 0 0 1 9.5 4h-3A1.5 1.5 0 0 1 5 2.5zm-2 0h1v1A2.5 2.5 0 0 0 6.5 5h3A2.5 2.5 0 0 0 12 2.5v-1h1a2 2 0 0 1 2 2V14a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V3.5a2 2 0 0 1 2-2"/>
                               </svg>
-                        </button>                    
+                        </button>
                         <div id="targetNameHelp" class="form-text">Paste RA/Dec from Clipboard</div>
                     </div>
-    
+
                     <div class="col">
                         <label for="raPanels" class="form-label">&nbsp;</label>
                         <input type="text" class="form-control" id="raPanels" name="raPanels"
@@ -131,20 +143,20 @@
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-star-fill" viewBox="0 0 16 16">
                                 <path d="M3.612 15.443c-.386.198-.824-.149-.746-.592l.83-4.73L.173 6.765c-.329-.314-.158-.888.283-.95l4.898-.696L7.538.792c.197-.39.73-.39.927 0l2.184 4.327 4.898.696c.441.062.612.636.282.95l-3.522 3.356.83 4.73c.078.443-.36.79-.746.592L8 13.187l-4.389 2.256z"/>
                               </svg>
-                        </button>                    
+                        </button>
                         <div id="targetNameHelp" class="form-text">Retreive RA/Dec from Stellarium</div>
                     </div>
                 </div>
-    
+
                 <div class="mb-3 row">
                     <div class="col">
                         <label for="dec" class="form-label">Declination</label>
                         <input type="text" class="form-control" id="dec" name="dec" aria-describedby="decHelp" required>
                         <div id="decHelp" class="form-text">Mosaic center in decimal degrees or degrees/minutes/seconds (e.g. -1.2 or
-                            +6d32m32.5s)						
+                            +6d32m32.5s)
                         </div>
                     </div>
-    
+
                     <div class="col">
                         <label for="decPanels" class="form-label">&nbsp;</label>
                         <input type="text" class="form-control" id="decPanels" name="decPanels"
@@ -152,7 +164,7 @@
                         <div id="decPanelsHelp" class="form-text">Number of Dec panels</div>
                     </div>
                 </div>
-    
+
                 <div class="mb-3 row">
                     <div class="mb-3 col">
                         <label for="panelOverlap" class="form-label">Panel Overlap (%)</label>
@@ -187,11 +199,11 @@
                 {% endif %}
             </div>
         </div>
-    
+
         <div class="card border-primary mb-3">
             <div class="card-body">
                 <h5 class="card-title">Exposure</h5>
-    
+
                 <div class="mb-3">
                     <label for="panelTime" class="form-label">Panel Acquisition Time</label>
                     <input type="text" class="form-control" id="panelTime" name="panelTime"
@@ -199,12 +211,12 @@
                     <div id="panelTimeHelp" class="form-text">How much time to acquire data for each panel (ex: 1h 30m or 5400).
                     </div>
                 </div>
-    
+
                 <div class="mb-3">
                         <input type="text" class="form-control" id="gain" name="gain" aria-describedby="gainHelp" value="80" required>
                     <div id="gainHelp" class="form-text">Gain. (ex: 80)</div>
                 </div>
-    
+
                 <div class="mb-3">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="useLpFilter" name="useLpFilter">
@@ -221,71 +233,168 @@
                         </label>
                     </div>
                 </div>
-    
+
             </div>
         </div>
         <button type="submit" class="btn btn-primary">Submit</button><button type="reset" class="btn btn-primary float-end" id="close_send_to_schedule_modal_btn">Close</button>
-    </form>        
+    </form>
 </dialog>
 <script>
-    // Default settings.
+    // 1. DEFAULT SETTINGS & VARIABLES
+    var isProgrammaticUpdate = false;
     var viewer_params = {
-        fov_x : 43.8,               // x fov in degrees
-        fov_y : 77.4,               // y fov in degrees
-        grid_type : "fov",          // grid type, "fov" or "mosaic", if not set, "fov" is used
-        grid_size_x : 1,            // number of grid panels in x direction, if not set, 1 is used
-        grid_size_y : 1,            // number of grid panels y direction, if not set, 1 is used
-        grid_overlap : 20,
-        location_lat : {{ config_lat }},    // location latitude (here Teide)
-        location_lng : {{ config_long }},   // location longitude (here Teide)
-        horizonSoft : null,         // soft horizon limit or null
-        horizonHard : [30],         // hard horizon limit or null
-        meridian_transit : null,    // meridian transit or null
-        UTCdate_ms : null,          // UTC date in milliseconds at the start of the day, null for current date
-        timezoneOffset: {{ utc_offset }},       // difference between UTC time and local time, in hours, null for UTC, should match with lat/lng
-        isCustomMode : true,        // use custom colors
-        chartTextColor : "white",   // custom chart text color
-        gridlinesColor : "gray",    // custom chart grid lines color
-        backgroundColor : "black"   // custom chart background color
+        fov_x: 43.8,
+        fov_y: 77.4,
+        grid_type: "fov",
+        grid_size_x: 1,
+        grid_size_y: 1,
+        grid_overlap: 20,
+        location_lat: 32.92,
+        location_lng: -96.72,
+        horizonSoft: null,
+        horizonHard: [30],
+        meridian_transit: null,
+        UTCdate_ms: null,
+        timezoneOffset: -5,
+        isCustomMode: true,
+        chartTextColor: "white",
+        gridlinesColor: "gray",
+        backgroundColor: "black",
+        isRepositionModeFunc: function() {
+            var isChecked = document.getElementById("repositionCheckbox").checked;
+            return isChecked;
+        },
+        repositionTargetFunc: function(target_str) {
+            isProgrammaticUpdate = true;
+            document.getElementById("astro_mosaic_search_text").value = target_str;
+            setTimeout(function() { isProgrammaticUpdate = false; }, 100);
+        }
     };
     var astro_mosaic = null;
 
-    update_astro_mosaic();
-
-    function update_astro_mosaic() {
-        var astro_mosaic_search_text = document.getElementById("astro_mosaic_search_text");
-        var astro_mosaic_grid_x = document.getElementById("astro_mosaic_grid_x");
-        var astro_mosaic_grid_y = document.getElementById("astro_mosaic_grid_y");
-        var astro_mosaic_overlap = document.getElementById("astro_mosaic_overlap");
-        if( astro_mosaic_grid_x.value == 1 && astro_mosaic_grid_y.value == 1){
-            viewer_params["grid_type"] = "fov";
-            viewer_params["grid_size_x"] = 1;
-            viewer_params["grid_size_y"] = 1;
-            viewer_params["grid_overlap"] = 100;
-        }else{
-            viewer_params["grid_type"] = "mosaic";
-            viewer_params["grid_size_x"] = astro_mosaic_grid_x.value;
-            viewer_params["grid_size_y"] = astro_mosaic_grid_y.value;
-            viewer_params["grid_overlap"] = astro_mosaic_overlap.value;
-        }
-        astro_mosaic = null;
-        astro_mosaic = AstroMosaicEngine(astro_mosaic_search_text.value, viewer_params, "aladin-div", "day-div", "year-div", "radec-div");
+    // ADD THIS FUNCTION - it's required by the engine
+    function getAstroMosaicFov(fov) {
+        return (fov * 60.0) / 3600.0;
     }
 
-    // Resize debounce
-    let astro_mosaic_resizeTimeout;
+    function fillHorizonLimits(horizon_limits) {
+        if (horizon_limits == null || horizon_limits.length == 0) {
+            horizon_limits = [0];
+        }
+        var len = horizon_limits.length;
+        if (len < 71) {
+            var last = horizon_limits[len-1];
+            for (var k = len; k < 71; k++) {
+                horizon_limits[k] = last;
+            }
+        }
+        return horizon_limits;
+    }
 
+    // 2. GOOGLE CHARTS LOAD AND INIT
+    google.charts.load('current', {'packages':['corechart']});
+    google.charts.setOnLoadCallback(initAstroMosaic);
+
+    function initAstroMosaic() {
+        update_astro_mosaic();
+
+        // Start monitoring checkbox state
+        setInterval(function() {
+            var isChecked = document.getElementById("repositionCheckbox").checked;
+        }, 3000);
+    }
+
+    // 3. MAIN UPDATE FUNCTION
+    function update_astro_mosaic() {
+        if (isProgrammaticUpdate) {
+            return;
+        }
+
+        const search_text = document.getElementById("astro_mosaic_search_text").value;
+        const grid_x = Number(document.getElementById("astro_mosaic_grid_x").value);
+        const grid_y = Number(document.getElementById("astro_mosaic_grid_y").value);
+        const overlap = Number(document.getElementById("astro_mosaic_overlap").value);
+        const seestar = document.getElementById("seestar").value;
+
+        if (seestar === "S50") {
+            viewer_params.fov_x = 43.8;
+            viewer_params.fov_y = 77.4;
+        } else if (seestar === "S30") {
+            viewer_params.fov_x = 73.2;
+            viewer_params.fov_y = 130.2;
+        } else if (seestar === "S30 Pro") {
+            viewer_params.fov_x = 144.4;
+            viewer_params.fov_y = 256.7;
+        }
+
+        if (grid_x === 1 && grid_y === 1) {
+            viewer_params.grid_type = "fov";
+            viewer_params.grid_size_x = 1;
+            viewer_params.grid_size_y = 1;
+            viewer_params.grid_overlap = 100;
+        } else {
+            viewer_params.grid_type = "mosaic";
+            viewer_params.grid_size_x = grid_x;
+            viewer_params.grid_size_y = grid_y;
+            viewer_params.grid_overlap = overlap;
+        }
+
+        viewer_params.am_fov_x = (viewer_params.fov_x * 60.0) / 3600.0;
+        viewer_params.am_fov_y = (viewer_params.fov_y * 60.0) / 3600.0;
+
+        if (viewer_params.UTCdate_ms == null) {
+            var d = new Date();
+            viewer_params.UTCdate_ms = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0);
+        }
+
+        astro_mosaic = StartAstroMosaicViewerEngine(
+            "all",
+            search_text,
+            viewer_params,
+            {
+                aladin_panel: "aladin-div",
+                aladin_panel_text: "radec-div",
+                dayvisibility_panel: "day-div",
+                dayvisibility_panel_text: "dayvisibility-panel-text",
+                yearvisibility_panel: "year-div",
+                yearvisibility_panel_text: "yearvisibility-panel-text",
+                status_text: "status-text",
+                error_text: "error-text",
+                panel_view_x: null,
+                panel_view_y: null,
+                panel_view_div: null,
+                panel_view_text: null
+            },
+            null,
+            viewer_params.grid_overlap ? viewer_params.grid_overlap : 20,
+            {
+                isRepositionModeFunc: viewer_params.isRepositionModeFunc,
+                repositionTargetFunc: viewer_params.repositionTargetFunc,
+                sun_rise_set: function(midday, lat, lon, h) { return {sunset: 0, sunrise: 0}; },
+                object_altitude_init: function(date, lat, lng) { return {}; },
+                object_altaz: function(date, ra, dec, lat, lng) { return {alt: 0, az: 0}; },
+                object_altitude_get: function(aa, ra, dec) { return 0; },
+                moon_position: function(date) { return {ra: 0, dec: 0}; },
+                moon_topocentric_correction: function(alt) { return 0; },
+                moon_distance: function(ra1, dec1, ra2, dec2) { return 0; },
+                getTargetAboveRightNow: function(lat, lng, date) { return [0, 0]; }
+            }
+        );
+    }
+
+    // 4. RESIZE DEBOUNCE
+    let astro_mosaic_resizeTimeout;
     window.addEventListener('resize', () => {
         clearTimeout(astro_mosaic_resizeTimeout);
         astro_mosaic_resizeTimeout = setTimeout(() => {
-            console.log("Window resizing finished, updating astro mosaic");
             update_astro_mosaic();
-        }, 300); // Adjust the delay as needed
+        }, 300);
     });
 
+    // 5. MODAL FUNCTIONS
     const send_to_schedule_modal = document.getElementById("send_to_schedule_modal");
     const open_send_to_schedule_modal_btn = document.getElementById("open_send_to_schedule_modal_btn");
-    const close_send_to_schedule_modal_btn  = document.getElementById("close_send_to_schedule_modal_btn");
+    const close_send_to_schedule_modal_btn = document.getElementById("close_send_to_schedule_modal_btn");
 
     function show_send_to_schedule_modal() {
         astro_mosaic_grid_x = document.getElementById('astro_mosaic_grid_x').value;
@@ -298,7 +407,6 @@
         }else{
             document.getElementById('panelOverlap').value = document.getElementById('astro_mosaic_overlap').value;
         }
-        // console.log("##### RADEC " + document.querySelector(".search").value);
         aladin_radec = document.querySelector(".search").value;
         const aladin_radec_array = aladin_radec.split(" ");
         aladin_ra = aladin_radec_array[0] + "h" + aladin_radec_array[1] + "m" + aladin_radec_array[2] + "s";
@@ -311,15 +419,13 @@
     function close_send_to_schedule_modal() {
         send_to_schedule_modal.close();
     }
-    
+
     document.addEventListener('click', (event) => {
         if (event.target === send_to_schedule_modal) {
-            // Click occurred outside the dialog
             send_to_schedule_modal.close();
         }
     });
 
-    // open modal event
     open_send_to_schedule_modal_btn.addEventListener("click", show_send_to_schedule_modal);
     close_send_to_schedule_modal_btn.addEventListener("click", close_send_to_schedule_modal);
 </script>
