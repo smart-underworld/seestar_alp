@@ -64,19 +64,31 @@ log_events_in_info = true
 
 [[seestars]]
 name = "Seestar Alpha"
-# ip_address should not have to be changed unless you have more than 1 seestar
-ip_address = "seestar.local"
-device_num = 1
-# You can specify the following settings to override those found in the seestar_initialization section on a per-device level
-#is_EQ_mode = false          # can be used to override default
+ip_address = "192.168.8.51"
+is_on = true
+is_EQ_mode = false
 
-#[[seestars]]
-#name = "Seestar Beta"
-#ip_address = "192.168.110.36"
-#device_num = 2
+[[seestars]]
+name = "Seestar Beta"
+ip_address = "192.168.8.52"
+is_on = false
+is_EQ_mode = true
 
+[[seestars]]
+name = "Seestar Gamma"
+ip_address = "192.168.8.53"
+is_on = false
+is_EQ_mode = false
 
-#[[seestars]]
-#name = "Seestar Gamma"
-#ip_address = "192.168.110.238"
-#device_num = 3
+[[seestars]]
+name = "Seestar Delta"
+ip_address = "192.168.8.54"
+is_on = false
+is_EQ_mode = true
+
+[[seestars]]
+name = "Seestar Baby"
+ip_address = "192.168.8.50"
+is_on = false
+is_EQ_mode = true
+

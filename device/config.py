@@ -154,28 +154,27 @@ class _Config:
         self.can_reverse: bool = self.get_toml("device", "can_reverse", True)
         self.step_size: float = self.get_toml("device", "step_size", 1.0)
         self.steps_per_sec: int = self.get_toml("device", "steps_per_sec", 6)
+
+
         if "seestars" in self._dict:
-            self.seestars = self._dict["seestars"]
-        else:
+            self.seestars = []
+            dev_index = 0
+            for seestar in self._dict["seestars"]:
+                if "is_on" not in seestar or seestar['is_on'] == True:
+                    dev_index += 1
+                    seestar['device_num'] = dev_index
+                    self.seestars.append(seestar)
+        if dev_index == 0:
             self.seestars = [
                 {
                     "name": "Seestar Alpha",
                     "ip_address": "seestar.local",
+                    "move_arm_lat_sec": 2.0,
+                    "move_arm_lon_sec": 20.0,
                     "is_EQ_mode": False,
                     "device_num": 1,
                 }
             ]
-
-        # For the rare situation of manually edited toml where the highest
-        # device_num is higher than the number of devices, we rewrite the device_num
-        # sequentially.
-
-        for seestar in self.seestars:
-            if int(seestar["device_num"]) > len(self.seestars):
-                counter = 1
-                for ss in self.seestars:
-                    ss["device_num"] = counter
-                    counter += 1
 
         # ---------------
         # Logging Section
