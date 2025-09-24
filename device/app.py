@@ -251,6 +251,7 @@ class DeviceMain:
                 4700,
                 dev["device_num"],
                 is_EQ_mode,
+                
             )
             # Don't start the imaging or log collector if this is a simulator
             simulator = dev.get("simulator", False)

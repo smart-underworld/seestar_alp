@@ -84,6 +84,7 @@ class Seestar:
         device_name: str,
         device_num: int,
         is_EQ_mode: bool,
+        is_queue_consumer: bool,
         is_debug=False,
         seestar_federation=None,
     ):
@@ -151,6 +152,8 @@ class Seestar:
         self.event_queue = collections.deque(maxlen=20)
         self.eventbus = signal(f"{self.device_name}.eventbus")
         self.is_EQ_mode: bool = is_EQ_mode
+        self.is_queue_consumer: bool = is_queue_consumer
+
         # self.trace = MessageTrace(self.device_num, self.port)
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
@@ -2128,7 +2131,7 @@ class Seestar:
                 break
 
             # if the device schedule is done, check if there is any scheduled items in the federation scheduler
-            if index >= len(self.schedule["list"]):
+            if self.is_queue_consumer and index >= len(self.schedule["list"]):
                 next_scheduled_item = self.seestar_federation.pop_next_schedule_item()
                 if next_scheduled_item is None:
                     break

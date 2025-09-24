@@ -172,6 +172,7 @@ class _Config:
                     "move_arm_lat_sec": 2.0,
                     "move_arm_lon_sec": 20.0,
                     "is_EQ_mode": False,
+                    "is_queue_consumer": False,
                     "device_num": 1,
                 }
             ]
