@@ -53,6 +53,9 @@ _context_cached = {}
 _last_api_state_get_time = {}
 _api_state_cached = {}
 
+_last_command_response_time = {}
+_last_command_response_cache = {}
+
 
 def get_ip() -> str | None:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -618,6 +621,22 @@ def do_insert_schedule_item(action, parameters, before_id, dev_num):
 
 
 def method_sync(method, telescope_id=1, **kwargs):
+    # let's try to cache the frequently called sync commands such as get_view_state
+    if method in ["get_view_state"]:
+        key = method + str(telescope_id) + str(kwargs)
+        if (
+            key not in _last_command_response_time
+            or time.time() - _last_command_response_time[key] > 3.0
+        ):
+            _last_command_response_time[key] = time.time()
+            _last_command_response_cache[key] = method_sync_inner(
+                method, telescope_id, **kwargs
+            )
+        return _last_command_response_cache[key]
+    else:
+        return method_sync_inner(method, telescope_id, **kwargs)
+
+def method_sync_inner(method, telescope_id=1, **kwargs):
     out = do_action_device("method_sync", telescope_id, {"method": method, **kwargs})
 
     # print(f"method_sync {out=}")
@@ -1745,6 +1764,7 @@ def get_live_status(telescope_id: int):
         return str(timedelta(seconds=int(elapsed / 1000)))
 
     while True:
+        time.sleep(5)
         imager.update_live_status()
         method_sync(
             "get_view_state", telescope_id, id=42

@@ -82,7 +82,7 @@ def start_seestar_device(
     # logger = logger
     global seestar_dev
     seestar_dev[device_num] = Seestar(
-        logger, ip_address, port, name, device_num, is_EQ_mode, True
+        logger, ip_address, port, name, device_num, is_EQ_mode, True, seestar_federation
     )
     seestar_dev[device_num].start_watch_thread()
     return seestar_dev[device_num]
@@ -195,7 +195,8 @@ class action:
                     f"request: {action_name} for device {devnum} with param {parameters}"
                 )
 
-            # print(f'Received request: Action {action_name} with params {params}')
+            print(f'Received request: Action {action_name} with params {params} for device {devnum} ')
+            
             if action_name == "get_event_state":
                 result = cur_dev.get_event_state(params)
                 resp.text = MethodResponse(req, value=result).json

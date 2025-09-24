@@ -85,6 +85,7 @@ class Seestar:
         device_num: int,
         is_EQ_mode: bool,
         is_debug=False,
+        seestar_federation=None,
     ):
         logger.info(
             f"Initialize the new instance of Seestar: {host}:{port}, name:{device_name}, num:{device_num}, is_EQ_mode:{is_EQ_mode}, is_debug:{is_debug}"
@@ -115,6 +116,7 @@ class Seestar:
         self.target_ra: float = 0
         self.utcdate = time.time()
         self.firmware_ver_int: int = 0
+        self.seestar_federation = seestar_federation
 
         self.event_callbacks: list[EventCallback] = []
 
@@ -2124,10 +2126,19 @@ class Seestar:
             f"schedule started from item {self.schedule['item_number']}..."
         )
         index = self.schedule["item_number"] - 1
-        while index < len(self.schedule["list"]):
+        while index < len(self.schedule["list"]) or self.seestar_federation.has_scheduled_items():
             update_time()
             if self.schedule["state"] != "working":
                 break
+            
+            # if the device schedule is done, check if there is any scheduled items in the federation scheduler
+            if index >= len(self.schedule["list"]):
+                next_scheduled_item = self.seestar_federation.pop_next_schedule_item()
+                if next_scheduled_item is None:
+                    break
+                self.logger.info("Found additional scheduled item from federation.")
+                self.schedule["list"].append(next_scheduled_item)
+
             cur_schedule_item = self.schedule["list"][index]
             self.schedule["current_item_id"] = cur_schedule_item.get(
                 "schedule_item_id", "UNKNOWN"
@@ -2256,6 +2267,7 @@ class Seestar:
                     request: MessageParams = {"method": action}
                 self.send_message_param_sync(request)
             index += 1
+
             self.schedule["is_skip_requested"] = False
 
         if self.schedule["state"] != "stopped":

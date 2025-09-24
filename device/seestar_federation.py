@@ -199,7 +199,8 @@ class Seestar_Federation:
         }
         return self.schedule
 
-    def construct_schedule_item(self, params):
+    def construct_schedule_sublist(self, params):
+        result = []
         item = params.copy()
         if item["action"] == "start_mosaic":
             mosaic_params = item["params"]
@@ -220,36 +221,57 @@ class Seestar_Federation:
                     # mosaic_params["is_j2000"] = False
                 mosaic_params["ra"] = round(mosaic_params["ra"], 4)
                 mosaic_params["dec"] = round(mosaic_params["dec"], 4)
-        item["schedule_item_id"] = str(uuid.uuid4())
-        return item
+
+            max_devices = mosaic_params.get("max_devices", 1)
+            if isinstance(max_devices, str):
+                max_devices = int(max_devices)
+            if max_devices < 1:
+                max_devices = 1
+            
+
+            # federation_mode : duplicate, by_panels or by_time
+            federation_mode = mosaic_params.get("federation_mode", "duplicate")
+            del mosaic_params["federation_mode"]
+            del mosaic_params["max_devices"]
+            
+            if federation_mode == 'duplicate':
+                for count in range(max_devices):
+                    new_item = item.copy()
+                    new_item["schedule_item_id"] = str(uuid.uuid4())
+                    result.append(new_item)
+
+            elif federation_mode == "by_time":
+                mosaic_params["panel_time_sec"] = round(
+                    mosaic_params["panel_time_sec"] / max_devices
+                )
+                for count in range(max_devices):
+                    new_item = item.copy()
+                    new_item["schedule_item_id"] = str(uuid.uuid4())
+                    result.append(new_item)
+
+            elif federation_mode == "by_panel":
+                section_dict = self.get_section_array_for_mosaic(
+                    max_devices, mosaic_params
+                )
+                self.logger.info(f"federation mode split ->  {section_dict}")
+
+                for key in section_dict:
+                    new_item = item.copy()
+                    new_item["params"] = mosaic_params.copy()
+                    new_item["params"]["selected_panels"] = section_dict[key]
+                    new_item["schedule_item_id"] = str(uuid.uuid4())
+                    result.append(new_item)
+                    self.logger.info(
+                        f"federation mode by panels ->   key: {key}; panel: {new_item['params']['selected_panels']}"
+                    )
+        else:
+            self.logger.warn("Federated schedule will only support mosaic action.")
+        return result
 
     def add_schedule_item(self, params: dict[str, Any]) -> Schedule:
-        new_item = self.construct_schedule_item(params)
-        self.schedule["list"].append(new_item)
+        new_list=self.construct_schedule_sublist(params)
+        self.schedule["list"].extend(new_list)
         return self.schedule
-        ###
-        item = params.copy()
-        if item["action"] == "start_mosaic":
-            mosaic_params = item["params"]
-            if isinstance(mosaic_params["ra"], str):
-                # try to trim the seconds to 1 decimal
-                mosaic_params["ra"] = Util.trim_seconds(mosaic_params["ra"])
-                mosaic_params["dec"] = Util.trim_seconds(mosaic_params["dec"])
-            elif isinstance(mosaic_params["ra"], float):
-                if mosaic_params["ra"] < 0:
-                    self.logger.warn(
-                        "Failed. Must specify an proper coordinate for a federated schedule."
-                    )
-                    raise Exception(
-                        "Failed. Must specify an proper coordinate for a federated schedule."
-                    )
-                mosaic_params["ra"] = round(mosaic_params["ra"], 4)
-                mosaic_params["dec"] = round(mosaic_params["dec"], 4)
-        item["schedule_item_id"] = str(uuid.uuid4())
-        self.schedule["list"].append(item)
-        return self.schedule
-
-    ###
 
     def remove_schedule_item(self, params):
         targeted_item_id = params["schedule_item_id"]
@@ -300,8 +322,11 @@ class Seestar_Federation:
             item = self.schedule["list"][index]
             item_id = item.get("schedule_item_id", "UNKNOWN")
             if item_id == targeted_item_id:
-                new_item = self.construct_schedule_item(params)
-                self.schedule["list"].insert(index, new_item)
+                new_list = self.construct_schedule_sublist(params)
+                new_index = index
+                for new_item in new_list:
+                    self.schedule["list"].insert(new_index, new_item)
+
                 break
             index += 1
         return self.schedule
@@ -334,8 +359,7 @@ class Seestar_Federation:
 
     # cur_params['selected_panels'] cur_params['ra_num'], cur_params['dec_num']
     # split selected panels into multiple sections. Given num_devices > 1 and num ra and dec is > 1
-    def get_section_array_for_mosaic(self, device_id_list, params):
-        num_devices = len(device_id_list)
+    def get_section_array_for_mosaic(self, num_devices, params):
         if num_devices == 0:
             raise Exception("there is no active device connected!")
 
@@ -354,14 +378,14 @@ class Seestar_Federation:
 
         num_panels_per_device = int(num_panels / num_devices)
         result = {}
-        for i in device_id_list:
+        for i in range(num_devices):
             end_index = start_index + num_panels_per_device
             selected_panels = ";".join(panel_array[start_index:end_index])
             if len(selected_panels) > 0:
                 result[i] = selected_panels
             start_index = end_index
         # take care of the reminder of the selected panels
-        for i in device_id_list:
+        for i in range(num_devices):
             if start_index >= num_panels:
                 break
             result[i] = f"{result[i]};{panel_array[start_index]}"
@@ -371,97 +395,25 @@ class Seestar_Federation:
 
     # shortcut to start a new scheduler with only a mosaic request
     def start_mosaic(self, cur_params):
-        cur_schedule = self.get_schedule(cur_params)
-        num_devices = len(cur_schedule["available_device_list"])
-        if num_devices < 1:
-            return {
-                "error": "Failed: No available devices found to execute a schedule."
-            }
-
-        self.schedule = {
-            "list": [],
-            "state": "stopped",
-            "schedule_id": str(uuid.uuid4()),
-        }
         schedule_item = {"action": "start_mosaic", "params": cur_params}
-        self.add_schedule_item(schedule_item)
-        return self.start_scheduler(cur_params)
+        return self.add_schedule_item(schedule_item)
 
     def start_scheduler(self, params):
-        if len(self.schedule["list"]) == 0:
-            return {"error": "Failed: The schedule is empty."}
-
-        root_schedule = self.get_schedule(params)
-        available_devices = root_schedule["available_device_list"]
-        random.shuffle(available_devices)
-
-        if "max_devices" in params:
-            available_devices = available_devices[: params["max_devices"]]
-
-        num_devices = len(available_devices)
-        if num_devices < 1:
-            return {
-                "error": "Failed: No available devices found to execute a schedule."
-            }
-
-        for key in available_devices:
-            cur_device = self.seestar_devices[key]
-            cur_device.create_schedule(params)
-
-        for schedule_item in self.schedule["list"]:
-            if "params" not in schedule_item:
-                cur_params = {}
-            else:
-                cur_params = schedule_item["params"].copy()
-
-            if schedule_item["action"] == "start_mosaic":
-                # federation_mode : duplicate, by_panels or by_time
-                if "federation_mode" not in cur_params or num_devices == 1:
-                    cur_params["federation_mode"] = "duplicate"
-                elif cur_params["federation_mode"] == "by_time":
-                    cur_params["panel_time_sec"] = round(
-                        cur_params["panel_time_sec"] / num_devices
-                    )
-
-                if cur_params["federation_mode"] == "by_panels":
-                    section_dict = self.get_section_array_for_mosaic(
-                        available_devices, cur_params
-                    )
-                    self.logger.info(f"federation mode split ->  {section_dict}")
-
-                for key in available_devices:
-                    cur_device = self.seestar_devices[key]
-                    new_item = {}
-                    new_item["action"] = "start_mosaic"
-                    new_item["params"] = cur_params.copy()
-                    if (
-                        cur_params["federation_mode"] == "by_panels"
-                        and key in section_dict
-                    ):
-                        new_item["params"]["selected_panels"] = section_dict[key]
-                        self.logger.info(
-                            f"federation mode by panels ->   key: {key}; panel: {new_item['params']['selected_panels']}"
-                        )
-                    cur_device.add_schedule_item(new_item)
-            else:
-                for key in available_devices:
-                    cur_device = self.seestar_devices[key]
-                    new_item = {}
-                    new_item["action"] = schedule_item["action"]
-                    cur_params = schedule_item["params"].copy()
-                    new_item["params"] = cur_params
-                    cur_device.add_schedule_item(new_item)
-
-        for key in available_devices:
-            cur_device = self.seestar_devices[key]
-            cur_device.start_scheduler(params)
-
+        self.logger.warn("Federation scheduler does not start by itself. Active devices will pick up scheduled tasks when they are idle.")
         return self.get_schedule(params)
 
     def stop_scheduler(self, params: dict):
         result = {}
-        for key in self.seestar_devices:
-            cur_device = self.seestar_devices[key]
-            if cur_device.is_connected:
-                result[key] = cur_device.stop_scheduler(params)
+        self.logger.warn("Federation scheduler does not stop by itself. Active devices can be stopped independently.")
         return result
+
+    def pop_next_schedule_item(self):
+        if len(self.schedule["list"]) == 0:
+            return None
+        
+        next_item = self.schedule["list"].popleft()
+        return next_item
+    
+    def has_scheduled_items(self):
+        return len(self.schedule["list"]) > 0
+    
