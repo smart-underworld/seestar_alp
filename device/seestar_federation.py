@@ -370,9 +370,11 @@ class Seestar_Federation:
             num_panels = params["dec_num"] * params["ra_num"]
             panel_array = [""] * num_panels
             index = 0
-            for n_dec in range(params["dec_num"]):
-                for n_ra in range(params["ra_num"]):
-                    panel_array[index] = f"{n_ra + 1}{n_dec + 1}"
+            ra_num = params["ra_num"]
+            dec_num = params["dec_num"]
+            for n_dec in range(dec_num):
+                for n_ra in range(ra_num):
+                    panel_array[index] = f"{chr(n_ra+ord("A"))}{n_dec + 1}"
                     index += 1
         start_index = 0
 

@@ -1560,13 +1560,9 @@ class Seestar:
             }
             self.update_scheduler_state_obj(item_state)
 
-            cur_dec = center_Dec - int(nDec / 2) * delta_Dec
+            cur_dec = center_Dec + int(nDec / 2) * delta_Dec
             for index_dec in range(nDec):
-                spacing_result = Util.mosaic_next_center_spacing(
-                    center_RA, cur_dec, overlap_percent
-                )
-                delta_RA = spacing_result[0]
-                cur_ra = center_RA - int(nRA / 2) * spacing_result[0]
+                cur_ra = center_RA + int(nRA / 2) * delta_RA
                 for index_ra in range(nRA):
                     if self.schedule["state"] != "working":
                         self.logger.info("Mosaic mode was requested to stop. Stopping")
@@ -1579,9 +1575,9 @@ class Seestar:
                         return
 
                     # check if we are doing a subset of the panels
-                    panel_string = str(index_ra + 1) + str(index_dec + 1)
+                    panel_string = f"{chr(index_ra+ord("A"))}{index_dec + 1}"
                     if is_use_selected_panels and panel_string not in panel_set:
-                        cur_ra += delta_RA
+                        cur_ra -= delta_RA
                         continue
 
                     self.event_state["scheduler"]["cur_scheduler_item"][
@@ -1660,7 +1656,7 @@ class Seestar:
                             "action"
                         ] = msg
 
-                        cur_ra += delta_RA
+                        cur_ra -= delta_RA
                         continue
 
                     msg = f"stacking the panel for {sleep_time_per_panel} seconds"
@@ -1677,7 +1673,7 @@ class Seestar:
                             "action"
                         ] = msg
 
-                        cur_ra += delta_RA
+                        cur_ra -= delta_RA
                         continue
 
                     panel_remaining_time_s = sleep_time_per_panel
@@ -1722,8 +1718,8 @@ class Seestar:
                     msg = "Stacking operation finished " + save_target_name
                     self.logger.info(msg)
                     self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
-                    cur_ra += delta_RA
-                cur_dec += delta_Dec
+                    cur_ra -= delta_RA
+                cur_dec -= delta_Dec
             self.logger.info("Finished mosaic.")
             self.event_state["scheduler"]["cur_scheduler_item"][
                 "item_remaining_time_s"
@@ -2130,7 +2126,7 @@ class Seestar:
             update_time()
             if self.schedule["state"] != "working":
                 break
-            
+
             # if the device schedule is done, check if there is any scheduled items in the federation scheduler
             if index >= len(self.schedule["list"]):
                 next_scheduled_item = self.seestar_federation.pop_next_schedule_item()
