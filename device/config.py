@@ -171,7 +171,6 @@ class _Config:
                     "ip_address": "seestar.local",
                     "move_arm_lat_sec": 2.0,
                     "move_arm_lon_sec": 20.0,
-                    "is_EQ_mode": False,
                     "is_queue_consumer": False,
                     "device_num": 1,
                 }
@@ -221,7 +220,6 @@ class _Config:
         )
         self.init_dew_heater_power: int = self.get_toml(section, "dew_heater_power", 0)
         self.init_guest_mode: bool = self.get_toml(section, "guest_mode_init", True)
-        self.is_EQ_mode: bool = self.get_toml(section, "is_EQ_mode", False)
         self.battery_low_limit: int = self.get_toml(section, "battery_low_limit", 3)
         self.dec_pos_index: int = self.get_toml(section, "dec_pos_index", 3)
         self.is_frame_calibrated: bool = self.get_toml(
@@ -255,12 +253,9 @@ class _Config:
             if deviceCount > 1:
                 ss_name = req.media["ss_name"][devNum]
                 ss_ip = req.media["ss_ip_address"][devNum]
-                key = f"ss_is_EQ_mode_{devNum + 1}"
-                ss_eq = key in req.media
             else:
                 ss_name = req.media["ss_name"]
                 ss_ip = req.media["ss_ip_address"]
-                ss_eq = "ss_is_EQ_mode_1" in req.media
 
             # Add to local config with new sequential device number
             self.seestars.append(
@@ -268,7 +263,6 @@ class _Config:
                     "name": ss_name,
                     "ip_address": ss_ip,
                     "device_num": new_device_num,
-                    "is_EQ_mode": ss_eq,
                 }
             )
             # Add to toml config
@@ -277,7 +271,6 @@ class _Config:
                     "name": ss_name,
                     "ip_address": ss_ip,
                     "device_num": new_device_num,
-                    "is_EQ_mode": ss_eq,
                 }
             )
 
@@ -378,7 +371,6 @@ class _Config:
             "dew_heater_power",
             int(req.media["init_dew_heater_power"]),
         )
-        self.set_toml("seestar_initialization", "is_EQ_mode", "is_EQ_mode" in req.media)
         self.set_toml(
             "seestar_initialization", "guest_mode_init", "init_guest_mode" in req.media
         )
@@ -541,10 +533,6 @@ class _Config:
         for seestar in self.seestars:
             c = ""
 
-            if "is_EQ_mode" in seestar:
-                if self.strToBool(seestar["is_EQ_mode"]):
-                    c = "checked"
-
             ssHTML += f"""<div id="device_div_{seestar["device_num"]}">
                                 <div class="col-sm-4 text-end">
                                     <label class="form-label">
@@ -553,17 +541,6 @@ class _Config:
                                 </div>
                                 {self.render_text("ss_name", "Name", seestar["name"], required=True)}
                                 {self.render_text("ss_ip_address", "IP Address", seestar["ip_address"], required=True)}
-
-                                <div class="row mb-3 align-items-center"> <!-- Checkbox Row -->
-                                    <div class="col-sm-4 text-end"> <!-- Checkbox label -->
-                                        <label for="ss_is_EQ_mode_{seestar["device_num"]}" class="form-label">
-                                            Is device in EQ mode
-                                        </label>
-                                    </div> <!-- Close checkbox label -->
-                                    <div class="col-sm-8 col-md-6"> <!-- Checkbox -->
-                                        <input id="ss_is_EQ_mode_{seestar["device_num"]}" name="ss_is_EQ_mode_{seestar["device_num"]}" class="form-check-input" title="Is device in EQ mode" type="checkbox" {c}>
-                                    </div> <!--Close checkbox -->
-                                </div> <!-- Close checkbox row -->
                                 {self.render_checkbox(f"delete_{seestar['device_num']}", "Delete device", False)}
 
                             </div>
@@ -873,12 +850,6 @@ class _Config:
                     "Dew heater power:",
                     self.init_dew_heater_power,
                     "Dew heater power level, 0 - 100",
-                )
-                + self.render_checkbox(
-                    "is_EQ_mode",
-                    "Scope in EQ Mode:",
-                    self.is_EQ_mode,
-                    "Is the scope in equitorial mode",
                 )
                 + self.render_checkbox(
                     "init_guest_mode",

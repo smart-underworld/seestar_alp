@@ -243,15 +243,13 @@ class DeviceMain:
         telescope.start_seestar_federation(logger)
 
         for dev in Config.seestars:
-            is_EQ_mode = dev.get("is_EQ_mode", Config.is_EQ_mode)
             controller = telescope.start_seestar_device(
                 logger,
                 dev["name"],
                 dev["ip_address"],
                 4700,
                 dev["device_num"],
-                is_EQ_mode,
-                
+                dev.get("is_queue_consumer", False),
             )
             # Don't start the imaging or log collector if this is a simulator
             simulator = dev.get("simulator", False)

@@ -77,13 +77,12 @@ def start_seestar_device(
     ip_address: str,
     port: int,
     device_num: int,
-    is_EQ_mode: bool,
     is_queue_consumer: bool
 ):  # type: ignore
     # logger = logger
     global seestar_dev
     seestar_dev[device_num] = Seestar(
-        logger, ip_address, port, name, device_num, is_EQ_mode, is_queue_consumer, True, seestar_federation
+        logger, ip_address, port, name, device_num, is_queue_consumer, True, seestar_federation
     )
     seestar_dev[device_num].start_watch_thread()
     return seestar_dev[device_num]
@@ -305,6 +304,22 @@ class action:
             elif action_name == "skip_scheduler_cur_item":
                 result = cur_dev.skip_scheduler_cur_item(params)
                 resp.text = MethodResponse(req, value=result).json
+            elif action_name == "get_job_queue":
+                if devnum != 0:
+                    raise InvalidValueException("Only federation device can call this action.")
+                result = seestar_federation.job_queue_get(params)
+                resp.text = MethodResponse(req, value=result).json
+            elif action_name == "append_to_job_queue":
+                if devnum != 0:
+                    raise InvalidValueException("Only federation device can call this action.")
+                result = seestar_federation.job_queue_append_to(params)
+                resp.text = MethodResponse(req, value=result).json
+            elif action_name == "insert_before_to_job_queue":
+                if devnum != 0:
+                    raise InvalidValueException("Only federation device can call this action.")
+                result = seestar_federation.job_queue_insert_before(params)
+                resp.text = MethodResponse(req, value=result).json
+
             if log_debug:
                 cur_dev.logger.debug(f"response: {result}")
             else:

@@ -83,13 +83,12 @@ class Seestar:
         port: int,
         device_name: str,
         device_num: int,
-        is_EQ_mode: bool,
         is_queue_consumer: bool,
         is_debug=False,
         seestar_federation=None,
     ):
         logger.info(
-            f"Initialize the new instance of Seestar: {host}:{port}, name:{device_name}, num:{device_num}, is_EQ_mode:{is_EQ_mode}, is_debug:{is_debug}"
+            f"Initialize the new instance of Seestar: {host}:{port}, name:{device_name}, num:{device_num}, is_debug:{is_debug}"
         )
 
         self.host: str = host
@@ -151,7 +150,6 @@ class Seestar:
         # self.event_queue = queue.Queue()
         self.event_queue = collections.deque(maxlen=20)
         self.eventbus = signal(f"{self.device_name}.eventbus")
-        self.is_EQ_mode: bool = is_EQ_mode
         self.is_queue_consumer: bool = is_queue_consumer
 
         # self.trace = MessageTrace(self.device_num, self.port)
@@ -470,6 +468,8 @@ class Seestar:
         self.send_message_param(data)
 
     def send_message_param_sync(self, data: MessageParams):
+        if not self.is_connected:
+            return None
         if data["method"] == "pi_shutdown" or data["method"] == "pi_reboot":
             threading.Thread(
                 name=f"shutdown-thread:{self.device_name}",
@@ -852,6 +852,20 @@ class Seestar:
 
         return rotated_matrix
 
+    def get_is_eq_mode(self):
+        try:
+            response = self.send_message_param_sync(
+                {"method": "get_device_state", "params": {"keys": ["mount"]}}
+            )
+            result = response["result"]["mount"]
+        except Exception as e:
+            self.logger.error(f"Failed to get mount state: {e}")
+            return False
+        
+        result = result.get("equ_mode", False)
+        self.logger.info(f"is eq mode: {result}")
+        return result
+        
     def adjust_mag_declination(self, params):
         adjust_mag_dec = params.get("adjust_mag_dec", False)
         fudge_angle = params.get("fudge_angle", 0.0)
@@ -1016,7 +1030,10 @@ class Seestar:
             do_dark_frames = params.get("dark_frames", False)
             dec_pos_index = params.get("dec_pos_index", Config.dec_pos_index)
 
-            if do_3PPA and not self.is_EQ_mode:
+            # get EQ mode from firmware now
+            is_EQ_mode = self.get_is_eq_mode()
+
+            if do_3PPA and not is_EQ_mode:
                 self.logger.warn("Cannot do 3PPA without EQ mode. Will skip 3PPA.")
                 do_3PPA = False
 
@@ -1524,6 +1541,7 @@ class Seestar:
         nDec,
         overlap_percent,
         gain,
+        expo_stack_ms,
         is_use_autofocus,
         selected_panels,
         num_tries,
@@ -1607,7 +1625,7 @@ class Seestar:
                     # set_settings(x_stack_l, x_continuous, d_pix, d_interval, d_enable, l_enhance, heater_enable):
                     # TODO: Need to set correct parameters
                     self.send_message_param_sync(
-                        {"method": "set_setting", "params": {"stack_lenhance": False}}
+                        {"method": "set_setting", "params": {"stack_lenhance": False, "exp_ms": {"stack_l": expo_stack_ms}}}
                     )
 
                     for try_index in range(num_tries):
@@ -1759,6 +1777,8 @@ class Seestar:
         selected_panels = params.get("selected_panels", "")
         num_tries = params.get("num_tries", 1)
         retry_wait_s = params.get("retry_wait_s", 300)
+        expo_stack_ms = params.get("frame_expo_ms", Config.init_expo_stack_ms)
+
 
         # verify mosaic pattern
         if nRA < 1 or nDec < 0:
@@ -1793,10 +1813,9 @@ class Seestar:
         self.logger.info("  RA num panels : %s", nRA)
         self.logger.info("  Dec num panels: %s", nDec)
         self.logger.info("  overlap %%    : %s", overlap_percent)
+        self.logger.info("  is_calibrated : %s", self.is_frame_calibrated)
         self.logger.info("  gain          : %s", gain)
-        self.logger.info(
-            "  exposure time : %s", result.get("exp_ms", {}).get("stack_l", "N/A")
-        )
+        self.logger.info("  exposure time : %s", expo_stack_ms)
         self.logger.info(
             "  dither pixLen : %s", result.get("stack_dither", {}).get("pix", "N/A")
         )
@@ -1821,6 +1840,7 @@ class Seestar:
                 nDec,
                 overlap_percent,
                 gain,
+                expo_stack_ms,
                 is_use_autofocus,
                 selected_panels,
                 num_tries,
@@ -2125,14 +2145,14 @@ class Seestar:
             f"schedule started from item {self.schedule['item_number']}..."
         )
         index = self.schedule["item_number"] - 1
-        while index < len(self.schedule["list"]) or self.seestar_federation.has_scheduled_items():
+        while index < len(self.schedule["list"]) or (self.is_queue_consumer and self.seestar_federation.job_queue_has_next()):
             update_time()
             if self.schedule["state"] != "working":
                 break
 
             # if the device schedule is done, check if there is any scheduled items in the federation scheduler
-            if self.is_queue_consumer and index >= len(self.schedule["list"]):
-                next_scheduled_item = self.seestar_federation.pop_next_schedule_item()
+            if index >= len(self.schedule["list"]) and self.is_queue_consumer and self.seestar_federation.job_queue_has_next():
+                next_scheduled_item = self.seestar_federation.job_queue_get_next()
                 if next_scheduled_item is None:
                     break
                 self.logger.info("Found additional scheduled item from federation.")
