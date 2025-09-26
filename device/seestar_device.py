@@ -1132,7 +1132,7 @@ class Seestar:
                 Config.is_frame_calibrated,
             )
 
-            response = self.send_message_param_sync({"method": "get_device_state"})
+            response = self.send_message_param_sync({"method": "get_device_state", "params": {"keys": ["device"]}})
             # make sure we have the right firmware version here
             self.firmware_ver_int = response["result"]["device"]["firmware_ver_int"]
             self.logger.info(f"Firmware version: {self.firmware_ver_int}")
@@ -1247,6 +1247,10 @@ class Seestar:
             elif not is_from_schedule:
                 self.schedule["state"] = "complete"
                 self.play_sound(82)
+
+            # record the device state for troubleshooting
+            response = self.send_message_param_sync({"method": "get_device_state"})
+            self.logger.info(f"Device state at end of start_up sequence: {response}")            
 
     def pause_scheduler(self, params):
         self.logger.info("pausing scheduler...")
@@ -1849,6 +1853,11 @@ class Seestar:
         )
         self.mosaic_thread.name = f"MosaicThread:{self.device_name}"
         self.mosaic_thread.start()
+
+        # record the device state for troubleshooting
+        response = self.send_message_param_sync({"method": "get_device_state"})
+        self.logger.info(f"Device state at start of mosaic thread: {response}")  
+
         return
 
     def get_schedule(self, params):

@@ -536,7 +536,7 @@ def _check_api_state_cached(telescope_id):
 def check_api_state(telescope_id):
     if (
         telescope_id not in _api_state_cached
-        or time.time() - _last_api_state_get_time[telescope_id] > 1.0
+        or time.time() - _last_api_state_get_time[telescope_id] > 3.0
     ):
         _last_api_state_get_time[telescope_id] = time.time()
         _api_state_cached[telescope_id] = _check_api_state_cached(telescope_id)
@@ -622,7 +622,7 @@ def do_insert_schedule_item(action, parameters, before_id, dev_num):
 
 def method_sync(method, telescope_id=1, **kwargs):
     # let's try to cache the frequently called sync commands such as get_view_state
-    if method in ["get_view_state"]:
+    if method in ["get_view_state", "get_event_state"]:
         key = method + str(telescope_id) + str(kwargs)
         if (
             key not in _last_command_response_time
@@ -703,7 +703,7 @@ def get_guestmode_state(telescope_id):
         client_list = []
         fw = 0
 
-        result = method_sync("get_device_state", telescope_id)
+        result = method_sync("get_device_state", telescope_id, params= {"keys": ["device", "setting", "client"]})
         if result is not None:
             device = result.get("device", {})
             fw = device.get("firmware_ver_int", 0)
@@ -4079,7 +4079,7 @@ class GetBalanceSensorResource:
         referer = req.get_header("Referer")
         referersplit = referer.split("/")[-2:]
         telescope_id = int(referersplit[0])
-        result = method_sync("get_device_state", telescope_id)
+        result = method_sync("get_device_state", telescope_id, params={"keys": ["balance_sensor"]})
         if result is not None:
             balance_sensor = {
                 "x": result["balance_sensor"]["data"]["x"],

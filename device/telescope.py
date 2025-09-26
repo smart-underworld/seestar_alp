@@ -195,7 +195,7 @@ class action:
                     f"request: {action_name} for device {devnum} with param {parameters}"
                 )
 
-            print(f'Received request: Action {action_name} with params {params} for device {devnum} ')
+            cur_dev.logger.debug(f'Received request: Action {action_name} with params {params} for device {devnum} ')
             
             if action_name == "get_event_state":
                 result = cur_dev.get_event_state(params)
