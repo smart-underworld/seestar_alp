@@ -569,6 +569,18 @@ class Seestar_Federation:
             index += 1
         return self.job_queue
 
+    def job_queue_remove_at(self, params):
+        targeted_item_id = params["schedule_item_id"]
+        index = 0
+        while index < len(self.job_queue["list"]):
+            item = self.job_queue["list"][index]
+            item_id = item.get("schedule_item_id", "UNKNOWN")
+            if item_id == targeted_item_id:
+                self.job_queue["list"].remove(item)
+                break
+            index += 1
+        return self.job_queue
+    
     def job_queue_get(self, params):
         if "schedule_id" in params:
             if self.job_queue["schedule_id"] == params["schedule_id"]:

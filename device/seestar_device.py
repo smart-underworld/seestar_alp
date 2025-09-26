@@ -1817,7 +1817,7 @@ class Seestar:
         self.logger.info("  RA num panels : %s", nRA)
         self.logger.info("  Dec num panels: %s", nDec)
         self.logger.info("  overlap %%    : %s", overlap_percent)
-        self.logger.info("  is_calibrated : %s", self.is_frame_calibrated)
+        self.logger.info("  is_calibrated : %s", Config.is_frame_calibrated)
         self.logger.info("  gain          : %s", gain)
         self.logger.info("  exposure time : %s", expo_stack_ms)
         self.logger.info(

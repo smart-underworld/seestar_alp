@@ -319,6 +319,11 @@ class action:
                     raise InvalidValueException("Only federation device can call this action.")
                 result = seestar_federation.job_queue_insert_before(params)
                 resp.text = MethodResponse(req, value=result).json
+            elif action_name == "remove_at_job_queue":
+                if devnum != 0:
+                    raise InvalidValueException("Only federation device can call this action.")
+                result = seestar_federation.job_queue_remove_at(params)
+                resp.text = MethodResponse(req, value=result).json
 
             if log_debug:
                 cur_dev.logger.debug(f"response: {result}")
