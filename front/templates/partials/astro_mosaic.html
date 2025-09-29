@@ -85,7 +85,7 @@
 <div id="status-text" style="display: none;"></div>
 <div id="error-text" style="display: none;"></div>
 <dialog id="send_to_schedule_modal">
-    <form method="post" action="/{{ telescope["device_num"] }}/schedule/mosaic">
+    <form method="post" action="/{{ telescope['device_num'] }}/schedule/mosaic">
         <div class="card border-primary mb-3">
             <div class="card-body">
                 <h5 class="card-title">Target</h5>
@@ -402,6 +402,7 @@
         document.getElementById('targetName').value = document.getElementById('astro_mosaic_search_text').value;
         document.getElementById('raPanels').value = astro_mosaic_grid_x;
         document.getElementById('decPanels').value = astro_mosaic_grid_y;
+        document.getElementById('useJ2000').checked = true;
         if(astro_mosaic_grid_x == 1 && astro_mosaic_grid_y ==1){
             document.getElementById('panelOverlap').value = 100
         }else{

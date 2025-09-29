@@ -60,7 +60,8 @@
             <!-- Checkbox for J2000 -->
             <div class="mb-3">
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="useJ2000" name="useJ2000">
+                    <input class="form-check-input" type="checkbox" id="useJ2000" name="useJ2000"
+                           {% if values.is_j2000 %}checked{% endif %}>
                     <label class="form-check-label" for="useJ2000">Use J2000?</label>
                 </div>
             </div>
