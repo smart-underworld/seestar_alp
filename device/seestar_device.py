@@ -1568,9 +1568,9 @@ class Seestar:
 
             # adjust mosaic center if num panels is even
             if nRA % 2 == 0:
-                center_RA += delta_RA / 2
+                center_RA -= delta_RA / 2
             if nDec % 2 == 0:
-                center_Dec += delta_Dec / 2
+                center_Dec -= delta_Dec / 2
 
             sleep_time_per_panel = round(panel_time_sec)
 
@@ -1785,7 +1785,7 @@ class Seestar:
 
 
         # verify mosaic pattern
-        if nRA < 1 or nDec < 0:
+        if nRA < 1 or nDec < 1:
             self.logger.info(
                 "Mosaic size is invalid. Moving to next schedule item if any."
             )
