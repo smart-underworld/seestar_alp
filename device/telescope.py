@@ -304,6 +304,21 @@ class action:
             elif action_name == "skip_scheduler_cur_item":
                 result = cur_dev.skip_scheduler_cur_item(params)
                 resp.text = MethodResponse(req, value=result).json
+            elif action_name == "create_job_queue":
+                if devnum != 0:
+                    raise InvalidValueException("Only federation device can call this action.")
+                result = seestar_federation.job_queue_create(params)
+                resp.text = MethodResponse(req, value=result).json
+            elif action_name == "import_to_job_queue":
+                if devnum != 0:
+                    raise InvalidValueException("Only federation device can call this action.")
+                result = seestar_federation.job_queue_import(params)
+                resp.text = MethodResponse(req, value=result).json
+            elif action_name == "export_job_queue":
+                if devnum != 0:
+                    raise InvalidValueException("Only federation device can call this action.")
+                result = seestar_federation.job_queue_export(params)
+                resp.text = MethodResponse(req, value=result).json
             elif action_name == "get_job_queue":
                 if devnum != 0:
                     raise InvalidValueException("Only federation device can call this action.")
