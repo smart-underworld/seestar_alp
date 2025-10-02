@@ -200,6 +200,7 @@ class Seestar_Federation:
 
     def create_schedule(self, params):
         self.schedule = {
+            "version": 1.0,
             "list": collections.deque(),
             "state": "stopped",
             "schedule_id": str(uuid.uuid4()),
@@ -548,6 +549,15 @@ class Seestar_Federation:
             self.logger.warn("Federated schedule will only support mosaic action.")
         return result
 
+    def job_queue_create(self, params):
+        self.job_queue = {
+            "version": 1.0,
+            "list": collections.deque(),
+            "state": "stopped",
+            "schedule_id": str(uuid.uuid4()),
+        }
+        return self.job_queue
+    
     def job_queue_append_to(self, params: dict[str, Any]) -> Schedule:
         new_list=self.construct_schedule_sublist(params)
         self.job_queue["list"].extend(new_list)
@@ -601,4 +611,25 @@ class Seestar_Federation:
     
     def job_queue_has_next(self):
         return len(self.job_queue["list"]) > 0
+    
+    def job_queue_export(self, params):
+        filepath = params["filepath"]
+        with open(filepath, "w") as fp:
+            json.dump(self.job_queue, fp, indent=4, cls=DequeEncoder)
+        return self.job_queue
+
+    def job_queue_import(self, params):
+        filepath = params["filepath"]
+        # ignored: is_retain_state = params["is_retain_state"]
+        with open(filepath, "r") as f:
+            imported_queue = json.load(f)
+        imported_queue = imported_queue.job_queue["list"]
+        
+        # update all uuid in the imported queue
+        for item in imported_queue:       
+            item["schedule_item_id"] = str(uuid.uuid4())
+
+        # append imported_queue into job_queue list
+        self.job_queue["list"].extend(imported_queue)
+        return self.job_queue
     
