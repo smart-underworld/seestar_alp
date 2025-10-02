@@ -2004,25 +2004,30 @@ class Seestar:
             )
         filepath = params["filepath"]
         is_retain_state = params["is_retain_state"]
-        with open(filepath, "r") as f:
-            self.schedule = json.load(f)
-        self.schedule["list"] = collections.deque(self.schedule["list"])
+        try:
+            with open(filepath, "r") as f:
+                self.schedule = json.load(f)
+            self.schedule["list"] = collections.deque(self.schedule["list"])
 
-        # ensure all required fields are present and set to default values
-        self.schedule["version"] = "1.0"
-        self.schedule["Event"] = "Scheduler"
-        self.schedule["state"] = "stopped"
-        self.schedule["is_stacking_paused"] = False
-        self.schedule["is_stacking"] = False
-        self.schedule["is_skip_requested"] = False
-        self.schedule["current_item_id"] = ""
-        self.schedule["item_number"] = 9999
-
-        if not is_retain_state:
-            self.schedule["schedule_id"] = str(uuid.uuid4())
-            for item in self.schedule["list"]:
-                item["schedule_item_id"] = str(uuid.uuid4())
+            # ensure all required fields are present and set to default values
+            self.schedule["version"] = "1.0"
+            self.schedule["Event"] = "Scheduler"
             self.schedule["state"] = "stopped"
+            self.schedule["is_stacking_paused"] = False
+            self.schedule["is_stacking"] = False
+            self.schedule["is_skip_requested"] = False
+            self.schedule["current_item_id"] = ""
+            self.schedule["item_number"] = 9999
+
+            if not is_retain_state:
+                self.schedule["schedule_id"] = str(uuid.uuid4())
+                for item in self.schedule["list"]:
+                    item["schedule_item_id"] = str(uuid.uuid4())
+                self.schedule["state"] = "stopped"
+        except Exception as e:
+            msg = f"Failed to import schedule from {filepath}, error: {e}"
+            self.logger.error(msg)
+            
         return self.schedule
 
     # shortcut to start a new scheduler with only a mosaic request

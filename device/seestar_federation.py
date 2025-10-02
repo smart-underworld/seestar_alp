@@ -329,15 +329,19 @@ class Seestar_Federation:
             )
         filepath = params["filepath"]
         is_retain_state = params["is_retain_state"]
-        with open(filepath, "r") as f:
-            self.schedule = json.load(f)
-        self.schedule["list"] = collections.deque(self.schedule["list"])
+        try:
+            with open(filepath, "r") as f:
+                self.schedule = json.load(f)
+            self.schedule["list"] = collections.deque(self.schedule["list"])
 
-        if not is_retain_state:
-            self.schedule["schedule_id"] = str(uuid.uuid4())
-            for item in self.schedule["list"]:
-                item["schedule_item_id"] = str(uuid.uuid4())
-            self.schedule["state"] = "stopped"
+            if not is_retain_state:
+                self.schedule["schedule_id"] = str(uuid.uuid4())
+                for item in self.schedule["list"]:
+                    item["schedule_item_id"] = str(uuid.uuid4())
+                self.schedule["state"] = "stopped"
+        except Exception as e:
+            self.logger.error(f"Failed to import schedule from {filepath}: {e}")
+            
         return self.schedule
 
     # cur_params['selected_panels'] cur_params['ra_num'], cur_params['dec_num']
@@ -621,15 +625,18 @@ class Seestar_Federation:
     def job_queue_import(self, params):
         filepath = params["filepath"]
         # ignored: is_retain_state = params["is_retain_state"]
-        with open(filepath, "r") as f:
-            imported_queue = json.load(f)
-        imported_queue = imported_queue.job_queue["list"]
-        
-        # update all uuid in the imported queue
-        for item in imported_queue:       
-            item["schedule_item_id"] = str(uuid.uuid4())
+        try:
+            with open(filepath, "r") as f:
+                imported_queue = json.load(f)
+            imported_queue = imported_queue["list"]
+            
+            # update all uuid in the imported queue
+            for item in imported_queue:       
+                item["schedule_item_id"] = str(uuid.uuid4())
 
-        # append imported_queue into job_queue list
-        self.job_queue["list"].extend(imported_queue)
+            # append imported_queue into job_queue list
+            self.job_queue["list"].extend(imported_queue)
+        except Exception as e:
+            self.logger.error(f"Failed to import job queue from {filepath}: {e}")
         return self.job_queue
     
