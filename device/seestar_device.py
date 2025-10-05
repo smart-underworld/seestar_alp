@@ -2246,9 +2246,12 @@ class Seestar:
                     "action": f"wait until local time of {cur_schedule_item['params']['local_time']}",
                 }
                 self.update_scheduler_state_obj(item_state)
+                tz_name = tzlocal.get_localzone_name()
+                tz = tzlocal.get_localzone()
+
                 while self.schedule["state"] == "working":
                     update_time()
-                    local_time = datetime.now()
+                    local_time = datetime.now(tz)
                     if (
                         local_time.hour == wait_until_hour
                         and local_time.minute == wait_until_minute
