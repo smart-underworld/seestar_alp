@@ -2236,6 +2236,13 @@ class Seestar:
                     ] = sleep_time - sleep_count
 
             elif action == "wait_until":
+                # check if there's ":" in the time string
+                if ":" not in cur_schedule_item["params"]["local_time"]:
+                    self.logger.error(
+                        f"wait_until time format is invalid: {cur_schedule_item['params']['local_time']}, must be HH:MM in 24-hour format. Skipping wait_until."
+                    )
+                    index += 1
+                    continue
                 wait_until_time = cur_schedule_item["params"]["local_time"].split(":")
                 wait_until_hour = int(wait_until_time[0])
                 wait_until_minute = int(wait_until_time[1])
