@@ -138,6 +138,7 @@ class Seestar:
         self.is_cur_scheduler_item_working: bool = False
 
         self.event_state: dict[str, Any] = {}
+
         self.update_scheduler_state_obj({}, result=0)
 
         self.cur_pa_error_x: float = None
@@ -390,7 +391,11 @@ class Seestar:
                         else:
                             self.logger.debug(f"received : {parsed_data}")
                         event_name = parsed_data["Event"]
-                        self.event_state[event_name] = parsed_data
+                        if event_name not in self.event_state:
+                            self.event_state[event_name] = parsed_data
+                        else:
+                            for key in parsed_data:
+                                self.event_state[event_name][key] = parsed_data[key]
 
                         # {'Event': 'EqModePA', 'Timestamp': '740.411562378', 'state': 'working', 'lapse_ms': 0, 'route': []}
                         # {'Event': 'EqModePA', 'Timestamp': '6359.231750447', 'state': 'fail', 'error': 'fail to operate', 'code': 207, 'lapse_ms': 80471, 'route': []}
@@ -988,6 +993,94 @@ class Seestar:
         self.logger.info("stop plate solve loop...")
         self.send_message_param_sync({"method": "stop_polar_align"})
         return True
+    
+# TODO: will implement startup even for non EQ mode
+# from park position
+
+# {"method":"scope_move_to_horizon"}
+# move up 2x: {"method":"scope_speed_move","params":{"speed":1000,"angle":90,"dur_sec":4}}
+# move right nx: {"method":"scope_speed_move","params":{"speed":1000,"angle":0,"dur_sec":4}}
+# auto focus
+# start stack: this will start horizontal calibration
+#   - wait till 3ppa percent reaches 90%
+#   - then stop stack
+#   - plate solve current view
+#   - sync to position
+
+    def start_up_horizontal_calibration(self, do_auto_focus):
+
+        msg = "perform Horizontal Calibration"
+        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+        self.logger.info(msg)
+        time.sleep(1.0)
+        response = self.send_message_param_sync({"method":"scope_move_to_horizon"})
+        result = self.wait_end_op("ScopeMoveToHorizon")
+        for count in range(6):
+            self.send_message_param_sync({"method":"scope_speed_move","params":{"speed":1000,"angle":90,"dur_sec":4}})
+            time.sleep(1)
+        for count in range(12):
+            self.send_message_param_sync({"method":"scope_speed_move","params":{"speed":1000,"angle":0,"dur_sec":4}})
+            time.sleep(1)
+
+        if do_auto_focus:
+            self.try_auto_focus(1)
+            time.sleep(1)
+
+        self.start_stack({"gain": Config.init_gain, "restart": True})
+        self.event_state["3PPA"] = {"state":"working", "percent": 0}
+        time.sleep(3)
+
+        if self.event_state["3PPA"]["state"] == "fail":
+            msg = "Failed to start horizontal calibration."
+            self.logger.warn(msg)
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+            self.send_message_param_sync({"method": "iscope_stop_view"})
+            time.sleep(1)
+            return False
+        
+        while self.event_state["3PPA"].get("percent", 0) < 90:
+            self.logger.info(f"3PPA percent is {self.event_state["3PPA"].get("percent", 0)}")
+            if self.event_state["3PPA"].get("calib_fail_autogoto", False) == True:
+                self.logger.warn("3PPA failed to autogoto: {}")
+                break
+            time.sleep(1)
+
+# {'Event': '3PPA', 'Timestamp': '797.491598769', 'state': 'working', 'lapse_ms': 46714, 'percent': 90.0, 'calib_fail_autogoto': False, 'offset': [114.221787, 50.723587], 'equ_offset': [-3.05547, 0.726613], 'route': ['View', 'Initialise']}
+        result = self.event_state["3PPA"]["calib_fail_autogoto"] == False and self.event_state["3PPA"]["percent"] >= 90.0
+        # Take us out of view mode. Can prevent successive polar alignments.
+        self.send_message_param_sync({"method": "iscope_stop_view"})
+        time.sleep(1)
+
+        if not result:
+            msg = "Failed to perform horizontal calibration."
+            self.logger.warn(msg)
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+            return False
+
+        time.sleep(1)
+        response = self.send_message_param_sync({"method":"start_solve"})
+        result = self.wait_end_op("PlateSolve")
+        if not result:
+            msg = "Failed to plate solve after horizontal calibration."
+            self.logger.warn(msg)
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+            return False
+        
+        # {'Event': 'PlateSolve', 'Timestamp': '932.903914704', 'page': 'focus', 'state': 'complete', 'result': {'ra_dec': [21.433348, 35.186583], 'fov': [1.19681, 2.12779], 'focal_len': 149.93158, 'angle': 357.588989, 'image_id': 65535, 'star_number': 1319, 'duration_ms': 3288}}
+        ra_dec = self.event_state["PlateSolve"].get("result", {}).get("ra_dec", None)
+        if ra_dec is None:
+            msg = "Failed to get ra_dec from plate solve result."
+            self.logger.warn(msg)
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+            return False
+        self.logger.info(f"plate solve result ra_dec: {ra_dec}")
+        result = self._sync_target(ra_dec)
+        if not result:
+            msg = "Failed to sync to position after plate solve."
+            self.logger.warn(msg)
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+            return False
+        return result
 
     # move to a good starting point position specified by lat and lon
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
@@ -1033,12 +1126,8 @@ class Seestar:
             # get EQ mode from firmware now
             is_EQ_mode = self.get_is_eq_mode()
 
-            if do_3PPA and not is_EQ_mode:
-                self.logger.warn("Cannot do 3PPA without EQ mode. Will skip 3PPA.")
-                do_3PPA = False
-
             self.logger.info(
-                f"begin start_up sequence with seestar_alp version {Version.app_version()}"
+                f"begin start_up sequence with seestar_alp version {Version.app_version()}, is_EQ_mode: {is_EQ_mode}, do_AF: {do_AF}, do_3PPA: {do_3PPA}, do_dark_frames: {do_dark_frames}, dec_pos_index: {dec_pos_index}"
             )
 
             loc_param = {}
@@ -1146,26 +1235,36 @@ class Seestar:
             result = True
 
             if do_3PPA:
-                msg = "perform PA Alignment"
-                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
-                self.logger.info(msg)
-                time.sleep(1.0)
-                response = self.send_message_param_sync(
-                    {
-                        "method": "start_polar_align",
-                        "params": {"restart": True, "dec_pos_index": dec_pos_index},
-                    }
-                )
 
-                self.mark_op_state("EqModePA", "working")
-                result = self.wait_end_op("EqModePA")
-                self.mark_op_state("EqModePA", "complete")
-                # Take us out of view mode. Can prevent successive polar alignments.
-                self.send_message_param_sync({"method": "iscope_stop_view"})
-                if not result:
-                    msg = "Failed to perform polar alignment."
-                    self.logger.warn(msg)
+                if not is_EQ_mode:
+                    result = self.start_up_horizontal_calibration(do_AF)
+                    if not result:
+                        msg = "Failed to perform horizontal calibration."
+                        self.logger.warn(msg)
+                        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+                        self.schedule["state"] = "stopping"
+                        return
+                else:                
+                    msg = "perform PA Alignment"
                     self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+                    self.logger.info(msg)
+                    time.sleep(1.0)
+                    response = self.send_message_param_sync(
+                        {
+                            "method": "start_polar_align",
+                            "params": {"restart": True, "dec_pos_index": dec_pos_index},
+                        }
+                    )
+
+                    self.mark_op_state("EqModePA", "working")
+                    result = self.wait_end_op("EqModePA")
+                    self.mark_op_state("EqModePA", "complete")
+                    # Take us out of view mode. Can prevent successive polar alignments.
+                    self.send_message_param_sync({"method": "iscope_stop_view"})
+                    if not result:
+                        msg = "Failed to perform polar alignment."
+                        self.logger.warn(msg)
+                        self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
 
             if self.schedule["state"] != "working":
                 return
@@ -1187,7 +1286,7 @@ class Seestar:
                         "Seestar starts in a parked position. Performing Auto Focus without Polar Alignment will result in a failed Auto Focus. Skipping."
                     )
 
-                else:
+                elif is_EQ_mode: # if not EQ mode, the horizontal calibration already did autofocus
                     # need to make sure we are in star mode
                     result = self.send_message_param_sync(
                         {"method": "iscope_start_view", "params": {"mode": "star"}}
