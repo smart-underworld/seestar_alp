@@ -55,7 +55,9 @@ def astap_to_floats(coord_string):
 # in_file = 'data/Unknown/Stacked_647_Unknown_20.0s_IRCUT_20250922-061754.fit'
 in_file = sys.argv[1]
 
-result = subprocess.run(['astap_cli', '-f', in_file, '-ra', '21.6', '-dec', '+58', '-s', '30','-r', '5', '-fov', '1.26', '-d', '/opt/astap/'], capture_output=True, text=True, check=True)
+result = subprocess.run(['astap_cli', '-f', in_file, '-log', '-progress', '-ra', '21', '-dec', '+57', 
+         '-t', '0.01', '-z', '1', '-s', '30','-r', '5', '-fov', '1.26', '-d', '/opt/astap/'],
+          capture_output=True, text=True, check=True)
 print("Stdout:", result.stdout)
 print("Stderr:", result.stderr)
 
