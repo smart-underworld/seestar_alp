@@ -250,6 +250,8 @@ class DeviceMain:
                 4700,
                 dev["device_num"],
                 dev.get("is_queue_consumer", False),
+                dev.get("move_arm_lat_sec", Config.move_arm_lat_sec_default),
+                dev.get("move_arm_lon_sec", Config.move_arm_lon_sec_default)
             )
             # Don't start the imaging or log collector if this is a simulator
             simulator = dev.get("simulator", False)

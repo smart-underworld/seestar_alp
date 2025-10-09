@@ -77,12 +77,14 @@ def start_seestar_device(
     ip_address: str,
     port: int,
     device_num: int,
-    is_queue_consumer: bool
+    is_queue_consumer: bool,
+    move_arm_lat_sec: int,
+    move_arm_lon_sec: int
 ):  # type: ignore
     # logger = logger
     global seestar_dev
     seestar_dev[device_num] = Seestar(
-        logger, ip_address, port, name, device_num, is_queue_consumer, True, seestar_federation
+        logger, ip_address, port, name, device_num, is_queue_consumer, move_arm_lat_sec, move_arm_lon_sec, True, seestar_federation
     )
     seestar_dev[device_num].start_watch_thread()
     return seestar_dev[device_num]

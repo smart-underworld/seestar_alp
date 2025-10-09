@@ -5,6 +5,7 @@ from astropy.time import Time
 import astropy.units as u
 import math
 import numpy as np
+import collections
 
 
 class Util:
@@ -47,14 +48,76 @@ class Util:
             result = result.transform_to(_fk5)
         return result
 
+    @staticmethod
+    def calculate_mosaic_centers_per_panel_fov(center_coord, panel_fov_ra, panel_fov_dec, n_ra, n_dec, overlap):
+        """
+        Calculates the center positions for a grid of mosaic panels,
+        given the FOV of a single panel.
+
+        Parameters
+        ----------
+        center_coord : astropy.coordinates.SkyCoord
+            The central coordinate of the entire mosaic.
+        panel_fov_ra : astropy.units.Quantity
+            The on-sky angular size (field of view) of a SINGLE PANEL in the RA direction.
+        panel_fov_dec : astropy.units.Quantity
+            The on-sky angular size (field of view) of a SINGLE PANEL in the Dec direction.
+        n_ra : int
+            The number of panels in the RA direction.
+        n_dec : int
+            The number of panels in the Dec direction.
+        overlap : float
+            The fractional overlap between adjacent panels (e.g., 0.1 for 10%).
+
+        Returns
+        -------
+        astropy.coordinates.SkyCoord
+            A SkyCoord object containing the coordinates of the center of each panel.
+            The result is a 2D array of coordinates with the shape (n_dec, n_ra).
+        """
+        # 1. Calculate the step size (distance between centers of adjacent panels).
+        # This is simply the panel's size multiplied by one minus the overlap fraction.
+        step_ra = panel_fov_ra * (1 - overlap)
+        step_dec = panel_fov_dec * (1 - overlap)
+
+        # 2. Determine the angular offsets for the center of each panel from the main center.
+        # The total span of the panel centers is (n - 1) * step_size.
+        # We create a linearly spaced array from -(span/2) to +(span/2).
+        ra_center_offsets = np.linspace(-(n_ra - 1) * step_ra / 2, (n_ra - 1) * step_ra / 2, n_ra)
+        dec_center_offsets = np.linspace(-(n_dec - 1) * step_dec / 2, (n_dec - 1) * step_dec / 2, n_dec)
+
+        # 3. Create a 2D grid of these offsets.
+        ra_grid_offsets, dec_grid_offsets = np.meshgrid(ra_center_offsets, dec_center_offsets)
+
+        # 4. Apply the offsets to the central coordinate.
+        # The change in the RA coordinate must be corrected by the cosine of the declination.
+        center_ra = center_coord.ra
+        center_dec = center_coord.dec
+        cos_dec_term = np.cos(center_dec.to(u.rad))
+
+        # Calculate the new RA and Dec for each panel center.
+        panel_ras = center_ra + ra_grid_offsets / cos_dec_term
+        panel_decs = center_dec + dec_grid_offsets
+
+        # 5. Create the final SkyCoord object with the grid of panel centers.
+        panel_centers = SkyCoord(ra=panel_ras, dec=panel_decs, frame=center_coord.frame)
+
+        return panel_centers
+
+
     # take into account ra spacing factor changes depends on dec position as 1/cos(dec)
     @staticmethod
-    def mosaic_next_center_spacing(in_ra, in_dec, overlap_percent):
+    def mosaic_next_center_spacing(in_ra, in_dec, overlap_percent, device_model="Seestar S50"):
         # seestar fov at dec = 0
-        dec_length = 1.29  # degrees
+        dec_length = 1.27  # degrees
         ra_length = (
-            3 / 60.0
+            2.83 / 60.0
         )  # 3 minutes when dec is at 0 degress, changes by factor of 1/cos(dec)
+
+        if device_model == "Seestar S30":
+            dec_length = 2.12
+
+        # todo: support other models too
 
         delta_Dec = dec_length * (100.0 - overlap_percent) / 100.0
         delta_RA = ra_length * (100.0 - overlap_percent) / 100.0
@@ -103,3 +166,186 @@ class Util:
         site = self.get_JNow(site_ra, site_dec)
         altaz_frame = AltAz(location=site)
         return altaz_frame
+    
+    @staticmethod
+    # return number of minutes from previous midnight to the given hour and minute
+    def get_start_minute_from_start_time(start_time_hour, start_time_minute):
+        if start_time_hour <= 12:
+            start_time_hour += 24
+        return start_time_hour * 60 + start_time_minute
+
+    @staticmethod
+    # return a map of <panel_name>:{ra,dec} for all panels in the mosaic
+    def get_panel_coordinates(center_RA, center_Dec, nRA, nDec, overlap_percent, model_name) -> map:
+
+        # --- Define Mosaic Parameters ---
+        # The central coordinate for the entire mosaic
+        mosaic_center = SkyCoord(ra=center_RA * u.deg, dec=center_Dec * u.deg, frame='icrs')
+        
+        # The total desired size of the mosaic on the sky
+        panel_fov_ra = 1.29 * u.deg
+        panel_fov_dec = 0.7 * u.deg
+        
+        # The number of individual pointings (panels) in each direction
+        num_panels_ra = nRA
+        num_panels_dec = nDec
+        
+        # The desired fractional overlap between adjacent panels
+        panel_overlap = overlap_percent / 100.0  # convert percentage to a fraction
+
+        # --- Calculation ---
+        mosaic_centers = Util.calculate_mosaic_centers_per_panel_fov(
+            center_coord=mosaic_center,
+            panel_fov_ra=panel_fov_ra,
+            panel_fov_dec=panel_fov_dec,
+            n_ra=num_panels_ra,
+            n_dec=num_panels_dec,
+            overlap=panel_overlap
+        )
+
+        # --- Print the Results ---
+        # Calculate the total FOV for context
+        step_ra_info = panel_fov_ra * (1 - panel_overlap)
+        step_dec_info = panel_fov_dec * (1 - panel_overlap)
+        total_fov_ra = panel_fov_ra + (num_panels_ra - 1) * step_ra_info
+        total_fov_dec = panel_fov_dec + (num_panels_dec - 1) * step_dec_info
+
+        print("--- Mosaic Parameters ---")
+        print(f"Mosaic Center: {mosaic_center.to_string('hmsdms', precision=2)}")
+        print(f"Panel Size (RA, Dec): ({panel_fov_ra}, {panel_fov_dec})")
+        print(f"Grid Size (RA, Dec): {num_panels_ra} x {num_panels_dec}")
+        print(f"Overlap: {panel_overlap:.0%}")
+        print(f"Resulting Total FOV (RA, Dec): ({total_fov_ra:.2f}, {total_fov_dec:.2f})\n")
+        
+        print("--- Calculated Panel Centers ---")
+        # Iterate through the results (Dec rows, then RA columns) and print them.
+        for i in range(num_panels_dec):
+            for j in range(num_panels_ra):
+                coord = mosaic_centers[i, j]
+                # Panel numbering starts from 1 for readability
+                print(f"Panel ({j+1}, {i+1}): RA={coord.ra.deg:8.4f} Dec={coord.dec.deg:8.4f}  ({coord.to_string('hmsdms', precision=1)})")
+            print("-" * 80)
+
+
+
+
+
+
+        
+        panel_map = {}
+        spacing_result = Util.mosaic_next_center_spacing(
+            center_RA, center_Dec, overlap_percent, model_name)
+        delta_RA = spacing_result[0]
+        delta_Dec = spacing_result[1]
+
+        # adjust mosaic center if num panels is even
+        if nRA % 2 == 0:
+            center_RA -= delta_RA / 2
+        if nDec % 2 == 0:
+            center_Dec -= delta_Dec / 2
+
+        cur_dec = center_Dec + int(nDec / 2) * delta_Dec
+        for index_dec in range(nDec):
+            cur_ra = center_RA + int(nRA / 2) * delta_RA
+            for index_ra in range(nRA):
+                # check if we are doing a subset of the panels
+                panel_string = f"{chr(index_ra+ord("A"))}{index_dec + 1}"
+                # round the floats ra and dec to 3 decimal places
+                panel_map[panel_string] = [round(cur_ra, 3), round(cur_dec,3)]
+                cur_ra -= delta_RA
+            cur_dec -= delta_Dec
+        return panel_map
+
+
+    @staticmethod
+    def convert_schedule_to_native_plan(schedule:map, device_model) -> map:
+        native_plan = {}
+        native_plan["update_time_seestar"] = datetime.utcnow().strftime("%Y.%m.%d")
+        native_plan["plan_name"] = schedule.get("name", schedule.get("schedule_id", "Unnamed Plan"))
+        native_plan["list"] = []
+        # set start_time_hr to local time hour 
+        # set start_time_minute to local time minute
+        start_time_hour = datetime.now().hour
+        start_time_minute = datetime.now().minute
+        start_min = Util.get_start_minute_from_start_time(start_time_hour, start_time_minute)
+
+        the_list = schedule.get("list", [])
+
+
+        if isinstance(the_list, collections.deque):
+            the_list = list(the_list)
+
+        for item in the_list:
+            if item.get("action") == "start_mosaic":
+                native_item = {}
+                params = item.get("params", {})
+                target_name = params.get("target_name", "Unknown")
+                is_j2000 = params.get("is_j2000", False)
+                ra = params.get("ra", "0h0m0s")
+                dec = params.get("dec", "0d0m0s")
+                parsed_coord = Util.parse_coordinate(is_j2000, ra, dec)
+                center_RA = parsed_coord.ra.hour
+                center_Dec = parsed_coord.dec.deg
+                native_item["lp_filter"] = params.get("is_use_lp_filter", False)
+                native_item["state"] = "idle"
+                native_item["target_id"] = 0  # no target ID in mosaic params
+                native_item["duration_min"] = params.get("panel_time_sec", 0) // 60
+                native_item["skip"] = False
+                ra_num = params.get("ra_num", 1)
+                dec_num = params.get("dec_num", 1)
+                # calculate the ra, dec for the selected panel
+                panel_coord_map = Util.get_panel_coordinates(center_RA, center_Dec, ra_num, dec_num, params.get("overlap_percent", 20), device_model)
+
+                selected_panels = params.get("selected_panels", "")
+                if selected_panels != "":
+                    selected_list = selected_panels.split(";")
+                    for panel_name in selected_list:
+                        native_item_clone = native_item.copy()
+                        native_item_clone["target_name"] = target_name+'_'+panel_name
+                        panel_coords = panel_coord_map.get(panel_name, [center_RA, center_Dec])
+                        native_item_clone["target_ra_dec"] = panel_coords
+                        print(f"Selected panel {panel_name} is at {panel_coords}")
+                        native_item_clone["start_min"] = start_min
+                        native_plan["list"].append(native_item_clone)
+                        start_min += native_item_clone["duration_min"]
+                else:
+                        native_item["target_name"] = target_name
+                        native_item["target_ra_dec"] = [center_RA, center_Dec]
+                        native_item["start_min"] = start_min
+
+                        # use max of ra_num and dec_num as scale, up to max of 2
+                        max_panels = max(ra_num, dec_num)
+                        scale = min(max_panels, 2.0) 
+                        native_item["duration_min"] = round(native_item["duration_min"] * scale * scale)  # increase duration by scale^2
+                        
+                        if max_panels > 1:
+                            native_item["mosaic"] = {
+                                "scale": scale,     
+                                "angle": 0,  # no angle in mosaic params
+                                "star_map_angle": 0,  # no star map angle in mosaic params
+                            }
+                        native_plan["list"].append(native_item)
+                        start_min += native_item["duration_min"]
+
+            elif item.get("action") == "wait_for":
+                sleep_time = item["params"]["timer_sec"]
+                start_min += sleep_time // 60
+
+            elif item.get("action") == "wait_until":
+                local_time_str = item["params"]["local_time"]
+                if ":" in local_time_str:
+                    time_parts = local_time_str.split(":")
+                    if len(time_parts) == 2:
+                        start_time_hour = int(time_parts[0])
+                        start_time_minute = int(time_parts[1])
+                        start_min = Util.get_start_minute_from_start_time(start_time_hour, start_time_minute)
+                else:
+                    # invalid time format, skip
+                    continue
+
+            else:
+                # unsupported action, skip
+                continue
+        return native_plan
+        
+

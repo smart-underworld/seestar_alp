@@ -84,6 +84,8 @@ class Seestar:
         device_name: str,
         device_num: int,
         is_queue_consumer: bool,
+        move_arm_lat_sec: int,
+        move_arm_lon_sec: int,
         is_debug=False,
         seestar_federation=None,
     ):
@@ -152,6 +154,8 @@ class Seestar:
         self.event_queue = collections.deque(maxlen=20)
         self.eventbus = signal(f"{self.device_name}.eventbus")
         self.is_queue_consumer: bool = is_queue_consumer
+        self.move_arm_lat_sec: int = move_arm_lat_sec
+        self.move_arm_lon_sec: int = move_arm_lon_sec
 
         # self.trace = MessageTrace(self.device_num, self.port)
 
@@ -871,6 +875,18 @@ class Seestar:
         self.logger.info(f"is eq mode: {result}")
         return result
         
+    def get_device_model(self):
+        try:
+            response = self.send_message_param_sync({"method": "get_device_state"})
+            result = response["result"]["device"]["product_model"]
+        except Exception as e:
+            self.logger.error(f"Failed to get device model: {e}")
+            return "Unknown"
+        
+        self.logger.info(f"device model: {result}")
+        return result
+    
+
     def adjust_mag_declination(self, params):
         adjust_mag_dec = params.get("adjust_mag_dec", False)
         fudge_angle = params.get("fudge_angle", 0.0)
@@ -1013,24 +1029,38 @@ class Seestar:
         self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
         self.logger.info(msg)
         time.sleep(1.0)
-        response = self.send_message_param_sync({"method":"scope_move_to_horizon"})
-        result = self.wait_end_op("ScopeMoveToHorizon")
-        for count in range(6):
-            self.send_message_param_sync({"method":"scope_speed_move","params":{"speed":1000,"angle":90,"dur_sec":4}})
-            time.sleep(1)
-        for count in range(12):
-            self.send_message_param_sync({"method":"scope_speed_move","params":{"speed":1000,"angle":0,"dur_sec":4}})
-            time.sleep(1)
 
-        if do_auto_focus:
-            self.try_auto_focus(1)
-            time.sleep(1)
+        # check if mount is parked
+        response = self.send_message_param_sync({"method": "get_device_state", "params": {"keys": ["mount"]}})
 
+        is_parked = response.get("result", {}).get("mount", {}).get("close", True)
+
+        if is_parked:
+            response = self.send_message_param_sync({"method":"scope_move_to_horizon"})
+            result = self.wait_end_op("ScopeMoveToHorizon")
+            for count in range(self.move_arm_lat_sec):
+                self.send_message_param_sync({"method":"scope_speed_move","params":{"speed":1000,"angle":90,"dur_sec":4}})
+                time.sleep(1)
+            move_angle = 0 if self.move_arm_lon_sec >= 0 else 180
+            for count in range(abs(self.move_arm_lon_sec)):
+                self.send_message_param_sync({"method":"scope_speed_move","params":{"speed":1000,"angle":move_angle,"dur_sec":4}})
+                time.sleep(1)
+
+        # if do_auto_focus:
+        if True: # always do autofocus as it is needed for horizontal calibration, otherwise, seestar firmware seem to go straight to dark frame measurement
+            result = self.try_auto_focus(1)
+            time.sleep(1)
+        if not result:
+            msg = "Failed to perform autofocus before horizontal calibration."
+            self.logger.warn(msg)
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+            return False
+        
         self.start_stack({"gain": Config.init_gain, "restart": True})
         self.event_state["3PPA"] = {"state":"working", "percent": 0}
         time.sleep(3)
 
-        if self.event_state["3PPA"]["state"] == "fail":
+        if self.event_state["3PPA"]["state"] == "fail" or self.event_state["Stack"].get("state", "Undefined") == "complete":
             msg = "Failed to start horizontal calibration."
             self.logger.warn(msg)
             self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
@@ -1040,7 +1070,7 @@ class Seestar:
         
         while self.event_state["3PPA"].get("percent", 0) < 90:
             self.logger.info(f"3PPA percent is {self.event_state["3PPA"].get("percent", 0)}")
-            if self.event_state["3PPA"].get("calib_fail_autogoto", False) == True:
+            if self.event_state["3PPA"].get("state", "Unkown") == "fail":
                 self.logger.warn("3PPA failed to autogoto: {}")
                 break
             time.sleep(1)
@@ -1249,10 +1279,15 @@ class Seestar:
                     self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
                     self.logger.info(msg)
                     time.sleep(1.0)
+                    
+                    # check if mount is parked
+                    response = self.send_message_param_sync({"method": "get_device_state", "params": {"keys": ["mount"]}})
+                    is_parked = response.get("result", {}).get("mount", {}).get("close", True)
+
                     response = self.send_message_param_sync(
                         {
                             "method": "start_polar_align",
-                            "params": {"restart": True, "dec_pos_index": dec_pos_index},
+                            "params": {"restart": is_parked, "dec_pos_index": dec_pos_index},
                         }
                     )
 
@@ -1652,7 +1687,7 @@ class Seestar:
     ):
         try:
             spacing_result = Util.mosaic_next_center_spacing(
-                center_RA, center_Dec, overlap_percent
+                center_RA, center_Dec, overlap_percent, self.get_device_model()
             )
             delta_RA = spacing_result[0]
             delta_Dec = spacing_result[1]
@@ -2089,7 +2124,25 @@ class Seestar:
         return self.schedule
 
     def export_schedule(self, params):
+
         filepath = params["filepath"]
+        # get last string after last folder delimitor
+        filename = filepath.split("/")[-1]
+        self.schedule["name"] = filename.replace(".json", "")
+
+
+        native_plan = Util.convert_schedule_to_native_plan(self.schedule, self.get_device_model())
+        self.logger.info("-----")
+        self.logger.info("Converted native plan:")
+        self.logger.info(native_plan)
+        self.logger.info("-----")
+        response = self.send_message_param_sync({"method": "get_view_state"} )
+        result = response["result"]
+        view_state = result.get("View", {}).get("state", "UNKNOWN")
+        self.logger.info(f"Current plan view state: {view_state}")
+        #state have to be not "working" before a plan can be executed
+
+
         with open(filepath, "w") as fp:
             json.dump(self.schedule, fp, indent=4, cls=DequeEncoder)
         return self.schedule

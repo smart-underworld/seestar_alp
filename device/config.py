@@ -169,10 +169,9 @@ class _Config:
                 {
                     "name": "Seestar Alpha",
                     "ip_address": "seestar.local",
-                    "move_arm_lat_sec": 2.0,
-                    "move_arm_lon_sec": 20.0,
                     "is_queue_consumer": False,
                     "device_num": 1,
+                    "is_on": True,
                 }
             ]
 
@@ -225,6 +224,9 @@ class _Config:
         self.is_frame_calibrated: bool = self.get_toml(
             section, "is_frame_calibrated", True
         )
+
+        self.move_arm_lat_sec_default = self.get_toml(section, "move_arm_lat_sec", 4)
+        self.move_arm_lon_sec_default = self.get_toml(section, "move_arm_lon_sec", 10)
 
     def load_from_form(self, req):
         """

@@ -52,6 +52,8 @@ guest_mode_init = true
 battery_low_limit = 3
 dec_pos_index = 3       # 1-5; 1 = Dec Arm pointing North,  3 = Dec Arm pointing at Zenith, 5 = Dec Arm pointing South
 is_frame_calibrated = true
+move_arm_lat_sec = 5           # start up raise arm setting for moving up/down in movement clock seconds, from 0 to 20
+move_arm_lon_sec = 13          # start up raise arm setting for moving counter/clockwise in movement clock seconds, from -100 to 100
 
 [logging]
 log_level = 'INFO'   #'WARN' only if trouble    #'INFO' to output more logging      #'DEBUG' still more output
@@ -72,6 +74,8 @@ name = "Seestar Beta"
 ip_address = "192.168.8.52"
 is_on = false
 is_queue_consumer = false
+#move_arm_lat_sec = 3   # overrides default
+#move_arm_lon_sec = 7   # overrides default
 
 [[seestars]]
 name = "Seestar Gamma"
