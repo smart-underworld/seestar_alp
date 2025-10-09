@@ -48,63 +48,6 @@ class Util:
             result = result.transform_to(_fk5)
         return result
 
-    @staticmethod
-    def calculate_mosaic_centers_per_panel_fov(center_coord, panel_fov_ra, panel_fov_dec, n_ra, n_dec, overlap):
-        """
-        Calculates the center positions for a grid of mosaic panels,
-        given the FOV of a single panel.
-
-        Parameters
-        ----------
-        center_coord : astropy.coordinates.SkyCoord
-            The central coordinate of the entire mosaic.
-        panel_fov_ra : astropy.units.Quantity
-            The on-sky angular size (field of view) of a SINGLE PANEL in the RA direction.
-        panel_fov_dec : astropy.units.Quantity
-            The on-sky angular size (field of view) of a SINGLE PANEL in the Dec direction.
-        n_ra : int
-            The number of panels in the RA direction.
-        n_dec : int
-            The number of panels in the Dec direction.
-        overlap : float
-            The fractional overlap between adjacent panels (e.g., 0.1 for 10%).
-
-        Returns
-        -------
-        astropy.coordinates.SkyCoord
-            A SkyCoord object containing the coordinates of the center of each panel.
-            The result is a 2D array of coordinates with the shape (n_dec, n_ra).
-        """
-        # 1. Calculate the step size (distance between centers of adjacent panels).
-        # This is simply the panel's size multiplied by one minus the overlap fraction.
-        step_ra = panel_fov_ra * (1 - overlap)
-        step_dec = panel_fov_dec * (1 - overlap)
-
-        # 2. Determine the angular offsets for the center of each panel from the main center.
-        # The total span of the panel centers is (n - 1) * step_size.
-        # We create a linearly spaced array from -(span/2) to +(span/2).
-        ra_center_offsets = np.linspace(-(n_ra - 1) * step_ra / 2, (n_ra - 1) * step_ra / 2, n_ra)
-        dec_center_offsets = np.linspace(-(n_dec - 1) * step_dec / 2, (n_dec - 1) * step_dec / 2, n_dec)
-
-        # 3. Create a 2D grid of these offsets.
-        ra_grid_offsets, dec_grid_offsets = np.meshgrid(ra_center_offsets, dec_center_offsets)
-
-        # 4. Apply the offsets to the central coordinate.
-        # The change in the RA coordinate must be corrected by the cosine of the declination.
-        center_ra = center_coord.ra
-        center_dec = center_coord.dec
-        cos_dec_term = np.cos(center_dec.to(u.rad))
-
-        # Calculate the new RA and Dec for each panel center.
-        panel_ras = center_ra + ra_grid_offsets / cos_dec_term
-        panel_decs = center_dec + dec_grid_offsets
-
-        # 5. Create the final SkyCoord object with the grid of panel centers.
-        panel_centers = SkyCoord(ra=panel_ras, dec=panel_decs, frame=center_coord.frame)
-
-        return panel_centers
-
-
     # take into account ra spacing factor changes depends on dec position as 1/cos(dec)
     @staticmethod
     def mosaic_next_center_spacing(in_ra, in_dec, overlap_percent, device_model="Seestar S50"):
@@ -192,45 +135,6 @@ class Util:
         
         # The desired fractional overlap between adjacent panels
         panel_overlap = overlap_percent / 100.0  # convert percentage to a fraction
-
-        # --- Calculation ---
-        mosaic_centers = Util.calculate_mosaic_centers_per_panel_fov(
-            center_coord=mosaic_center,
-            panel_fov_ra=panel_fov_ra,
-            panel_fov_dec=panel_fov_dec,
-            n_ra=num_panels_ra,
-            n_dec=num_panels_dec,
-            overlap=panel_overlap
-        )
-
-        # --- Print the Results ---
-        # Calculate the total FOV for context
-        step_ra_info = panel_fov_ra * (1 - panel_overlap)
-        step_dec_info = panel_fov_dec * (1 - panel_overlap)
-        total_fov_ra = panel_fov_ra + (num_panels_ra - 1) * step_ra_info
-        total_fov_dec = panel_fov_dec + (num_panels_dec - 1) * step_dec_info
-
-        print("--- Mosaic Parameters ---")
-        print(f"Mosaic Center: {mosaic_center.to_string('hmsdms', precision=2)}")
-        print(f"Panel Size (RA, Dec): ({panel_fov_ra}, {panel_fov_dec})")
-        print(f"Grid Size (RA, Dec): {num_panels_ra} x {num_panels_dec}")
-        print(f"Overlap: {panel_overlap:.0%}")
-        print(f"Resulting Total FOV (RA, Dec): ({total_fov_ra:.2f}, {total_fov_dec:.2f})\n")
-        
-        print("--- Calculated Panel Centers ---")
-        # Iterate through the results (Dec rows, then RA columns) and print them.
-        for i in range(num_panels_dec):
-            for j in range(num_panels_ra):
-                coord = mosaic_centers[i, j]
-                # Panel numbering starts from 1 for readability
-                print(f"Panel ({j+1}, {i+1}): RA={coord.ra.deg:8.4f} Dec={coord.dec.deg:8.4f}  ({coord.to_string('hmsdms', precision=1)})")
-            print("-" * 80)
-
-
-
-
-
-
         
         panel_map = {}
         spacing_result = Util.mosaic_next_center_spacing(
