@@ -196,6 +196,8 @@ def _get_context_real(telescope_id, req):
     webui_link_color = Config.webui_link_color
     webui_accent_color = Config.webui_accent_color
     defgain = Config.init_gain
+    defsubexpos = Config.init_expo_stack_ms
+
     if telescope_id > 0:
         telescope = get_telescope(telescope_id)
     else:
@@ -256,6 +258,7 @@ def _get_context_real(telescope_id, req):
         "current_stack": current_stack,
         "platform": os_platform,
         "defgain": defgain,
+        "frame_expo_ms": defsubexpos,
         "current_exp": current_exp,
     }
 
@@ -1114,6 +1117,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
     useLpfilter = form.get("useLpFilter") == "on"
     useAutoFocus = form.get("useAutoFocus") == "on"
     gain = form["gain"]
+    frame_expo_ms = form["frame_expo_ms"]
     num_tries = form.get("num_tries")
     retry_wait_s = form.get("retry_wait_s")
     action = form.get("action", "")
@@ -1131,6 +1135,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
         "panel_overlap_percent": int(panelOverlap),
         "selected_panels": panelSelect,
         "gain": int(gain),
+        "frame_expo_ms": int(frame_expo_ms),
         "is_use_autofocus": useAutoFocus,
         "num_tries": int(num_tries) if num_tries else 1,
         "retry_wait_s": int(retry_wait_s) if retry_wait_s else 300,

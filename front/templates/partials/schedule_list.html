@@ -58,6 +58,9 @@
                   <!-- Sixth Column: Gain -->
                   <div class="col align-self-start">{{ item["params"]["gain"] }}</div>
 
+                  <!-- Six-prime Column: Sub Exposure Time (s) -->
+                  <div class="col align-self-start">{{ item["params"]["frame_expo_ms"]/1000 }}</div>
+
                   <!-- Seventh Column: LP Filter Checkbox -->
                   <div class="col align-self-start">
                     {% if item["params"]["is_use_lp_filter"] == True %}
@@ -177,6 +180,9 @@
 
                   <!-- Sixth Column: Gain -->
                   <div class="col align-self-start">{{ item["params"]["gain"] }}</div>
+
+                  <!-- Six-prime Column: Sub Exposure Time (1s) -->
+                  <div class="col align-self-start">{{ item["params"]["frame_expo_ms"]/1000 }}</div>
 
                   <!-- Seventh Column: LP Filter Checkbox -->
                   <div class="col align-self-start">

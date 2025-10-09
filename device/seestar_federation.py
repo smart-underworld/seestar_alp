@@ -315,7 +315,12 @@ class Seestar_Federation:
         return self.schedule
 
     def export_schedule(self, params):
+
         filepath = params["filepath"]
+        # get last string after last folder delimitor
+        filename = filepath.split("/")[-1]
+        self.schedule["name"] = filename.replace(".json", "")
+    
         with open(filepath, "w") as fp:
             json.dump(self.schedule, fp, indent=4, cls=DequeEncoder)
         return self.schedule

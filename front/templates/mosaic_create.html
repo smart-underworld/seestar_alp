@@ -180,6 +180,17 @@
             </div>
 
             <div class="mb-3">
+                {% if values.frame_expo_ms %}
+                    <input type="text" class="form-control" id="frame_expo_ms" name="frame_expo_ms" aria-describedby="subExposeHelp"
+                        value="{{ values.frame_expo_ms }}" required>
+                {% else %}
+                    <input type="text" class="form-control" id="frame_expo_ms" name="frame_expo_ms" aria-describedby="subExposeHelp"
+                        value="{{ defsubexpos }}" required>
+                {% endif %}
+                <div id="subExposeHelp" class="form-text">Exposure time per sub in ms. (ex: 10500)</div>
+            </div>
+            
+            <div class="mb-3">
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="useLpFilter" name="useLpFilter">
                     <label class="form-check-label" for="useLpFilter">
