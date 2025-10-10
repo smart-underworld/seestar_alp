@@ -510,6 +510,13 @@ class Seestar_Federation:
 
         return result
 
+    def stop_device_plan(self, params):
+        result = {}
+        for key in self.seestar_devices:
+            cur_device = self.seestar_devices[key]
+            if cur_device.is_connected:
+                result[key] = cur_device.stop_device_plan(params)
+        return result
 
 ### start of federated job queue implementation
 

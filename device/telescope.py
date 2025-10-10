@@ -345,6 +345,9 @@ class action:
             elif action_name == "start_schedule_as_device_plan":
                 result = cur_dev.start_schedule_as_device_plan(params)
                 resp.text = MethodResponse(req, value=result).json
+            elif action_name == "stop_device_plan":
+                result = cur_dev.stop_device_plan(params)
+                resp.text = MethodResponse(req, value=result).json
             elif action_name == "add_schedule_items_to_job_queue":
                 if devnum != 0:
                     raise InvalidValueException("Only federation device can call this action.")

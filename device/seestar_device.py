@@ -2125,7 +2125,8 @@ class Seestar:
 
     def start_schedule_as_device_plan(self, params):
         response = self.send_message_param_sync({"method": "iscope_get_app_state"} )
-        self.logger.info("view state before sending out the plan to execute...", response["result"])
+        self.logger.info("view state before sending out the plan to execute...")
+        self.logger.info(response["result"])
         view_state = response["result"].get("ViewPlan", {}).get("state", "UNKNOWN")
         self.logger.info(f"Current plan view state:")
         self.logger.info(view_state)
@@ -2139,13 +2140,48 @@ class Seestar:
             native_plan = Util.convert_schedule_to_native_plan(params, self.get_device_model())
         else:
             native_plan = Util.convert_schedule_to_native_plan(self.schedule, self.get_device_model())
-            
+
         self.logger.info("-----")
         self.logger.info("Converted native plan:")
         self.logger.info(native_plan)
         self.logger.info("-----")
-        response = self.send_message_param_sync({"method": "get_view_state"} )
-        self.logger.info("view state after sending out the plan to execute...", response["result"])
+
+        request = {"method":"set_view_plan", "params":native_plan}
+        response = self.send_message_param_sync(request)
+        self.logger.info("set_view_plan response:")
+        self.logger.info(response)
+
+        response = self.send_message_param_sync({"method": "iscope_get_app_state"} )
+        self.logger.info("view state after sending out the plan to execute...")
+        self.logger.info(response["result"])
+        view_state = response["result"].get("ViewPlan", {}).get("state", "UNKNOWN")
+        self.logger.info(f"Current plan view state:")
+        self.logger.info(view_state)
+        return self.schedule
+
+    def stop_device_plan(self, params):
+        response = self.send_message_param_sync({"method": "iscope_get_app_state"} )
+        self.logger.info("view state before stopping the plan...")
+        self.logger.info(response["result"])
+        view_state = response["result"].get("ViewPlan", {}).get("state", "UNKNOWN")
+        self.logger.info(f"Current plan view state:")
+        self.logger.info(view_state)
+        if view_state != "working":
+            msg = "No active plan is running. Returned with no action."
+            self.logger.warn(msg)
+            return self.json_result("no active plan", -1, msg)
+
+        request = {"method":"stop_func","params":{"name":"ViewPlan"}}
+        response = self.send_message_param_sync(request)
+        self.logger.info("stop_view_plan response:")
+        self.logger.info(response)
+
+        response = self.send_message_param_sync({"method": "iscope_get_app_state"} )
+        self.logger.info("view state after stopping the plan...")
+        self.logger.info(response["result"])
+        view_state = response["result"].get("ViewPlan", {}).get("state", "UNKNOWN")
+        self.logger.info(f"Current plan view state:")
+        self.logger.info(view_state)
         return self.schedule
 
     def export_schedule(self, params):

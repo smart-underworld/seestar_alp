@@ -2105,6 +2105,12 @@ class ScheduleStartDevicePlanResource:
         do_action_device("start_schedule_as_device_plan", telescope_id, {})
         redirect(f"/{telescope_id}/schedule")
 
+class ScheduleStopDevicePlanResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        do_action_device("stop_device_plan", telescope_id, {})
+        redirect(f"/{telescope_id}/schedule")
+
 class ScheduleAddToJobQueueResource:
     @staticmethod
     def on_post(req, resp, telescope_id=0):
@@ -4586,6 +4592,7 @@ class FrontMain:
         app.add_route("/schedule/wait-for", ScheduleWaitForResource())
         app.add_route("/schedule/upload", ScheduleUploadResource())
         app.add_route("/schedule/start_as_device_plan", ScheduleStartDevicePlanResource())
+        app.add_route("/schedule/stop_device_plan", ScheduleStopDevicePlanResource())
         app.add_route("/schedule/add_to_federation_job_queue", ScheduleAddToJobQueueResource())
 
         
@@ -4660,6 +4667,7 @@ class FrontMain:
         app.add_route("/{telescope_id:int}/schedule/upload", ScheduleUploadResource())
 
         app.add_route("/{telescope_id:int}/schedule/start_as_device_plan", ScheduleStartDevicePlanResource())
+        app.add_route("/{telescope_id:int}/schedule/stop_device_plan", ScheduleStopDevicePlanResource())
         app.add_route("/{telescope_id:int}/schedule/add_to_federation_job_queue", ScheduleAddToJobQueueResource())
 
 
