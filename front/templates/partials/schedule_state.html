@@ -56,6 +56,9 @@
         <option value="upload">Upload Schedule</option>
         <option value="export">Export Schedule</option>
         <option value="download">Download Schedule</option>
+        <option value="">-------------</option>
+        <option value="start_as_device_plan">Start As Device Plan</option>
+        <option value="add_to_federation_queue">Add to Federation Job Queue</option>
       </select>
     </div>
   </div>
@@ -123,6 +126,16 @@
                         <input type="text" class="form-control" name="filename" placeholder="Filename" required>
                     </div>
                     <button type="submit" class="btn btn-primary">Download</button>
+                </form>
+            `,
+            "start_as_device_plan": `
+                <form action="{{ root }}/schedule/start_as_device_plan" method="post">
+                    <button type="submit" class="btn btn-primary">Start as Device Plan</button>
+                </form>
+            `,
+            "add_to_federation_queue": `
+                <form action="{{ root }}/schedule/add_to_federation_job_queue" method="post">
+                    <button type="submit" class="btn btn-primary">Add to Federation Job Queue</button>
                 </form>
             `
         };

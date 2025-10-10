@@ -2099,6 +2099,18 @@ class MosaicResource(BaseResource):
             **context,
         )
 
+class ScheduleStartDevicePlanResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        do_action_device("start_schedule_as_device_plan", telescope_id, {})
+        redirect(f"/{telescope_id}/schedule")
+
+class ScheduleAddToJobQueueResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        do_action_device("add_schedule_items_to_job_queue", telescope_id, {})
+        redirect(f"/{telescope_id}/schedule")
+
 
 class ScheduleResource:
     @staticmethod
@@ -4573,6 +4585,11 @@ class FrontMain:
         app.add_route("/schedule/wait-until", ScheduleWaitUntilResource())
         app.add_route("/schedule/wait-for", ScheduleWaitForResource())
         app.add_route("/schedule/upload", ScheduleUploadResource())
+        app.add_route("/schedule/start_as_device_plan", ScheduleStartDevicePlanResource())
+        app.add_route("/schedule/add_to_federation_job_queue", ScheduleAddToJobQueueResource())
+
+        
+        
         app.add_route("/startup", StartupResource())
         app.add_route("/stats", StatsResource())
         app.add_route("/guestmode", GuestModeResource())
@@ -4641,6 +4658,11 @@ class FrontMain:
             "/{telescope_id:int}/schedule/wait-for", ScheduleWaitForResource()
         )
         app.add_route("/{telescope_id:int}/schedule/upload", ScheduleUploadResource())
+
+        app.add_route("/{telescope_id:int}/schedule/start_as_device_plan", ScheduleStartDevicePlanResource())
+        app.add_route("/{telescope_id:int}/schedule/add_to_federation_job_queue", ScheduleAddToJobQueueResource())
+
+
         app.add_route("/{telescope_id:int}/startup", StartupResource())
         app.add_route("/{telescope_id:int}/stats", StatsResource())
         app.add_route("/{telescope_id:int}/guestmode", GuestModeResource())

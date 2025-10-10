@@ -486,6 +486,31 @@ class Seestar_Federation:
                 result[key] = cur_device.stop_scheduler(params)
         return result
     
+
+
+    def start_schedule_as_device_plan(self, params):
+        result = {}
+
+        root_schedule = self.get_schedule(params)
+        available_devices = root_schedule["available_device_list"]
+        random.shuffle(available_devices)
+
+        if "max_devices" in params:
+            available_devices = available_devices[: params["max_devices"]]
+
+        num_devices = len(available_devices)
+        if num_devices < 1:
+            return {
+                "error": "Failed: No available devices found to execute a schedule."
+            }
+
+        for key in available_devices:
+            cur_device = self.seestar_devices[key]
+            result[key] = cur_device.start_schedule_as_device_plan(self.schedule)
+
+        return result
+
+
 ### start of federated job queue implementation
 
     def construct_schedule_sublist(self, params):

@@ -2123,24 +2123,37 @@ class Seestar:
             index += 1
         return self.schedule
 
+    def start_schedule_as_device_plan(self, params):
+        response = self.send_message_param_sync({"method": "iscope_get_app_state"} )
+        self.logger.info("view state before sending out the plan to execute...", response["result"])
+        view_state = response["result"].get("ViewPlan", {}).get("state", "UNKNOWN")
+        self.logger.info(f"Current plan view state:")
+        self.logger.info(view_state)
+        #state have to be not "working" before a plan can be executed
+        if view_state == "working":
+            msg = "Cannot start a new plan while another plan is still working."
+            self.logger.warn(msg)
+            return self.json_result("device is still working", -1, msg)
+
+        if params.get("schedule_id", "") != "":
+            native_plan = Util.convert_schedule_to_native_plan(params, self.get_device_model())
+        else:
+            native_plan = Util.convert_schedule_to_native_plan(self.schedule, self.get_device_model())
+            
+        self.logger.info("-----")
+        self.logger.info("Converted native plan:")
+        self.logger.info(native_plan)
+        self.logger.info("-----")
+        response = self.send_message_param_sync({"method": "get_view_state"} )
+        self.logger.info("view state after sending out the plan to execute...", response["result"])
+        return self.schedule
+
     def export_schedule(self, params):
 
         filepath = params["filepath"]
         # get last string after last folder delimitor
         filename = filepath.split("/")[-1]
         self.schedule["name"] = filename.replace(".json", "")
-
-
-        native_plan = Util.convert_schedule_to_native_plan(self.schedule, self.get_device_model())
-        self.logger.info("-----")
-        self.logger.info("Converted native plan:")
-        self.logger.info(native_plan)
-        self.logger.info("-----")
-        response = self.send_message_param_sync({"method": "get_view_state"} )
-        result = response["result"]
-        view_state = result.get("View", {}).get("state", "UNKNOWN")
-        self.logger.info(f"Current plan view state: {view_state}")
-        #state have to be not "working" before a plan can be executed
 
 
         with open(filepath, "w") as fp:

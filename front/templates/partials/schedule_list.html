@@ -182,7 +182,7 @@
                   <div class="col align-self-start">{{ item["params"]["gain"] }}</div>
 
                   <!-- Six-prime Column: Sub Exposure Time (1s) -->
-                  <div class="col align-self-start">{{ item["params"]["frame_expo_ms"]/1000 }}</div>
+                  <div class="col align-self-start">{% if item["params"]["frame_expo_ms"] is defined %} {{ item["params"]["frame_expo_ms"]/1000 }} {% endif %}</div>
 
                   <!-- Seventh Column: LP Filter Checkbox -->
                   <div class="col align-self-start">
