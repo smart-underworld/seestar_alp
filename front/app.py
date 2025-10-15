@@ -1598,7 +1598,7 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
     if tab == "job_queue":
         action_name = "get_job_queue"
         telescope_id = 0
-        tab = "startup"
+        tab = "mosaic"
     else:
         action_name = "get_schedule"
 
@@ -2133,7 +2133,7 @@ class ScheduleGetJobQueueResource:
         if not online:
             telescope_id = 0
         render_schedule_tab(
-            req, resp, telescope_id, "schedule_startup.html", "job_queue", {}, {}
+            req, resp, telescope_id, "job_queue_mosaic.html", "job_queue", {}, {}
         )
 
 
@@ -2746,50 +2746,6 @@ class ScheduleImportResource:
         flash(resp, f"Schedule imported from {selected_file}.")
         redirect(f"/{telescope_id}/schedule")
 
-class JobQueueExportResource:
-    @staticmethod
-    def on_post(req, resp, telescope_id=0):
-        filename = req.media["filename"]
-        if not filename.lower().endswith(".json"):
-            filename = filename + ".json"
-        directory = os.path.join(os.getcwd(), "schedule")
-        file_path = os.path.join(directory, filename)
-
-        do_action_device("export_job_queue", telescope_id, {"filepath": file_path})
-        redirect(f"/{telescope_id}/schedule")
-
-
-class JobQueueImportResource:
-    @staticmethod
-    def on_post(req, resp, telescope_id=0):
-        form = req.media
-        selected_file = form.get("schedule_file")
-
-        if not selected_file:
-            raise falcon.HTTPBadRequest("Missing Parameter", "No file selected")
-
-        directory = os.path.join(os.getcwd(), "schedule")
-        file_path = os.path.join(directory, selected_file)
-        file_type = determine_file_type(file_path)
-
-        if file_type == "json":
-            do_action_device(
-                "import_to_job_queue",
-                telescope_id,
-                {"filepath": file_path, "is_retain_state": False},
-            )
-
-        else:
-            flash(
-                resp,
-                f"Invalid file type for {selected_file}. Only .json are allowed",
-            )
-            return redirect(f"/{telescope_id}/schedule")
-
-        flash(resp, f"Schedule imported from {selected_file}.")
-        redirect(f"/{telescope_id}/schedule")
-
-
 class ScheduleUploadResource:
     @staticmethod
     def on_post(req, resp, telescope_id=0):
@@ -2925,6 +2881,73 @@ class ScheduleRefreshResource(BaseResource):
 
         return html
 
+class JobQueueResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        telescope_id = 0
+        render_schedule_tab(
+            req, resp, telescope_id, "job_queue_mosaic.html", "job_queue", {}, {}
+        )
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        telescope_id = 0
+        render_schedule_tab(
+            req, resp, telescope_id, "job_queue_mosaic.html", "job_queue", {}, {}
+        )
+
+class JobQueueClearResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        telescope_id = 0
+        do_action_device("create_job_queue", telescope_id, {})
+        redirect(f"/{telescope_id}/job_queue")
+
+
+
+class JobQueueExportResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        telescope_id = 0
+        filename = req.media["filename"]
+        if not filename.lower().endswith(".json"):
+            filename = filename + ".json"
+        directory = os.path.join(os.getcwd(), "schedule")
+        file_path = os.path.join(directory, filename)
+
+        do_action_device("export_job_queue", telescope_id, {"filepath": file_path})
+        redirect(f"/{telescope_id}/job_queue")
+
+
+class JobQueueImportResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        form = req.media
+        selected_file = form.get("schedule_file")
+
+        if not selected_file:
+            raise falcon.HTTPBadRequest("Missing Parameter", "No file selected")
+
+        directory = os.path.join(os.getcwd(), "schedule")
+        file_path = os.path.join(directory, selected_file)
+        file_type = determine_file_type(file_path)
+
+        if file_type == "json":
+            do_action_device(
+                "import_to_job_queue",
+                telescope_id,
+                {"filepath": file_path, "is_retain_state": False},
+            )
+
+        else:
+            flash(
+                resp,
+                f"Invalid file type for {selected_file}. Only .json are allowed",
+            )
+            return redirect(f"/{telescope_id}/job_queue")
+
+        flash(resp, f" imported from {selected_file}.")
+        redirect(f"/{telescope_id}/job_queue")
 
 class EventStatus:
     @staticmethod
@@ -4658,6 +4681,9 @@ class FrontMain:
         app.add_route("/schedule/stop_device_plan", ScheduleStopDevicePlanResource())
         app.add_route("/schedule/add_to_federation_job_queue", ScheduleAddToJobQueueResource())
         app.add_route("/schedule/get_job_queue", ScheduleGetJobQueueResource())
+
+        app.add_route("/job_queue", JobQueueResource())
+        app.add_route("/job_queue/clear", JobQueueClearResource())
         app.add_route("/job_queue/export", JobQueueExportResource())
         app.add_route("/job_queue/import", JobQueueImportResource())
         
@@ -4730,15 +4756,16 @@ class FrontMain:
             "/{telescope_id:int}/schedule/wait-for", ScheduleWaitForResource()
         )
         app.add_route("/{telescope_id:int}/schedule/upload", ScheduleUploadResource())
-
-        app.add_route("/{telescope_id:int}/job_queue/export", JobQueueExportResource())
-        app.add_route("/{telescope_id:int}/job_queue/import", JobQueueImportResource())
         app.add_route("/{telescope_id:int}/schedule/start_as_device_plan", ScheduleStartDevicePlanResource())
         app.add_route("/{telescope_id:int}/schedule/stop_device_plan", ScheduleStopDevicePlanResource())
         app.add_route("/{telescope_id:int}/schedule/add_to_federation_job_queue", ScheduleAddToJobQueueResource())
         app.add_route("/{telescope_id:int}/schedule/get_job_queue", ScheduleGetJobQueueResource())
 
-
+        app.add_route("/{telescope_id:int}/job_queue", JobQueueResource())
+        app.add_route("/{telescope_id:int}/job_queue/clear", JobQueueClearResource())
+        app.add_route("/{telescope_id:int}/job_queue/export", JobQueueExportResource())
+        app.add_route("/{telescope_id:int}/job_queue/import", JobQueueImportResource())
+        
         app.add_route("/{telescope_id:int}/startup", StartupResource())
         app.add_route("/{telescope_id:int}/stats", StatsResource())
         app.add_route("/{telescope_id:int}/guestmode", GuestModeResource())

@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+
+{% block header %}
+    <div class="container mt-3">
+        <p class="h1">{% block title %}Federation Job Queue Page{% endblock %} - {{ telescope["name"] }}
+            ({{ telescope["ip_address"] }})</p>
+    </div>
+{% endblock %}
+
+{% block content %}
+  <div class="container mb-2">
+    <p class="h3">Federation Job Queue</p>
+
+    <div id="schedule-status" class="mb-3">
+      <div class="container mb-3">
+        <span id="state_span"> {% include 'partials/job_queue_state.html' %}</span>
+      </div>
+    </div>
+
+    <form id="scheduleForm" action="{{ root }}/job_queue/delete" method="post" enctype="application/x-www-form-urlencoded">
+
+      <div id="schedule-head">
+        <div class="row fw-bold border-bottom py-1 text-start">
+          <div class="col-2 align-self-start">Target</div>
+          <div class="col-2 align-self-start">Param</div>
+          <div class="col align-self-start">Panels</div>
+          <div class="col align-self-start">Ov%</div>
+          <div class="col align-self-start">J2000</div>
+          <div class="col align-self-start">Exp</div>
+          <div class="col align-self-start">Gain</div>
+          <div class="col align-self-start">Sub(s)</div>         
+          <div class="col align-self-start">LP</div>
+          <div class="col align-self-start">AF</div>
+          <div class="col-2 align-self-start">Selected Panels</div>
+        </div>
+      </div>
+
+      <div id="schedule-body" class="container mt-3">
+        {% include 'partials/schedule_list.html' %}
+      </div>
+
+      <div id="schedule-buttons-top" class="container mt-3">
+        <div class="bt-3">
+          {% if schedule.list %}
+            <button type="submit" class="btn btn-danger" name="action" value="delete" title="Delete the selected schedule item">Delete</button>
+            <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/job_queue/{{ tab }}" title="Add an item to bottom of job queue">Append</button>
+            <button type="submit" class="btn btn-secondary" name="action" value="insert" formaction="{{ root }}/job_queue/{{ tab }}" title="Insert an item before the selected item">Insert</button>
+          {% else %}
+            <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/job_queue/{{ tab }}" title="Add an item to bottom of job_queue">Add</button>
+          {% endif %}
+        </div>
+      </div>
+
+
+      <p class="mt-3">Schedule page. Pick an item to schedule, and Submit to add to the schedule.</p>
+
+      {% include 'partials/job_queue_tab_header.html' with context %}
+
+      <div class="tab-content">
+        <div class="tab-pane fade show active" role="tabpanel" aria-labelledby="auto-focus-tab">
+          {% block schedule_tab_content %}{% endblock %}
+        </div>
+      </div>
+
+      <div id="schedule-buttons-bottom" class="container mt-3">
+        <div class="bt-3">
+          {% if schedule.list %}
+            <button type="submit" class="btn btn-danger" name="action" value="delete" title="Delete the selected schedule item">Delete</button>
+            <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/schedule/{{ tab }}" title="Add a schedule item to bottom of schedule">Append</button>
+            <button type="submit" class="btn btn-secondary" name="action" value="insert" formaction="{{ root }}/schedule/{{ tab }}" title="Insert a schedule item before the selected item">Insert</button>
+          {% else %}
+            <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/schedule/{{ tab }}" title="Add a schedule item to bottom of schedule">Add</button>
+          {% endif %}
+        </div>
+      </div>
+
+    </form>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const form = document.getElementById("scheduleForm");
+        
+        // Clear any previously stored accordion state on form load
+        localStorage.removeItem('openAccordionId');
+
+        form.addEventListener("submit", function (event) {
+            const checkboxes = document.querySelectorAll('input[name="selected_items"]:checked');
+            const buttonClicked = event.submitter;
+
+            if (buttonClicked) {
+                if (buttonClicked.name === "action") {
+                    if (buttonClicked.value === "insert" && checkboxes.length !== 1) {
+                        alert("Please select exactly one item to insert before.");
+                        event.preventDefault();
+                        return;
+                    }
+                    if (buttonClicked.value === "delete" && checkboxes.length === 0) {
+                        alert("Please select at least one item to delete.");
+                        event.preventDefault();
+                        return;
+                    }
+                }
+            }
+        });
+    });
+
+// Track previous state
+let previousScheduleState = null;
+
+document.addEventListener("DOMContentLoaded", function () {
+    function checkScheduleState() {
+        const openAccordionId = localStorage.getItem('openAccordionId') || '';
+        fetch(`{{ root }}/job_queue/refresh?open_accordion_id=${encodeURIComponent(openAccordionId)}`)
+            .then(response => response.json())
+            .then(data => {
+                    console.log("Schedule is working, refreshing...");
+                    document.getElementById("schedule-body").innerHTML = data.html;
+                    setTimeout(checkScheduleState, 5000);  // Keep checking every 5s
+            })
+            .catch(error => console.error("Error refreshing schedule:", error));
+    }
+
+    // Start checking state on page load
+    checkScheduleState();
+});
+
+
+
+
+//  This script manages the persistence of the open state for Bootstrap accordions using localStorage.
+//  - On page load, if an 'openAccordionId' exists in localStorage, it is removed to reset the accordion state.
+//  This ensures that the accordion's open state does not persist across page reloads.
+
+
+// Accordion open state persistence
+document.addEventListener("DOMContentLoaded", function () {
+  // Listen for accordion open events
+  document.body.addEventListener('show.bs.collapse', function (event) {
+    if (event.target.classList.contains('accordion-collapse')) {
+      localStorage.setItem('openAccordionId', event.target.id);
+    }
+  });
+
+  // Listen for accordion close events
+  document.body.addEventListener('hide.bs.collapse', function (event) {
+    if (event.target.classList.contains('accordion-collapse')) {
+      localStorage.removeItem('openAccordionId');
+    }
+  });
+
+  // On page load, remove the saved accordion if present
+  const openAccordionId = localStorage.getItem('openAccordionId');
+  if (openAccordionId) {
+    localStorage.removeItem('openAccordionId');
+  }
+});
+
+  </script>
+
+  <footer class="bg-body-tertiary text-center mt-3">
+    Version: {{ version }}
+  </footer>
+
+{% endblock %}

@@ -38,7 +38,7 @@ class Seestar_Federation:
         self.job_queue: Schedule = {
             "version": 1.0,
             "list": collections.deque(),
-            "state": "stopped",
+            "state": "working",
             "schedule_id": str(uuid.uuid4()),
         }
 

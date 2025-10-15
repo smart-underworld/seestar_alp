@@ -1,0 +1,7 @@
+{% extends 'job_queue_base.html' %}
+
+{% block schedule_tab_content %}
+    {% with action=root ~ "/job_queue/mosaic" %}
+        {% include 'mosaic_create.html' with context %}
+    {% endwith %}
+{% endblock %}

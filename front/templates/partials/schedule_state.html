@@ -51,9 +51,6 @@
       <label for="actionSelector" class="form-label">Schedule Actions:</label>
       <select class="form-select" id="actionSelector" onchange="handleAction()">
         <option value="">--Select an Action--</option>
-        <option value="show_schedule">Show Schedule</option>
-        <option value="show_job_queue">Show Federation Job Queue</option>
-        <option value="">-------------</option>
         <option value="clear">Clear Schedule</option>
         <option value="import">Import Schedule</option>
         <option value="upload">Upload Schedule</option>
@@ -147,16 +144,6 @@
                 <form action="{{ root }}/schedule/add_to_federation_job_queue" method="post">
                     <button type="submit" class="btn btn-primary">Confirm</button>
                 </form>
-            `,
-            "show_schedule": `
-                <form action="{{ root }}/schedule" method="post">
-                    <button type="submit" class="btn btn-primary">Confirm</button>
-                </form>
-            `,
-            "show_job_queue": `
-                <form action="{{ root }}/schedule/get_job_queue" method="post">
-                    <button type="submit" class="btn btn-primary">Confirm</button>
-                </form>
             `
         };
 
@@ -169,8 +156,6 @@
             "start_as_device_plan": "Start Schedule As Device Plan",
             "stop_device_plan": "Stop Active Device Plan",
             "add_to_federation_queue": "Add Schedule to Federation Job Queue",
-            "show_schedule": "Show Current Schedule",
-            "show_job_queue": "Show Federation Job Queue"
         };
 
         if (selectedValue === "clear") {
