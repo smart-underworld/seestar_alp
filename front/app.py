@@ -2949,6 +2949,76 @@ class JobQueueImportResource:
         flash(resp, f" imported from {selected_file}.")
         redirect(f"/{telescope_id}/job_queue")
 
+class JobQueueImageResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        telescope_id = 0
+        render_schedule_tab(
+            req, resp, telescope_id, "job_queue_image.html", "image", {}, {}
+        )
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        telescope_id = 0
+        values, errors = do_create_image(req, resp, True, telescope_id)
+        render_schedule_tab(
+            req, resp, telescope_id, "job_queue_image.html", "image", values, errors
+        )
+
+
+class JobQueueMosaicResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        telescope_id = 0
+        render_schedule_tab(
+            req, resp, telescope_id, "job_queue_mosaic.html", "mosaic", {}, {}
+        )
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        values, errors = do_create_mosaic(req, resp, True, telescope_id)
+        telescope_id = 0
+        render_schedule_tab(
+            req, resp, telescope_id, "job_queue_mosaic.html", "mosaic", values, errors
+        )
+
+
+class JobQueueRefreshResource(BaseResource):
+    def on_get(self, req, resp, telescope_id=0):
+        telescope_id = 0
+        context = get_context(telescope_id, req)
+        current = do_action_device("get_job_queue", telescope_id, {})
+        if current is not None:
+            schedule = current.get("Value", {})
+            state = schedule.get("state", "")
+        else:
+            schedule = {}
+            state = "stopped"
+
+        html = self.render_schedule_list_html(req, resp, schedule, context)
+        resp.media = {"state": state, "html": html}
+        resp.content_type = "application/json"
+        resp.status = falcon.HTTP_200
+
+    def render_schedule_list_html(self, req, resp, schedule, context):
+        template = fetch_template("partials/schedule_list.html")
+        webui_theme = Config.uitheme
+        version = Version.app_version()
+        open_accordion_id = req.get_param("open_accordion_id", default="")
+
+        html = template.render(
+            flashed_messages=get_flash_cookie(req, resp),
+            messages=get_messages(),
+            webui_theme=webui_theme,
+            version=version,
+            schedule=schedule,
+            open_accordion_id=open_accordion_id,
+            **context,
+        )
+
+        return html
+
+
 class EventStatus:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -4680,12 +4750,17 @@ class FrontMain:
         app.add_route("/schedule/start_as_device_plan", ScheduleStartDevicePlanResource())
         app.add_route("/schedule/stop_device_plan", ScheduleStopDevicePlanResource())
         app.add_route("/schedule/add_to_federation_job_queue", ScheduleAddToJobQueueResource())
-        app.add_route("/schedule/get_job_queue", ScheduleGetJobQueueResource())
 
         app.add_route("/job_queue", JobQueueResource())
         app.add_route("/job_queue/clear", JobQueueClearResource())
+        app.add_route("/job_queue/append", JobQueueClearResource())
+        app.add_route("/job_queue/insert", JobQueueClearResource())
+        app.add_route("/job_queue/delete", JobQueueClearResource())        
         app.add_route("/job_queue/export", JobQueueExportResource())
         app.add_route("/job_queue/import", JobQueueImportResource())
+        app.add_route("/job_queue/image", JobQueueImageResource())
+        app.add_route("/job_queue/mosaic", JobQueueMosaicResource()) 
+        app.add_route("/job_queue/refresh", JobQueueRefreshResource()) 
         
         
         app.add_route("/startup", StartupResource())
@@ -4759,12 +4834,14 @@ class FrontMain:
         app.add_route("/{telescope_id:int}/schedule/start_as_device_plan", ScheduleStartDevicePlanResource())
         app.add_route("/{telescope_id:int}/schedule/stop_device_plan", ScheduleStopDevicePlanResource())
         app.add_route("/{telescope_id:int}/schedule/add_to_federation_job_queue", ScheduleAddToJobQueueResource())
-        app.add_route("/{telescope_id:int}/schedule/get_job_queue", ScheduleGetJobQueueResource())
 
         app.add_route("/{telescope_id:int}/job_queue", JobQueueResource())
         app.add_route("/{telescope_id:int}/job_queue/clear", JobQueueClearResource())
         app.add_route("/{telescope_id:int}/job_queue/export", JobQueueExportResource())
         app.add_route("/{telescope_id:int}/job_queue/import", JobQueueImportResource())
+        app.add_route("/{telescope_id:int}/job_queue/image", JobQueueImageResource())
+        app.add_route("/{telescope_id:int}/job_queue/mosaic", JobQueueMosaicResource()) 
+        app.add_route("/{telescope_id:int}/job_queue/refresh", JobQueueRefreshResource()) 
         
         app.add_route("/{telescope_id:int}/startup", StartupResource())
         app.add_route("/{telescope_id:int}/stats", StatsResource())

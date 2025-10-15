@@ -66,10 +66,10 @@
         <div class="bt-3">
           {% if schedule.list %}
             <button type="submit" class="btn btn-danger" name="action" value="delete" title="Delete the selected schedule item">Delete</button>
-            <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/schedule/{{ tab }}" title="Add a schedule item to bottom of schedule">Append</button>
-            <button type="submit" class="btn btn-secondary" name="action" value="insert" formaction="{{ root }}/schedule/{{ tab }}" title="Insert a schedule item before the selected item">Insert</button>
+            <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/job_queue/{{ tab }}" title="Append to the job queue">Append</button>
+            <button type="submit" class="btn btn-secondary" name="action" value="insert" formaction="{{ root }}/job_queue/{{ tab }}" title="Insert before the selected item">Insert</button>
           {% else %}
-            <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/schedule/{{ tab }}" title="Add a schedule item to bottom of schedule">Add</button>
+            <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/job_queue/{{ tab }}" title="Append to the job queue">Add</button>
           {% endif %}
         </div>
       </div>
