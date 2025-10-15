@@ -57,7 +57,9 @@ class SeestarLogging:
         except socket.error:
             # Let's just delay a fraction of a second to avoid reconnecting too quickly
             self.is_connected = False
-            sleep(0.1)
+            # Kai - let the system wait a bit longer if we failed to reconnect. This is to support many more device instances in the federation
+            sleep(5.0)
+            # sleep(0.1)
             return False
 
     def disconnect(self):

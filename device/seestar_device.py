@@ -287,11 +287,11 @@ class Seestar:
         except socket.error:
             # Let's just delay a fraction of a second to avoid reconnecting too quickly
             self.is_connected = False
-            sleep(1)
+            sleep(10)
             return False
         except Exception:
             self.is_connected = False
-            sleep(1)
+            sleep(10)
             return False
 
     def get_socket_msg(self) -> str | None:
@@ -2123,15 +2123,17 @@ class Seestar:
             index += 1
         return self.schedule
 
-    def start_schedule_as_device_plan(self, params):
+    def is_active_plan_exists(self):
         response = self.send_message_param_sync({"method": "iscope_get_app_state"} )
         self.logger.info("view state before sending out the plan to execute...")
         self.logger.info(response["result"])
         view_state = response["result"].get("ViewPlan", {}).get("state", "UNKNOWN")
         self.logger.info(f"Current plan view state:")
         self.logger.info(view_state)
-        #state have to be not "working" before a plan can be executed
-        if view_state == "working":
+        return view_state == "working"
+
+    def start_schedule_as_device_plan(self, params):
+        if self.is_active_plan_exists():
             msg = "Cannot start a new plan while another plan is still working."
             self.logger.warn(msg)
             return self.json_result("device is still working", -1, msg)
@@ -2151,22 +2153,12 @@ class Seestar:
         self.logger.info("set_view_plan response:")
         self.logger.info(response)
 
-        response = self.send_message_param_sync({"method": "iscope_get_app_state"} )
-        self.logger.info("view state after sending out the plan to execute...")
-        self.logger.info(response["result"])
-        view_state = response["result"].get("ViewPlan", {}).get("state", "UNKNOWN")
-        self.logger.info(f"Current plan view state:")
-        self.logger.info(view_state)
+        # log the device state for troubleshooting
+        self.is_active_plan_exists()
         return self.schedule
 
     def stop_device_plan(self, params):
-        response = self.send_message_param_sync({"method": "iscope_get_app_state"} )
-        self.logger.info("view state before stopping the plan...")
-        self.logger.info(response["result"])
-        view_state = response["result"].get("ViewPlan", {}).get("state", "UNKNOWN")
-        self.logger.info(f"Current plan view state:")
-        self.logger.info(view_state)
-        if view_state != "working":
+        if not self.is_active_plan_exists():
             msg = "No active plan is running. Returned with no action."
             self.logger.warn(msg)
             return self.json_result("no active plan", -1, msg)
@@ -2176,12 +2168,9 @@ class Seestar:
         self.logger.info("stop_view_plan response:")
         self.logger.info(response)
 
-        response = self.send_message_param_sync({"method": "iscope_get_app_state"} )
-        self.logger.info("view state after stopping the plan...")
-        self.logger.info(response["result"])
-        view_state = response["result"].get("ViewPlan", {}).get("state", "UNKNOWN")
-        self.logger.info(f"Current plan view state:")
-        self.logger.info(view_state)
+        # log the device state for troubleshooting
+        self.is_active_plan_exists()
+ 
         return self.schedule
 
     def export_schedule(self, params):
@@ -2360,16 +2349,18 @@ class Seestar:
             f"schedule started from item {self.schedule['item_number']}..."
         )
         index = self.schedule["item_number"] - 1
-        while index < len(self.schedule["list"]) or (self.is_queue_consumer and self.seestar_federation.job_queue_has_next()):
+        while index < len(self.schedule["list"]) or (self.is_queue_consumer):
             update_time()
             if self.schedule["state"] != "working":
                 break
 
             # if the device schedule is done, check if there is any scheduled items in the federation scheduler
-            if index >= len(self.schedule["list"]) and self.is_queue_consumer and self.seestar_federation.job_queue_has_next():
+            if index >= len(self.schedule["list"]) and self.is_queue_consumer:
+                while not self.seestar_federation.job_queue_has_next():
+                    time.sleep(5)
                 next_scheduled_item = self.seestar_federation.job_queue_get_next()
                 if next_scheduled_item is None:
-                    break
+                    continue
                 self.logger.info("Found additional scheduled item from federation.")
                 self.schedule["list"].append(next_scheduled_item)
 

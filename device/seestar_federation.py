@@ -188,10 +188,10 @@ class Seestar_Federation:
                 device_schedule = cur_device.get_schedule(params)
                 if "state" not in device_schedule:
                     continue
-                if (
+                if ( 
                     device_schedule["state"] == "stopped"
                     or device_schedule["state"] == "complete"
-                ):
+                ) and not cur_device.is_active_plan_exists() :
                     availiable_device_list.append(key)
                 result["device"][key] = device_schedule
         result["available_device_list"] = availiable_device_list
@@ -552,8 +552,11 @@ class Seestar_Federation:
 
             # federation_mode : duplicate, by_panel or by_time
             federation_mode = mosaic_params.get("federation_mode", "duplicate")
-            del mosaic_params["federation_mode"]
-            del mosaic_params["max_devices"]
+            
+            if "federation_mode" in mosaic_params:
+                del mosaic_params["federation_mode"]
+            if "max_devices" in mosaic_params:
+                del mosaic_params["max_devices"]
             
             if federation_mode == 'duplicate':
                 for count in range(max_devices):
@@ -600,24 +603,39 @@ class Seestar_Federation:
         return self.job_queue
     
     def job_queue_append_to(self, params: dict[str, Any]) -> Schedule:
-        new_list=self.construct_schedule_sublist(params)
-        self.job_queue["list"].extend(new_list)
+        # if params is empty, then use the current schedule list as input
+        if not params or len(params) == 0:
+            new_list = list(self.schedule['list'])
+        else:
+            # create a list where the only element is a copy of the params object
+            new_list = [params.copy()]
+        for item in new_list:
+            tmp=self.construct_schedule_sublist(item)
+            self.job_queue["list"].extend(tmp)
         return self.job_queue
 
+    # typical params would be {"before_id": before_id, "action": action, "params": parameters}
+    # however, if the inner params is empty, then the request is interpreted as inserting the entire current schedule before the before_id
     def job_queue_insert_before(self, params):
         targeted_item_id = params["before_id"]
+        if params.get("params", {}) == {}:
+            new_list = list(self.schedule['list'])
+        else:
+            new_list = [params.copy()]
+
         index = 0
         while index < len(self.job_queue["list"]):
             item = self.job_queue["list"][index]
             item_id = item.get("schedule_item_id", "UNKNOWN")
             if item_id == targeted_item_id:
-                new_list = self.construct_schedule_sublist(params)
-                new_index = index
-                for new_item in new_list:
-                    self.job_queue["list"].insert(new_index, new_item)
-
+                for item in new_list:
+                    tmp = self.construct_schedule_sublist(item)
+                    for new_item in tmp:
+                        self.job_queue["list"].insert(index, new_item)
+                        index += 1
                 break
-            index += 1
+            else:
+                index += 1
         return self.job_queue
 
     def job_queue_remove_at(self, params):

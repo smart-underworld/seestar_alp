@@ -151,7 +151,7 @@ class SocketBase:
             if self.is_started():
                 # Only run heartbeat logic or try reconnecting if we're started
                 if not self.is_connected() and not self.reconnect():
-                    time.sleep(1)
+                    time.sleep(5)
                     continue
 
                 for listener in self._listeners:

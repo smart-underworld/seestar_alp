@@ -326,11 +326,6 @@ class action:
                     raise InvalidValueException("Only federation device can call this action.")
                 result = seestar_federation.job_queue_get(params)
                 resp.text = MethodResponse(req, value=result).json
-            elif action_name == "append_to_job_queue":
-                if devnum != 0:
-                    raise InvalidValueException("Only federation device can call this action.")
-                result = seestar_federation.job_queue_append_to(params)
-                resp.text = MethodResponse(req, value=result).json
             elif action_name == "insert_before_to_job_queue":
                 if devnum != 0:
                     raise InvalidValueException("Only federation device can call this action.")
@@ -341,17 +336,17 @@ class action:
                     raise InvalidValueException("Only federation device can call this action.")
                 result = seestar_federation.job_queue_remove_at(params)
                 resp.text = MethodResponse(req, value=result).json
+            elif action_name == "add_schedule_item_to_job_queue":
+                if devnum != 0:
+                    raise InvalidValueException("Only federation device can call this action.")
+                result = seestar_federation.job_queue_append_to(params)
+                resp.text = MethodResponse(req, value=result).json
 
             elif action_name == "start_schedule_as_device_plan":
                 result = cur_dev.start_schedule_as_device_plan(params)
                 resp.text = MethodResponse(req, value=result).json
             elif action_name == "stop_device_plan":
                 result = cur_dev.stop_device_plan(params)
-                resp.text = MethodResponse(req, value=result).json
-            elif action_name == "add_schedule_items_to_job_queue":
-                if devnum != 0:
-                    raise InvalidValueException("Only federation device can call this action.")
-                result = seestar_federation.job_queue_append_to(params)
                 resp.text = MethodResponse(req, value=result).json
 
             if log_debug:
