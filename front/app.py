@@ -2958,9 +2958,7 @@ class JobQueueDeleteResource:
                 {"schedule_item_id": selected_items},
             )
 
-        render_schedule_tab(
-            req, resp, telescope_id, "job_queue_mosaic.html", "mosaic", {}, {}
-        )
+        redirect(f"/{telescope_id}/job_queue")
 
 
 class JobQueueExportResource:
@@ -4814,8 +4812,7 @@ class FrontMain:
         app.add_route("/job_queue/delete", JobQueueDeleteResource())        
         app.add_route("/job_queue/export", JobQueueExportResource())
         app.add_route("/job_queue/import", JobQueueImportResource())
-        app.add_route("/job_queue/image", JobQueueImageResource())
-        app.add_route("/job_queue/mosaic", JobQueueMosaicResource()) 
+        app.add_route("/job_queue/mosaic", JobQueueResource()) 
         app.add_route("/job_queue/refresh", JobQueueRefreshResource()) 
         
         
@@ -4896,8 +4893,7 @@ class FrontMain:
         app.add_route("/{telescope_id:int}/job_queue/delete", JobQueueDeleteResource())  
         app.add_route("/{telescope_id:int}/job_queue/export", JobQueueExportResource())
         app.add_route("/{telescope_id:int}/job_queue/import", JobQueueImportResource())
-        app.add_route("/{telescope_id:int}/job_queue/image", JobQueueImageResource())
-        app.add_route("/{telescope_id:int}/job_queue/mosaic", JobQueueMosaicResource()) 
+        app.add_route("/{telescope_id:int}/job_queue/mosaic", JobQueueResource()) 
         app.add_route("/{telescope_id:int}/job_queue/refresh", JobQueueRefreshResource()) 
         
         app.add_route("/{telescope_id:int}/startup", StartupResource())

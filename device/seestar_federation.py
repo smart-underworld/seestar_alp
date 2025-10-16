@@ -689,8 +689,10 @@ class Seestar_Federation:
             for item in imported_queue:       
                 item["schedule_item_id"] = str(uuid.uuid4())
 
-            # append imported_queue into job_queue list
-            self.job_queue["list"].extend(imported_queue)
+            # todo: kai - need to walk through each entry, accept only mosaic items, and if needed chop each of them up based on federation mode
+            for item in imported_queue:
+                tmp=self.construct_schedule_sublist(item)
+                self.job_queue["list"].extend(tmp)
         except Exception as e:
             self.logger.error(f"Failed to import job queue from {filepath}: {e}")
         return self.job_queue
