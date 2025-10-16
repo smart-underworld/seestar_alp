@@ -42,19 +42,17 @@
       <div id="schedule-buttons-top" class="container mt-3">
         <div class="bt-3">
           {% if schedule.list %}
-            <button type="submit" class="btn btn-danger" name="action" value="delete" title="Delete the selected schedule item">Delete</button>
+            <button type="submit" class="btn btn-danger" formnovalidate name="action" value="delete" title="Delete the selected schedule item">Delete</button>
             <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/job_queue/{{ tab }}" title="Add an item to bottom of job queue">Append</button>
             <button type="submit" class="btn btn-secondary" name="action" value="insert" formaction="{{ root }}/job_queue/{{ tab }}" title="Insert an item before the selected item">Insert</button>
           {% else %}
-            <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/job_queue/{{ tab }}" title="Add an item to bottom of job_queue">Add</button>
+            <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/job_queue/{{ tab }}" title="Add an item to bottom of job_queue">Append</button>
           {% endif %}
         </div>
       </div>
 
 
-      <p class="mt-3">Schedule page. Pick an item to schedule, and Submit to add to the schedule.</p>
-
-      {% include 'partials/job_queue_tab_header.html' with context %}
+      <p class="mt-3">Federation Job Queue Page. Pick an item, and Submit to add to the job queue.</p>
 
       <div class="tab-content">
         <div class="tab-pane fade show active" role="tabpanel" aria-labelledby="auto-focus-tab">
@@ -65,7 +63,7 @@
       <div id="schedule-buttons-bottom" class="container mt-3">
         <div class="bt-3">
           {% if schedule.list %}
-            <button type="submit" class="btn btn-danger" name="action" value="delete" title="Delete the selected schedule item">Delete</button>
+            <button type="submit" class="btn btn-danger" formnovalidate name="action" value="delete" title="Delete the selected schedule item">Delete</button>
             <button type="submit" class="btn btn-primary" name="action" value="append" formaction="{{ root }}/job_queue/{{ tab }}" title="Append to the job queue">Append</button>
             <button type="submit" class="btn btn-secondary" name="action" value="insert" formaction="{{ root }}/job_queue/{{ tab }}" title="Insert before the selected item">Insert</button>
           {% else %}

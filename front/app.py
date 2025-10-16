@@ -622,7 +622,33 @@ def do_insert_schedule_item(action, parameters, before_id, dev_num):
             False,
         )
 
+def do_job_queue_action_device(action, parameters, dev_num):
+    if parameters:
+        return do_action_device(
+            "add_schedule_item_to_job_queue", dev_num, {"action": action, "params": parameters}, True
+        )
+    else:
+        return do_action_device(
+            "add_schedule_item_to_job_queue", dev_num, {"action": action, "params": {}}, True
+        )
 
+
+def do_insert_job_queue_item(action, parameters, before_id, dev_num):
+    if parameters:
+        return do_action_device(
+            "insert_before_to_job_queue",
+            dev_num,
+            {"before_id": before_id, "action": action, "params": parameters},
+            False,
+        )
+    else:
+        return do_action_device(
+            "insert_before_to_job_queue",
+            dev_num,
+            {"before_id": before_id, "action": action, "params": {}},
+            False,
+        )
+    
 def method_sync(method, telescope_id=1, **kwargs):
     # let's try to cache the frequently called sync commands such as get_view_state
     if method in ["get_view_state", "get_event_state"]:
@@ -1162,14 +1188,25 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
         return values, errors
 
     if schedule:
-        if action == "append":
-            response = do_schedule_action_device("start_mosaic", values, telescope_id)
-        else:
-            response = do_insert_schedule_item(
-                "start_mosaic", values, selected_items, telescope_id
-            )
+        if 'job_queue' in req.uri:
+            if action == "append":
+                response = do_job_queue_action_device("start_mosaic", values, telescope_id)
+            else:
+                response = do_insert_job_queue_item(
+                    "start_mosaic", values, selected_items, telescope_id
+                )
 
-        logger.info("POST scheduled request %s %s", values, response)
+            logger.info("POST scheduled request %s %s", values, response)
+           
+        else:
+            if action == "append":
+                response = do_schedule_action_device("start_mosaic", values, telescope_id)
+            else:
+                response = do_insert_schedule_item(
+                    "start_mosaic", values, selected_items, telescope_id
+                )
+
+            logger.info("POST scheduled request %s %s", values, response)
     else:
         response = do_action_device("start_mosaic", telescope_id, values, False)
         logger.info("POST immediate request %s %s", values, response)
@@ -2903,6 +2940,27 @@ class JobQueueClearResource:
         do_action_device("create_job_queue", telescope_id, {})
         redirect(f"/{telescope_id}/job_queue")
 
+class JobQueueDeleteResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        data = req.media
+        selected_items = data.get("selected_items", [])
+
+        if isinstance(selected_items, list):
+            for item in selected_items:
+                do_action_device(
+                    "remove_at_job_queue", telescope_id, {"schedule_item_id": item}
+                )
+        else:
+            do_action_device(
+                "remove_at_job_queue",
+                telescope_id,
+                {"schedule_item_id": selected_items},
+            )
+
+        render_schedule_tab(
+            req, resp, telescope_id, "job_queue_mosaic.html", "mosaic", {}, {}
+        )
 
 
 class JobQueueExportResource:
@@ -4753,9 +4811,7 @@ class FrontMain:
 
         app.add_route("/job_queue", JobQueueResource())
         app.add_route("/job_queue/clear", JobQueueClearResource())
-        app.add_route("/job_queue/append", JobQueueClearResource())
-        app.add_route("/job_queue/insert", JobQueueClearResource())
-        app.add_route("/job_queue/delete", JobQueueClearResource())        
+        app.add_route("/job_queue/delete", JobQueueDeleteResource())        
         app.add_route("/job_queue/export", JobQueueExportResource())
         app.add_route("/job_queue/import", JobQueueImportResource())
         app.add_route("/job_queue/image", JobQueueImageResource())
@@ -4837,6 +4893,7 @@ class FrontMain:
 
         app.add_route("/{telescope_id:int}/job_queue", JobQueueResource())
         app.add_route("/{telescope_id:int}/job_queue/clear", JobQueueClearResource())
+        app.add_route("/{telescope_id:int}/job_queue/delete", JobQueueDeleteResource())  
         app.add_route("/{telescope_id:int}/job_queue/export", JobQueueExportResource())
         app.add_route("/{telescope_id:int}/job_queue/import", JobQueueImportResource())
         app.add_route("/{telescope_id:int}/job_queue/image", JobQueueImageResource())
