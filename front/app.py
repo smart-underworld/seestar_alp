@@ -258,7 +258,7 @@ def _get_context_real(telescope_id, req):
         "current_stack": current_stack,
         "platform": os_platform,
         "defgain": defgain,
-        "frame_expo_ms": defsubexpos,
+        "defsubexpos": defsubexpos,
         "current_exp": current_exp,
     }
 
@@ -574,6 +574,7 @@ def queue_action(dev_num, payload):
 
 
 def do_action_device(action, dev_num, parameters, is_schedule=False):
+    logger.info(f"front - do_action_device {action}")
     url = f"{base_url}/api/v1/telescope/{dev_num}/action"
     payload = {
         "Action": action,
@@ -2929,6 +2930,7 @@ class JobQueueResource:
     @staticmethod
     def on_post(req, resp, telescope_id=0):
         telescope_id = 0
+        values, errors = do_create_mosaic(req, resp, True, telescope_id)
         render_schedule_tab(
             req, resp, telescope_id, "job_queue_mosaic.html", "job_queue", {}, {}
         )
@@ -3032,8 +3034,8 @@ class JobQueueMosaicResource:
 
     @staticmethod
     def on_post(req, resp, telescope_id=0):
-        values, errors = do_create_mosaic(req, resp, True, telescope_id)
         telescope_id = 0
+        values, errors = do_create_mosaic(req, resp, True, telescope_id)
         render_schedule_tab(
             req, resp, telescope_id, "job_queue_mosaic.html", "mosaic", values, errors
         )
@@ -4812,7 +4814,7 @@ class FrontMain:
         app.add_route("/job_queue/delete", JobQueueDeleteResource())        
         app.add_route("/job_queue/export", JobQueueExportResource())
         app.add_route("/job_queue/import", JobQueueImportResource())
-        app.add_route("/job_queue/mosaic", JobQueueResource()) 
+        app.add_route("/job_queue/mosaic", JobQueueMosaicResource()) 
         app.add_route("/job_queue/refresh", JobQueueRefreshResource()) 
         
         
