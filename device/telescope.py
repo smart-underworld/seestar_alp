@@ -182,12 +182,13 @@ class action:
             if action_name == "method_sync" and params["method"] in [
                 "scope_get_equ_coord",
                 "get_view_state",
+                "get_schedule"
             ]:
                 cur_dev.logger.debug(
                     f"request: {action_name} for device {devnum} with param {parameters}"
                 )
                 log_debug = True
-            elif action_name in ["get_event_state", "get_view_state"]:
+            elif action_name in ["get_event_state", "get_view_state", "get_schedule"]:
                 cur_dev.logger.debug(
                     f"request: {action_name} for device {devnum} with param {parameters}"
                 )

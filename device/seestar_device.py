@@ -2357,7 +2357,10 @@ class Seestar:
             # if the device schedule is done, check if there is any scheduled items in the federation scheduler
             if index >= len(self.schedule["list"]) and self.is_queue_consumer:
                 while not self.seestar_federation.job_queue_has_next():
+                    self.logger.info("active but empty scheduler waiting for next job queue.")
                     time.sleep(5)
+                    if self.schedule["state"] != "working":
+                        break
                 next_scheduled_item = self.seestar_federation.job_queue_get_next()
                 if next_scheduled_item is None:
                     continue

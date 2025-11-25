@@ -574,7 +574,6 @@ def queue_action(dev_num, payload):
 
 
 def do_action_device(action, dev_num, parameters, is_schedule=False):
-    logger.info(f"front - do_action_device {action}")
     url = f"{base_url}/api/v1/telescope/{dev_num}/action"
     payload = {
         "Action": action,
