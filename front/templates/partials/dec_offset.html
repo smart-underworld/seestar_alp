@@ -95,6 +95,9 @@
 <script>
 const container = document.getElementById('container');
 const arrow = document.getElementById('arrow');
+const modal = document.getElementById('decOffsetModal');
+const startupForm = modal ? modal.closest('form') : null;
+const startupFormId = startupForm ? startupForm.id : '';
 
 let radios = [];
 
@@ -129,6 +132,9 @@ function setupRadios() {
     radio.name = 'dec-offset';
     radio.value = `${i+1}`;
     radio.id = `option${i + 1}`;
+    if (startupFormId) {
+      radio.setAttribute('form', startupFormId);
+    }
 
     label.appendChild(radio);
     const textSpan = document.createElement('span');
@@ -163,13 +169,20 @@ container.addEventListener('change', (e) => {
 });
 
 // Wait for modal to show, then setup radios
-const modal = document.getElementById('decOffsetModal');
-modal.addEventListener('shown.bs.modal', () => {
-  setupRadios();
+if (modal) {
+  // Bootstrap backdrop is attached under <body>. Move this modal out of any
+  // stacking context so it remains interactive above the backdrop.
+  if (modal.parentElement !== document.body) {
+    document.body.appendChild(modal);
+  }
 
-  // Default select #3
-  radios[2].radio.checked = true;
-  rotateToRadio(radios[2].radio);
-});
+  modal.addEventListener('shown.bs.modal', () => {
+    setupRadios();
+
+    // Default select #3
+    radios[2].radio.checked = true;
+    rotateToRadio(radios[2].radio);
+  });
+}
 
 </script>
