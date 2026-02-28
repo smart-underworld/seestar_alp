@@ -54,69 +54,74 @@
     }
 </style>
 
-<button type="button" class="btn btn-secondary float-end"
-        data-bs-toggle="modal" data-bs-target="#bubbleLevelModal">
+<button type="button" class="btn btn-secondary float-end js-bubble-level-open">
     Show Bubble Level
 </button>
 
-<div class="modal fade" id="bubbleLevelModal" tabindex="-1"
-     aria-labelledby="bubbleLevelModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" role="document"
-         style="max-width: 400px; width: 400px;">
-        <div class="modal-content bg-dark text-white" style="height: 430px; overflow: visible;">
-            <div class="modal-header">
-                <h5 class="modal-title" id="bubbleLevelModalLabel">Bubble Level</h5>
-                <button type="button" class="btn-close btn-close-white"
-                        data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body d-flex flex-column align-items-center justify-content-start p-3">
-                <div id="bubble_level">
-                    <div id="bubble_ball"></div>
-                </div>
-                <div class="bubble-level-readout">
-                    X: <span id="bubble_output_x" class="value">0.00</span>
-                    &nbsp; | &nbsp;
-                    Y: <span id="bubble_output_y" class="value">0.00</span>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 <!-- Based on https://developer.mozilla.org/en-US/docs/Web/API/Device_orientation_events/Detecting_device_orientation -->
 <script>
-    const bubbleBall = document.getElementById("bubble_ball");
-    const bubbleGarden = document.getElementById("bubble_level");
-    const bubbleOutputX = document.getElementById("bubble_output_x");
-    const bubbleOutputY = document.getElementById("bubble_output_y");
-    const bubbleModal = document.getElementById("bubbleLevelModal");
-    let bubbleInterval = null;
+(() => {
+    const MODAL_ID = "bubbleLevelModal";
+    let bubbleModal = document.getElementById(MODAL_ID);
+
+    if (!bubbleModal) {
+        document.body.insertAdjacentHTML(
+            "beforeend",
+            `
+            <div class="modal fade" id="bubbleLevelModal" tabindex="-1"
+                 aria-labelledby="bubbleLevelModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered" role="document"
+                     style="max-width: 400px; width: 400px;">
+                    <div class="modal-content bg-dark text-white" style="height: 430px; overflow: visible;">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="bubbleLevelModalLabel">Bubble Level</h5>
+                            <button type="button" class="btn-close btn-close-white"
+                                    data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body d-flex flex-column align-items-center justify-content-start p-3">
+                            <div id="bubble_level">
+                                <div id="bubble_ball"></div>
+                            </div>
+                            <div class="bubble-level-readout">
+                                X: <span id="bubble_output_x" class="value">0.00</span>
+                                &nbsp; | &nbsp;
+                                Y: <span id="bubble_output_y" class="value">0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            `
+        );
+        bubbleModal = document.getElementById(MODAL_ID);
+    }
+
+    const bubbleBall = bubbleModal.querySelector("#bubble_ball");
+    const bubbleGarden = bubbleModal.querySelector("#bubble_level");
+    const bubbleOutputX = bubbleModal.querySelector("#bubble_output_x");
+    const bubbleOutputY = bubbleModal.querySelector("#bubble_output_y");
 
     function updateBubbleOrientation(x, y) {
         const maxX = bubbleGarden.clientWidth - bubbleBall.clientWidth;
         const maxY = bubbleGarden.clientHeight - bubbleBall.clientHeight;
 
-        // Bring up the scale to make easier to visualize
         x = x * 100;
         y = y * 100;
 
         bubbleOutputX.textContent = x.toFixed(2);
         bubbleOutputY.textContent = y.toFixed(2);
 
-        // To make computation easier we shift the range of
-        // x and y to [0,180]
         x += 100;
         y += 100;
 
-        // 10 is half the size of the ball. It centers the movement point.
         bubbleBall.style.top = `${(maxY * x) / 180 - 10}px`;
         bubbleBall.style.left = `${(maxX * y) / 180 - 10}px`;
     }
 
     async function getBalanceSensor() {
         try {
-            const baseURL = `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
-            const getBalanceSensorURL = baseURL + "/getbalancesensor";
-            const response = await fetch(getBalanceSensorURL);
+            const baseURL = `${window.location.protocol}//${window.location.hostname}${window.location.port ? ":" + window.location.port : ""}`;
+            const response = await fetch(baseURL + "/getbalancesensor");
             const data = await response.json();
             updateBubbleOrientation(data["x"], data["y"]);
         } catch (error) {
@@ -125,27 +130,34 @@
     }
 
     function startBubbleLevel() {
-        if (bubbleInterval !== null) {
+        if (bubbleModal.dataset.polling === "true") {
             return;
         }
+        bubbleModal.dataset.polling = "true";
         getBalanceSensor();
-        bubbleInterval = setInterval(getBalanceSensor, 250);
+        bubbleModal._bubbleInterval = setInterval(getBalanceSensor, 250);
     }
 
     function stopBubbleLevel() {
-        if (bubbleInterval !== null) {
-            clearInterval(bubbleInterval);
-            bubbleInterval = null;
+        if (bubbleModal._bubbleInterval) {
+            clearInterval(bubbleModal._bubbleInterval);
+            bubbleModal._bubbleInterval = null;
         }
+        bubbleModal.dataset.polling = "false";
     }
 
-    if (bubbleModal) {
-        // Keep this modal above the Bootstrap backdrop even inside custom containers.
-        if (bubbleModal.parentElement !== document.body) {
-            document.body.appendChild(bubbleModal);
-        }
-
+    if (bubbleModal.dataset.initialized !== "true") {
         bubbleModal.addEventListener("shown.bs.modal", startBubbleLevel);
         bubbleModal.addEventListener("hidden.bs.modal", stopBubbleLevel);
+        bubbleModal.dataset.initialized = "true";
+        bubbleModal.dataset.polling = "false";
     }
+
+    document.querySelectorAll(".js-bubble-level-open").forEach((btn) => {
+        btn.onclick = () => {
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(bubbleModal);
+            modalInstance.show();
+        };
+    });
+})();
 </script>

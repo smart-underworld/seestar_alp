@@ -51,7 +51,9 @@
 
     <div class="mt-3 mb-3">
       {% include 'partials/dec_offset.html' %}
-      <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#decOffsetModal" title="Adjust the declination arm to point further north or south.">
+      <button type="button" class="btn btn-secondary js-dec-offset-open"
+              data-bs-toggle="modal" data-bs-target="#decOffsetModal"
+              title="Adjust the declination arm to point further north or south.">
         Set DEC Offset
       </button>
     </div>
