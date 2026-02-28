@@ -3830,7 +3830,9 @@ class StatsContentResource:
         else:
             stats = get_device_state(telescope_id)
         context = get_context(telescope_id, req)
-        render_fragment(req, resp, "partials/stats_content.html", stats=stats, **context)
+        render_fragment(
+            req, resp, "partials/stats_content.html", stats=stats, **context
+        )
         respond_204_if_unchanged(
             resp,
             StatsContentResource._last_render_by_key,
