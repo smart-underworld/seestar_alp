@@ -600,25 +600,6 @@
             }
         }
 
-        [data-density="compact"] .content {
-            padding: 0.82rem;
-        }
-
-        [data-density="compact"] .panel-card {
-            padding: 0.72rem;
-            margin-bottom: 0.72rem;
-        }
-
-        [data-density="compact"] .stat-row {
-            padding-top: 0.34rem;
-            padding-bottom: 0.34rem;
-        }
-
-        [data-density="compact"] .btn {
-            padding-top: 0.34rem;
-            padding-bottom: 0.34rem;
-        }
-
         {% if webui_font_family %}
         body {
             font-family: {{ webui_font_family }};
@@ -847,13 +828,6 @@
 <script src="/public/main.js"></script>
 <script>
   document.addEventListener("DOMContentLoaded", function () {
-    const savedDensity = localStorage.getItem("ui-density");
-    if (savedDensity === "compact") {
-      document.documentElement.setAttribute("data-density", "compact");
-      const compactToggle = document.getElementById("toggleuidensity");
-      if (compactToggle) compactToggle.checked = true;
-    }
-
     const markLoading = function (target) {
       if (!target) return;
       if (target.classList.contains("no-htmx-fx")) return;
@@ -874,17 +848,6 @@
       clearLoading(evt.detail.target);
     });
   });
-
-  function toggleuidensity() {
-    const compact = document.getElementById("toggleuidensity")?.checked;
-    if (compact) {
-      document.documentElement.setAttribute("data-density", "compact");
-      localStorage.setItem("ui-density", "compact");
-    } else {
-      document.documentElement.removeAttribute("data-density");
-      localStorage.setItem("ui-density", "comfortable");
-    }
-  }
 </script>
 
 {% block scripts %}
