@@ -1625,6 +1625,33 @@ def render_template(req, resp, template_name, **context):
     )
 
 
+def render_fragment(req, resp, template_name, **context):
+    template = fetch_template(template_name)
+    resp.status = falcon.HTTP_200
+    resp.content_type = "text/html"
+    version = Version.app_version()
+    merged_context = dict(context)
+    merged_context.setdefault("webui_theme", Config.uitheme)
+    merged_context.setdefault("webui_text_color", Config.webui_text_color)
+    merged_context.setdefault("webui_font_family", Config.webui_font_family)
+    merged_context.setdefault("webui_font_url", Config.webui_font_url)
+    merged_context.setdefault("webui_link_color", Config.webui_link_color)
+    merged_context.setdefault("webui_accent_color", Config.webui_accent_color)
+    merged_context.setdefault("version", version)
+    resp.text = template.render(**merged_context)
+
+
+def respond_204_if_unchanged(resp, cache, lock, cache_key):
+    html = resp.text
+    with lock:
+        last_html = cache.get(cache_key)
+        if last_html == html:
+            resp.status = falcon.HTTP_204
+            resp.text = ""
+            return
+        cache[cache_key] = html
+
+
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
     directory = os.path.join(os.getcwd(), "schedule")
     Path(directory).mkdir(parents=True, exist_ok=True)
@@ -1984,6 +2011,35 @@ class HomeTelescopeResource:
             del context["telescopes"]
         render_template(
             req, resp, "index.html", now=now, telescopes=telescopes, **context
+        )
+
+
+class HomeContentResource:
+    _last_render_by_key = {}
+    _lock = threading.Lock()
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        telescopes = get_telescopes_state()
+        context_id = int(telescope_id)
+        if context_id == 0 and telescopes:
+            context_id = telescopes[0]["device_num"]
+        context = get_context(context_id, req)
+        # Avoid duplicate keyword when passing explicit telescopes=... below.
+        if "telescopes" in context:
+            del context["telescopes"]
+        render_fragment(
+            req,
+            resp,
+            "partials/home_content.html",
+            telescopes=telescopes,
+            **context,
+        )
+        respond_204_if_unchanged(
+            resp,
+            HomeContentResource._last_render_by_key,
+            HomeContentResource._lock,
+            ("home-content", context_id),
         )
 
 
@@ -2849,6 +2905,9 @@ class ScheduleReStartResource(BaseResource):
 
 
 class ScheduleRefreshResource(BaseResource):
+    _last_render_by_key = {}
+    _lock = threading.Lock()
+
     def on_get(self, req, resp, telescope_id=0):
         context = get_context(telescope_id, req)
         current = do_action_device("get_schedule", telescope_id, {})
@@ -2859,8 +2918,20 @@ class ScheduleRefreshResource(BaseResource):
             schedule = {}
             state = "stopped"
 
+        open_accordion_id = req.get_param("open_accordion_id", default="")
         html = self.render_schedule_list_html(req, resp, schedule, context)
-        resp.media = {"state": state, "html": html}
+        cache_key = (int(telescope_id), open_accordion_id)
+        changed = True
+        with ScheduleRefreshResource._lock:
+            last_html = ScheduleRefreshResource._last_render_by_key.get(cache_key)
+            if last_html == html:
+                changed = False
+            else:
+                ScheduleRefreshResource._last_render_by_key[cache_key] = html
+
+        resp.media = {"state": state, "changed": changed}
+        if changed:
+            resp.media["html"] = html
         resp.content_type = "application/json"
         resp.status = falcon.HTTP_200
 
@@ -2884,6 +2955,9 @@ class ScheduleRefreshResource(BaseResource):
 
 
 class EventStatus:
+    _last_render_by_key = {}
+    _lock = threading.Lock()
+
     @staticmethod
     def on_get(req, resp, telescope_id=1):
         results = []
@@ -2949,6 +3023,17 @@ class EventStatus:
             now=now,
             **context,
         )
+
+        # HTMX polls this endpoint every second. Avoid repaint/reflow when output is unchanged.
+        cache_key = (int(telescope_id), action or "default")
+        html = resp.text
+        with EventStatus._lock:
+            last_html = EventStatus._last_render_by_key.get(cache_key)
+            if last_html == html:
+                resp.status = falcon.HTTP_204
+                resp.text = ""
+                return
+            EventStatus._last_render_by_key[cache_key] = html
 
 
 class LivePage:
@@ -3158,6 +3243,9 @@ class LiveZoomResource(BaseResource):
 
 
 class LiveVideoResource(BaseResource):
+    _last_render_by_telescope = {}
+    _lock = threading.Lock()
+
     def on_get(self, req, resp, telescope_id: int = 1):
         # print("LiveViewResource.on_get telescope_id:", telescope_id)
         dev = telescope.get_seestar_device(telescope_id)
@@ -3178,6 +3266,16 @@ class LiveVideoResource(BaseResource):
             render_template(
                 req, resp, "partials/live_video_record.html", state=state, **context
             )
+
+        html = resp.text
+        key = int(telescope_id)
+        with LiveVideoResource._lock:
+            last_html = LiveVideoResource._last_render_by_telescope.get(key)
+            if last_html == html:
+                resp.status = falcon.HTTP_204
+                resp.text = ""
+                return
+            LiveVideoResource._last_render_by_telescope[key] = html
 
     def on_post(self, req, resp, telescope_id: int = 1):
         # If status is stopped, start recording, otherwise stop
@@ -3721,6 +3819,26 @@ class StatsResource:
         render_template(req, resp, "stats.html", stats=stats, now=now, **context)
 
 
+class StatsContentResource:
+    _last_render_by_key = {}
+    _lock = threading.Lock()
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        if telescope_id == 0:
+            stats = {}
+        else:
+            stats = get_device_state(telescope_id)
+        context = get_context(telescope_id, req)
+        render_fragment(req, resp, "partials/stats_content.html", stats=stats, **context)
+        respond_204_if_unchanged(
+            resp,
+            StatsContentResource._last_render_by_key,
+            StatsContentResource._lock,
+            ("stats-content", int(telescope_id)),
+        )
+
+
 class StartupResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         self.startup(req, resp, telescope_id, {})
@@ -3803,6 +3921,33 @@ class GuestModeResource:
     def on_post(self, req, resp, telescope_id=0):
         do_command(req, resp, telescope_id)
         self.on_get(req, resp, telescope_id)
+
+
+class GuestModeContentResource:
+    _last_render_by_key = {}
+    _lock = threading.Lock()
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        context = get_context(telescope_id, req)
+        if telescope_id == 0 or not context["online"]:
+            state = {}
+        else:
+            state = get_guestmode_state(telescope_id)
+        render_fragment(
+            req,
+            resp,
+            "partials/guestmode_content.html",
+            state=state,
+            action=f"/{telescope_id}/guestmode",
+            **context,
+        )
+        respond_204_if_unchanged(
+            resp,
+            GuestModeContentResource._last_render_by_key,
+            GuestModeContentResource._lock,
+            ("guestmode-content", int(telescope_id)),
+        )
 
 
 class SupportResource:
@@ -4727,6 +4872,9 @@ class FrontMain:
         app.add_route("/schedule/upload", ScheduleUploadResource())
         app.add_route("/startup", StartupResource())
         app.add_route("/stats", StatsResource())
+        app.add_route("/home-content", HomeContentResource())
+        app.add_route("/stats-content", StatsContentResource())
+        app.add_route("/guestmode-content", GuestModeContentResource())
         app.add_route("/guestmode", GuestModeResource())
         app.add_route("/support", SupportResource())
         app.add_route("/eventstatus", EventStatus())
@@ -4795,6 +4943,11 @@ class FrontMain:
         app.add_route("/{telescope_id:int}/schedule/upload", ScheduleUploadResource())
         app.add_route("/{telescope_id:int}/startup", StartupResource())
         app.add_route("/{telescope_id:int}/stats", StatsResource())
+        app.add_route("/{telescope_id:int}/home-content", HomeContentResource())
+        app.add_route("/{telescope_id:int}/stats-content", StatsContentResource())
+        app.add_route(
+            "/{telescope_id:int}/guestmode-content", GuestModeContentResource()
+        )
         app.add_route("/{telescope_id:int}/guestmode", GuestModeResource())
         app.add_route("/{telescope_id:int}/support", SupportResource())
         app.add_route("/{telescope_id:int}/system", SystemResource())

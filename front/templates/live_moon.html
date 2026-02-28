@@ -1,25 +1,35 @@
 {% extends 'live_base.html' %}
 
 {% block header %}
-  <h1 class="text-center mb-3">{% block title %}Live View - Moon{% endblock %}</h1>
+  <div class="page-hero">
+    <div>
+      <p class="page-kicker">Capture</p>
+      <h1 class="page-title">{% block title %}Live View - Moon{% endblock %}</h1>
+      <p class="page-subtitle">{{ telescope["name"] }} ({{ telescope["ip_address"] }})</p>
+    </div>
+  </div>
 {% endblock %}
 
 {% block live_content %}
-  <div class="container">
-    <div class="row justify-content-md-center g-3">
-      <div class="col-md-auto">
-        <img id="liveViewImg" src="{{ imager_root }}/vid" alt="Live view image"
-             style="max-height: 80vh; max-width: 100%"/>
+  <div class="live-layout">
+    <div class="live-main">
+      <img id="liveViewImg" src="{{ imager_root }}/vid" alt="Live view image"/>
+    </div>
+
+    <aside class="live-sidebar">
+      <div class="live-side-card">
+        {% include 'partials/live_controls_video.html' %}
       </div>
 
-      <div class="col-md-auto">
-        {% include 'partials/live_controls_video.html' %}
-
+      <div class="live-side-card">
         {% include 'partials/live_controls_zoom.html' %}
+      </div>
 
+      <div class="live-side-card">
         {% include 'partials/live_movement_control.html' with context %}
+      </div>
 
-        <div id="movement-controls" class="mb-3 d-flex flex-column">
+      <div id="movement-controls" class="live-side-card d-flex flex-column">
           <button class="btn btn-outline-secondary p-3" hx-post="{{ root }}/live/goto" hx-swap="none"
                   hx-vals='{ "target": "Moon" }'>
             <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" fill="currentColor" class="bi bi-bullseye"
@@ -31,19 +41,22 @@
             </svg>
             Goto
           </button>
-        </div>
-
-        {% include 'partials/live_card_controls.html' with context %}
-
-        {% include 'partials/live_card_status.html' with context %}
-
-        <div id="movement-controls" class="mb-3 d-flex flex-column">
-          {% include 'partials/live_controls_mode_none.html' with context %}
-        </div>
       </div>
-    </div>
-    <div class="row mt-3">
+
+      <div class="live-side-card">
+        {% include 'partials/live_card_controls.html' with context %}
+      </div>
+
+      <div class="live-side-card">
+        {% include 'partials/live_card_status.html' with context %}
+      </div>
+
+      <div id="movement-controls" class="live-side-card mb-0 d-flex flex-column">
+          {% include 'partials/live_controls_mode_none.html' with context %}
+      </div>
+    </aside>
+  </div>
+  <div class="row mt-3">
       {% include 'partials/events.html' with context %}
-    </div>
   </div>
 {% endblock %}

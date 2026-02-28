@@ -25,7 +25,7 @@
 			<div id="eventStatusDiv" class="accordion-collapse collapse show"
 				 aria-labelledby="headingOne"
 				 data-bs-parent="#eventStatusAccordion">
-				<div class="accordion-body" id="eventStatusContent"
+				<div class="accordion-body no-htmx-fx" id="eventStatusContent"
 					 hx-get="{{ root }}/eventstatus?action=command"
 					 hx-trigger="load, every 1s"
 					 hx-swap="innerHTML">

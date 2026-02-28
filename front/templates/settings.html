@@ -2,11 +2,15 @@
 
 {% block header %}
     <meta http-equiv="Cache-Control" content="no-cache">
-    <div class="container mt-3">
-        <h1>{% block title %}Settings{% endblock %}</h1>
+    <div class="page-hero">
+        <div>
+            <p class="page-kicker">Configuration</p>
+            <h1 class="page-title">{% block title %}Settings{% endblock %}</h1>
+            <p class="page-subtitle">Device capture, processing, and behavior controls.</p>
+        </div>
         {% if firmware_ver_int is defined %}
             {% set fw = firmware_ver_int|int %}
-            <div class="form-text">Firmware: {{ fw }}</div>
+            <div class="panel-muted">Firmware: {{ fw }}</div>
         {% endif %}
     </div>
 {% endblock %}
@@ -16,15 +20,44 @@
         {% set fw = firmware_ver_int|int %}
     {% endif %}
     {% if client_master and online and settings %}
-        <div class="container mt-3">
+        <div class="panel-card">
             {% if output %}
                 <div class="alert alert-primary" role="alert">{{output}}</div>
             {% endif %}
-            <form method="post" action="{{ action }}">
-                <table class="table table-striped">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="panel-muted">Changes apply immediately after save.</div>
+                <div id="unsavedPill" class="unsaved-pill d-none">
+                    <span class="dot"></span>
+                    Unsaved Changes
+                </div>
+            </div>
+            <form id="settingsForm" method="post" action="{{ action }}">
+                <div class="table-responsive">
+                <table class="table table-striped align-middle mb-3">
                     <tbody>
+                    {% set ns = namespace(current_group="") %}
                     {% for key, value in settings.items() %}
-                        <tr>
+                        {% set key_l = key|lower %}
+                        {% if "gain" in key_l or "exp" in key_l or "stack" in key_l or "frame" in key_l or "light" in key_l %}
+                            {% set group = "Imaging" %}
+                        {% elif "temp" in key_l or "heater" in key_l or "dew" in key_l %}
+                            {% set group = "Environment" %}
+                        {% elif "dither" in key_l or "focus" in key_l or "track" in key_l or "mount" in key_l %}
+                            {% set group = "Mount and Focus" %}
+                        {% else %}
+                            {% set group = "General" %}
+                        {% endif %}
+                        {% if group != ns.current_group %}
+                            {% set ns.current_group = group %}
+                            <tr>
+                                <td colspan="2" class="pt-3 pb-2">
+                                    <div class="form-group-head">
+                                        <h3 class="form-group-title">{{ group }}</h3>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endif %}
+                        <tr class="setting-row">
                             <th class="col">
                                 {{ settings_friendly_names[key] }}
                                 <div class="form-text">{{ settings_helper_text[key] }}</div>
@@ -37,60 +70,99 @@
                             {% if value is true or value is false %}
                                 <td>
                                     {% if value is true %}
-                                        <input type="radio" id="{{ key }}_enable" name="{{ key }}" value="{{ value }}" checked>
-                                        <label for="{{ key }}_enable">Enable</label>
-                                        <input type="radio" id="{{ key }}_disable" name="{{ key }}" value="false">
+                                        <input class="form-check-input me-1" type="radio" id="{{ key }}_enable" name="{{ key }}" value="{{ value }}" checked>
+                                        <label class="me-3" for="{{ key }}_enable">Enable</label>
+                                        <input class="form-check-input me-1" type="radio" id="{{ key }}_disable" name="{{ key }}" value="false">
                                         <label for="{{ key }}_disable">Disable</label>
                                     {% else %}
-                                        <input type="radio" id="{{ key }}_enable" name="{{ key }}" value="true">
-                                        <label for="{{ key }}_enable">Enable</label>
-                                        <input type="radio" id="{{ key }}_disable" name="{{ key }}" value="{{ value }}" checked>
+                                        <input class="form-check-input me-1" type="radio" id="{{ key }}_enable" name="{{ key }}" value="true">
+                                        <label class="me-3" for="{{ key }}_enable">Enable</label>
+                                        <input class="form-check-input me-1" type="radio" id="{{ key }}_disable" name="{{ key }}" value="{{ value }}" checked>
                                         <label for="{{ key }}_disable">Disable</label>
                                     {% endif %}
                                 </td>
                             {% elif key == "temp_unit" %}
                                 <td>
-                                    <input type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}" required pattern="[Cc]|[Ff]" aria-describedby="cfHelp">
+                                    <input class="form-control" type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}" required pattern="[Cc]|[Ff]" aria-describedby="cfHelp">
                                     <div id="cfHelp" class="form-text">C/F</div>
                                 </td>
                             {% elif value is number %}
                                 {% if key == "exp_ms_stack_l" %}
                                     <td>
-                                        <input type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" min="5" max="90000" required aria-describedby="numberHelp">
+                                        <input class="form-control" type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" min="5" max="90000" required aria-describedby="numberHelp">
                                         <div id="numberHelp" class="form-text">Numbers Only (5ms-90000ms)</div>
                                     </td>
                                 {% elif key == "stack_dither_pix" %}
                                     <td>
-                                        <input type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" min="10" max="200" required aria-describedby="numberHelp">
+                                        <input class="form-control" type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" min="10" max="200" required aria-describedby="numberHelp">
                                         <div id="numberHelp" class="form-text">Numbers only 10 - 200 pixels)</div>
                                     </td>
                                 {% else %}
                                     <td>
-                                        <input type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" required aria-describedby="numberHelp">
+                                        <input class="form-control" type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" required aria-describedby="numberHelp">
                                         <div id="numberHelp" class="form-text">Numbers Only</div>
                                     </td>
                                 {% endif %}
                             {% else %}
-                                <td><input type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}" required></td>
+                                <td><input class="form-control" type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}" required></td>
                             {% endif %}
                         </tr>
                     {% endfor %}
                     </tbody>
                 </table>
-                <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+                <div class="action-row">
+                    <button id="saveSettingsBtn" type="submit" class="btn btn-primary">Save</button>
+                    <button id="resetSettingsBtn" type="button" class="btn btn-outline-primary">Reset Form</button>
+                </div>
             </form>
         </div>
     {% elif not client_master %}
-        <div class="container mt-3">
+        <div class="panel-card">
           <p>You are currently in guest mode. You can release this in the Advanced->Guest Mode of the SeeStar app.</p>
           <p>See the <a href="https://github.com/smart-underworld/seestar_alp/wiki/Guest-Mode">Guest Mode</a> wiki page for details</p>
         </div>
     {% else %}
-        <div class="container mt-3">
+        <div class="panel-card">
             <p>You are currently in offline mode</p>
         </div>
     {% endif %}
-    <footer class="bg-body-tertiary text-center mt-3">
+    <footer class="footer-meta">
         Version: {{ version }}
     </footer>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const form = document.getElementById("settingsForm");
+        if (!form) return;
+        const saveBtn = document.getElementById("saveSettingsBtn");
+        const resetBtn = document.getElementById("resetSettingsBtn");
+        const unsavedPill = document.getElementById("unsavedPill");
+        const baseline = new FormData(form);
+
+        function serialize(fd) {
+          return Array.from(fd.entries()).map(([k, v]) => `${k}=${v}`).sort().join("&");
+        }
+
+        const baselineSig = serialize(baseline);
+        function refreshDirtyState() {
+          const currentSig = serialize(new FormData(form));
+          const dirty = currentSig !== baselineSig;
+          saveBtn.disabled = !dirty;
+          if (dirty) {
+            unsavedPill.classList.remove("d-none");
+          } else {
+            unsavedPill.classList.add("d-none");
+          }
+        }
+
+        form.addEventListener("input", refreshDirtyState);
+        form.addEventListener("change", refreshDirtyState);
+        resetBtn.addEventListener("click", function () {
+          form.reset();
+          refreshDirtyState();
+        });
+        refreshDirtyState();
+      });
+    </script>
 {% endblock %}

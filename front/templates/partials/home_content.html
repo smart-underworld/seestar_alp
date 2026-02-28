@@ -1,0 +1,100 @@
+{% macro render_stat_row(key, value) %}
+    <div class="stat-row">
+        <div class="stat-key">{{ key }}</div>
+        {% if key == "Wi-Fi Signal" %}
+            {% set wifi_dbm = value|replace('dBm', '')|replace('dbm', '')|trim|int %}
+            {% set wifi_pct_raw = ((wifi_dbm + 90) * 100 / 40)|int %}
+            {% set wifi_pct = (wifi_pct_raw if wifi_pct_raw > 0 else 0) if wifi_pct_raw < 100 else 100 %}
+            {% if wifi_dbm >= -69 %}
+                <div class="stat-value text-success">
+                    {{ value }}
+                    <div class="metric-bar" style="--metric-value: {{ wifi_pct }}%;"></div>
+                </div>
+            {% elif (wifi_dbm <= -70) and (wifi_dbm >= -79) %}
+                <div class="stat-value text-warning">
+                    {{ value }}
+                    <div class="metric-bar" style="--metric-value: {{ wifi_pct }}%;"></div>
+                </div>
+            {% else %}
+                <div class="stat-value text-danger">
+                    {{ value }}
+                    <div class="metric-bar" style="--metric-value: {{ wifi_pct }}%;"></div>
+                </div>
+            {% endif %}
+        {% elif key == "Free Storage" %}
+            {% if (value[:2]|int <= 5) or (value.split(" ")[1] != "GB") %}
+                <div class="stat-value text-danger">
+                    {{ value }}
+                    <div class="metric-bar" style="--metric-value: {{ value[:2]|int if value[:2]|int < 100 else 100 }}%;"></div>
+                </div>
+            {% elif (value[:2]|int <= 10) and (value[:2]|int >= 6) %}
+                <div class="stat-value text-warning">
+                    {{ value }}
+                    <div class="metric-bar" style="--metric-value: {{ value[:2]|int if value[:2]|int < 100 else 100 }}%;"></div>
+                </div>
+            {% else %}
+                <div class="stat-value text-success">
+                    {{ value }}
+                    <div class="metric-bar" style="--metric-value: {{ value[:2]|int if value[:2]|int < 100 else 100 }}%;"></div>
+                </div>
+            {% endif %}
+        {% elif key == "Battery %" %}
+            {% if value|int <= 5 %}
+                <div class="stat-value text-danger">
+                    {{ value }}
+                    <div class="metric-bar" style="--metric-value: {{ value|int if value|int < 100 else 100 }}%;"></div>
+                </div>
+            {% elif (value|int <= 15) and (value|int > 6) %}
+                <div class="stat-value text-warning">
+                    {{ value }}
+                    <div class="metric-bar" style="--metric-value: {{ value|int if value|int < 100 else 100 }}%;"></div>
+                </div>
+            {% else %}
+                <div class="stat-value text-success">
+                    {{ value }}
+                    <div class="metric-bar" style="--metric-value: {{ value|int if value|int < 100 else 100 }}%;"></div>
+                </div>
+            {% endif %}
+        {% elif key == "SNR" %}
+            <div class="stat-value">
+                {{ value }}
+                {% set snr = value|float %}
+                {% set snr_pct = (snr * 10)|int %}
+                <div class="metric-bar" style="--metric-value: {{ (snr_pct if snr_pct < 100 else 100) if snr_pct > 0 else 0 }}%;"></div>
+            </div>
+        {% else %}
+            <div class="stat-value">{{ value }}</div>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+<div class="panel-card panel-card-tight">
+    <p class="mb-0">Welcome to the Simple Seestar (Web) Controller.</p>
+</div>
+
+{% for telescope in telescopes %}
+    <div class="panel-card">
+        <h2 class="panel-title mb-3">
+            <a href="/{{ telescope["device_num"] }}/">{{ telescope["name"] }} ({{ telescope["ip_address"] }})</a>
+        </h2>
+
+        {% if telescope.stats %}
+            <div class="dashboard-stat-list">
+                {% for key, value in telescope.stats.items() %}
+                    {% if value is not none and value != "" %}
+                        {% if telescope.stats.get("View State", "Idle") == "Idle" and key in ["View Mode", "View Stage", "Target Name", "Successful Frames", "Failed Frames"] %}
+                        {% else %}
+                            {{ render_stat_row(key, value) }}
+                        {% endif %}
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% else %}
+        <p class="mb-0 text-warning">Telescope is currently offline</p>
+        {% endif %}
+    </div>
+{% endfor %}
+
+<footer class="footer-meta">
+    Version: {{ version }}
+</footer>

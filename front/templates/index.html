@@ -1,76 +1,22 @@
 {% extends 'base.html' %}
 
 {% block header %}
-    <div class="container mt-3">
-        <p class="h1">{% block title %}Simple Seestar Controller{% endblock %}</p>
+    <div class="page-hero">
+        <div>
+            <p class="page-kicker">Dashboard</p>
+            <h1 class="page-title">{% block title %}Simple Seestar Controller{% endblock %}</h1>
+            <p class="page-subtitle">Connected telescope status in a single readable stream.</p>
+        </div>
+        <div class="panel-muted">Auto refresh every 15s</div>
     </div>
 {% endblock %}
 
 {% block content %}
-    <div class="container mt-3">
-        <p>Welcome to the Simple Seestar (Web) Controller.</p>
+    <div id="home-content"
+         class="no-htmx-fx"
+         hx-get="{{ root }}/home-content"
+         hx-trigger="load, every 15s"
+         hx-swap="innerHTML">
+        {% include 'partials/home_content.html' with context %}
     </div>
-
-    {% for telescope in telescopes %}
-        <div class="container mt-3"><p class="h2"><a href="/{{ telescope["device_num"] }}/">{{ telescope["name"] }}
-            ({{ telescope["ip_address"] }})</a></p></div>
-
-        {% if telescope.stats %}
-            <div class="container mt-3">
-                {% for key, value in telescope.stats.items() %}
-                    {# Don't display empty values #}
-                    {% if value is not none and value != "" %}
-                        {# Skip view detail keys if View State is Idle #}
-                        {% if telescope.stats.get("View State", "Idle") == "Idle" and key in ["View Mode", "View Stage", "Target Name", "Successful Frames", "Failed Frames"] %}
-                            {# Skip these keys when View State is Idle #}
-                        {% else %}
-                            <div class="row border-bottom py-1">
-                                <div class="col fw-bold"><p>{{ key }}</p></div>
-                                {% if key == "Wi-Fi Signal" %}
-                                    {% if value[:3]|int >= -69 %}
-                                        <div class="col"><p class="text-end text-success">{{ value }}</p></div>
-                                    {% elif (value[:3]|int <= -70) and (value[:3]|int >= -79) %}
-                                        <div class="col"><p class="text-end text-warning">{{ value }}</p></div>
-                                    {% else %}
-                                        <div class="col"><p class="text-end text-danger">{{ value }}</p></div>
-                                    {% endif %}
-                                {% elif key == "Free Storage" %}
-                                    {% if (value[:2]|int <= 5) or (value.split(" ")[1] != "GB") %}
-                                        <div class="col"><p class="text-end text-danger">{{ value }}</p></div>
-                                    {% elif (value[:2]|int <= 10) and (value[:2]|int >= 6) %}
-                                        <div class="col"><p class="text-end text-warning">{{ value }}</p></div>
-                                    {% else %}
-                                        <div class="col"><p class="text-end text-success">{{ value }}</p></div>
-                                    {% endif %}
-                                {% elif key == "Battery %" %}
-                                    {% if value|int <= 5 %}
-                                        <div class="col"><p class="text-end text-danger">{{ value }}</p></div>
-                                    {% elif (value|int <= 15) and (value|int > 6) %}
-                                        <div class="col"><p class="text-end text-warning">{{ value }}</p></div>
-                                    {% else %}
-                                        <div class="col"><p class="text-end text-success">{{ value }}</p></div>
-                                    {% endif %}
-                                {% else %}
-                                    <div class="col"><p class="text-end">{{ value }}</p></div>
-                                {% endif %}
-                            </div>
-                        {% endif %}
-                    {% endif %}
-                {% endfor %}
-            </div>
-        {% else %}
-            <div class="container mt-3">
-                <p>Telescope is currently offline</p>
-            </div>
-        {% endif %}
-    {% endfor %}
-
-    <footer class="bg-body-tertiary text-center mt-3">
-        Version: {{ version }} | Last updated: {{ now }}
-    </footer>
-
-{% endblock %}
-
-{% block html_header %}
-    <meta http-equiv="refresh" content="15">
 {% endblock %}
