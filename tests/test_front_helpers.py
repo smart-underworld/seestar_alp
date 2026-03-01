@@ -1,10 +1,12 @@
 import threading
 
+import front.app as front_app
 from front.app import (
     check_dec_value,
     check_ra_value,
     determine_file_type,
     hms_to_sec,
+    import_csv_schedule,
     respond_204_if_unchanged,
 )
 
@@ -61,3 +63,37 @@ def test_respond_204_if_unchanged_sets_status():
     respond_204_if_unchanged(second, cache, lock, key)
     assert second.status == "204 No Content"
     assert second.text == ""
+
+
+def test_import_csv_schedule_wait_for_dispatch(monkeypatch):
+    calls = []
+
+    def fake_dispatch(action, params, telescope_id):
+        calls.append((action, params, telescope_id))
+
+    monkeypatch.setattr(front_app, "do_schedule_action_device", fake_dispatch)
+    csv_input = "action,timer_sec\nwait_for,30\n"
+    import_csv_schedule([csv_input], telescope_id=1)
+
+    assert calls == [("wait_for", {"timer_sec": 30}, 1)]
+
+
+def test_import_csv_schedule_startup_3ppa_to_polar_align(monkeypatch):
+    calls = []
+
+    def fake_dispatch(action, params, telescope_id):
+        calls.append((action, params, telescope_id))
+
+    monkeypatch.setattr(front_app, "do_schedule_action_device", fake_dispatch)
+    csv_input = (
+        "action,3ppa,auto_focus,dark_frames\nstart_up_sequence,true,false,true\n"
+    )
+    import_csv_schedule([csv_input], telescope_id=2)
+
+    assert calls == [
+        (
+            "start_up_sequence",
+            {"auto_focus": False, "3ppa": True, "dark_frames": True},
+            2,
+        )
+    ]
