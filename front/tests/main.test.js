@@ -74,6 +74,35 @@ describe("main.js", () => {
     expect(document.getElementById("dec").value).toBe("12d34m56s");
   });
 
+  it("fetchClipboard parses two-part format into RA/DEC", async () => {
+    Object.defineProperty(globalThis.navigator, "clipboard", {
+      value: {
+        readText: vi.fn().mockResolvedValue("DE:01h02m03s +10°20'30\""),
+      },
+      configurable: true,
+    });
+
+    await window.fetchClipboard();
+    await flush();
+
+    expect(document.getElementById("ra").value).toBe("DE:01h02m03s");
+    expect(document.getElementById("dec").value).toBe("+10d20m30s");
+  });
+
+  it("fetchClipboard alerts on unsupported clipboard format", async () => {
+    Object.defineProperty(globalThis.navigator, "clipboard", {
+      value: {
+        readText: vi.fn().mockResolvedValue("bad format value"),
+      },
+      configurable: true,
+    });
+
+    await window.fetchClipboard();
+    await flush();
+
+    expect(globalThis.alert).toHaveBeenCalledTimes(1);
+  });
+
   it("fetchStellarium fills target coordinates", async () => {
     globalThis.fetch.mockResolvedValue({
       ok: true,
