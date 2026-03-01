@@ -59,6 +59,7 @@ class FakeDevice:
         self.target_dec = 11.0
         self.target_ra = 22.0
         self.utcdate = 1000.0
+        self.calls = []
 
     def start_watch_thread(self):
         return None
@@ -67,6 +68,19 @@ class FakeDevice:
         return None
 
     def stop_slew(self):
+        self.calls.append(("stop_slew", None))
+        return {"ok": True}
+
+    def move_scope(self, axis, rate):
+        self.calls.append(("move_scope", axis, rate))
+        return {"ok": True}
+
+    def goto_target(self, payload):
+        self.calls.append(("goto_target", payload))
+        return {"ok": True}
+
+    def sync_target(self, payload):
+        self.calls.append(("sync_target", payload))
         return {"ok": True}
 
 
@@ -205,6 +219,68 @@ def test_numeric_put_endpoints_invalid_input_return_error():
         (telescope.sideofpier, {"SideOfPier": "nope"}),
         (telescope.slewsettletime, {"SlewSettleTime": "nope"}),
         (telescope.trackingrate, {"TrackingRate": "nope"}),
+    ]
+    for responder, media in bad_cases:
+        req = DummyReq(method="PUT", extra_media=media)
+        resp = DummyResp()
+        responder().on_put(req, resp, devnum=1)
+        payload = json.loads(resp.text)
+        assert payload["ErrorNumber"] != 0, responder.__name__
+
+
+def test_command_put_endpoints_success_paths():
+    set_shr_logger(logging.getLogger("test-telescope-props"))
+    device_exceptions.logger = DummyLogger()
+    telescope.seestar_dev.clear()
+    device = FakeDevice()
+    telescope.seestar_dev[1] = device
+
+    ok_cases = [
+        (telescope.abortslew, {}),
+        (telescope.findhome, {}),
+        (telescope.moveaxis, {"Axis": "1", "Rate": "2.5"}),
+        (telescope.park, {}),
+        (telescope.pulseguide, {"Direction": "1", "Duration": "2"}),
+        (telescope.setpark, {}),
+        (telescope.slewtoaltaz, {"Azimuth": "10", "Altitude": "20"}),
+        (telescope.slewtoaltazasync, {"Azimuth": "10", "Altitude": "20"}),
+        (telescope.slewtocoordinates, {"RightAscension": "1.5", "Declination": "2.5"}),
+        (
+            telescope.slewtocoordinatesasync,
+            {"RightAscension": "1.5", "Declination": "2.5"},
+        ),
+        (telescope.slewtotarget, {}),
+        (telescope.slewtotargetasync, {}),
+        (telescope.synctoaltaz, {"Azimuth": "10", "Altitude": "20"}),
+        (telescope.synctocoordinates, {"RightAscension": "1.5", "Declination": "2.5"}),
+        (telescope.synctotarget, {}),
+        (telescope.unpark, {}),
+    ]
+    for responder, media in ok_cases:
+        req = DummyReq(method="PUT", extra_media=media)
+        resp = DummyResp()
+        responder().on_put(req, resp, devnum=1)
+        payload = json.loads(resp.text)
+        assert payload["ErrorNumber"] == 0, responder.__name__
+
+
+def test_command_put_endpoints_invalid_number_inputs():
+    set_shr_logger(logging.getLogger("test-telescope-props"))
+    device_exceptions.logger = DummyLogger()
+    telescope.seestar_dev.clear()
+    telescope.seestar_dev[1] = FakeDevice()
+
+    bad_cases = [
+        (telescope.moveaxis, {"Axis": "x", "Rate": "1"}),
+        (telescope.moveaxis, {"Axis": "1", "Rate": "x"}),
+        (telescope.pulseguide, {"Direction": "x", "Duration": "1"}),
+        (telescope.pulseguide, {"Direction": "1", "Duration": "x"}),
+        (telescope.slewtoaltaz, {"Azimuth": "x", "Altitude": "1"}),
+        (telescope.slewtoaltaz, {"Azimuth": "1", "Altitude": "x"}),
+        (telescope.slewtocoordinates, {"RightAscension": "x", "Declination": "1"}),
+        (telescope.slewtocoordinates, {"RightAscension": "1", "Declination": "x"}),
+        (telescope.synctocoordinates, {"RightAscension": "x", "Declination": "1"}),
+        (telescope.synctocoordinates, {"RightAscension": "1", "Declination": "x"}),
     ]
     for responder, media in bad_cases:
         req = DummyReq(method="PUT", extra_media=media)
