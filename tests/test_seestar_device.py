@@ -489,3 +489,149 @@ def test_sync_and_move_helpers(monkeypatch, seestar):
     seestar.schedule["state"] = "stopped"
     msg = seestar.sync_target([1.0, 2.0])
     assert "Cannot sync target while scheduler is active" in msg
+
+
+def test_receive_message_thread_updates_state_and_callbacks(monkeypatch, seestar):
+    fired = []
+
+    class CB:
+        def fireOnEvents(self):
+            return ["EqModePA", "event_*"]
+
+        def eventFired(self, _dev, event):
+            fired.append(event["Event"])
+
+    seestar.event_callbacks = [CB()]
+    seestar.is_watch_events = True
+
+    messages = (
+        '{"jsonrpc":"2.0","method":"scope_get_equ_coord","result":{"ra":1.1,"dec":2.2},"id":1}\r\n'
+        '{"jsonrpc":"2.0","method":"get_view_state","result":{"View":{"stage":"RTSP"}},"id":2}\r\n'
+        '{"Event":"EqModePA","state":"complete","x":3.3,"y":4.4}\r\n'
+        '{"Event":"Simu_Stack","stack_status":{"ok":1},"stacked_frame":5,"dropped_frame":1}\r\n'
+    )
+    monkeypatch.setattr(seestar, "get_socket_msg", lambda: messages)
+
+    def fake_sleep(_s):
+        seestar.is_watch_events = False
+
+    monkeypatch.setattr("device.seestar_device.time.sleep", fake_sleep)
+    monkeypatch.setattr("device.seestar_device.Config.log_events_in_info", False)
+
+    seestar.receive_message_thread_fn()
+
+    assert seestar.ra == 1.1
+    assert seestar.dec == 2.2
+    assert seestar.view_state == {"stage": "RTSP"}
+    assert seestar.response_dict[1]["method"] == "scope_get_equ_coord"
+    assert seestar.response_dict[2]["method"] == "get_view_state"
+    assert seestar.event_state["EqModePA"]["state"] == "complete"
+    assert seestar.cur_pa_error_x == 3.3
+    assert seestar.cur_pa_error_y == 4.4
+    assert seestar.event_state["Stack"]["stacked_frame"] == 5
+    assert "Simu_Stack" not in seestar.event_state
+    assert "EqModePA" in fired
+
+
+def test_start_stack_and_stop_plate_and_last_image(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+
+    calls = []
+
+    def fake_sync(payload):
+        calls.append(payload)
+        if payload["method"] == "iscope_start_stack" and len(calls) == 1:
+            return {"error": "retry"}
+        if payload["method"] == "get_albums":
+            return {
+                "result": {
+                    "path": "albums",
+                    "list": [
+                        {
+                            "files": [
+                                {"name": "img-sub", "thn": "a_thn.jpg"},
+                                {"name": "img", "thn": "b_thn.jpg"},
+                            ]
+                        }
+                    ],
+                }
+            }
+        return {"result": "ok"}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
+    assert seestar.start_stack({"gain": 100, "restart": True}) is True
+    assert seestar.schedule["is_stacking"] is True
+
+    out_thumb = seestar.get_last_image({"is_subframe": True, "is_thumb": True})
+    assert out_thumb["url"].endswith("/albums/a_thn.jpg")
+    out_full = seestar.get_last_image({"is_subframe": False, "is_thumb": False})
+    assert out_full["url"].endswith("/albums/b.jpg")
+
+    assert seestar.stop_plate_solve_loop() is True
+    assert any(c["method"] == "stop_polar_align" for c in calls)
+
+
+def test_start_stack_failure_path(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        seestar, "send_message_param_sync", lambda _payload: {"error": "fail"}
+    )
+    assert seestar.start_stack({"gain": 80, "restart": True}) is False
+
+
+def test_auto_focus_and_dark_frame_paths(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    seestar.event_state["AutoFocus"] = {"state": "working"}
+
+    responses = {
+        "start_auto_focuse": {"result": "ok"},
+        "iscope_stop_view": {"result": "ok"},
+        "start_create_dark": {"result": "ok"},
+        "set_control_value": {"result": "ok"},
+    }
+
+    def fake_sync(payload):
+        return responses.get(payload["method"], {"result": "ok"})
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
+    monkeypatch.setattr(seestar, "wait_end_op", lambda _evt: True)
+
+    assert seestar._start_auto_focus() is True
+    assert seestar.try_auto_focus(2) is True
+    assert seestar.event_state["AutoFocus"]["state"] == "complete"
+
+    seestar.event_state["AutoFocus"] = {"state": "working"}
+    assert seestar._try_dark_frame() is True
+    assert seestar.event_state["AutoFocus"]["state"] == "complete"
+
+
+def test_adjust_mag_declination(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.geomag.declination", lambda *_a: 2.0)
+
+    def fake_sync(payload):
+        if payload["method"] == "get_device_state":
+            return {"result": {"location_lon_lat": [10.0, 20.0]}}
+        if payload["method"] == "get_sensor_calibration":
+            return {
+                "result": {
+                    "compassSensor": {
+                        "x": 1,
+                        "y": 2,
+                        "z": 3,
+                        "x11": 1.0,
+                        "x12": 0.0,
+                        "y11": 0.0,
+                        "y12": 1.0,
+                    }
+                }
+            }
+        if payload["method"] == "set_sensor_calibration":
+            return {"result": "ok"}
+        return {"result": "ok"}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
+    out = seestar.adjust_mag_declination({"adjust_mag_dec": True, "fudge_angle": 1.0})
+    assert (
+        "Adjusted compass calibration to offset by total of 3.0 degrees."
+        in out["result"]
+    )
