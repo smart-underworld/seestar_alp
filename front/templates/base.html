@@ -25,6 +25,7 @@
             --ui-border-soft: rgba(255, 255, 255, 0.12);
             --ui-surface-glass: rgba(9, 16, 34, 0.68);
             --ui-nav-bg: rgba(5, 10, 24, 0.78);
+            --ui-dropdown-bg: rgba(8, 15, 33, 0.96);
             --ui-main-bg: radial-gradient(140% 80% at 12% -5%, #173c67 0%, transparent 60%),
                            radial-gradient(120% 80% at 92% 6%, #4a2b1f 0%, transparent 55%),
                            linear-gradient(135deg, #050910 0%, #111b2f 55%, #17253d 100%);
@@ -72,6 +73,7 @@
             --ui-border-soft: rgba(23, 40, 68, 0.16);
             --ui-surface-glass: rgba(255, 255, 255, 0.78);
             --ui-nav-bg: rgba(255, 255, 255, 0.85);
+            --ui-dropdown-bg: rgba(255, 255, 255, 0.98);
             --ui-main-bg: radial-gradient(120% 90% at 12% -5%, #b7d8ff 0%, transparent 58%),
                            radial-gradient(120% 90% at 96% 8%, #ffe4c1 0%, transparent 52%),
                            linear-gradient(135deg, #f6fbff 0%, #eef5ff 55%, #e9f2ff 100%);
@@ -301,8 +303,8 @@
         .dropdown-menu {
             border: 1px solid var(--ui-border-soft);
             border-radius: 0.85rem;
-            background: color-mix(in srgb, var(--ui-surface-glass) 84%, #03070f);
-            backdrop-filter: blur(12px);
+            background: var(--ui-dropdown-bg);
+            backdrop-filter: blur(6px);
             box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28);
             padding: 0.42rem;
         }
@@ -929,7 +931,7 @@
         }
 
         .navbar-dark .dropdown-menu {
-            background-color: var(--bs-body-bg, #212529);
+            background-color: var(--ui-dropdown-bg);
             border-color: rgba(255, 255, 255, 0.1);
             color: {{ navbar_color }};
         }
