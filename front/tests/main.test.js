@@ -1,0 +1,76 @@
+import fs from "node:fs";
+import path from "node:path";
+import { vi } from "vitest";
+
+function loadScript(relPath) {
+  const scriptPath = path.resolve(process.cwd(), relPath);
+  const source = fs.readFileSync(scriptPath, "utf8");
+  window.eval(source);
+}
+
+async function flush() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+describe("main.js", () => {
+  beforeEach(() => {
+    document.body.innerHTML = `
+      <select id="searchFor"><option value="DS">DS</option></select>
+      <input id="targetName" />
+      <input id="ra" />
+      <input id="dec" />
+      <input id="useJ2000" type="checkbox" />
+      <input id="useLpFilter" type="checkbox" />
+    `;
+    globalThis.alert = vi.fn();
+    globalThis.fetch = vi.fn();
+    globalThis.bootstrap = { Modal: class {} };
+    loadScript("public/main.js");
+  });
+
+  it("fetchCoordinates in DS mode fills RA/DEC and flags", async () => {
+    document.getElementById("searchFor").value = "DS";
+    document.getElementById("targetName").value = "M42";
+    globalThis.fetch.mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve("01h00m00s +02d00m00s on"),
+    });
+
+    await window.fetchCoordinates();
+    await flush();
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(document.getElementById("ra").value).toBe("01h00m00s");
+    expect(document.getElementById("dec").value).toBe("+02d00m00s");
+    expect(document.getElementById("useJ2000").checked).toBe(true);
+    expect(document.getElementById("useLpFilter").checked).toBe(true);
+  });
+
+  it("fetchCoordinates in DS mode alerts when target is missing", async () => {
+    document.getElementById("searchFor").value = "DS";
+    document.getElementById("targetName").value = "";
+
+    await window.fetchCoordinates();
+    await flush();
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(globalThis.alert).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetchClipboard parses six-part coordinates into RA/DEC", async () => {
+    Object.defineProperty(globalThis.navigator, "clipboard", {
+      value: {
+        readText: vi.fn().mockResolvedValue("12 34 56 +12 34 56"),
+      },
+      configurable: true,
+    });
+
+    await window.fetchClipboard();
+    await flush();
+
+    expect(document.getElementById("ra").value).toBe("12h34m56s");
+    expect(document.getElementById("dec").value).toBe("12d34m56s");
+  });
+});
