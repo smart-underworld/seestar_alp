@@ -957,8 +957,9 @@ def get_telescopes_state():
 
     return list(
         map(
-            lambda telescope: telescope
-            | {"stats": get_device_state(telescope["device_num"])},
+            lambda telescope: (
+                telescope | {"stats": get_device_state(telescope["device_num"])}
+            ),
             telescopes,
         )
     )
