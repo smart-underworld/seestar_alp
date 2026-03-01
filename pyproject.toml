@@ -76,3 +76,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+filterwarnings = [
+    "ignore:datetime\\.datetime\\.utcfromtimestamp\\(\\) is deprecated.*:DeprecationWarning",
+]
+
+[tool.coverage.run]
+disable_warnings = ["couldnt-parse"]

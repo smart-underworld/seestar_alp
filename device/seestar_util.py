@@ -1,5 +1,5 @@
 import geocoder
-from datetime import datetime
+from datetime import datetime, timezone
 from astropy.coordinates import FK5, SkyCoord, AltAz
 from astropy.time import Time
 import astropy.units as u
@@ -30,7 +30,9 @@ class Util:
     def parse_coordinate(is_j2000, in_ra, in_dec):
         _fk5 = FK5(
             equinox=Time(
-                Time(datetime.utcnow(), scale="utc").jd, format="jd", scale="utc"
+                Time(datetime.now(timezone.utc), scale="utc").jd,
+                format="jd",
+                scale="utc",
             )
         )
         if is_j2000:
