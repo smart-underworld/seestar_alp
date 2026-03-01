@@ -4,9 +4,83 @@
   {% if client_master and online %}
     <script>
       let navigating = false;
+      const LIVE_ROTATION_KEY = 'ssc.live.rotation';
+
       function fmt(n) {
         return Math.trunc(n).toString().padStart(2, '0')
       }
+
+      function normalizeRotation(rotation) {
+        const parsed = Number(rotation);
+        if (!Number.isFinite(parsed)) return 0;
+        const normalized = Math.trunc(parsed) % 360;
+        return normalized < 0 ? normalized + 360 : normalized;
+      }
+
+      function getStoredLiveRotation() {
+        try {
+          return normalizeRotation(localStorage.getItem(LIVE_ROTATION_KEY) || 0);
+        } catch (e) {
+          return 0;
+        }
+      }
+
+      function applyLiveRotation(rotation) {
+        const normalized = normalizeRotation(rotation);
+        const isQuarterTurn = normalized % 180 !== 0;
+        document.body.classList.toggle('live-rotation-quarter', isQuarterTurn);
+        document.body.classList.toggle('live-rotation-flat', !isQuarterTurn);
+        document.documentElement.style.setProperty('--live-rotation-deg', `${normalized}deg`);
+        const rotateButton = document.getElementById('liveRotateButton');
+        if (rotateButton) {
+          rotateButton.setAttribute('data-rotation', String(normalized));
+          rotateButton.setAttribute('title', `Rotate live view 90 degrees (current: ${normalized}°)`);
+          rotateButton.setAttribute('aria-label', `Rotate live view 90 degrees (current: ${normalized} degrees)`);
+        }
+        syncLiveVideoSize();
+      }
+
+      function syncLiveVideoSize() {
+        const main = document.querySelector('.live-main');
+        if (!main) return;
+        const mainRect = main.getBoundingClientRect();
+        const clampedTop = Math.max(0, Math.floor(mainRect.top));
+        const maxViewportHeight = Math.max(240, Math.floor(window.innerHeight - 12));
+        const availableHeight = Math.max(
+          240,
+          Math.min(maxViewportHeight, Math.floor(window.innerHeight - clampedTop - 12))
+        );
+        document.documentElement.style.setProperty('--live-portrait-size', `${availableHeight}px`);
+        if (document.body.classList.contains('live-rotation-quarter')) {
+          const mainWidth = Math.max(0, Math.floor(main.clientWidth));
+          if (mainWidth > 0) {
+            document.documentElement.style.setProperty('--live-landscape-size', `${mainWidth}px`);
+          }
+        } else {
+          document.documentElement.style.removeProperty('--live-landscape-size');
+        }
+      }
+
+      function setLiveRotation(rotation) {
+        const normalized = normalizeRotation(rotation);
+        try {
+          localStorage.setItem(LIVE_ROTATION_KEY, String(normalized));
+        } catch (e) {
+          // Ignore storage issues in restrictive browser modes.
+        }
+        applyLiveRotation(normalized);
+      }
+
+      function rotateLiveView() {
+        const nextRotation = (getStoredLiveRotation() + 90) % 360;
+        setLiveRotation(nextRotation);
+      }
+
+      document.addEventListener('DOMContentLoaded', function () {
+        applyLiveRotation(getStoredLiveRotation());
+      });
+      window.addEventListener('resize', syncLiveVideoSize);
+
       document.body.addEventListener('htmx:sseBeforeMessage', function (evt) {
         if (navigating) return;
         //console.log('sse event:', evt.detail.type, evt.detail);
@@ -90,6 +164,7 @@
             const newSrc = currentSrc + "?timestamp=" + new Date().getTime();
 
             img.src = newSrc;
+            applyLiveRotation(getStoredLiveRotation());
 
             updateModeButtons(mode);
           }
@@ -97,6 +172,8 @@
 
         }
       });
+
+      document.body.addEventListener('htmx:afterSwap', syncLiveVideoSize);
     </script>
 
     <div hx-ext="sse" sse-connect="{{ imager_root }}/events">
