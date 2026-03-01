@@ -86,3 +86,47 @@ def test_falcon_uncaught_exception_handler_raises_http_500(monkeypatch):
         device_app.falcon_uncaught_exception_handler(None, None, Exception("x"), {})
 
     assert called["count"] == 1
+
+
+def test_device_main_reload_calls_config_load(monkeypatch):
+    called = {"count": 0}
+    monkeypatch.setattr(
+        device_app.Config, "load_toml", lambda: called.__setitem__("count", 1)
+    )
+    dm = device_app.DeviceMain()
+    dm.reload()
+    assert called["count"] == 1
+
+
+def test_device_main_get_imager_delegates(monkeypatch):
+    monkeypatch.setattr(
+        device_app.telescope, "get_seestar_imager", lambda dev: f"imager-{dev}"
+    )
+    dm = device_app.DeviceMain()
+    assert dm.get_imager(2) == "imager-2"
+
+
+def test_device_main_stop_ends_devices_and_shutdowns_server(monkeypatch):
+    monkeypatch.setattr(
+        device_app.Config,
+        "seestars",
+        [{"device_num": 1}, {"device_num": 2}],
+    )
+    ended = []
+    monkeypatch.setattr(
+        device_app.telescope, "end_seestar_device", lambda devnum: ended.append(devnum)
+    )
+
+    class FakeHTTPD:
+        def __init__(self):
+            self.shutdown_called = 0
+
+        def shutdown(self):
+            self.shutdown_called += 1
+
+    dm = device_app.DeviceMain()
+    dm.httpd = FakeHTTPD()
+    dm.stop()
+
+    assert ended == [1, 2]
+    assert dm.httpd.shutdown_called == 1
