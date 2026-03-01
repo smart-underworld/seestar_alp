@@ -223,7 +223,9 @@ def test_live_video_cache_is_scoped_per_client(monkeypatch):
         view_state = {"AviRecord": {"state": "stopped"}}
 
     monkeypatch.setattr(front_app, "get_context", lambda telescope_id, req: {})
-    monkeypatch.setattr(front_app.telescope, "get_seestar_device", lambda tid: DummyDev())
+    monkeypatch.setattr(
+        front_app.telescope, "get_seestar_device", lambda tid: DummyDev()
+    )
     monkeypatch.setattr(front_app, "method_sync", lambda *args, **kwargs: {})
 
     def fake_render_template(req, resp, template_name, **context):
