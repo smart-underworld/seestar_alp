@@ -49,7 +49,7 @@
   <div class="p-2">
     <div class="container mb-3">
       <label for="actionSelector" class="form-label">Schedule Actions:</label>
-      <select class="form-select" id="actionSelector" onchange="handleAction()">
+      <select class="form-select app-select" id="actionSelector" onchange="handleAction()">
         <option value="">--Select an Action--</option>
         <option value="clear">Clear Schedule</option>
         <option value="import">Import Schedule</option>
@@ -88,7 +88,7 @@
                 <form action="{{ root }}/schedule/import" method="post">
                     <div class="mb-3">
                         <label class="form-label">Select a File:</label>
-                        <select class="form-select" name="schedule_file" required>
+                        <select class="form-select app-select" name="schedule_file" required>
                             <option value="" disabled selected>Select a File</option>
                             {% for file in files %}
                                 <option value="{{ file }}">{{ file }}</option>
