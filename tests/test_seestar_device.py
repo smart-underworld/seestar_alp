@@ -1231,3 +1231,117 @@ def test_stop_scheduler_mark_wait_guest_and_watch(monkeypatch, seestar, tmp_path
     )
     frame = next(seestar.get_events())
     assert b"focusMove" in frame
+
+
+def test_mosaic_thread_fn_happy_path(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "device.seestar_device.Util.mosaic_next_center_spacing", lambda *_a: [0.1, 0.2]
+    )
+    monkeypatch.setattr(seestar, "mosaic_goto_inner_worker", lambda *_a, **_k: True)
+    monkeypatch.setattr(seestar, "set_target_name", lambda _n: {"ok": True})
+    monkeypatch.setattr(seestar, "start_stack", lambda _p: True)
+    monkeypatch.setattr(seestar, "stop_stack", lambda: {"ok": True})
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {"ok": True})
+    seestar.schedule["state"] = "working"
+    seestar.schedule["is_skip_requested"] = False
+    seestar.schedule["current_item_id"] = "m1"
+    seestar.event_state["scheduler"] = {"cur_scheduler_item": {}}
+
+    seestar.mosaic_thread_fn(
+        "T1",
+        1.0,
+        2.0,
+        False,
+        5,
+        1,
+        1,
+        10,
+        80,
+        False,
+        "",
+        1,
+        5,
+    )
+    assert (
+        seestar.event_state["scheduler"]["cur_scheduler_item"]["action"] == "complete"
+    )
+    assert seestar.is_cur_scheduler_item_working is False
+
+
+def test_start_mosaic_item_paths(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+
+    class FakeCoord:
+        ra = SimpleNamespace(hour=1.5)
+        dec = SimpleNamespace(deg=2.5)
+
+    monkeypatch.setattr(
+        "device.seestar_device.Util.parse_coordinate", lambda *_a, **_k: FakeCoord
+    )
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda _p: {
+            "result": {
+                "exp_ms": {"stack_l": 1},
+                "stack_dither": {"pix": 1, "interval": 1},
+            }
+        },
+    )
+
+    started = {"count": 0}
+
+    class FakeThread:
+        def __init__(self, target=None):
+            self.target = target
+            self.name = ""
+
+        def start(self):
+            started["count"] += 1
+
+    monkeypatch.setattr("device.seestar_device.threading.Thread", FakeThread)
+    monkeypatch.setattr(seestar, "mosaic_thread_fn", lambda *a, **k: None)
+
+    # scheduler not working branch
+    seestar.schedule["state"] = "stopped"
+    assert seestar.start_mosaic_item({"target_name": "T", "ra": 1, "dec": 2}) is None
+
+    # invalid mosaic size
+    seestar.schedule["state"] = "working"
+    bad = {
+        "target_name": "T",
+        "ra": 1.0,
+        "dec": 2.0,
+        "is_j2000": False,
+        "is_use_lp_filter": False,
+        "panel_time_sec": 5,
+        "ra_num": 0,
+        "dec_num": 1,
+        "panel_overlap_percent": 10,
+        "gain": 80,
+    }
+    assert seestar.start_mosaic_item(bad) is None
+
+    # session_time_sec compatibility + start thread
+    good = {
+        "target_name": "T",
+        "ra": -1.0,
+        "dec": -1.0,
+        "is_j2000": False,
+        "is_use_lp_filter": False,
+        "session_time_sec": 5,
+        "ra_num": 1,
+        "dec_num": 1,
+        "panel_overlap_percent": 10,
+        "gain": 80,
+        "num_tries": 1,
+        "retry_wait_s": 5,
+    }
+    seestar.ra = 3.2
+    seestar.dec = 4.3
+    seestar.schedule["state"] = "working"
+    seestar.start_mosaic_item(good)
+    assert started["count"] == 1
