@@ -1,4 +1,5 @@
 import collections
+import socket
 from types import SimpleNamespace
 
 import pytest
@@ -217,3 +218,274 @@ def test_get_pa_error_returns_current_values(seestar):
     seestar.cur_pa_error_y = 4.56
     out = seestar.get_pa_error({})
     assert out == {"pa_error_alt": 4.56, "pa_error_az": 1.23}
+
+
+class _DummySocket:
+    def __init__(self, *, recv_value=None, recv_error=None, send_error=None):
+        self.recv_value = recv_value
+        self.recv_error = recv_error
+        self.send_error = send_error
+        self.closed = False
+        self.sent = []
+
+    def recv(self, _n):
+        if self.recv_error is not None:
+            raise self.recv_error
+        return self.recv_value
+
+    def sendall(self, payload):
+        if self.send_error is not None:
+            raise self.send_error
+        self.sent.append(payload)
+
+    def close(self):
+        self.closed = True
+
+
+def test_repr_and_get_name(seestar):
+    assert "Seestar(host=127.0.0.1, port=4700)" == repr(seestar)
+    assert seestar.get_name() == "TestScope"
+
+
+def test_fixed_size_ordered_dict_drops_oldest():
+    from device.seestar_device import FixedSizeOrderedDict
+
+    d = FixedSizeOrderedDict(maxsize=2)
+    d["a"] = 1
+    d["b"] = 2
+    d["c"] = 3
+    assert list(d.keys()) == ["b", "c"]
+
+
+def test_deque_encoder_serializes_deque():
+    from device.seestar_device import DequeEncoder
+    import json
+
+    encoded = json.dumps({"v": collections.deque([1, 2])}, cls=DequeEncoder)
+    assert encoded == '{"v": [1, 2]}'
+
+
+def test_send_message_paths(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+
+    seestar.s = None
+    assert seestar.send_message("x") is False
+
+    seestar.s = _DummySocket(send_error=socket.timeout())
+    assert seestar.send_message("x") is False
+
+    disconnected = {"count": 0}
+    monkeypatch.setattr(
+        seestar, "disconnect", lambda: disconnected.__setitem__("count", 1)
+    )
+    monkeypatch.setattr(seestar, "reconnect", lambda: False)
+    seestar.is_watch_events = True
+    seestar.s = _DummySocket(send_error=socket.error("boom"))
+    assert seestar.send_message("x") is False
+    assert disconnected["count"] == 1
+
+    class GeneralSock:
+        def sendall(self, _payload):
+            raise RuntimeError("nope")
+
+    seestar.s = GeneralSock()
+    assert seestar.send_message("x") is False
+
+
+def test_socket_force_close_and_disconnect(seestar):
+    s = _DummySocket()
+    seestar.s = s
+    seestar.socket_force_close()
+    assert s.closed is True
+    assert seestar.s is None
+
+    seestar.s = _DummySocket()
+    seestar.is_connected = True
+    seestar.disconnect()
+    assert seestar.is_connected is False
+    assert seestar.s is None
+
+
+def test_reconnect_success_and_fail_paths(monkeypatch, seestar):
+    monkeypatch.setattr(seestar, "send_udp_intro", lambda: None)
+    monkeypatch.setattr(seestar, "disconnect", lambda: None)
+
+    class Sock:
+        def __init__(self):
+            self.connected = None
+
+        def settimeout(self, _v):
+            return None
+
+        def connect(self, addr):
+            self.connected = addr
+
+    monkeypatch.setattr("device.seestar_device.socket.socket", lambda *_args: Sock())
+    seestar.is_connected = False
+    assert seestar.reconnect() is True
+
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+
+    class BadSock:
+        def settimeout(self, _v):
+            return None
+
+        def connect(self, _addr):
+            raise socket.error("bad")
+
+    seestar.is_connected = False
+    monkeypatch.setattr("device.seestar_device.socket.socket", lambda *_args: BadSock())
+    assert seestar.reconnect() is False
+
+
+def test_get_socket_msg_paths(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+
+    seestar.s = None
+    assert seestar.get_socket_msg() is None
+
+    seestar.s = _DummySocket(recv_error=socket.timeout())
+    assert seestar.get_socket_msg() is None
+
+    disconnected = {"count": 0}
+    monkeypatch.setattr(
+        seestar, "disconnect", lambda: disconnected.__setitem__("count", 1)
+    )
+    monkeypatch.setattr(seestar, "reconnect", lambda: False)
+    seestar.is_watch_events = True
+    seestar.s = _DummySocket(recv_error=socket.error("x"))
+    assert seestar.get_socket_msg() is None
+    assert disconnected["count"] == 1
+
+    seestar.s = _DummySocket(recv_value=b"")
+    assert seestar.get_socket_msg() is None
+
+    seestar.s = _DummySocket(recv_value=b"hello")
+    assert seestar.get_socket_msg() == "hello"
+
+
+def test_update_equ_coord_and_view_state(seestar):
+    seestar.update_equ_coord(
+        {"method": "scope_get_equ_coord", "result": {"ra": "1.25", "dec": "2.5"}}
+    )
+    assert seestar.ra == 1.25
+    assert seestar.dec == 2.5
+
+    seestar.update_view_state(
+        {"method": "get_view_state", "result": {"View": {"a": 1}}}
+    )
+    assert seestar.view_state == {"a": 1}
+
+
+def test_json_message_increments_cmdid(monkeypatch, seestar):
+    sent = []
+    monkeypatch.setattr(seestar, "send_message", lambda payload: sent.append(payload))
+    start = seestar.cmdid
+    seestar.json_message("scope_get_equ_coord", id=420)
+    assert seestar.cmdid == start + 1
+    assert '"method": "scope_get_equ_coord"' in sent[0]
+
+
+def test_send_message_param_sync_shutdown_and_wait_paths(monkeypatch, seestar):
+    started = {"thread": 0}
+
+    class FakeThread:
+        def __init__(self, name=None, target=None):
+            self.target = target
+            self.name = name
+
+        def start(self):
+            started["thread"] += 1
+
+    monkeypatch.setattr("device.seestar_device.threading.Thread", FakeThread)
+    out = seestar.send_message_param_sync({"method": "pi_shutdown"})
+    assert out["method"] == "pi_shutdown"
+    assert started["thread"] == 1
+
+    monkeypatch.setattr(seestar, "send_message_param", lambda _d: 55)
+    seestar.response_dict[55] = {"id": 55, "result": "ok"}
+    out2 = seestar.send_message_param_sync({"method": "scope_get_equ_coord"})
+    assert out2["result"] == "ok"
+
+
+def test_send_message_param_sync_timeout(monkeypatch, seestar):
+    monkeypatch.setattr(seestar, "send_message_param", lambda _d: 999)
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+
+    times = iter([0.0, 2.1, 11.2])
+    monkeypatch.setattr("device.seestar_device.time.time", lambda: next(times))
+    out = seestar.send_message_param_sync({"method": "scope_get_equ_coord"})
+    assert "Error: Exceeded allotted wait time for result" in out["result"]
+
+
+def test_get_event_state_and_is_client_master(seestar):
+    seestar.schedule["state"] = "working"
+    seestar.event_state["3PPA"] = {"eq_offset_alt": 0, "eq_offset_az": 0}
+    seestar.cur_pa_error_x = 9.8
+    seestar.cur_pa_error_y = 7.6
+    out = seestar.get_event_state({"event_name": "3PPA"})
+    assert out["code"] == 0
+    assert out["result"]["eq_offset_alt"] == 7.6
+
+    assert seestar.is_client_master() is True
+    seestar.event_state["Client"] = {"is_master": False}
+    assert seestar.is_client_master() is False
+
+
+def test_get_altaz_from_eq_paths(monkeypatch, seestar):
+    seestar.site_altaz_frame = None
+    assert seestar.get_altaz_from_eq(1.0, 2.0, "obs") == [9999.9, 9999.9]
+
+    class AltAzObj:
+        az = SimpleNamespace(deg=11.0)
+        alt = SimpleNamespace(deg=22.0)
+
+    class Coord:
+        def transform_to(self, _x):
+            return AltAzObj()
+
+    monkeypatch.setattr(
+        "device.seestar_device.Util.parse_coordinate", lambda **_k: Coord()
+    )
+    monkeypatch.setattr("device.seestar_device.AltAz", lambda **_kwargs: object())
+    seestar.site_altaz_frame = object()
+    assert seestar.get_altaz_from_eq(1.0, 2.0, "obs") == [22.0, 11.0]
+
+
+def test_set_setting_emits_expected_sequence(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    calls = []
+
+    def fake_sync(payload):
+        calls.append(payload)
+        if payload["method"] == "get_setting":
+            return {"result": {"ok": True}}
+        return {"ok": True}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
+    out = seestar.set_setting(1, 2, 3, 4, True, False, True)
+    assert out == {"ok": True}
+    assert len(calls) == 6
+    assert calls[-1]["method"] == "get_setting"
+
+
+def test_sync_and_move_helpers(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    seestar.event_state["AutoGoto"] = {"state": "working"}
+    assert seestar.is_goto() is True
+    seestar.event_state["AutoGoto"] = {"state": "start"}
+    assert seestar.is_goto() is True
+    seestar.event_state["AutoGoto"] = {"state": "complete"}
+    assert seestar.is_goto_completed_ok() is True
+
+    seestar.is_goto = lambda: True
+    assert seestar.move_scope(10, 100) is False
+    seestar.is_goto = lambda: False
+    assert seestar.stop_goto_target() == "goto stopped already: no action taken"
+
+    seestar.send_message_param_sync = lambda _d: {"ok": True}
+    assert seestar.move_scope(10, 100) is True
+
+    seestar.schedule["state"] = "stopped"
+    msg = seestar.sync_target([1.0, 2.0])
+    assert "Cannot sync target while scheduler is active" in msg
