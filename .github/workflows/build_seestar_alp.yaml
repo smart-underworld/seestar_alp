@@ -135,7 +135,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-MacOS-arm64:
-    runs-on: "MacOS-latest"
+    runs-on: "macos-latest"
 
     steps:
       - uses: actions/checkout@v4
@@ -196,7 +196,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
   build-MacOS-x86:
-    runs-on: "MacOS-13"
+    runs-on: "macos-13"
 
     steps:
       - uses: actions/checkout@v4
