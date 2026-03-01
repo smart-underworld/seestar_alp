@@ -163,3 +163,52 @@ def test_settable_property_put_endpoints_update_device_state():
         payload = json.loads(resp.text)
         assert payload["ErrorNumber"] == 0
         assert getattr(device, attr) == expected
+
+
+def test_numeric_and_bool_put_endpoints_success_paths():
+    set_shr_logger(logging.getLogger("test-telescope-props"))
+    device_exceptions.logger = DummyLogger()
+    telescope.seestar_dev.clear()
+    telescope.seestar_dev[1] = FakeDevice()
+
+    ok_cases = [
+        (telescope.declinationrate, {"DeclinationRate": "0.1"}),
+        (telescope.guideratedeclination, {"GuideRateDeclination": "0.2"}),
+        (telescope.guideraterightascension, {"GuideRateRightAscension": "0.3"}),
+        (telescope.rightascensionrate, {"RightAscensionRate": "0.4"}),
+        (telescope.sideofpier, {"SideOfPier": "0"}),
+        (telescope.slewsettletime, {"SlewSettleTime": "1.0"}),
+        (telescope.trackingrate, {"TrackingRate": "1.0"}),
+        (telescope.utcdate, {"UTCDate": "2024-01-01T00:00:00Z"}),
+        (telescope.tracking, {"Tracking": "true"}),
+        (telescope.doesrefraction, {"DoesRefraction": "false"}),
+    ]
+    for responder, media in ok_cases:
+        req = DummyReq(method="PUT", extra_media=media)
+        resp = DummyResp()
+        responder().on_put(req, resp, devnum=1)
+        payload = json.loads(resp.text)
+        assert payload["ErrorNumber"] == 0, responder.__name__
+
+
+def test_numeric_put_endpoints_invalid_input_return_error():
+    set_shr_logger(logging.getLogger("test-telescope-props"))
+    device_exceptions.logger = DummyLogger()
+    telescope.seestar_dev.clear()
+    telescope.seestar_dev[1] = FakeDevice()
+
+    bad_cases = [
+        (telescope.declinationrate, {"DeclinationRate": "nope"}),
+        (telescope.guideratedeclination, {"GuideRateDeclination": "nope"}),
+        (telescope.guideraterightascension, {"GuideRateRightAscension": "nope"}),
+        (telescope.rightascensionrate, {"RightAscensionRate": "nope"}),
+        (telescope.sideofpier, {"SideOfPier": "nope"}),
+        (telescope.slewsettletime, {"SlewSettleTime": "nope"}),
+        (telescope.trackingrate, {"TrackingRate": "nope"}),
+    ]
+    for responder, media in bad_cases:
+        req = DummyReq(method="PUT", extra_media=media)
+        resp = DummyResp()
+        responder().on_put(req, resp, devnum=1)
+        payload = json.loads(resp.text)
+        assert payload["ErrorNumber"] != 0, responder.__name__
