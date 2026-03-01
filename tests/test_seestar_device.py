@@ -635,3 +635,113 @@ def test_adjust_mag_declination(monkeypatch, seestar):
         "Adjusted compass calibration to offset by total of 3.0 degrees."
         in out["result"]
     )
+
+
+def test_scheduler_pause_continue_skip_and_actions(monkeypatch, seestar):
+    seestar.schedule["state"] = "working"
+    seestar.schedule["is_stacking"] = True
+    seestar.schedule["is_stacking_paused"] = False
+    monkeypatch.setattr(seestar, "stop_stack", lambda: {"ok": True})
+    assert seestar.pause_scheduler({}) == {"ok": True}
+
+    seestar.schedule["is_stacking"] = False
+    seestar.schedule["is_stacking_paused"] = True
+    monkeypatch.setattr(seestar, "start_stack", lambda _p: True)
+    assert seestar.continue_scheduler({})["code"] == 0
+
+    seestar.schedule["is_skip_requested"] = False
+    assert seestar.skip_scheduler_cur_item({})["code"] == 0
+    assert seestar.skip_scheduler_cur_item({})["code"] == -1
+
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda payload: {"method": payload["method"]},
+    )
+    assert seestar.action_set_dew_heater({"heater": 0})["method"] == "pi_output_set2"
+    out = seestar.action_set_exposure({"exp": 1200})
+    assert out["set_response"]["method"] == "set_setting"
+    assert out["dark_response"]["method"] == "start_create_dark"
+
+
+def test_action_start_up_sequence_paths(monkeypatch, seestar):
+    seestar.schedule["state"] = "working"
+    busy = seestar.action_start_up_sequence({})
+    assert busy["code"] == -1
+
+    seestar.schedule["state"] = "stopped"
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {"result": "ok"})
+    monkeypatch.setattr(seestar, "is_client_master", lambda: False)
+    not_master = seestar.action_start_up_sequence({})
+    assert not_master["code"] == -1
+
+    started = {"count": 0}
+
+    class FakeThread:
+        def __init__(self, name=None, target=None):
+            self.target = target
+            self.name = name
+
+        def start(self):
+            started["count"] += 1
+
+    monkeypatch.setattr("device.seestar_device.threading.Thread", FakeThread)
+    monkeypatch.setattr(seestar, "is_client_master", lambda: True)
+    ok = seestar.action_start_up_sequence({})
+    assert ok["code"] == 0
+    assert started["count"] == 1
+
+
+def test_start_up_thread_fn_success_and_old_firmware(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone_name", lambda: "UTC"
+    )
+
+    import datetime as _dt
+
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone", lambda: _dt.timezone.utc
+    )
+    monkeypatch.setattr("device.seestar_device.EarthLocation", lambda **_k: object())
+    monkeypatch.setattr(
+        "device.seestar_device.Util.get_current_gps_coordinates", lambda: [3.0, 4.0]
+    )
+    monkeypatch.setattr(seestar, "set_setting", lambda *a, **k: {"ok": True})
+
+    calls = []
+
+    def fake_sync(payload):
+        calls.append(payload["method"])
+        if payload["method"] == "get_device_state":
+            return {"result": {"device": {"firmware_ver_int": 2500}}}
+        return {"result": "ok"}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
+
+    played = []
+    monkeypatch.setattr(seestar, "play_sound", lambda sid: played.append(sid))
+
+    seestar.start_up_thread_fn(
+        {
+            "lat": 1.1,
+            "lon": 2.2,
+            "auto_focus": False,
+            "3ppa": False,
+            "dark_frames": False,
+        }
+    )
+    assert seestar.schedule["state"] == "complete"
+    assert played[0] == 80 and played[-1] == 82
+    assert "get_device_state" in calls
+
+    # old firmware branch should stop
+    def old_fw(payload):
+        if payload["method"] == "get_device_state":
+            return {"result": {"device": {"firmware_ver_int": 2400}}}
+        return {"result": "ok"}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", old_fw)
+    seestar.schedule["state"] = "stopped"
+    seestar.start_up_thread_fn({"lat": 1.1, "lon": 2.2}, is_from_schedule=True)
+    assert seestar.schedule["state"] == "stopped"
