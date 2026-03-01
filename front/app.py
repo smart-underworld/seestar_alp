@@ -1686,6 +1686,17 @@ def respond_204_if_unchanged(resp, cache, lock, cache_key):
         cache[cache_key] = html
 
 
+def get_request_cache_identity(req):
+    remote_addr = getattr(req, "remote_addr", "") or ""
+    user_agent = req.get_header("User-Agent") or ""
+    current_url = (
+        req.get_header("HX-Current-URL")
+        or req.get_header("Referer")
+        or getattr(req, "relative_uri", "")
+    )
+    return (remote_addr, user_agent, current_url)
+
+
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
     directory = os.path.join(os.getcwd(), "schedule")
     Path(directory).mkdir(parents=True, exist_ok=True)
@@ -3055,7 +3066,11 @@ class EventStatus:
         )
 
         # HTMX polls this endpoint every second. Avoid repaint/reflow when output is unchanged.
-        cache_key = (int(telescope_id), action or "default")
+        cache_key = (
+            int(telescope_id),
+            action or "default",
+            get_request_cache_identity(req),
+        )
         html = resp.text
         with EventStatus._lock:
             last_html = EventStatus._last_render_by_key.get(cache_key)

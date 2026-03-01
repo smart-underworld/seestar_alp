@@ -2,9 +2,11 @@ import threading
 
 import front.app as front_app
 from front.app import (
+    EventStatus,
     check_dec_value,
     check_ra_value,
     determine_file_type,
+    get_request_cache_identity,
     hms_to_sec,
     import_csv_schedule,
     respond_204_if_unchanged,
@@ -15,6 +17,28 @@ class DummyResp:
     def __init__(self, text):
         self.text = text
         self.status = None
+
+
+class DummyReq:
+    def __init__(
+        self,
+        action="goto",
+        headers=None,
+        relative_uri="/1/goto",
+        remote_addr="192.168.1.10",
+    ):
+        self._action = action
+        self._headers = headers or {}
+        self.relative_uri = relative_uri
+        self.remote_addr = remote_addr
+
+    def get_param(self, name, default=None):
+        if name == "action":
+            return self._action
+        return default
+
+    def get_header(self, name):
+        return self._headers.get(name)
 
 
 def test_check_ra_value_accepts_multiple_formats():
@@ -97,3 +121,91 @@ def test_import_csv_schedule_startup_3ppa_to_polar_align(monkeypatch):
             2,
         )
     ]
+
+
+def test_get_request_cache_identity_uses_headers_and_remote():
+    req = DummyReq(
+        headers={"User-Agent": "UA-1", "HX-Current-URL": "http://host/1/goto"},
+        remote_addr="10.0.0.5",
+    )
+    ident = get_request_cache_identity(req)
+    assert ident == ("10.0.0.5", "UA-1", "http://host/1/goto")
+
+
+def test_event_status_cache_is_scoped_per_client(monkeypatch):
+    EventStatus._last_render_by_key.clear()
+
+    monkeypatch.setattr(front_app, "get_context", lambda telescope_id, req: {})
+    monkeypatch.setattr(
+        front_app, "do_action_device", lambda action, telescope_id, params: {"Value": {}}
+    )
+
+    def fake_render_template(req, resp, template_name, **context):
+        resp.status = "200 OK"
+        resp.content_type = "text/html"
+        resp.text = "<div>same-status</div>"
+
+    monkeypatch.setattr(front_app, "render_template", fake_render_template)
+
+    req_desktop = DummyReq(
+        action="goto",
+        headers={"User-Agent": "Desktop-UA", "HX-Current-URL": "http://host/1/goto"},
+        remote_addr="192.168.1.20",
+    )
+    req_phone = DummyReq(
+        action="goto",
+        headers={"User-Agent": "Phone-UA", "HX-Current-URL": "http://host/1/goto"},
+        remote_addr="192.168.1.21",
+    )
+
+    resp_desktop = DummyResp("")
+    EventStatus.on_get(req_desktop, resp_desktop, telescope_id=1)
+    assert resp_desktop.status == "200 OK"
+
+    resp_phone = DummyResp("")
+    EventStatus.on_get(req_phone, resp_phone, telescope_id=1)
+    assert resp_phone.status == "200 OK"
+
+    resp_desktop_repeat = DummyResp("")
+    EventStatus.on_get(req_desktop, resp_desktop_repeat, telescope_id=1)
+    assert resp_desktop_repeat.status == "204 No Content"
+
+
+def test_event_status_command_polar_align_not_suppressed_across_clients(monkeypatch):
+    EventStatus._last_render_by_key.clear()
+
+    monkeypatch.setattr(front_app, "get_context", lambda telescope_id, req: {})
+    monkeypatch.setattr(
+        front_app, "do_action_device", lambda action, telescope_id, params: {"Value": {}}
+    )
+
+    def fake_render_template(req, resp, template_name, **context):
+        # Keep html stable to exercise the 204 dedupe path.
+        resp.status = "200 OK"
+        resp.content_type = "text/html"
+        resp.text = "<div>3PPA running</div>"
+
+    monkeypatch.setattr(front_app, "render_template", fake_render_template)
+
+    req_phone_a = DummyReq(
+        action="command",
+        headers={"User-Agent": "Phone-A", "HX-Current-URL": "http://host/1/command"},
+        remote_addr="192.168.1.31",
+    )
+    req_phone_b = DummyReq(
+        action="command",
+        headers={"User-Agent": "Phone-B", "HX-Current-URL": "http://host/1/command"},
+        remote_addr="192.168.1.32",
+    )
+
+    resp_a_first = DummyResp("")
+    EventStatus.on_get(req_phone_a, resp_a_first, telescope_id=1)
+    assert resp_a_first.status == "200 OK"
+
+    resp_b_first = DummyResp("")
+    EventStatus.on_get(req_phone_b, resp_b_first, telescope_id=1)
+    assert resp_b_first.status == "200 OK"
+
+    resp_a_repeat = DummyResp("")
+    EventStatus.on_get(req_phone_a, resp_a_repeat, telescope_id=1)
+    assert resp_a_repeat.status == "204 No Content"
