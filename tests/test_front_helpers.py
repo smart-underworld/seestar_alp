@@ -137,7 +137,9 @@ def test_event_status_cache_is_scoped_per_client(monkeypatch):
 
     monkeypatch.setattr(front_app, "get_context", lambda telescope_id, req: {})
     monkeypatch.setattr(
-        front_app, "do_action_device", lambda action, telescope_id, params: {"Value": {}}
+        front_app,
+        "do_action_device",
+        lambda action, telescope_id, params: {"Value": {}},
     )
 
     def fake_render_template(req, resp, template_name, **context):
@@ -176,7 +178,9 @@ def test_event_status_command_polar_align_not_suppressed_across_clients(monkeypa
 
     monkeypatch.setattr(front_app, "get_context", lambda telescope_id, req: {})
     monkeypatch.setattr(
-        front_app, "do_action_device", lambda action, telescope_id, params: {"Value": {}}
+        front_app,
+        "do_action_device",
+        lambda action, telescope_id, params: {"Value": {}},
     )
 
     def fake_render_template(req, resp, template_name, **context):
