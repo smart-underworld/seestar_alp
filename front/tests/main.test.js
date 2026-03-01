@@ -138,4 +138,45 @@ describe("main.js", () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     expect(globalThis.fetch.mock.calls[0][0]).toContain("/toggleuitheme");
   });
+
+  it("NewCheckboxChange toggles hidden value string", () => {
+    const hidden = document.createElement("input");
+    hidden.id = "hidden-toggle";
+    hidden.value = "False";
+    document.body.appendChild(hidden);
+
+    window.NewCheckboxChange("hidden-toggle");
+    expect(hidden.value).toBe("True");
+    window.NewCheckboxChange("hidden-toggle");
+    expect(hidden.value).toBe("False");
+  });
+
+  it("addSeestar appends another device block", () => {
+    const container = document.createElement("div");
+    container.innerHTML = `
+      <input name="ss_name" value="scope-1" />
+      <div id="device_div_1"></div>
+    `;
+    document.body.appendChild(container);
+
+    window.addSeestar();
+
+    expect(document.getElementById("device_div_2")).not.toBeNull();
+  });
+
+  it("delSeestar removes checked device blocks", () => {
+    const deviceDiv = document.createElement("div");
+    deviceDiv.id = "device_div_2";
+    document.body.appendChild(deviceDiv);
+
+    const checkbox = document.createElement("input");
+    checkbox.id = "delete_2";
+    checkbox.name = "delete_2";
+    checkbox.type = "checkbox";
+    checkbox.checked = true;
+    document.body.appendChild(checkbox);
+
+    window.delSeestar();
+    expect(document.getElementById("device_div_2")).toBeNull();
+  });
 });
