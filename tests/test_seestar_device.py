@@ -184,9 +184,9 @@ def test_goto_target_sends_expected_request(monkeypatch, seestar):
     captured = {}
     seestar.is_goto = lambda: False
     seestar.mark_op_state = lambda *args, **kwargs: None
-    seestar.send_message_param_sync = lambda payload: captured.setdefault(
-        "payload", payload
-    ) or {"result": "ok"}
+    seestar.send_message_param_sync = lambda payload: (
+        captured.setdefault("payload", payload) or {"result": "ok"}
+    )
     monkeypatch.setattr(
         "device.seestar_device.Util.parse_coordinate", lambda *args, **kwargs: FakeCoord
     )
@@ -1175,9 +1175,11 @@ def test_stop_scheduler_mark_wait_guest_and_watch(monkeypatch, seestar, tmp_path
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         "device.seestar_device.ConfigFactory.parse_file",
-        lambda fp: {"events": ["PiStatus"], "execute": ["/bin/true"]}
-        if "ok" in str(fp)
-        else (_ for _ in ()).throw(Exception("bad")),
+        lambda fp: (
+            {"events": ["PiStatus"], "execute": ["/bin/true"]}
+            if "ok" in str(fp)
+            else (_ for _ in ()).throw(Exception("bad"))
+        ),
     )
     seestar.event_callbacks_init(
         {

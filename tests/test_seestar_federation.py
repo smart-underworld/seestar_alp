@@ -6,7 +6,7 @@ import pytest
 from device import seestar_util as _seestar_util
 
 sys.modules.setdefault("seestar_util", _seestar_util)
-from device.seestar_federation import Seestar_Federation
+from device.seestar_federation import Seestar_Federation  # noqa: E402
 
 
 class DummyLogger:

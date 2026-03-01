@@ -56,10 +56,9 @@ def test_process_queue_dispatches_actions(monkeypatch):
     monkeypatch.setattr(
         front_app,
         "do_schedule_action_device",
-        lambda action, params, telescope_id: calls.append(
-            (action, params, telescope_id)
-        )
-        or {"ok": True},
+        lambda action, params, telescope_id: (
+            calls.append((action, params, telescope_id)) or {"ok": True}
+        ),
     )
 
     front_app.process_queue(DummyResp(), 1)
