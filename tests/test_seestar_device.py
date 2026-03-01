@@ -76,6 +76,30 @@ def test_transform_message_for_verify_list_params(seestar):
         Config.verify_injection = old_setting
 
 
+def test_transform_message_for_verify_no_params_adds_verify(seestar):
+    seestar.firmware_ver_int = 3000
+    old_setting = Config.verify_injection
+    try:
+        Config.verify_injection = True
+        out = seestar.transform_message_for_verify({"method": "noop"})
+        assert out["params"] == ["verify"]
+    finally:
+        Config.verify_injection = old_setting
+
+
+def test_transform_message_for_verify_keeps_existing_verify_list(seestar):
+    seestar.firmware_ver_int = 3000
+    old_setting = Config.verify_injection
+    try:
+        Config.verify_injection = True
+        out = seestar.transform_message_for_verify(
+            {"method": "scope_goto", "params": [[1.0, 2.0], "verify"]}
+        )
+        assert out["params"] == [[1.0, 2.0], "verify"]
+    finally:
+        Config.verify_injection = old_setting
+
+
 def test_send_message_param_assigns_id_and_serializes(monkeypatch, seestar):
     sent = {}
 
