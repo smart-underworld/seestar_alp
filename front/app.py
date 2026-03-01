@@ -52,6 +52,14 @@ _last_context_get_time = {}
 _context_cached = {}
 _last_api_state_get_time = {}
 _api_state_cached = {}
+_planning_cards_cache = None
+_planning_cards_cache_mtime = None
+_planning_cards_cache_lock = threading.Lock()
+_csc_sites_cache = None
+_csc_sites_cache_lock = threading.Lock()
+_nearest_csc_cache = {}
+_nearest_csc_cache_ttl_sec = 300
+_nearest_csc_cache_lock = threading.Lock()
 
 
 def get_ip() -> str | None:
@@ -170,7 +178,14 @@ def get_imager_root(telescope_id, req):
             filter(lambda tel: tel["device_num"] == telescope_id, telescopes)
         )[0]
         if telescope:
-            root = f"http://{req.host}:{Config.imgport}/{telescope['device_num']}"
+            # req.host may already include an incoming port, and Firefox rejects
+            # malformed host:port:port URLs. Build a clean origin explicitly.
+            parsed_host = urllib.parse.urlsplit(f"//{req.host}")
+            hostname = parsed_host.hostname or req.host
+            if ":" in hostname and not hostname.startswith("["):
+                hostname = f"[{hostname}]"
+            scheme = getattr(req, "scheme", "http")
+            root = f"{scheme}://{hostname}:{Config.imgport}/{telescope['device_num']}"
             return root
     return ""
 
@@ -422,6 +437,7 @@ def get_twilight_times():
 
 
 def get_planning_cards():
+    global _planning_cards_cache, _planning_cards_cache_mtime
     if getattr(
         sys, "frozen", False
     ):  # frozen means that we are running from a bundled app
@@ -446,35 +462,30 @@ def get_planning_cards():
                 os.path.dirname(__file__), "planning.json.example"
             )
         shutil.copyfile(card_state_example_file_location, card_state_file_location)
-
-    with open(card_state_file_location, "r") as card_state_file:
-        state_data = json.load(card_state_file)
-        return state_data
+    file_mtime = os.path.getmtime(card_state_file_location)
+    with _planning_cards_cache_lock:
+        if (
+            _planning_cards_cache is not None
+            and _planning_cards_cache_mtime == file_mtime
+        ):
+            return json.loads(json.dumps(_planning_cards_cache))
+        with open(card_state_file_location, "r") as card_state_file:
+            state_data = json.load(card_state_file)
+        _planning_cards_cache = state_data
+        _planning_cards_cache_mtime = file_mtime
+        return json.loads(json.dumps(state_data))
 
 
 def get_planning_card_state(card_name):
     # Get's the state of a card via planning.json
-    if getattr(
-        sys, "frozen", False
-    ):  # frozen means that we are running from a bundled app
-        planning_state_file_location = os.path.abspath(
-            os.path.join(sys._MEIPASS, "planning.json")
-        )
-    else:
-        planning_state_file_location = os.path.join(
-            os.path.dirname(__file__), "planning.json"
-        )
-
-    with open(planning_state_file_location, "r") as planning_state_file:
-        state_data = json.load(planning_state_file)
-
-    for card in state_data:
+    for card in get_planning_cards():
         # print (card['card_name'])
         if card["card_name"] == card_name:
             return card
 
 
 def update_planning_card_state(card_name, var, value):
+    global _planning_cards_cache, _planning_cards_cache_mtime
     # Update planning.json with current card state
     if getattr(
         sys, "frozen", False
@@ -502,6 +513,25 @@ def update_planning_card_state(card_name, var, value):
 
     with open(planning_state_file_location, "w") as planning_state_file:
         json.dump(state_data, planning_state_file, indent=4)
+    with _planning_cards_cache_lock:
+        _planning_cards_cache = None
+        _planning_cards_cache_mtime = None
+
+
+def get_csc_sites_data():
+    global _csc_sites_cache
+    with _csc_sites_cache_lock:
+        if _csc_sites_cache is not None:
+            return _csc_sites_cache
+        if getattr(
+            sys, "frozen", False
+        ):  # frozen means that we are running from a bundled app
+            csc_file = os.path.abspath(os.path.join(sys._MEIPASS, "csc_sites.json"))
+        else:
+            csc_file = os.path.join(os.path.dirname(__file__), "./csc_sites.json")
+        with open(csc_file, "r") as f:
+            _csc_sites_cache = json.load(f)
+        return _csc_sites_cache
 
 
 def _check_api_state_cached(telescope_id):
@@ -957,8 +987,9 @@ def get_telescopes_state():
 
     return list(
         map(
-            lambda telescope: telescope
-            | {"stats": get_device_state(telescope["device_num"])},
+            lambda telescope: (
+                telescope | {"stats": get_device_state(telescope["device_num"])}
+            ),
             telescopes,
         )
     )
@@ -1084,66 +1115,69 @@ def get_nearest_csc():
     lat = Config.init_lat
     lng = Config.init_long
 
-    if getattr(
-        sys, "frozen", False
-    ):  # frozen means that we are running from a bundled app
-        csc_file = os.path.abspath(os.path.join(sys._MEIPASS, "csc_sites.json"))
-    else:
-        csc_file = os.path.join(os.path.dirname(__file__), "./csc_sites.json")
-
     closest_site = {}
+    cache_key = (round(float(lat), 3), round(float(lng), 3))
+    now_ts = time.time()
+    with _nearest_csc_cache_lock:
+        cached = _nearest_csc_cache.get(cache_key)
+        if cached and now_ts - cached["ts"] < _nearest_csc_cache_ttl_sec:
+            return dict(cached["value"])
 
     # Get list of all csc site locations
-    with open(csc_file, "r") as f:
-        data = json.load(f)
-        nearby_csc = []
+    data = get_csc_sites_data()
+    nearby_csc = []
 
-        # Get list of all sites within same or adjacent 1 degree lat/lng bin
-        try:
-            for x in range(-1, 2):
-                for y in range(-1, 2):
-                    lat_str = str(int(lat) + x)
-                    lng_str = str(int(lng) + y)
-                    if lat_str in data:
-                        if lng_str in data[lat_str]:
-                            sites_in_bin = data[lat_str][lng_str]
-                            for site in sites_in_bin:
-                                nearby_csc.append(site)
-        except:
-            # API returns error
-            closest_site = {
-                "status_msg": "ERROR parsing coordinates or reading from list of CSC sites"
-            }
-
-        curr_closest_km = 1000
-
-        # Find the closest site in Clear Dark Sky database within bins
-        for site in nearby_csc:
-            dist = lat_lng_distance_in_km(lat, lng, site["lat"], site["lng"])
-
-            if dist < curr_closest_km:
-                curr_closest_km = dist
-                closest_site = site
-
-        # Grab site url and return site data if within 100 km
-        if curr_closest_km < 1000:
-            closest_site["status_msg"] = "SUCCESS"
-            closest_site["dist_km"] = curr_closest_km
-            closest_site["full_img"] = (
-                "https://www.cleardarksky.com/c/" + closest_site["id"] + "csk.gif"
-            )
-            closest_site["mini_img"] = (
-                "https://www.cleardarksky.com/c/" + closest_site["id"] + "cs0.gif"
-            )
-            closest_site["href"] = (
-                "https://www.cleardarksky.com/c/" + closest_site["id"] + "key.html"
-            )
-        else:
-            closest_site = {
-                "status_msg": "No sites within 100 km. CSC sites are only available in the Continental US, Canada, and Northern Mexico"
-            }
-
+    # Get list of all sites within same or adjacent 1 degree lat/lng bin
+    try:
+        for x in range(-1, 2):
+            for y in range(-1, 2):
+                lat_str = str(int(lat) + x)
+                lng_str = str(int(lng) + y)
+                if lat_str in data:
+                    if lng_str in data[lat_str]:
+                        sites_in_bin = data[lat_str][lng_str]
+                        for site in sites_in_bin:
+                            nearby_csc.append(site)
+    except Exception:
+        # API returns error
+        closest_site = {
+            "status_msg": "ERROR parsing coordinates or reading from list of CSC sites"
+        }
+        with _nearest_csc_cache_lock:
+            _nearest_csc_cache[cache_key] = {"ts": now_ts, "value": closest_site}
         return closest_site
+
+    curr_closest_km = 1000
+
+    # Find the closest site in Clear Dark Sky database within bins
+    for site in nearby_csc:
+        dist = lat_lng_distance_in_km(lat, lng, site["lat"], site["lng"])
+
+        if dist < curr_closest_km:
+            curr_closest_km = dist
+            closest_site = site
+
+    # Grab site url and return site data if within 100 km
+    if curr_closest_km < 1000:
+        closest_site["status_msg"] = "SUCCESS"
+        closest_site["dist_km"] = curr_closest_km
+        closest_site["full_img"] = (
+            "https://www.cleardarksky.com/c/" + closest_site["id"] + "csk.gif"
+        )
+        closest_site["mini_img"] = (
+            "https://www.cleardarksky.com/c/" + closest_site["id"] + "cs0.gif"
+        )
+        closest_site["href"] = (
+            "https://www.cleardarksky.com/c/" + closest_site["id"] + "key.html"
+        )
+    else:
+        closest_site = {
+            "status_msg": "No sites within 100 km. CSC sites are only available in the Continental US, Canada, and Northern Mexico"
+        }
+
+    with _nearest_csc_cache_lock:
+        _nearest_csc_cache[cache_key] = {"ts": now_ts, "value": closest_site}
+    return dict(closest_site)
 
 
 def do_create_mosaic(req, resp, schedule, telescope_id):
@@ -1625,6 +1659,44 @@ def render_template(req, resp, template_name, **context):
     )
 
 
+def render_fragment(req, resp, template_name, **context):
+    template = fetch_template(template_name)
+    resp.status = falcon.HTTP_200
+    resp.content_type = "text/html"
+    version = Version.app_version()
+    merged_context = dict(context)
+    merged_context.setdefault("webui_theme", Config.uitheme)
+    merged_context.setdefault("webui_text_color", Config.webui_text_color)
+    merged_context.setdefault("webui_font_family", Config.webui_font_family)
+    merged_context.setdefault("webui_font_url", Config.webui_font_url)
+    merged_context.setdefault("webui_link_color", Config.webui_link_color)
+    merged_context.setdefault("webui_accent_color", Config.webui_accent_color)
+    merged_context.setdefault("version", version)
+    resp.text = template.render(**merged_context)
+
+
+def respond_204_if_unchanged(resp, cache, lock, cache_key):
+    html = resp.text
+    with lock:
+        last_html = cache.get(cache_key)
+        if last_html == html:
+            resp.status = falcon.HTTP_204
+            resp.text = ""
+            return
+        cache[cache_key] = html
+
+
+def get_request_cache_identity(req):
+    remote_addr = getattr(req, "remote_addr", "") or ""
+    user_agent = req.get_header("User-Agent") or ""
+    current_url = (
+        req.get_header("HX-Current-URL")
+        or req.get_header("Referer")
+        or getattr(req, "relative_uri", "")
+    )
+    return (remote_addr, user_agent, current_url)
+
+
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
     directory = os.path.join(os.getcwd(), "schedule")
     Path(directory).mkdir(parents=True, exist_ok=True)
@@ -1649,10 +1721,6 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
         else:
             schedule = get_schedule["Value"]
             state = schedule.get("state", "stopped")
-    nearest_csc = get_nearest_csc()
-    if nearest_csc["status_msg"] != "SUCCESS":
-        nearest_csc["href"] = ""
-        nearest_csc["full_img"] = ""
     render_template(
         req,
         resp,
@@ -1984,6 +2052,35 @@ class HomeTelescopeResource:
             del context["telescopes"]
         render_template(
             req, resp, "index.html", now=now, telescopes=telescopes, **context
+        )
+
+
+class HomeContentResource:
+    _last_render_by_key = {}
+    _lock = threading.Lock()
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        telescopes = get_telescopes_state()
+        context_id = int(telescope_id)
+        if context_id == 0 and telescopes:
+            context_id = telescopes[0]["device_num"]
+        context = get_context(context_id, req)
+        # Avoid duplicate keyword when passing explicit telescopes=... below.
+        if "telescopes" in context:
+            del context["telescopes"]
+        render_fragment(
+            req,
+            resp,
+            "partials/home_content.html",
+            telescopes=telescopes,
+            **context,
+        )
+        respond_204_if_unchanged(
+            resp,
+            HomeContentResource._last_render_by_key,
+            HomeContentResource._lock,
+            ("home-content", context_id),
         )
 
 
@@ -2849,6 +2946,9 @@ class ScheduleReStartResource(BaseResource):
 
 
 class ScheduleRefreshResource(BaseResource):
+    _last_render_by_key = {}
+    _lock = threading.Lock()
+
     def on_get(self, req, resp, telescope_id=0):
         context = get_context(telescope_id, req)
         current = do_action_device("get_schedule", telescope_id, {})
@@ -2859,8 +2959,20 @@ class ScheduleRefreshResource(BaseResource):
             schedule = {}
             state = "stopped"
 
+        open_accordion_id = req.get_param("open_accordion_id", default="")
         html = self.render_schedule_list_html(req, resp, schedule, context)
-        resp.media = {"state": state, "html": html}
+        cache_key = (int(telescope_id), open_accordion_id)
+        changed = True
+        with ScheduleRefreshResource._lock:
+            last_html = ScheduleRefreshResource._last_render_by_key.get(cache_key)
+            if last_html == html:
+                changed = False
+            else:
+                ScheduleRefreshResource._last_render_by_key[cache_key] = html
+
+        resp.media = {"state": state, "changed": changed}
+        if changed:
+            resp.media["html"] = html
         resp.content_type = "application/json"
         resp.status = falcon.HTTP_200
 
@@ -2884,6 +2996,9 @@ class ScheduleRefreshResource(BaseResource):
 
 
 class EventStatus:
+    _last_render_by_key = {}
+    _lock = threading.Lock()
+
     @staticmethod
     def on_get(req, resp, telescope_id=1):
         results = []
@@ -2950,10 +3065,26 @@ class EventStatus:
             **context,
         )
 
+        # HTMX polls this endpoint every second. Avoid repaint/reflow when output is unchanged.
+        cache_key = (
+            int(telescope_id),
+            action or "default",
+            get_request_cache_identity(req),
+        )
+        html = resp.text
+        with EventStatus._lock:
+            last_html = EventStatus._last_render_by_key.get(cache_key)
+            if last_html == html:
+                resp.status = falcon.HTTP_204
+                resp.text = ""
+                return
+            EventStatus._last_render_by_key[cache_key] = html
+
 
 class LivePage:
     @staticmethod
     def on_get(req, resp, telescope_id=1, mode=None):
+        LiveVideoResource.clear_cache_for_telescope(int(telescope_id))
         status = method_sync("get_view_state", telescope_id)
         context = get_context(telescope_id, req)
         now = datetime.now()
@@ -3158,6 +3289,19 @@ class LiveZoomResource(BaseResource):
 
 
 class LiveVideoResource(BaseResource):
+    _last_render_by_telescope = {}
+    _lock = threading.Lock()
+
+    @staticmethod
+    def clear_cache_for_telescope(telescope_id: int):
+        with LiveVideoResource._lock:
+            to_remove = []
+            for key in LiveVideoResource._last_render_by_telescope:
+                if key[0] == int(telescope_id):
+                    to_remove.append(key)
+            for key in to_remove:
+                del LiveVideoResource._last_render_by_telescope[key]
+
     def on_get(self, req, resp, telescope_id: int = 1):
         # print("LiveViewResource.on_get telescope_id:", telescope_id)
         dev = telescope.get_seestar_device(telescope_id)
@@ -3178,6 +3322,16 @@ class LiveVideoResource(BaseResource):
             render_template(
                 req, resp, "partials/live_video_record.html", state=state, **context
             )
+
+        html = resp.text
+        key = (int(telescope_id), get_request_cache_identity(req))
+        with LiveVideoResource._lock:
+            last_html = LiveVideoResource._last_render_by_telescope.get(key)
+            if last_html == html:
+                resp.status = falcon.HTTP_204
+                resp.text = ""
+                return
+            LiveVideoResource._last_render_by_telescope[key] = html
 
     def on_post(self, req, resp, telescope_id: int = 1):
         # If status is stopped, start recording, otherwise stop
@@ -3721,6 +3875,28 @@ class StatsResource:
         render_template(req, resp, "stats.html", stats=stats, now=now, **context)
 
 
+class StatsContentResource:
+    _last_render_by_key = {}
+    _lock = threading.Lock()
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        if telescope_id == 0:
+            stats = {}
+        else:
+            stats = get_device_state(telescope_id)
+        context = get_context(telescope_id, req)
+        render_fragment(
+            req, resp, "partials/stats_content.html", stats=stats, **context
+        )
+        respond_204_if_unchanged(
+            resp,
+            StatsContentResource._last_render_by_key,
+            StatsContentResource._lock,
+            ("stats-content", int(telescope_id)),
+        )
+
+
 class StartupResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         self.startup(req, resp, telescope_id, {})
@@ -3803,6 +3979,33 @@ class GuestModeResource:
     def on_post(self, req, resp, telescope_id=0):
         do_command(req, resp, telescope_id)
         self.on_get(req, resp, telescope_id)
+
+
+class GuestModeContentResource:
+    _last_render_by_key = {}
+    _lock = threading.Lock()
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        context = get_context(telescope_id, req)
+        if telescope_id == 0 or not context["online"]:
+            state = {}
+        else:
+            state = get_guestmode_state(telescope_id)
+        render_fragment(
+            req,
+            resp,
+            "partials/guestmode_content.html",
+            state=state,
+            action=f"/{telescope_id}/guestmode",
+            **context,
+        )
+        respond_204_if_unchanged(
+            resp,
+            GuestModeContentResource._last_render_by_key,
+            GuestModeContentResource._lock,
+            ("guestmode-content", int(telescope_id)),
+        )
 
 
 class SupportResource:
@@ -4727,6 +4930,9 @@ class FrontMain:
         app.add_route("/schedule/upload", ScheduleUploadResource())
         app.add_route("/startup", StartupResource())
         app.add_route("/stats", StatsResource())
+        app.add_route("/home-content", HomeContentResource())
+        app.add_route("/stats-content", StatsContentResource())
+        app.add_route("/guestmode-content", GuestModeContentResource())
         app.add_route("/guestmode", GuestModeResource())
         app.add_route("/support", SupportResource())
         app.add_route("/eventstatus", EventStatus())
@@ -4795,6 +5001,11 @@ class FrontMain:
         app.add_route("/{telescope_id:int}/schedule/upload", ScheduleUploadResource())
         app.add_route("/{telescope_id:int}/startup", StartupResource())
         app.add_route("/{telescope_id:int}/stats", StatsResource())
+        app.add_route("/{telescope_id:int}/home-content", HomeContentResource())
+        app.add_route("/{telescope_id:int}/stats-content", StatsContentResource())
+        app.add_route(
+            "/{telescope_id:int}/guestmode-content", GuestModeContentResource()
+        )
         app.add_route("/{telescope_id:int}/guestmode", GuestModeResource())
         app.add_route("/{telescope_id:int}/support", SupportResource())
         app.add_route("/{telescope_id:int}/system", SystemResource())

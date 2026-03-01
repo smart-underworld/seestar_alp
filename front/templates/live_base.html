@@ -34,7 +34,8 @@
             {#console.log('Capturing status');#}
             const payload = JSON.parse(evt.detail.data);
             const captureStatus = document.getElementById('capture_status');
-            let elapsed = payload.lapse_ms / 1000.0;
+            const lapseMs = Number(payload.lapse_ms);
+            let elapsed = Number.isFinite(lapseMs) ? (lapseMs / 1000.0) : 0;
             elapsed = `${fmt(elapsed / 60.0)}:${fmt(elapsed % 60)}`;
             captureStatus.innerText = `State: ${payload.state} Elapsed: ${elapsed}`;
             break;
@@ -102,25 +103,38 @@
       {% block live_content %}{% endblock %}
     </div>
 
-    <footer class="bg-body-tertiary text-center mt-3">
+    <div class="live-quickbar">
+      <button class="btn btn-outline-danger" hx-delete="{{ root }}/live/mode" hx-swap="none"
+              hx-confirm="Stop current imaging or schedule item?">Stop</button>
+      <button class="btn btn-outline-primary" hx-post="{{ root }}/live/record" hx-swap="none">Record</button>
+      <button class="btn btn-outline-primary" hx-post="{{ root }}/command" hx-swap="none"
+              hx-vals='{"command": "start_auto_focus"}'>Auto Focus</button>
+      <button class="btn btn-outline-primary" hx-post="{{ root }}/live/zoom" hx-swap="none"
+              hx-vals='{"zoom": 0}'>1x</button>
+    </div>
+
+    <footer class="footer-meta">
       Version: {{ version }} | Last updated: {{ now }}
     </footer>
 
     <script>
+      document.body.classList.add('live-has-quickbar');
       new LiveViewJoystick('{{ root }}', 'zone').register();
     </script>
 
   {% elif not client_master %}
-    <div class="container mt-3">
+    <script>document.body.classList.remove('live-has-quickbar');</script>
+    <div class="panel-card">
       <p>You are currently in guest mode. You can release this in the Advanced->Guest Mode of the SeeStar app.</p>
       <p>See the <a href="https://github.com/smart-underworld/seestar_alp/wiki/Guest-Mode">Guest Mode</a> wiki page for
         details</p>
     </div>
   {% else %}
-    <div class="container mt-3">
+    <script>document.body.classList.remove('live-has-quickbar');</script>
+    <div class="panel-card">
       <p>You are currently in offline mode</p>
     </div>
-    <footer class="bg-body-tertiary text-center mt-3">
+    <footer class="footer-meta">
       Version: {{ version }} | Last updated: {{ now }}
     </footer>
   {% endif %}

@@ -18,22 +18,25 @@ class MessageTrace:
         self.port = port
         self.lock = threading.RLock()
         self.do_save = do_save
-        self.connection = sqlite3.connect(
-            f"messages_{telescope_id}_{port}.db", check_same_thread=False
-        )
+        self.connection = None
+        if self.do_save:
+            self.connection = sqlite3.connect(
+                f"messages_{telescope_id}_{port}.db", check_same_thread=False
+            )
         try:
-            with self.lock:
-                with closing(self.connection.cursor()) as cursor:
-                    cursor.execute(
-                        "CREATE TABLE messages (telescope_id INTEGER, port INTEGER, timestamp TEXT, type TEXT, data BLOB)"
-                    )
+            if self.connection is not None:
+                with self.lock:
+                    with closing(self.connection.cursor()) as cursor:
+                        cursor.execute(
+                            "CREATE TABLE messages (telescope_id INTEGER, port INTEGER, timestamp TEXT, type TEXT, data BLOB)"
+                        )
         except:
             # we just ignore create table for now...
             # print("table already exists")
             pass
 
     def save_message(self, message, direction):
-        if self.do_save:
+        if self.do_save and self.connection is not None:
             with self.lock:
                 with closing(self.connection.cursor()) as cursor:
                     cursor.execute(
@@ -47,6 +50,18 @@ class MessageTrace:
                         ),
                     )
                 self.connection.commit()
+
+    def close(self):
+        if self.connection is not None:
+            with self.lock:
+                self.connection.close()
+                self.connection = None
+
+    def __del__(self):
+        try:
+            self.close()
+        except:
+            pass
 
 
 # Prune old data:  from messages where timestamp > datetime('now', 'localtime', '-5 minute') ;

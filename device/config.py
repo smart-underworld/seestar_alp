@@ -92,7 +92,8 @@ class _Config:
         if preloaded_dict is not None:
             self._dict = preloaded_dict
         else:
-            self._dict = tomlkit.loads(open(toml_path).read())
+            with open(toml_path) as fp:
+                self._dict = tomlkit.loads(fp.read())
         """
         Load a config.toml file into a Config object.
 

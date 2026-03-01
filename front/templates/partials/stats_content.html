@@ -1,0 +1,69 @@
+{% macro metric_row(key, value) %}
+    <div class="stat-row">
+        <div class="stat-key">{{ key }}</div>
+        {% if key == "Free Storage" %}
+            {% set storage = value[:2]|int %}
+            <div class="stat-value">
+                {{ value }}
+                <div class="metric-bar" style="--metric-value: {{ storage if storage < 100 else 100 }}%;"></div>
+            </div>
+        {% elif key == "Wi-Fi Signal" %}
+            {% set wifi_dbm = value|replace('dBm', '')|replace('dbm', '')|trim|int %}
+            {% set wifi_pct_raw = ((wifi_dbm + 90) * 100 / 40)|int %}
+            {% set wifi_pct = (wifi_pct_raw if wifi_pct_raw > 0 else 0) if wifi_pct_raw < 100 else 100 %}
+            <div class="stat-value">
+                {{ value }}
+                <div class="metric-bar" style="--metric-value: {{ wifi_pct }}%;"></div>
+            </div>
+        {% elif key == "Battery %" %}
+            <div class="stat-value">
+                {{ value }}
+                <div class="metric-bar" style="--metric-value: {{ value|int if value|int < 100 else 100 }}%;"></div>
+            </div>
+        {% elif key == "SNR" %}
+            {% set snr = value|float %}
+            {% set snr_pct = (snr * 10)|int %}
+            <div class="stat-value">
+                {{ value }}
+                <div class="metric-bar" style="--metric-value: {{ (snr_pct if snr_pct < 100 else 100) if snr_pct > 0 else 0 }}%;"></div>
+            </div>
+        {% else %}
+            <div class="stat-value">{{ value }}</div>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+{% if online %}
+    <div class="panel-card">
+        {% if stats %}
+            {# First, check if we need to show view details #}
+            {% set show_view_details = stats.get('View State', 'Idle') != 'Idle' %}
+            <div class="dashboard-stat-list">
+                {% for key, value in stats.items() %}
+                    {# Skip view detail keys if we're not showing them or if value is empty #}
+                    {% if not show_view_details and key in ['View Mode', 'View Stage', 'Target Name', 'Successful Frames', 'Failed Frames'] %}
+                    {% elif show_view_details and key in ['View Mode', 'View Stage', 'Target Name', 'Successful Frames', 'Failed Frames'] and not value %}
+                    {% elif value is none or value == "" %}
+                    {% elif key == "Balance Sensor (angle)" %}
+                        {{ metric_row(key, value) }}
+                        <div class="ps-1 pb-2">{% include 'partials/bubble_level.html' with context %}</div>
+                    {% else %}
+                        {{ metric_row(key, value) }}
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="mb-0">
+                <p>You have the Seestar Federation Device selected. Please select an actual telescope from the dropdown.</p>
+            </div>
+        {% endif %}
+    </div>
+{% else %}
+    <div class="panel-card">
+        <p>You are currently in offline mode</p>
+    </div>
+{% endif %}
+
+<footer class="footer-meta">
+    Version: {{ version }}
+</footer>
