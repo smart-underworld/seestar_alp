@@ -436,6 +436,9 @@
 
         .live-main {
             min-width: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .live-sidebar {
@@ -449,6 +452,27 @@
             background: color-mix(in srgb, var(--ui-surface-glass) 88%, #081325);
             padding: 0.85rem;
             margin-bottom: 0.8rem;
+        }
+
+        .live-video-heading {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.65rem;
+            margin-right: auto;
+        }
+
+        .live-rotate-btn {
+            min-width: 2.25rem;
+            min-height: 2.15rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.25rem 0.45rem;
+        }
+
+        .live-rotate-btn svg {
+            width: 1.05rem;
+            height: 1.05rem;
         }
 
         .live-video-controls-wrap {
@@ -696,6 +720,51 @@
             object-fit: contain;
         }
 
+        body.live-rotation-flat img#liveViewImg {
+            position: static;
+            width: auto;
+            height: var(--live-portrait-size, 80vh);
+            max-width: 100%;
+            max-height: var(--live-portrait-size, 80vh);
+            transform: rotate(var(--live-rotation-deg, 0deg));
+            transform-origin: center center;
+            margin: 0 auto;
+            display: block;
+        }
+
+        body.live-rotation-quarter img#liveViewImg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: auto;
+            height: var(--live-landscape-size, min(74vw, 76vh));
+            max-width: none;
+            max-height: none;
+            transform: translate(-50%, -50%) rotate(var(--live-rotation-deg, 90deg));
+            transform-origin: center center;
+            margin: 0;
+        }
+
+        body.live-rotation-quarter .live-layout {
+            grid-template-columns: 1fr;
+            gap: 0.85rem;
+        }
+
+        body.live-rotation-quarter .live-sidebar {
+            position: static;
+            width: 100%;
+        }
+
+        body.live-rotation-quarter .live-main {
+            position: relative;
+            width: 100%;
+            min-height: min(calc(var(--live-landscape-size, 100vw) * 0.5625), 76vh);
+            height: min(calc(var(--live-landscape-size, 100vw) * 0.5625), 76vh);
+            overflow: hidden;
+            align-items: stretch;
+            justify-content: stretch;
+        }
+
         @media (max-width: 768px) {
             main.container {
                 margin-top: 1rem !important;
@@ -728,6 +797,12 @@
 
             body.live-has-quickbar {
                 padding-bottom: 5.2rem;
+            }
+
+            .live-video-heading {
+                width: 100%;
+                justify-content: space-between;
+                margin-right: 0;
             }
 
             .command-groups form select {
