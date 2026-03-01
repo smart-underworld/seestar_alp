@@ -1,4 +1,4 @@
-name: Validate python correctness
+name: Validate test suite
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
     types: [opened, synchronize, reopened, closed]
 
 jobs:
-  run-linting:
+  run-test-suite:
     if: github.event_name == 'push' || 
         (github.event_name == 'pull_request' && github.event.action != 'closed') || 
         (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true)
@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: 3.13
 
-      - name: Install dependencies
+      - name: Install backend dependencies
         run: |
           pip install -r requirements.txt
           pip install pytest pytest-cov pytest-mock
@@ -35,13 +35,13 @@ jobs:
         with:
           node-version: 20
 
-      - name: Run linting tests
+      - name: Run lint checks
         run: ruff check
 
-      - name: Run formatting checks
+      - name: Run format checks
         run: ruff format --check
 
-      - name: Run Python tests
+      - name: Run backend tests
         run: pytest --cov=device --cov=front --cov-report=term --cov-fail-under=30.0 -q
 
       - name: Install frontend test dependencies
