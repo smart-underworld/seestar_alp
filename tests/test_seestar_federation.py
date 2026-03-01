@@ -36,6 +36,18 @@ class FakeDevice:
         self.called.append(("goto_target", params))
         return True
 
+    def stop_slew(self):
+        self.called.append(("stop_slew", None))
+        return {"ok": True}
+
+    def play_sound(self, sid):
+        self.called.append(("play_sound", sid))
+        return {"ok": True}
+
+    def start_stack(self, params):
+        self.called.append(("start_stack", params))
+        return {"ok": True}
+
 
 def test_federation_only_calls_connected_devices():
     dev1 = FakeDevice(connected=True)
@@ -97,3 +109,31 @@ def test_add_schedule_item_appends_deque():
     )
     assert isinstance(out["list"], collections.deque)
     assert len(out["list"]) == 1
+
+
+def test_federation_control_fanout_methods():
+    dev1 = FakeDevice(connected=True)
+    dev2 = FakeDevice(connected=False)
+    federation = Seestar_Federation(DummyLogger(), {1: dev1, 2: dev2})
+
+    out_slew = federation.stop_slew()
+    out_sound = federation.play_sound(80)
+    out_stack = federation.start_stack({"gain": 90, "restart": True})
+
+    assert 1 in out_slew and 2 not in out_slew
+    assert 1 in out_sound and 2 not in out_sound
+    assert 1 in out_stack and 2 not in out_stack
+    assert ("stop_slew", None) in dev1.called
+    assert ("play_sound", 80) in dev1.called
+    assert ("start_stack", {"gain": 90, "restart": True}) in dev1.called
+
+
+def test_federation_create_schedule_resets_state():
+    federation = Seestar_Federation(DummyLogger(), {})
+    federation.schedule["list"].append({"action": "wait_for"})
+    federation.schedule["state"] = "working"
+
+    out = federation.create_schedule({})
+    assert out["state"] == "stopped"
+    assert len(out["list"]) == 0
+    assert "schedule_id" in out
