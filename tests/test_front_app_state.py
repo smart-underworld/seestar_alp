@@ -5,8 +5,9 @@ from device.config import Config
 
 
 class DummyReq:
-    def __init__(self, host="localhost:5432"):
+    def __init__(self, host="localhost:5432", scheme="http"):
         self.host = host
+        self.scheme = scheme
         self.relative_uri = "/1/live"
 
 
@@ -42,7 +43,21 @@ def test_get_root_and_imager_root(monkeypatch):
 
     assert front_app.get_root(0) == "/0"
     assert front_app.get_root(2) == "/2"
-    assert front_app.get_imager_root(2, req) == "http://myhost:1234:7556/2"
+    assert front_app.get_imager_root(2, req) == "http://myhost:7556/2"
+
+
+def test_get_imager_root_strips_incoming_port_and_preserves_scheme(monkeypatch):
+    monkeypatch.setattr(
+        Config,
+        "seestars",
+        [
+            {"device_num": 2, "name": "B", "ip_address": "b.local"},
+        ],
+    )
+    monkeypatch.setattr(Config, "imgport", 7556)
+    req = DummyReq(host="securehost.example:8443", scheme="https")
+
+    assert front_app.get_imager_root(2, req) == "https://securehost.example:7556/2"
 
 
 def test_process_queue_dispatches_actions(monkeypatch):

@@ -170,7 +170,14 @@ def get_imager_root(telescope_id, req):
             filter(lambda tel: tel["device_num"] == telescope_id, telescopes)
         )[0]
         if telescope:
-            root = f"http://{req.host}:{Config.imgport}/{telescope['device_num']}"
+            # req.host may already include an incoming port, and Firefox rejects
+            # malformed host:port:port URLs. Build a clean origin explicitly.
+            parsed_host = urllib.parse.urlsplit(f"//{req.host}")
+            hostname = parsed_host.hostname or req.host
+            if ":" in hostname and not hostname.startswith("["):
+                hostname = f"[{hostname}]"
+            scheme = getattr(req, "scheme", "http")
+            root = f"{scheme}://{hostname}:{Config.imgport}/{telescope['device_num']}"
             return root
     return ""
 
