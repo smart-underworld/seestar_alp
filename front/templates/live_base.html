@@ -34,7 +34,8 @@
             {#console.log('Capturing status');#}
             const payload = JSON.parse(evt.detail.data);
             const captureStatus = document.getElementById('capture_status');
-            let elapsed = payload.lapse_ms / 1000.0;
+            const lapseMs = Number(payload.lapse_ms);
+            let elapsed = Number.isFinite(lapseMs) ? (lapseMs / 1000.0) : 0;
             elapsed = `${fmt(elapsed / 60.0)}:${fmt(elapsed % 60)}`;
             captureStatus.innerText = `State: ${payload.state} Elapsed: ${elapsed}`;
             break;

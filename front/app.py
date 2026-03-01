@@ -3313,7 +3313,7 @@ class LiveVideoResource(BaseResource):
             )
 
         html = resp.text
-        key = int(telescope_id)
+        key = (int(telescope_id), get_request_cache_identity(req))
         with LiveVideoResource._lock:
             last_html = LiveVideoResource._last_render_by_telescope.get(key)
             if last_html == html:

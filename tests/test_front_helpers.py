@@ -3,6 +3,7 @@ import threading
 import front.app as front_app
 from front.app import (
     EventStatus,
+    LiveVideoResource,
     check_dec_value,
     check_ra_value,
     determine_file_type,
@@ -213,3 +214,43 @@ def test_event_status_command_polar_align_not_suppressed_across_clients(monkeypa
     resp_a_repeat = DummyResp("")
     EventStatus.on_get(req_phone_a, resp_a_repeat, telescope_id=1)
     assert resp_a_repeat.status == "204 No Content"
+
+
+def test_live_video_cache_is_scoped_per_client(monkeypatch):
+    LiveVideoResource._last_render_by_telescope.clear()
+
+    class DummyDev:
+        view_state = {"AviRecord": {"state": "stopped"}}
+
+    monkeypatch.setattr(front_app, "get_context", lambda telescope_id, req: {})
+    monkeypatch.setattr(front_app.telescope, "get_seestar_device", lambda tid: DummyDev())
+    monkeypatch.setattr(front_app, "method_sync", lambda *args, **kwargs: {})
+
+    def fake_render_template(req, resp, template_name, **context):
+        resp.status = "200 OK"
+        resp.content_type = "text/html"
+        resp.text = "<button>Record</button>"
+
+    monkeypatch.setattr(front_app, "render_template", fake_render_template)
+
+    resource = LiveVideoResource()
+    req_a = DummyReq(
+        headers={"User-Agent": "Desktop-UA", "HX-Current-URL": "http://host/1/live"},
+        remote_addr="192.168.1.10",
+    )
+    req_b = DummyReq(
+        headers={"User-Agent": "Phone-UA", "HX-Current-URL": "http://host/1/live"},
+        remote_addr="192.168.1.11",
+    )
+
+    resp_a1 = DummyResp("")
+    resource.on_get(req_a, resp_a1, telescope_id=1)
+    assert resp_a1.status == "200 OK"
+
+    resp_b1 = DummyResp("")
+    resource.on_get(req_b, resp_b1, telescope_id=1)
+    assert resp_b1.status == "200 OK"
+
+    resp_a2 = DummyResp("")
+    resource.on_get(req_a, resp_a2, telescope_id=1)
+    assert resp_a2.status == "204 No Content"
