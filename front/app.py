@@ -616,11 +616,12 @@ def method_sync(method, telescope_id=1, **kwargs):
 
     def err_extractor(obj):
         if obj and obj.get("error"):
-            logger.warn(f"method_sync: {method} - {obj['error']}")
-            result = {"command": method, "status": "error", "result": obj["error"]}
+            err = pydash.get(obj, "error")
+            logger.warn(f"method_sync: {method} - {err}")
+            result = {"command": method, "status": "error", "result": err}
             return result
         elif obj:
-            result = {"command": method, "status": "success", "result": obj["result"]}
+            result = {"command": method, "status": "success", "result": pydash.get(obj, "result")}
             return result
 
     if out:
@@ -637,10 +638,10 @@ def method_sync(method, telescope_id=1, **kwargs):
                     results[devnum] = "Offline"
                 else:
                     if (
-                        results[devnum]["status"] == "success"
-                        and results[devnum]["result"] != 0
+                        pydash.get(results[devnum], "status") == "success"
+                        and pydash.get(results[devnum], "result") != 0
                     ):
-                        results[devnum] = results[devnum]["result"]
+                        results[devnum] = pydash.get(results[devnum], "result")
         else:
             if not value:
                 return "Offline"
@@ -660,9 +661,9 @@ def get_client_master(telescope_id):
     if telescope_id > 0:
         event_state = do_action_device("get_event_state", telescope_id, {})
         if event_state is not None:
-            result = event_state["Value"]["result"]
+            result = pydash.get(event_state, "Value.result", {})
             if "Client" in result:
-                client_master = result["Client"].get("is_master", True)
+                client_master = pydash.get(result, "Client.is_master", True)
 
     return client_master
 
@@ -909,9 +910,9 @@ def process_queue(resp, telescope_id):
         for command in queue[telescope_id]:
             parameters_list.append(json.loads(command["Parameters"]))
         for param in parameters_list:
-            action = param["action"]
-            if param["params"]:
-                params = param["params"]
+            action = pydash.get(param, "action")
+            if pydash.get(param, "params"):
+                params = pydash.get(param, "params")
             else:
                 params = None
             logger.info("POST scheduled request %s %s", action, params)
@@ -1929,8 +1930,8 @@ class ImageResource(BaseResource):
         current = do_action_device("get_schedule", telescope_id, {})
         if current is None:
             return
-        state = current["Value"]["state"]
-        schedule = current["Value"]
+        state = pydash.get(current, "Value.state", "")
+        schedule = pydash.get(current, "Value", {})
 
         # remove values=values to stop remembering values
         render_template(
@@ -1963,7 +1964,7 @@ class GotoResource(BaseResource):
         if context["online"]:
             current = do_action_device("get_schedule", telescope_id, {})
             if current is not None:
-                state = current["Value"]["state"]
+                state = pydash.get(current, "Value.state", "")
 
                 if state == "working":
                     flash(resp, "Scheduler is running. Cannot perform goto.")
@@ -2045,8 +2046,8 @@ class MosaicResource(BaseResource):
         current = do_action_device("get_schedule", telescope_id, {})
         if current is None:
             return
-        state = current["Value"]["state"]
-        schedule = current["Value"]
+        state = pydash.get(current, "Value.state", "")
+        schedule = pydash.get(current, "Value", {})
 
         # remove values=values to stop remembering values
         render_template(
@@ -2534,7 +2535,7 @@ class ScheduleToggleResource(BaseResource):
         context = get_context(telescope_id, req)
         current = do_action_device("get_schedule", telescope_id, {})
         if current.get("Value"):
-            state = current["Value"]["state"]
+            state = pydash.get(current, "Value.state", "stopped")
         else:
             state = "stopped"
         render_template(
@@ -2570,7 +2571,7 @@ class ScheduleClearResource:
     def on_post(req, resp, telescope_id=0):
         if check_api_state(telescope_id):
             current = do_action_device("get_schedule", telescope_id, {})
-            state = current["Value"]["state"]
+            state = pydash.get(current, "Value.state", "stopped")
 
             if state == "working":
                 do_action_device("stop_scheduler", telescope_id, {})
@@ -4049,8 +4050,8 @@ class GetBalanceSensorResource:
         result = method_sync("get_device_state", telescope_id)
         if result is not None:
             balance_sensor = {
-                "x": result["balance_sensor"]["data"]["x"],
-                "y": result["balance_sensor"]["data"]["y"],
+                "x": pydash.get(result, "balance_sensor.data.x", 0),
+                "y": pydash.get(result, "balance_sensor.data.y", 0),
             }
             resp.status = falcon.HTTP_200
             resp.content_type = "application/json"
@@ -4477,7 +4478,8 @@ class GetAAVSOSearch:
         )
         rtn = requests.get(aavso_URL + objName, timeout=10)
         rtnJson = json.loads(rtn.text)
-        if len(rtnJson["VSXObject"]) == 0:
+        vsx_object = pydash.get(rtnJson, "VSXObject", {})
+        if len(vsx_object) == 0:
             resp.status = falcon.HTTP_404
             resp.content_type = "application/text"
             resp.text = "Object not found"
@@ -4486,9 +4488,9 @@ class GetAAVSOSearch:
             resp.status = falcon.HTTP_200
             resp.content_type = "application/json"
 
-            ra = decimal_RA_to_Sexagesimal(float(rtnJson["VSXObject"]["RA2000"]))
+            ra = decimal_RA_to_Sexagesimal(float(pydash.get(vsx_object, "RA2000", 0)))
             dec = decimal_DEC_to_Sexagesimal(
-                float(rtnJson["VSXObject"]["Declination2000"])
+                float(pydash.get(vsx_object, "Declination2000", 0))
             )
 
             resp.text = json.dumps({"ra": ra, "dec": dec})
