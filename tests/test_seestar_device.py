@@ -174,3 +174,22 @@ def test_goto_target_sends_expected_request(monkeypatch, seestar):
     assert req["method"] == "iscope_start_view"
     assert req["params"]["target_ra_dec"] == [1.5, 22.25]
     assert req["params"]["target_name"] == "M42"
+
+
+def test_parse_dec_to_float_positive_and_negative(seestar):
+    assert seestar.parse_dec_to_float("12:30:00") == 12.5
+    assert seestar.parse_dec_to_float("-12:30:00") == -11.5
+
+
+def test_get_pa_error_defaults_when_unknown(seestar):
+    seestar.cur_pa_error_x = None
+    seestar.cur_pa_error_y = None
+    out = seestar.get_pa_error({})
+    assert out == {"pa_error_alt": 9999.9, "pa_error_az": 9999.9}
+
+
+def test_get_pa_error_returns_current_values(seestar):
+    seestar.cur_pa_error_x = 1.23
+    seestar.cur_pa_error_y = 4.56
+    out = seestar.get_pa_error({})
+    assert out == {"pa_error_alt": 4.56, "pa_error_az": 1.23}
