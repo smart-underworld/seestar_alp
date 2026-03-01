@@ -73,4 +73,40 @@ describe("main.js", () => {
     expect(document.getElementById("ra").value).toBe("12h34m56s");
     expect(document.getElementById("dec").value).toBe("12d34m56s");
   });
+
+  it("fetchStellarium fills target coordinates", async () => {
+    globalThis.fetch.mockResolvedValue({
+      ok: true,
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            name: "M31",
+            ra: "00h42m44s",
+            dec: "+41d16m09s",
+            lp: false,
+          }),
+        ),
+    });
+
+    await window.fetchStellarium();
+    await flush();
+
+    expect(document.getElementById("targetName").value).toBe("M31");
+    expect(document.getElementById("ra").value).toBe("00h42m44s");
+    expect(document.getElementById("dec").value).toBe("+41d16m09s");
+    expect(document.getElementById("useJ2000").checked).toBe(true);
+    expect(document.getElementById("useLpFilter").checked).toBe(false);
+  });
+
+  it("toggleuitheme flips HTML theme and calls backend endpoint", async () => {
+    document.documentElement.setAttribute("data-bs-theme", "dark");
+    globalThis.fetch.mockResolvedValue({ ok: true });
+
+    await window.toggleuitheme();
+    await flush();
+
+    expect(document.documentElement.getAttribute("data-bs-theme")).toBe("light");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch.mock.calls[0][0]).toContain("/toggleuitheme");
+  });
 });
