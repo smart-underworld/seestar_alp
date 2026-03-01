@@ -315,6 +315,23 @@
             padding-bottom: 0.42rem;
         }
 
+        .command-groups form {
+            min-width: 0;
+        }
+
+        .command-groups form select {
+            width: calc(100% - 7.5rem);
+            max-width: calc(100% - 7.5rem);
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .command-groups .command-exec-btn {
+            margin-left: 0.45rem;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
         .nav-pills {
             gap: 0.42rem;
         }
@@ -711,6 +728,17 @@
 
             body.live-has-quickbar {
                 padding-bottom: 5.2rem;
+            }
+
+            .command-groups form select {
+                width: 100%;
+                max-width: 100%;
+                display: block;
+            }
+
+            .command-groups .command-exec-btn {
+                margin-left: 0;
+                margin-top: 0.45rem;
             }
         }
 
