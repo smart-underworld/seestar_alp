@@ -246,11 +246,14 @@ def test_live_video_cache_is_scoped_per_client(monkeypatch):
     resp_a1 = DummyResp("")
     resource.on_get(req_a, resp_a1, telescope_id=1)
     assert resp_a1.status == "200 OK"
+    assert "<button>Record</button>" in resp_a1.text
 
     resp_b1 = DummyResp("")
     resource.on_get(req_b, resp_b1, telescope_id=1)
     assert resp_b1.status == "200 OK"
+    assert "<button>Record</button>" in resp_b1.text
 
     resp_a2 = DummyResp("")
     resource.on_get(req_a, resp_a2, telescope_id=1)
     assert resp_a2.status == "204 No Content"
+    assert resp_a2.text == ""

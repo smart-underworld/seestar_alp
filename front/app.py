@@ -3084,6 +3084,7 @@ class EventStatus:
 class LivePage:
     @staticmethod
     def on_get(req, resp, telescope_id=1, mode=None):
+        LiveVideoResource.clear_cache_for_telescope(int(telescope_id))
         status = method_sync("get_view_state", telescope_id)
         context = get_context(telescope_id, req)
         now = datetime.now()
@@ -3290,6 +3291,16 @@ class LiveZoomResource(BaseResource):
 class LiveVideoResource(BaseResource):
     _last_render_by_telescope = {}
     _lock = threading.Lock()
+
+    @staticmethod
+    def clear_cache_for_telescope(telescope_id: int):
+        with LiveVideoResource._lock:
+            to_remove = []
+            for key in LiveVideoResource._last_render_by_telescope:
+                if key[0] == int(telescope_id):
+                    to_remove.append(key)
+            for key in to_remove:
+                del LiveVideoResource._last_render_by_telescope[key]
 
     def on_get(self, req, resp, telescope_id: int = 1):
         # print("LiveViewResource.on_get telescope_id:", telescope_id)
