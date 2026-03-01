@@ -81,6 +81,21 @@ def test_preprocess_request_accepts_valid_request():
     pre(req, None, None, {"devnum": 1})
 
 
+def test_preprocess_request_rejects_bad_client_ids():
+    pre = shr.PreProcessRequest(maxdev=10)
+    req_bad_client = DummyReq(
+        method="GET", params={"ClientID": "-1", "ClientTransactionID": "2"}
+    )
+    with pytest.raises(falcon.HTTPBadRequest):
+        pre(req_bad_client, None, None, {"devnum": 1})
+
+    req_bad_txn = DummyReq(
+        method="GET", params={"ClientID": "1", "ClientTransactionID": "-9"}
+    )
+    with pytest.raises(falcon.HTTPBadRequest):
+        pre(req_bad_txn, None, None, {"devnum": 1})
+
+
 def test_method_response_serializes_deque_values():
     req = DummyReq(method="PUT", media={"ClientTransactionID": "7"})
     rsp = shr.MethodResponse(req, value={"items": deque([1, 2, 3])})
@@ -88,6 +103,18 @@ def test_method_response_serializes_deque_values():
     assert payload["ClientTransactionID"] == 7
     assert payload["Value"]["items"] == [1, 2, 3]
     assert payload["ErrorNumber"] == 0
+
+
+def test_property_response_omits_value_on_error():
+    req = DummyReq(method="GET", params={"ClientTransactionID": "3"})
+    err = type("Err", (), {})()
+    err.number = 1
+    err.message = "bad"
+    rsp = shr.PropertyResponse("value-ignored", req, err)
+    payload = json.loads(rsp.json)
+    assert payload["ErrorNumber"] == 1
+    assert payload["ErrorMessage"] == "bad"
+    assert "Value" not in payload
 
 
 def test_transaction_id_monotonic():
