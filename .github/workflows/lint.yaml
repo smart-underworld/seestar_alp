@@ -42,7 +42,7 @@ jobs:
         run: ruff format --check
 
       - name: Run Python tests
-        run: pytest --cov=device --cov=front --cov-report=term --cov-fail-under=24.5 -q
+        run: pytest --cov=device --cov=front --cov-report=term --cov-fail-under=25.0 -q
 
       - name: Install frontend test dependencies
         run: npm ci
