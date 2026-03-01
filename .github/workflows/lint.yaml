@@ -28,9 +28,26 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-mock
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
       - name: Run linting tests
         run: ruff check
 
       - name: Run formatting checks
         run: ruff format --check
+
+      - name: Run Python tests
+        run: pytest -q
+
+      - name: Install frontend test dependencies
+        run: npm ci
+        working-directory: front
+
+      - name: Run frontend tests
+        run: npm test
+        working-directory: front
