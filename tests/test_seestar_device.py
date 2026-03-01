@@ -1345,3 +1345,380 @@ def test_start_mosaic_item_paths(monkeypatch, seestar):
     seestar.schedule["state"] = "working"
     seestar.start_mosaic_item(good)
     assert started["count"] == 1
+
+
+def test_startup_sequence_error_branches(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone_name", lambda: "UTC"
+    )
+    import datetime as _dt
+
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone", lambda: _dt.timezone.utc
+    )
+    monkeypatch.setattr("device.seestar_device.EarthLocation", lambda **_k: object())
+    monkeypatch.setattr(
+        "device.seestar_device.Util.get_current_gps_coordinates", lambda: [7.7, 8.8]
+    )
+    monkeypatch.setattr(seestar, "play_sound", lambda _sid: None)
+    monkeypatch.setattr(seestar, "set_setting", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(seestar, "mark_op_state", lambda *a, **k: None)
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda _p: {"result": {"device": {"firmware_ver_int": 2600}}},
+    )
+
+    # do_3ppa true but EQ mode false => forced skip
+    seestar.is_EQ_mode = False
+    seestar.schedule["state"] = "stopped"
+    seestar.start_up_thread_fn(
+        {"lat": 0, "lon": 0, "3ppa": True}, is_from_schedule=True
+    )
+    assert seestar.schedule["state"] == "working"
+
+    # 3PPA failure path
+    seestar.is_EQ_mode = True
+    monkeypatch.setattr(seestar, "wait_end_op", lambda _e: False)
+    seestar.schedule["state"] = "stopped"
+    seestar.start_up_thread_fn(
+        {"lat": 1.0, "lon": 2.0, "3ppa": True}, is_from_schedule=True
+    )
+    assert seestar.schedule["state"] == "working"
+
+    # AF failure path
+    monkeypatch.setattr(seestar, "wait_end_op", lambda _e: True)
+    monkeypatch.setattr(seestar, "try_auto_focus", lambda _n: False)
+    seestar.schedule["state"] = "stopped"
+    seestar.start_up_thread_fn(
+        {"lat": 1.0, "lon": 2.0, "3ppa": True, "auto_focus": True},
+        is_from_schedule=True,
+    )
+    assert seestar.schedule["state"] == "stopped"
+
+    # dark frame failure path
+    monkeypatch.setattr(seestar, "try_auto_focus", lambda _n: True)
+    monkeypatch.setattr(seestar, "_try_dark_frame", lambda: False)
+    seestar.schedule["state"] = "stopped"
+    seestar.start_up_thread_fn(
+        {"lat": 1.0, "lon": 2.0, "dark_frames": True}, is_from_schedule=True
+    )
+    assert seestar.schedule["state"] == "stopped"
+
+
+def test_mosaic_thread_branch_variants(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "device.seestar_device.Util.mosaic_next_center_spacing", lambda *_a: [0.1, 0.2]
+    )
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {"ok": True})
+    monkeypatch.setattr(seestar, "set_target_name", lambda _n: {"ok": True})
+    monkeypatch.setattr(seestar, "stop_stack", lambda: {"ok": True})
+    seestar.schedule["current_item_id"] = "m2"
+    seestar.event_state["scheduler"] = {"cur_scheduler_item": {}}
+
+    # selected panels skip path + goto fail retry path
+    attempts = {"n": 0}
+
+    def fail_then_fail(*_a, **_k):
+        attempts["n"] += 1
+        return False
+
+    monkeypatch.setattr(seestar, "mosaic_goto_inner_worker", fail_then_fail)
+    monkeypatch.setattr(seestar, "start_stack", lambda _p: True)
+    seestar.schedule["state"] = "working"
+    seestar.schedule["is_skip_requested"] = False
+    seestar.mosaic_thread_fn(
+        "T",
+        1.0,
+        2.0,
+        False,
+        5,
+        2,
+        1,
+        10,
+        80,
+        False,
+        "11",
+        2,
+        10,
+    )
+    assert attempts["n"] >= 1
+
+    # stacking start failure branch
+    monkeypatch.setattr(seestar, "mosaic_goto_inner_worker", lambda *_a, **_k: True)
+    monkeypatch.setattr(seestar, "start_stack", lambda _p: False)
+    seestar.schedule["state"] = "working"
+    seestar.mosaic_thread_fn("T", 1.0, 2.0, False, 5, 1, 1, 10, 80, False, "", 1, 5)
+
+    # stop requested during loop
+    monkeypatch.setattr(seestar, "start_stack", lambda _p: True)
+
+    def stop_after_first_sleep(_s):
+        seestar.schedule["state"] = "stopping"
+
+    monkeypatch.setattr("device.seestar_device.time.sleep", stop_after_first_sleep)
+    seestar.schedule["state"] = "working"
+    seestar.mosaic_thread_fn("T", 1.0, 2.0, False, 5, 1, 1, 10, 80, False, "", 1, 5)
+
+
+def test_scheduler_and_schedule_guard_branches(monkeypatch, seestar):
+    # get_schedule mismatch
+    seestar.schedule["schedule_id"] = "abc"
+    assert seestar.get_schedule({"schedule_id": "zzz"}) == {}
+
+    # start shortcuts while busy
+    seestar.schedule["state"] = "working"
+    assert seestar.start_mosaic({"ra": 1, "dec": 2, "is_j2000": False})["code"] == -1
+    assert seestar.start_spectra({"ra": 1, "dec": 2, "is_j2000": False})["code"] == -1
+
+    # start_scheduler guards
+    seestar.schedule["state"] = "stopped"
+    seestar.schedule["schedule_id"] = "id1"
+    assert seestar.start_scheduler({"schedule_id": "id2"})["code"] == 0
+    seestar.is_client_master = lambda: False
+    assert seestar.start_scheduler({})["code"] == -1
+    seestar.is_client_master = lambda: True
+    seestar.schedule["state"] = "working"
+    assert seestar.start_scheduler({})["code"] == -1
+
+    # start_item branch
+    seestar.schedule["state"] = "stopped"
+    started = {"n": 0}
+
+    class FakeThread:
+        def __init__(self, target=None, daemon=None):
+            self.target = target
+            self.daemon = daemon
+            self.name = ""
+
+        def start(self):
+            started["n"] += 1
+
+    monkeypatch.setattr("device.seestar_device.threading.Thread", FakeThread)
+    out = seestar.start_scheduler({"start_item": 3})
+    assert out["item_number"] == 3
+    assert started["n"] == 1
+
+
+def test_scheduler_thread_extra_branches(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    seestar.schedule["list"] = collections.deque(
+        [
+            {
+                "schedule_item_id": "w1",
+                "action": "wait_for",
+                "params": {"timer_sec": 5},
+            },
+            {
+                "schedule_item_id": "u1",
+                "action": "wait_until",
+                "params": {"local_time": "23:59"},
+            },
+            {"schedule_item_id": "s1", "action": "start_up_sequence", "params": {}},
+            {"schedule_item_id": "o1", "action": "scope_get_equ_coord", "params": {}},
+            {"schedule_item_id": "o2", "action": "scope_get_time"},
+        ]
+    )
+    seestar.schedule["state"] = "stopped"
+    seestar.schedule["item_number"] = 1
+    seestar.schedule["is_skip_requested"] = True
+    seestar.play_sound = lambda _sid: None
+    seestar.send_message_param_sync = lambda _p: {"ok": True}
+
+    class StartupThread:
+        def __init__(self, name=None, target=None):
+            self._alive = True
+            self.target = target
+
+        def start(self):
+            self._alive = False
+
+        def is_alive(self):
+            return self._alive
+
+    monkeypatch.setattr("device.seestar_device.threading.Thread", StartupThread)
+    import datetime as _dt
+
+    monkeypatch.setattr(
+        "device.seestar_device.datetime",
+        SimpleNamespace(now=lambda: _dt.datetime(2000, 1, 1, 23, 59)),
+    )
+    seestar.scheduler_thread_fn()
+    assert seestar.schedule["state"] == "complete"
+
+
+def test_wait_guest_watch_and_events_extra(monkeypatch, seestar, tmp_path):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+
+    # wait_end_op loop branches
+    vals = iter([True, False])
+    monkeypatch.setattr(seestar, "is_goto", lambda: next(vals))
+    monkeypatch.setattr(seestar, "is_goto_completed_ok", lambda: False)
+    assert seestar.wait_end_op("goto_target") is False
+    seestar.event_state["X"] = {"state": "working"}
+    flips = {"n": 0}
+
+    def _sleep(_s):
+        flips["n"] += 1
+        if flips["n"] == 1:
+            seestar.event_state["X"]["state"] = "fail"
+
+    monkeypatch.setattr("device.seestar_device.time.sleep", _sleep)
+    assert seestar.wait_end_op("X") is False
+
+    # guest mode with empty hostname
+    monkeypatch.setattr("device.seestar_device.socket.gethostname", lambda: "")
+    sent = []
+    monkeypatch.setattr(
+        seestar, "send_message_param_sync", lambda p: sent.append(p) or {"ok": True}
+    )
+    seestar.firmware_ver_int = 2400
+    seestar.guest_mode_init()
+    assert any(p["params"].get("cli_name") == "SSC" for p in sent if "params" in p)
+
+    # callbacks parse warning path
+    hooks = tmp_path / "user_hooks"
+    hooks.mkdir()
+    (hooks / "bad.conf").write_text("x")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "device.seestar_device.ConfigFactory.parse_file",
+        lambda _p: (_ for _ in ()).throw(Exception("bad")),
+    )
+    seestar.event_callbacks_init(
+        {
+            "pi_status": {
+                "battery_capacity": 1,
+                "charger_status": "Charging",
+                "charge_online": True,
+            }
+        }
+    )
+
+    # start_watch_thread early return + reconnect fail path
+    seestar.is_watch_events = True
+    assert seestar.start_watch_thread() is None
+    seestar.is_watch_events = False
+    monkeypatch.setattr(seestar, "reconnect", lambda: False)
+    monkeypatch.setattr(
+        "device.seestar_device.threading.Thread",
+        lambda *a, **k: (_ for _ in ()).throw(Exception("thread boom")),
+    )
+    seestar.start_watch_thread()
+
+    # get_events branches: no timestamp + PiStatus + AviRecord + generic except
+    class BadQueue:
+        def __len__(self):
+            return 1
+
+        def popleft(self):
+            raise RuntimeError("boom")
+
+    seestar.event_queue = collections.deque(
+        [
+            {"Event": "PiStatus", "temp": 1, "battery_capacity": 2},
+            {"Event": "AviRecord", "state": "start"},
+        ]
+    )
+    frame1 = next(seestar.get_events())
+    frame2 = next(seestar.get_events())
+    assert b"event: temp" in frame1
+    assert b"video_record_status" in frame2
+
+    seestar.event_queue = BadQueue()
+
+    def stop_sleep(_s):
+        raise GeneratorExit
+
+    monkeypatch.setattr("device.seestar_device.time.sleep", stop_sleep)
+    gen = seestar.get_events()
+    with pytest.raises(GeneratorExit):
+        next(gen)
+
+
+def test_schedule_item_guards_for_working_scheduler(seestar):
+    seestar.schedule["list"] = collections.deque(
+        [
+            {"schedule_item_id": "a", "action": "wait_for", "params": {"timer_sec": 1}},
+            {"schedule_item_id": "b", "action": "wait_for", "params": {"timer_sec": 2}},
+            {"schedule_item_id": "c", "action": "wait_for", "params": {"timer_sec": 3}},
+        ]
+    )
+    seestar.schedule["state"] = "working"
+    seestar.schedule["current_item_id"] = "b"
+
+    # Disallow editing/removing items already executed.
+    seestar.replace_schedule_item(
+        {"item_id": "a", "action": "wait_for", "params": {"timer_sec": 9}}
+    )
+    seestar.insert_schedule_item_before(
+        {"before_id": "a", "action": "wait_for", "params": {"timer_sec": 8}}
+    )
+    seestar.remove_schedule_item({"schedule_item_id": "a"})
+    assert [x["schedule_item_id"] for x in seestar.schedule["list"]] == ["a", "b", "c"]
+
+    # Allow edits/removals after current item.
+    seestar.schedule["current_item_id"] = "a"
+    seestar.replace_schedule_item(
+        {"item_id": "c", "action": "wait_for", "params": {"timer_sec": 30}}
+    )
+    replaced_id = seestar.schedule["list"][2]["schedule_item_id"]
+    seestar.insert_schedule_item_before(
+        {"before_id": replaced_id, "action": "wait_for", "params": {"timer_sec": 20}}
+    )
+    inserted_id = seestar.schedule["list"][2]["schedule_item_id"]
+    assert seestar.schedule["list"][3]["params"]["timer_sec"] == 30
+    seestar.remove_schedule_item({"schedule_item_id": inserted_id})
+    assert [x["schedule_item_id"] for x in list(seestar.schedule["list"])[:2]] == [
+        "a",
+        "b",
+    ]
+    assert seestar.schedule["list"][2]["params"]["timer_sec"] == 30
+
+
+def test_get_events_focus_empty_queue_and_watch_firmware_init(monkeypatch, seestar):
+    # Cover focus event formatting and timestamp stripping.
+    seestar.event_queue = collections.deque(
+        [{"Event": "FocuserMove", "position": 1234, "Timestamp": "1.23"}]
+    )
+    frame = next(seestar.get_events())
+    assert b"event: focusMove" in frame
+    assert b"1234" in frame
+
+    # Cover empty queue branch.
+    seestar.event_queue = collections.deque()
+
+    def stop_quick(_s):
+        raise GeneratorExit
+
+    monkeypatch.setattr("device.seestar_device.time.sleep", stop_quick)
+    gen = seestar.get_events()
+    with pytest.raises(StopIteration):
+        next(gen)
+
+    # Cover watch init firmware extraction path.
+    class FakeThread:
+        def __init__(self, target=None, daemon=None):
+            self.target = target
+            self.daemon = daemon
+            self.name = ""
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr("device.seestar_device.threading.Thread", FakeThread)
+    monkeypatch.setattr(seestar, "reconnect", lambda: True)
+    monkeypatch.setattr(seestar, "guest_mode_init", lambda: None)
+    monkeypatch.setattr(seestar, "event_callbacks_init", lambda _s: None)
+    seestar.is_watch_events = False
+    seestar.firmware_ver_int = 0
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda _p: {"result": {"device": {"firmware_ver_int": 2600}}},
+    )
+    seestar.start_watch_thread()
+    assert seestar.firmware_ver_int == 2600
