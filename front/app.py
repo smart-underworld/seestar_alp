@@ -52,6 +52,14 @@ _last_context_get_time = {}
 _context_cached = {}
 _last_api_state_get_time = {}
 _api_state_cached = {}
+_planning_cards_cache = None
+_planning_cards_cache_mtime = None
+_planning_cards_cache_lock = threading.Lock()
+_csc_sites_cache = None
+_csc_sites_cache_lock = threading.Lock()
+_nearest_csc_cache = {}
+_nearest_csc_cache_ttl_sec = 300
+_nearest_csc_cache_lock = threading.Lock()
 
 
 def get_ip() -> str | None:
@@ -429,6 +437,7 @@ def get_twilight_times():
 
 
 def get_planning_cards():
+    global _planning_cards_cache, _planning_cards_cache_mtime
     if getattr(
         sys, "frozen", False
     ):  # frozen means that we are running from a bundled app
@@ -453,35 +462,30 @@ def get_planning_cards():
                 os.path.dirname(__file__), "planning.json.example"
             )
         shutil.copyfile(card_state_example_file_location, card_state_file_location)
-
-    with open(card_state_file_location, "r") as card_state_file:
-        state_data = json.load(card_state_file)
-        return state_data
+    file_mtime = os.path.getmtime(card_state_file_location)
+    with _planning_cards_cache_lock:
+        if (
+            _planning_cards_cache is not None
+            and _planning_cards_cache_mtime == file_mtime
+        ):
+            return json.loads(json.dumps(_planning_cards_cache))
+        with open(card_state_file_location, "r") as card_state_file:
+            state_data = json.load(card_state_file)
+        _planning_cards_cache = state_data
+        _planning_cards_cache_mtime = file_mtime
+        return json.loads(json.dumps(state_data))
 
 
 def get_planning_card_state(card_name):
     # Get's the state of a card via planning.json
-    if getattr(
-        sys, "frozen", False
-    ):  # frozen means that we are running from a bundled app
-        planning_state_file_location = os.path.abspath(
-            os.path.join(sys._MEIPASS, "planning.json")
-        )
-    else:
-        planning_state_file_location = os.path.join(
-            os.path.dirname(__file__), "planning.json"
-        )
-
-    with open(planning_state_file_location, "r") as planning_state_file:
-        state_data = json.load(planning_state_file)
-
-    for card in state_data:
+    for card in get_planning_cards():
         # print (card['card_name'])
         if card["card_name"] == card_name:
             return card
 
 
 def update_planning_card_state(card_name, var, value):
+    global _planning_cards_cache, _planning_cards_cache_mtime
     # Update planning.json with current card state
     if getattr(
         sys, "frozen", False
@@ -509,6 +513,25 @@ def update_planning_card_state(card_name, var, value):
 
     with open(planning_state_file_location, "w") as planning_state_file:
         json.dump(state_data, planning_state_file, indent=4)
+    with _planning_cards_cache_lock:
+        _planning_cards_cache = None
+        _planning_cards_cache_mtime = None
+
+
+def get_csc_sites_data():
+    global _csc_sites_cache
+    with _csc_sites_cache_lock:
+        if _csc_sites_cache is not None:
+            return _csc_sites_cache
+        if getattr(
+            sys, "frozen", False
+        ):  # frozen means that we are running from a bundled app
+            csc_file = os.path.abspath(os.path.join(sys._MEIPASS, "csc_sites.json"))
+        else:
+            csc_file = os.path.join(os.path.dirname(__file__), "./csc_sites.json")
+        with open(csc_file, "r") as f:
+            _csc_sites_cache = json.load(f)
+        return _csc_sites_cache
 
 
 def _check_api_state_cached(telescope_id):
@@ -1092,66 +1115,69 @@ def get_nearest_csc():
     lat = Config.init_lat
     lng = Config.init_long
 
-    if getattr(
-        sys, "frozen", False
-    ):  # frozen means that we are running from a bundled app
-        csc_file = os.path.abspath(os.path.join(sys._MEIPASS, "csc_sites.json"))
-    else:
-        csc_file = os.path.join(os.path.dirname(__file__), "./csc_sites.json")
-
     closest_site = {}
+    cache_key = (round(float(lat), 3), round(float(lng), 3))
+    now_ts = time.time()
+    with _nearest_csc_cache_lock:
+        cached = _nearest_csc_cache.get(cache_key)
+        if cached and now_ts - cached["ts"] < _nearest_csc_cache_ttl_sec:
+            return dict(cached["value"])
 
     # Get list of all csc site locations
-    with open(csc_file, "r") as f:
-        data = json.load(f)
-        nearby_csc = []
+    data = get_csc_sites_data()
+    nearby_csc = []
 
-        # Get list of all sites within same or adjacent 1 degree lat/lng bin
-        try:
-            for x in range(-1, 2):
-                for y in range(-1, 2):
-                    lat_str = str(int(lat) + x)
-                    lng_str = str(int(lng) + y)
-                    if lat_str in data:
-                        if lng_str in data[lat_str]:
-                            sites_in_bin = data[lat_str][lng_str]
-                            for site in sites_in_bin:
-                                nearby_csc.append(site)
-        except:
-            # API returns error
-            closest_site = {
-                "status_msg": "ERROR parsing coordinates or reading from list of CSC sites"
-            }
-
-        curr_closest_km = 1000
-
-        # Find the closest site in Clear Dark Sky database within bins
-        for site in nearby_csc:
-            dist = lat_lng_distance_in_km(lat, lng, site["lat"], site["lng"])
-
-            if dist < curr_closest_km:
-                curr_closest_km = dist
-                closest_site = site
-
-        # Grab site url and return site data if within 100 km
-        if curr_closest_km < 1000:
-            closest_site["status_msg"] = "SUCCESS"
-            closest_site["dist_km"] = curr_closest_km
-            closest_site["full_img"] = (
-                "https://www.cleardarksky.com/c/" + closest_site["id"] + "csk.gif"
-            )
-            closest_site["mini_img"] = (
-                "https://www.cleardarksky.com/c/" + closest_site["id"] + "cs0.gif"
-            )
-            closest_site["href"] = (
-                "https://www.cleardarksky.com/c/" + closest_site["id"] + "key.html"
-            )
-        else:
-            closest_site = {
-                "status_msg": "No sites within 100 km. CSC sites are only available in the Continental US, Canada, and Northern Mexico"
-            }
-
+    # Get list of all sites within same or adjacent 1 degree lat/lng bin
+    try:
+        for x in range(-1, 2):
+            for y in range(-1, 2):
+                lat_str = str(int(lat) + x)
+                lng_str = str(int(lng) + y)
+                if lat_str in data:
+                    if lng_str in data[lat_str]:
+                        sites_in_bin = data[lat_str][lng_str]
+                        for site in sites_in_bin:
+                            nearby_csc.append(site)
+    except Exception:
+        # API returns error
+        closest_site = {
+            "status_msg": "ERROR parsing coordinates or reading from list of CSC sites"
+        }
+        with _nearest_csc_cache_lock:
+            _nearest_csc_cache[cache_key] = {"ts": now_ts, "value": closest_site}
         return closest_site
+
+    curr_closest_km = 1000
+
+    # Find the closest site in Clear Dark Sky database within bins
+    for site in nearby_csc:
+        dist = lat_lng_distance_in_km(lat, lng, site["lat"], site["lng"])
+
+        if dist < curr_closest_km:
+            curr_closest_km = dist
+            closest_site = site
+
+    # Grab site url and return site data if within 100 km
+    if curr_closest_km < 1000:
+        closest_site["status_msg"] = "SUCCESS"
+        closest_site["dist_km"] = curr_closest_km
+        closest_site["full_img"] = (
+            "https://www.cleardarksky.com/c/" + closest_site["id"] + "csk.gif"
+        )
+        closest_site["mini_img"] = (
+            "https://www.cleardarksky.com/c/" + closest_site["id"] + "cs0.gif"
+        )
+        closest_site["href"] = (
+            "https://www.cleardarksky.com/c/" + closest_site["id"] + "key.html"
+        )
+    else:
+        closest_site = {
+            "status_msg": "No sites within 100 km. CSC sites are only available in the Continental US, Canada, and Northern Mexico"
+        }
+
+    with _nearest_csc_cache_lock:
+        _nearest_csc_cache[cache_key] = {"ts": now_ts, "value": closest_site}
+    return dict(closest_site)
 
 
 def do_create_mosaic(req, resp, schedule, telescope_id):
@@ -1684,10 +1710,6 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
         else:
             schedule = get_schedule["Value"]
             state = schedule.get("state", "stopped")
-    nearest_csc = get_nearest_csc()
-    if nearest_csc["status_msg"] != "SUCCESS":
-        nearest_csc["href"] = ""
-        nearest_csc["full_img"] = ""
     render_template(
         req,
         resp,

@@ -86,3 +86,31 @@ def test_process_queue_offline_flashes_error(monkeypatch):
     front_app.process_queue(resp, 1)
     msgs = front_app.get_messages()
     assert any("API is Offline" in msg for msg in msgs)
+
+
+def test_get_nearest_csc_uses_result_cache(monkeypatch):
+    monkeypatch.setattr(Config, "init_lat", 42.0)
+    monkeypatch.setattr(Config, "init_long", -71.0)
+    front_app._nearest_csc_cache.clear()
+
+    calls = {"count": 0}
+
+    def fake_get_csc_sites_data():
+        calls["count"] += 1
+        return {
+            "42": {
+                "-71": [
+                    {"id": "TEST", "lat": 42.0, "lng": -71.0},
+                ]
+            }
+        }
+
+    monkeypatch.setattr(front_app, "get_csc_sites_data", fake_get_csc_sites_data)
+
+    first = front_app.get_nearest_csc()
+    second = front_app.get_nearest_csc()
+
+    assert first["status_msg"] == "SUCCESS"
+    assert second["status_msg"] == "SUCCESS"
+    assert first["href"] == "https://www.cleardarksky.com/c/TESTkey.html"
+    assert calls["count"] == 1
