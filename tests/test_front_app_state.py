@@ -114,3 +114,90 @@ def test_get_nearest_csc_uses_result_cache(monkeypatch):
     assert second["status_msg"] == "SUCCESS"
     assert first["href"] == "https://www.cleardarksky.com/c/TESTkey.html"
     assert calls["count"] == 1
+
+
+def test_get_planning_cards_uses_file_mtime_cache(monkeypatch, tmp_path):
+    planning_file = tmp_path / "planning.json"
+    planning_file.write_text(
+        json.dumps(
+            [
+                {
+                    "card_name": "twilight_times",
+                    "planning_page_enable": True,
+                    "planning_page_collapsed": False,
+                }
+            ]
+        )
+    )
+
+    original_json_load = front_app.json.load
+    calls = {"count": 0}
+
+    def counting_json_load(fp):
+        calls["count"] += 1
+        return original_json_load(fp)
+
+    monkeypatch.setattr(front_app.os.path, "dirname", lambda _: str(tmp_path))
+    monkeypatch.setattr(front_app.json, "load", counting_json_load)
+    front_app._planning_cards_cache = None
+    front_app._planning_cards_cache_mtime = None
+
+    first = front_app.get_planning_cards()
+    second = front_app.get_planning_cards()
+
+    assert first[0]["card_name"] == "twilight_times"
+    assert second[0]["card_name"] == "twilight_times"
+    assert calls["count"] == 1
+
+
+def test_update_planning_card_state_invalidates_cache(monkeypatch, tmp_path):
+    planning_file = tmp_path / "planning.json"
+    planning_file.write_text(
+        json.dumps(
+            [
+                {
+                    "card_name": "twilight_times",
+                    "planning_page_enable": True,
+                    "planning_page_collapsed": False,
+                }
+            ]
+        )
+    )
+
+    monkeypatch.setattr(front_app.os.path, "dirname", lambda _: str(tmp_path))
+    front_app._planning_cards_cache = None
+    front_app._planning_cards_cache_mtime = None
+
+    cards = front_app.get_planning_cards()
+    assert cards[0]["planning_page_enable"] is True
+    assert front_app._planning_cards_cache is not None
+
+    front_app.update_planning_card_state(
+        "twilight_times", "planning_page_enable", False
+    )
+
+    assert front_app._planning_cards_cache is None
+    updated_cards = front_app.get_planning_cards()
+    assert updated_cards[0]["planning_page_enable"] is False
+
+
+def test_get_csc_sites_data_uses_in_memory_cache(monkeypatch, tmp_path):
+    csc_file = tmp_path / "csc_sites.json"
+    csc_file.write_text(json.dumps({"42": {"-71": [{"id": "A"}]}}))
+
+    original_json_load = front_app.json.load
+    calls = {"count": 0}
+
+    def counting_json_load(fp):
+        calls["count"] += 1
+        return original_json_load(fp)
+
+    monkeypatch.setattr(front_app.os.path, "dirname", lambda _: str(tmp_path))
+    monkeypatch.setattr(front_app.json, "load", counting_json_load)
+    front_app._csc_sites_cache = None
+
+    first = front_app.get_csc_sites_data()
+    second = front_app.get_csc_sites_data()
+
+    assert first == second
+    assert calls["count"] == 1
