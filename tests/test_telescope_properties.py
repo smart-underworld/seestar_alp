@@ -288,3 +288,119 @@ def test_command_put_endpoints_invalid_number_inputs():
         responder().on_put(req, resp, devnum=1)
         payload = json.loads(resp.text)
         assert payload["ErrorNumber"] != 0, responder.__name__
+
+
+def test_not_connected_on_get_responders_return_error():
+    set_shr_logger(logging.getLogger("test-telescope-props"))
+    device_exceptions.logger = DummyLogger()
+    telescope.seestar_dev.clear()
+    disconnected = FakeDevice()
+    disconnected.is_connected = False
+    telescope.seestar_dev[1] = disconnected
+
+    responders = [
+        telescope.alignmentmode,
+        telescope.altitude,
+        telescope.aperturearea,
+        telescope.aperturediameter,
+        telescope.athome,
+        telescope.atpark,
+        telescope.azimuth,
+        telescope.canfindhome,
+        telescope.canpark,
+        telescope.canpulseguide,
+        telescope.cansetdeclinationrate,
+        telescope.cansetguiderates,
+        telescope.cansetpark,
+        telescope.cansetpierside,
+        telescope.cansetrightascensionrate,
+        telescope.cansettracking,
+        telescope.canslew,
+        telescope.canslewaltaz,
+        telescope.canslewaltazasync,
+        telescope.canslewasync,
+        telescope.cansync,
+        telescope.cansyncaltaz,
+        telescope.canunpark,
+        telescope.declination,
+        telescope.declinationrate,
+        telescope.doesrefraction,
+        telescope.equatorialsystem,
+        telescope.focallength,
+        telescope.guideratedeclination,
+        telescope.guideraterightascension,
+        telescope.ispulseguiding,
+        telescope.rightascension,
+        telescope.rightascensionrate,
+        telescope.sideofpier,
+        telescope.siderealtime,
+        telescope.siteelevation,
+        telescope.sitelatitude,
+        telescope.sitelongitude,
+        telescope.slewing,
+        telescope.slewsettletime,
+        telescope.targetdeclination,
+        telescope.targetrightascension,
+        telescope.tracking,
+        telescope.trackingrate,
+        telescope.trackingrates,
+        telescope.utcdate,
+        telescope.axisrates,
+        telescope.canmoveaxis,
+        telescope.destinationsideofpier,
+    ]
+    for responder in responders:
+        req = DummyReq(method="GET")
+        resp = DummyResp()
+        responder().on_get(req, resp, devnum=1)
+        payload = json.loads(resp.text)
+        assert payload["ErrorNumber"] != 0, responder.__name__
+
+
+def test_not_connected_on_put_responders_return_error():
+    set_shr_logger(logging.getLogger("test-telescope-props"))
+    device_exceptions.logger = DummyLogger()
+    telescope.seestar_dev.clear()
+    disconnected = FakeDevice()
+    disconnected.is_connected = False
+    telescope.seestar_dev[1] = disconnected
+
+    put_responders = [
+        telescope.declinationrate,
+        telescope.doesrefraction,
+        telescope.guideratedeclination,
+        telescope.guideraterightascension,
+        telescope.rightascensionrate,
+        telescope.sideofpier,
+        telescope.siteelevation,
+        telescope.sitelatitude,
+        telescope.sitelongitude,
+        telescope.slewsettletime,
+        telescope.targetdeclination,
+        telescope.targetrightascension,
+        telescope.tracking,
+        telescope.trackingrate,
+        telescope.utcdate,
+        telescope.abortslew,
+        telescope.findhome,
+        telescope.moveaxis,
+        telescope.park,
+        telescope.pulseguide,
+        telescope.setpark,
+        telescope.slewtoaltaz,
+        telescope.slewtoaltazasync,
+        telescope.slewtocoordinates,
+        telescope.slewtocoordinatesasync,
+        telescope.slewtotarget,
+        telescope.slewtotargetasync,
+        telescope.synctoaltaz,
+        telescope.synctocoordinates,
+        telescope.synctotarget,
+        telescope.unpark,
+    ]
+    for responder in put_responders:
+        req = DummyReq(method="PUT")
+        resp = DummyResp()
+        responder().on_put(req, resp, devnum=1)
+        payload = json.loads(resp.text)
+        assert payload["ErrorNumber"] != 0, responder.__name__
