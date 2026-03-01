@@ -67,6 +67,10 @@ class FakeDevice:
         return {"result": "ok", "params": params}
 
 
+class FakeFederation(FakeDevice):
+    pass
+
+
 def test_action_put_routes_start_scheduler(monkeypatch):
     set_shr_logger(logging.getLogger("test-telescope"))
     device_exceptions.logger = DummyLogger()
@@ -115,3 +119,21 @@ def test_action_put_returns_not_connected_error(monkeypatch):
 
     payload = json.loads(resp.text)
     assert payload["ErrorNumber"] != 0
+
+
+def test_action_put_devnum_zero_routes_to_federation():
+    set_shr_logger(logging.getLogger("test-telescope"))
+    device_exceptions.logger = DummyLogger()
+    telescope.seestar_dev.clear()
+    telescope.seestar_federation = FakeFederation(connected=True)
+
+    req = DummyReq("method_sync", {"method": "scope_get_equ_coord"})
+    resp = DummyResp()
+    telescope.action().on_put(req, resp, devnum=0)
+
+    payload = json.loads(resp.text)
+    assert payload["ErrorNumber"] == 0
+    assert payload["Value"]["result"] == "ok"
+    assert telescope.seestar_federation.calls == [
+        ("method_sync", {"method": "scope_get_equ_coord"})
+    ]
