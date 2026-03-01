@@ -92,6 +92,34 @@ class FakeDevice:
         self.called.append(("is_goto_completed_ok", None))
         return True
 
+    def set_below_horizon_dec_offset(self, offset):
+        self.called.append(("set_below_horizon_dec_offset", offset))
+        return {"ok": True}
+
+    def move_scope(self, angle, speed, dur):
+        self.called.append(("move_scope", (angle, speed, dur)))
+        return {"ok": True}
+
+    def try_auto_focus(self, count):
+        self.called.append(("try_auto_focus", count))
+        return True
+
+    def stop_stack(self):
+        self.called.append(("stop_stack", None))
+        return {"ok": True}
+
+    def action_set_dew_heater(self, params):
+        self.called.append(("action_set_dew_heater", params))
+        return {"ok": True}
+
+    def action_set_exposure(self, params):
+        self.called.append(("action_set_exposure", params))
+        return {"ok": True}
+
+    def action_start_up_sequence(self, params):
+        self.called.append(("action_start_up_sequence", params))
+        return {"ok": True}
+
 
 def test_federation_only_calls_connected_devices():
     dev1 = FakeDevice(connected=True)
@@ -332,3 +360,99 @@ def test_start_scheduler_empty_or_no_available_devices():
         }
     )
     assert "error" in out
+
+
+def test_federation_misc_fanout_methods(monkeypatch):
+    dev1 = FakeDevice(connected=True)
+    dev2 = FakeDevice(connected=False)
+    federation = Seestar_Federation(DummyLogger(), {1: dev1, 2: dev2})
+
+    assert federation.disconnect() is None
+    assert federation.reconnect() is True
+    assert federation.set_below_horizon_dec_offset(1.2) == {1: {"ok": True}}
+    assert federation.move_scope(10, 20, 3) == {1: {"ok": True}}
+    assert federation.stop_stack() == {1: {"ok": True}}
+    assert federation.action_set_dew_heater({"heater": 10}) == {1: {"ok": True}}
+    assert federation.action_set_exposure({"exp": 1000}) == {1: {"ok": True}}
+    assert federation.action_start_up_sequence({"auto_focus": True}) == {
+        1: {"ok": True}
+    }
+
+    started = {"count": 0}
+
+    class FakeThread:
+        def __init__(self, target=None):
+            self.target = target
+
+        def start(self):
+            started["count"] += 1
+            self.target()
+
+    monkeypatch.setattr("device.seestar_federation.threading.Thread", FakeThread)
+    out = federation.try_auto_focus(2)
+    assert out == {1: "Auto focus started"}
+    assert started["count"] == 1
+
+
+def test_get_schedule_with_mismatched_schedule_id_and_missing_state():
+    dev = FakeDevice(connected=True)
+    dev.schedule = {"no_state": True}
+    federation = Seestar_Federation(DummyLogger(), {1: dev})
+    out = federation.get_schedule({"schedule_id": "mismatch"})
+    assert out["available_device_list"] == []
+
+
+def test_import_schedule_active_state_raises_attribute_error(tmp_path):
+    federation = Seestar_Federation(DummyLogger(), {})
+    federation.schedule["state"] = "working"
+    with pytest.raises(AttributeError):
+        federation.import_schedule(
+            {"filepath": str(tmp_path / "x.json"), "is_retain_state": True}
+        )
+
+
+def test_start_scheduler_by_time(monkeypatch):
+    dev1 = FakeDevice(connected=True)
+    dev2 = FakeDevice(connected=True)
+    federation = Seestar_Federation(DummyLogger(), {1: dev1, 2: dev2})
+
+    federation.schedule["list"] = collections.deque(
+        [
+            {
+                "action": "start_mosaic",
+                "params": {
+                    "ra": 1.2,
+                    "dec": 3.4,
+                    "is_j2000": True,
+                    "federation_mode": "by_time",
+                    "panel_time_sec": 31,
+                    "ra_num": 1,
+                    "dec_num": 1,
+                    "selected_panels": "",
+                },
+            },
+        ]
+    )
+    monkeypatch.setattr("device.seestar_federation.random.shuffle", lambda x: None)
+    out = federation.start_scheduler({})
+    assert "available_device_list" in out
+    assert any(c[0] == "add_schedule_item" for c in dev1.called)
+    assert any(c[0] == "add_schedule_item" for c in dev2.called)
+
+
+def test_start_scheduler_missing_params_raises_keyerror(monkeypatch):
+    dev1 = FakeDevice(connected=True)
+    dev2 = FakeDevice(connected=True)
+    federation = Seestar_Federation(DummyLogger(), {1: dev1, 2: dev2})
+    federation.schedule["list"] = collections.deque([{"action": "noop"}])
+    monkeypatch.setattr("device.seestar_federation.random.shuffle", lambda x: None)
+    with pytest.raises(KeyError):
+        federation.start_scheduler({})
+
+
+def test_stop_scheduler_only_connected_devices():
+    dev1 = FakeDevice(connected=True)
+    dev2 = FakeDevice(connected=False)
+    federation = Seestar_Federation(DummyLogger(), {1: dev1, 2: dev2})
+    out = federation.stop_scheduler({})
+    assert out == {1: {"ok": True}}

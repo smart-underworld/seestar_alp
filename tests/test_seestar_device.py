@@ -745,3 +745,71 @@ def test_start_up_thread_fn_success_and_old_firmware(monkeypatch, seestar):
     seestar.schedule["state"] = "stopped"
     seestar.start_up_thread_fn({"lat": 1.1, "lon": 2.2}, is_from_schedule=True)
     assert seestar.schedule["state"] == "stopped"
+
+
+def test_spectra_thread_and_start_item(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+
+    class FakeCoord:
+        ra = SimpleNamespace(hour=1.5)
+        dec = SimpleNamespace(deg=22.0)
+
+    monkeypatch.setattr(
+        "device.seestar_device.Util.parse_coordinate", lambda *_a, **_k: FakeCoord
+    )
+    monkeypatch.setattr(seestar, "_slew_to_ra_dec", lambda _p: True)
+    monkeypatch.setattr(seestar, "set_target_name", lambda _n: {"ok": True})
+    monkeypatch.setattr(seestar, "start_stack", lambda _p: True)
+    monkeypatch.setattr(seestar, "stop_stack", lambda: {"ok": True})
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {"result": "ok"})
+    seestar.schedule["state"] = "working"
+    seestar.schedule["current_item_id"] = "item-1"
+    seestar.schedule["is_skip_requested"] = False
+
+    params = {
+        "ra": 1.0,
+        "dec": 2.0,
+        "is_j2000": False,
+        "target_name": "Vega",
+        "panel_time_sec": 10,
+        "gain": 80,
+    }
+    seestar.spectra_thread_fn(params)
+    assert (
+        seestar.event_state["scheduler"]["cur_scheduler_item"]["action"] == "complete"
+    )
+    assert seestar.is_cur_scheduler_item_working is False
+
+    # start_spectra_item branch: not working
+    seestar.schedule["state"] = "stopped"
+    assert seestar.start_spectra_item(params) is None
+
+    # start_spectra_item branch: working
+    started = {"count": 0}
+
+    class FakeThread:
+        def __init__(self, name=None, target=None):
+            self.name = name
+            self.target = target
+
+        def start(self):
+            started["count"] += 1
+
+    monkeypatch.setattr("device.seestar_device.threading.Thread", FakeThread)
+    seestar.schedule["state"] = "working"
+    assert seestar.start_spectra_item(params) == "spectra mosiac started"
+    assert started["count"] == 1
+
+
+def test_mosaic_goto_inner_worker_paths(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    seestar.event_state["scheduler"] = {"cur_scheduler_item": {}}
+
+    monkeypatch.setattr(seestar, "goto_target", lambda _p: False)
+    assert seestar.mosaic_goto_inner_worker(1.0, 2.0, "x", False, False) is False
+
+    monkeypatch.setattr(seestar, "goto_target", lambda _p: True)
+    monkeypatch.setattr(seestar, "wait_end_op", lambda _e: True)
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {"result": "ok"})
+    monkeypatch.setattr(seestar, "try_auto_focus", lambda _n: False)
+    assert seestar.mosaic_goto_inner_worker(1.0, 2.0, "x", True, True) is True
