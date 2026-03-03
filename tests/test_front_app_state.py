@@ -206,6 +206,7 @@ def test_get_csc_sites_data_uses_in_memory_cache(monkeypatch, tmp_path):
 def test_get_device_settings_uses_fallback_keys_for_newer_firmware(monkeypatch):
     monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
     monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2670)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
 
     def fake_method_sync(method, telescope_id=1, **kwargs):
         if method == "get_setting":
@@ -225,6 +226,8 @@ def test_get_device_settings_uses_fallback_keys_for_newer_firmware(monkeypatch):
                 "viewplan_go_home": True,
                 "expert_mode": False,
             }
+        if method == "get_stack_setting":
+            return {}
         raise AssertionError(f"Unexpected method call: {method}")
 
     monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
@@ -298,6 +301,7 @@ def test_settings_post_tries_fallback_variants_for_firmware_specific_keys(monkey
         return {"ErrorNumber": 0, "Value": {"code": 0}}
 
     monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2670)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
     monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
     monkeypatch.setattr(
         front_app.SettingsResource,
@@ -322,3 +326,307 @@ def test_settings_post_tries_fallback_variants_for_firmware_specific_keys(monkey
         "method_sync",
         {"method": "set_setting", "params": {"viewplan_go_home": True}},
     ) in captured["calls"]
+
+
+def test_get_device_settings_loads_discrete_save_flags_from_get_stack_setting(
+    monkeypatch,
+):
+    monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2500)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+
+    def fake_method_sync(method, telescope_id=1, **kwargs):
+        if method == "get_setting":
+            return {
+                "stack_dither": {"pix": 10, "interval": 2, "enable": True},
+                "exp_ms": {"stack_l": 10000, "continuous": 500},
+                "auto_3ppa_calib": True,
+                "frame_calib": True,
+                "focal_pos": 1500,
+                "heater_enable": False,
+                "auto_power_off": False,
+                "stack_lenhance": False,
+                "dark_mode": False,
+                "stack_cont_capt": True,
+                "stack": {"drizzle2x": False},
+            }
+        if method == "get_stack_setting":
+            return {
+                "save_discrete_frame": True,
+                "save_discrete_ok_frame": False,
+            }
+        raise AssertionError(f"Unexpected method call: {method}")
+
+    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
+
+    settings = front_app.get_device_settings(1)
+
+    assert settings["save_discrete_frame"] is True
+    assert settings["save_discrete_ok_frame"] is False
+
+
+def test_method_sync_handles_wrapped_single_device_value(monkeypatch):
+    def fake_do_action_device(action, dev_num, parameters, is_schedule=False):
+        assert action == "method_sync"
+        return {
+            "ServerTransactionID": 1,
+            "ClientTransactionID": 999,
+            "Value": {
+                "1": {
+                    "jsonrpc": "2.0",
+                    "method": "get_stack_setting",
+                    "result": {
+                        "save_discrete_frame": True,
+                        "save_discrete_ok_frame": True,
+                        "light_duration_min": -1,
+                    },
+                    "code": 0,
+                    "id": 27207,
+                }
+            },
+            "ErrorNumber": 0,
+            "ErrorMessage": "",
+        }
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    result = front_app.method_sync("get_stack_setting", telescope_id=1)
+
+    assert result["save_discrete_frame"] is True
+    assert result["save_discrete_ok_frame"] is True
+    assert result["light_duration_min"] == -1
+
+
+def test_settings_post_saves_discrete_flags_under_stack_payload(monkeypatch):
+    class DummyReq:
+        def __init__(self):
+            self.media = {
+                "stack_lenhance": "false",
+                "stack_dither_pix": "10",
+                "stack_dither_interval": "2",
+                "stack_dither_enable": "true",
+                "exp_ms_stack_l": "10000",
+                "exp_ms_continuous": "500",
+                "focal_pos": "1500",
+                "auto_power_off": "false",
+                "auto_3ppa_calib": "true",
+                "frame_calib": "true",
+                "plan_target_af": "false",
+                "viewplan_gohome": "false",
+                "expert_mode": "false",
+                "save_discrete_frame": "true",
+                "save_discrete_ok_frame": "false",
+                "light_duration_min": "10",
+                "stack_capt_type": "stack",
+                "stack_capt_num": "2",
+                "stack_brightness": "1.1",
+                "stack_contrast": "2.2",
+                "stack_saturation": "3.3",
+                "stack_dbe_enable": "true",
+                "heater_enable": "false",
+                "dark_mode": "false",
+                "stack_cont_capt": "false",
+                "stack_drizzle2x": "false",
+            }
+
+    captured = {"stack_payload": None}
+
+    def fake_do_action_device(action, dev_num, parameters, is_schedule=False):
+        method = parameters.get("method")
+        params = parameters.get("params", {})
+        if (
+            action == "method_sync"
+            and method == "set_setting"
+            and isinstance(params, dict)
+            and "stack" in params
+        ):
+            captured["stack_payload"] = params["stack"]
+        return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2670)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+    monkeypatch.setattr(
+        front_app.SettingsResource,
+        "render_settings",
+        staticmethod(lambda _req, _resp, _tid, _output: None),
+    )
+
+    front_app.SettingsResource().on_post(DummyReq(), object(), 1)
+
+    assert captured["stack_payload"] is not None
+    assert captured["stack_payload"]["save_discrete_frame"] is True
+    assert captured["stack_payload"]["save_discrete_ok_frame"] is False
+
+
+def test_settings_post_falls_back_to_set_stack_setting_for_discrete_flags(monkeypatch):
+    class DummyReq:
+        def __init__(self):
+            self.media = {
+                "stack_lenhance": "false",
+                "stack_dither_pix": "10",
+                "stack_dither_interval": "2",
+                "stack_dither_enable": "true",
+                "exp_ms_stack_l": "10000",
+                "exp_ms_continuous": "500",
+                "focal_pos": "1500",
+                "auto_power_off": "false",
+                "auto_3ppa_calib": "true",
+                "frame_calib": "true",
+                "plan_target_af": "false",
+                "viewplan_gohome": "false",
+                "expert_mode": "false",
+                "save_discrete_frame": "true",
+                "save_discrete_ok_frame": "false",
+                "light_duration_min": "15",
+                "stack_capt_type": "stack",
+                "stack_capt_num": "2",
+                "stack_brightness": "0",
+                "stack_contrast": "0",
+                "stack_saturation": "0",
+                "stack_dbe_enable": "false",
+                "heater_enable": "false",
+                "dark_mode": "false",
+                "stack_cont_capt": "false",
+                "stack_drizzle2x": "false",
+            }
+
+    captured = {"output": None, "stack_fallback_called": False}
+
+    def fake_do_action_device(action, dev_num, parameters, is_schedule=False):
+        if action == "method_async":
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+        method = parameters.get("method")
+        params = parameters.get("params", {})
+        if method == "set_setting" and params == {"stack": {"cont_capt": False}}:
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+        if method == "set_setting" and isinstance(params, dict) and "stack" in params:
+            # Simulate firmware that rejects stack payload via set_setting.
+            return {"ErrorNumber": 0, "Value": {"code": -1, "error": "unsupported"}}
+        if method == "set_stack_setting":
+            captured["stack_fallback_called"] = True
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+        return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2670)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+    monkeypatch.setattr(
+        front_app.SettingsResource,
+        "render_settings",
+        staticmethod(
+            lambda _req, _resp, _tid, output: captured.__setitem__("output", output)
+        ),
+    )
+
+    front_app.SettingsResource().on_post(DummyReq(), object(), 1)
+
+    assert captured["stack_fallback_called"] is True
+    assert captured["output"] == "Successfully Updated Settings."
+
+
+def test_settings_post_older_firmware_uses_stack_setting_methods(monkeypatch):
+    class DummyReq:
+        def __init__(self):
+            self.media = {
+                "stack_lenhance": "false",
+                "stack_dither_pix": "10",
+                "stack_dither_interval": "2",
+                "stack_dither_enable": "true",
+                "exp_ms_stack_l": "10000",
+                "exp_ms_continuous": "500",
+                "focal_pos": "1500",
+                "auto_power_off": "false",
+                "auto_3ppa_calib": "true",
+                "frame_calib": "true",
+                "save_discrete_frame": "true",
+                "save_discrete_ok_frame": "false",
+                "light_duration_min": "20",
+                "stack_capt_type": "stack",
+                "stack_capt_num": "3",
+                "stack_brightness": "0",
+                "stack_contrast": "0",
+                "stack_saturation": "0",
+                "stack_dbe_enable": "false",
+                "heater_enable": "false",
+                "dark_mode": "false",
+                "stack_cont_capt": "false",
+                "stack_drizzle2x": "false",
+            }
+
+    captured = {"stack_method_calls": []}
+
+    def fake_do_action_device(action, dev_num, parameters, is_schedule=False):
+        method = parameters.get("method")
+        params = parameters.get("params", {})
+        if action == "method_async":
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+        if method in {"set_stack_setting", "set_stack_settings"}:
+            captured["stack_method_calls"].append((method, params))
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+        return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2500)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+    monkeypatch.setattr(
+        front_app.SettingsResource,
+        "render_settings",
+        staticmethod(lambda _req, _resp, _tid, _output: None),
+    )
+
+    front_app.SettingsResource().on_post(DummyReq(), object(), 1)
+
+    assert captured["stack_method_calls"]
+    method_name, payload = captured["stack_method_calls"][0]
+    assert method_name in {"set_stack_setting", "set_stack_settings"}
+    assert payload["save_discrete_frame"] is True
+    assert payload["save_discrete_ok_frame"] is False
+
+
+def test_settings_post_missing_light_duration_min_does_not_raise(monkeypatch):
+    class DummyReq:
+        def __init__(self):
+            self.media = {
+                "stack_lenhance": "false",
+                "stack_dither_pix": "10",
+                "stack_dither_interval": "2",
+                "stack_dither_enable": "true",
+                "exp_ms_stack_l": "10000",
+                "exp_ms_continuous": "500",
+                "focal_pos": "1500",
+                "auto_power_off": "false",
+                "auto_3ppa_calib": "true",
+                "frame_calib": "true",
+                "save_discrete_frame": "true",
+                "save_discrete_ok_frame": "false",
+                "heater_enable": "false",
+                "dark_mode": "false",
+                "stack_cont_capt": "false",
+                "stack_drizzle2x": "false",
+            }
+
+    captured = {"stack_payload": None}
+
+    def fake_do_action_device(action, dev_num, parameters, is_schedule=False):
+        method = parameters.get("method")
+        params = parameters.get("params", {})
+        if method in {"set_stack_setting", "set_stack_settings"}:
+            captured["stack_payload"] = params
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+        return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2500)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+    monkeypatch.setattr(
+        front_app.SettingsResource,
+        "render_settings",
+        staticmethod(lambda _req, _resp, _tid, _output: None),
+    )
+
+    front_app.SettingsResource().on_post(DummyReq(), object(), 1)
+
+    assert captured["stack_payload"] is not None
+    assert captured["stack_payload"]["light_duration_min"] == -1

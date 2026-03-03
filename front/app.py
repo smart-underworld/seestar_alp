@@ -653,6 +653,17 @@ def method_sync(method, telescope_id=1, **kwargs):
     # print(f"method_sync {out=}")
 
     def err_extractor(obj):
+        # Some firmware/proxy combinations wrap the RPC payload under
+        # a device-number key, even for single-device requests.
+        if (
+            isinstance(obj, dict)
+            and "result" not in obj
+            and "error" not in obj
+            and len(obj) == 1
+        ):
+            inner = next(iter(obj.values()))
+            if isinstance(inner, dict):
+                obj = inner
         if obj and obj.get("error"):
             logger.warn(f"method_sync: {method} - {obj['error']}")
             result = {"command": method, "status": "error", "result": obj["error"]}
@@ -901,27 +912,30 @@ def get_device_settings(telescope_id):
     if get_client_master(telescope_id):
         fw = get_firmware_ver_int(telescope_id)
         model = get_device_model(telescope_id)
-        settings_result = method_sync("get_setting", telescope_id)
-        stack_settings_result = {}
-        stack_settings_error = False
+        settings_result = method_sync("get_setting", telescope_id) or {}
+        stack_settings_result = method_sync("get_stack_setting", telescope_id) or {}
+        stack_settings_error = (
+            not isinstance(stack_settings_result, dict)
+            or "error" in stack_settings_result
+        )
 
-        if fw > 2597:
-            stack_settings_result = pydash.get(settings_result, "stack", {})
-        else:
-            stack_settings_result = method_sync("get_stack_setting", telescope_id)
-            stack_settings_error = (
-                stack_settings_result is None or "error" in stack_settings_result
-            )
+        # Different firmware families expose stack settings in different places.
+        # Merge them and prefer get_stack_setting when it returns data.
+        merged_stack_settings = {}
+        stack_from_get_setting = pydash.get(settings_result, "stack", {})
+        if isinstance(stack_from_get_setting, dict):
+            merged_stack_settings.update(stack_from_get_setting)
+        if not stack_settings_error and isinstance(stack_settings_result, dict):
+            merged_stack_settings.update(stack_settings_result)
 
-        # Some firmware builds don't support get_stack_setting; fall back to get_setting.
         fallback_light_duration_min = pydash.get(
             settings_result, "stack.light_duration_min"
         )
         fallback_save_discrete_ok_frame = pydash.get(
-            settings_result, "stack.save_discrete_ok_frame", False
+            settings_result, "stack.save_discrete_ok_frame"
         )
         fallback_save_discrete_frame = pydash.get(
-            settings_result, "stack.save_discrete_frame", False
+            settings_result, "stack.save_discrete_frame"
         )
 
         stack_cont_capt = pydash.get(settings_result, "stack.cont_capt")
@@ -962,31 +976,31 @@ def get_device_settings(telescope_id):
 
             settings |= {
                 "save_discrete_ok_frame": pydash.get(
-                    stack_settings_result,
+                    merged_stack_settings,
                     "save_discrete_ok_frame",
                     fallback_save_discrete_ok_frame,
                 ),
                 "save_discrete_frame": pydash.get(
-                    stack_settings_result,
+                    merged_stack_settings,
                     "save_discrete_frame",
                     fallback_save_discrete_frame,
                 ),
                 "light_duration_min": (
                     fallback_light_duration_min
                     if stack_settings_error
-                    else pydash.get(stack_settings_result, "light_duration_min")
+                    else pydash.get(merged_stack_settings, "light_duration_min")
                 ),
-                "stack_capt_type": pydash.get(stack_settings_result, "capt_type"),
-                "stack_capt_num": pydash.get(stack_settings_result, "capt_num"),
+                "stack_capt_type": pydash.get(merged_stack_settings, "capt_type"),
+                "stack_capt_num": pydash.get(merged_stack_settings, "capt_num"),
                 "stack_brightness": pydash.get(
-                    stack_settings_result, "brightness", 0.0
+                    merged_stack_settings, "brightness", 0.0
                 ),
-                "stack_contrast": pydash.get(stack_settings_result, "contrast", 0.0),
+                "stack_contrast": pydash.get(merged_stack_settings, "contrast", 0.0),
                 "stack_saturation": pydash.get(
-                    stack_settings_result, "saturation", 0.0
+                    merged_stack_settings, "saturation", 0.0
                 ),
                 "stack_dbe_enable": pydash.get(
-                    stack_settings_result, "dbe_enable", False
+                    merged_stack_settings, "dbe_enable", False
                 ),
                 "plan_target_af": (
                     plan_target_af if plan_target_af is not None else False
@@ -1008,6 +1022,28 @@ def get_device_settings(telescope_id):
                         settings_result, "stack.star_trails", False
                     ),
                 }
+
+        # If either endpoint reports these stack-save fields, expose them.
+        for key, value in (
+            (
+                "save_discrete_ok_frame",
+                pydash.get(
+                    merged_stack_settings,
+                    "save_discrete_ok_frame",
+                    fallback_save_discrete_ok_frame,
+                ),
+            ),
+            (
+                "save_discrete_frame",
+                pydash.get(
+                    merged_stack_settings,
+                    "save_discrete_frame",
+                    fallback_save_discrete_frame,
+                ),
+            ),
+        ):
+            if value is not None:
+                settings[key] = value
     return settings
 
 
@@ -3568,6 +3604,10 @@ class SettingsResource(BaseResource):
             if action_output.get("ErrorNumber", -1) != 0:
                 return False
             value = action_output.get("Value")
+            if isinstance(value, dict) and "code" not in value and len(value) == 1:
+                inner = next(iter(value.values()))
+                if isinstance(inner, dict):
+                    value = inner
             if isinstance(value, dict):
                 if value.get("error"):
                     return False
@@ -3583,6 +3623,19 @@ class SettingsResource(BaseResource):
                     "method_sync",
                     telescope_id,
                     {"method": "set_setting", "params": params},
+                )
+                last_output = out or last_output
+                if _did_set_setting_succeed(out):
+                    return out, True
+            return last_output, False
+
+        def _try_method_sync_variants(method_variants):
+            last_output = {"ErrorNumber": 1, "ErrorMessage": "No variants attempted"}
+            for method_name, params in method_variants:
+                out = do_action_device(
+                    "method_sync",
+                    telescope_id,
+                    {"method": method_name, "params": params},
                 )
                 last_output = out or last_output
                 if _did_set_setting_succeed(out):
@@ -3618,14 +3671,30 @@ class SettingsResource(BaseResource):
                 }
 
         FormattedNewStackSettings = {}
-        if fw > 2597:
+        has_stack_settings_input = any(
+            key in PostedSettings
+            for key in (
+                "save_discrete_frame",
+                "save_discrete_ok_frame",
+                "light_duration_min",
+                "stack_capt_type",
+                "stack_capt_num",
+                "stack_brightness",
+                "stack_contrast",
+                "stack_saturation",
+                "stack_dbe_enable",
+            )
+        )
+        if has_stack_settings_input:
             FormattedNewStackSettings = {
-                "save_discrete_frame": str2bool(PostedSettings["save_discrete_frame"]),
+                "save_discrete_frame": str2bool(
+                    PostedSettings.get("save_discrete_frame", False)
+                ),
                 "save_discrete_ok_frame": str2bool(
-                    PostedSettings["save_discrete_ok_frame"]
+                    PostedSettings.get("save_discrete_ok_frame", False)
                 ),
                 "light_duration_min": _safe_int(
-                    PostedSettings["light_duration_min"], -1
+                    PostedSettings.get("light_duration_min"), -1
                 ),
                 "capt_type": PostedSettings.get("stack_capt_type", "stack"),
                 "capt_num": _safe_int(PostedSettings.get("stack_capt_num"), 0),
@@ -3726,25 +3795,45 @@ class SettingsResource(BaseResource):
                 telescope_id,
                 {"method": "set_setting", "params": StarTrailsSettings},
             )
-        if fw > 2597:
-            stack_settings_output = do_action_device(
-                "method_sync",
-                telescope_id,
-                {
-                    "method": "set_setting",
-                    "params": {"stack": FormattedNewStackSettings},
-                },
-            )
-        else:
-            stack_settings_output = do_action_device(
-                "method_sync",
-                telescope_id,
-                {"method": "set_stack_setting", "params": FormattedNewStackSettings},
+        stack_settings_output = {"ErrorNumber": 0}
+        stack_settings_success = True
+        if FormattedNewStackSettings:
+            # Some firmware accepts stack fields via set_setting(stack=...),
+            # while others still require set_stack_setting.
+            stack_save_compat_settings = {
+                k: FormattedNewStackSettings[k]
+                for k in (
+                    "save_discrete_frame",
+                    "save_discrete_ok_frame",
+                    "light_duration_min",
+                )
+                if k in FormattedNewStackSettings
+            }
+            if fw > 2597:
+                method_variants = [
+                    ("set_setting", {"stack": FormattedNewStackSettings})
+                ]
+                if stack_save_compat_settings:
+                    method_variants.append(
+                        ("set_stack_setting", stack_save_compat_settings)
+                    )
+                    method_variants.append(
+                        ("set_stack_settings", stack_save_compat_settings)
+                    )
+            else:
+                method_variants = [
+                    ("set_stack_setting", FormattedNewStackSettings),
+                    ("set_stack_settings", FormattedNewStackSettings),
+                    ("set_setting", {"stack": FormattedNewStackSettings}),
+                ]
+            stack_settings_output, stack_settings_success = _try_method_sync_variants(
+                method_variants
             )
 
         if (
             settings_output["ErrorNumber"]
             or stack_settings_output["ErrorNumber"]
+            or not stack_settings_success
             or live_mode_output["ErrorNumber"]
             or dark_mode_output["ErrorNumber"]
             or drizzle_mode_output["ErrorNumber"]
@@ -3800,8 +3889,8 @@ class SettingsResource(BaseResource):
             "dark_mode": 0,
             "stack_cont_capt": 0,
             "stack_drizzle2x": 0,
-            "save_discrete_ok_frame": 2598,
-            "save_discrete_frame": 2598,
+            "save_discrete_ok_frame": 0,
+            "save_discrete_frame": 0,
             "light_duration_min": 2598,
             "stack_capt_type": 2598,
             "stack_capt_num": 2598,
