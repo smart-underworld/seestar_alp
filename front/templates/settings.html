@@ -16,6 +16,72 @@
 {% endblock %}
 
 {% block content %}
+    {%- macro group_for_key(key) -%}
+        {%- set key_l = key|lower -%}
+        {%- if "gain" in key_l or "exp" in key_l or "stack" in key_l or "frame" in key_l or "light" in key_l -%}
+            Imaging
+        {%- elif "temp" in key_l or "heater" in key_l or "dew" in key_l -%}
+            Environment
+        {%- elif "dither" in key_l or "focus" in key_l or "track" in key_l or "mount" in key_l -%}
+            Mount and Focus
+        {%- else -%}
+            General
+        {%- endif -%}
+    {%- endmacro -%}
+
+    {%- macro render_setting_row(key, value) -%}
+        <tr class="setting-row">
+            <th class="col">
+                {{ settings_friendly_names[key] }}
+                <div class="form-text">{{ settings_helper_text[key] }}</div>
+                {% if key == "light_duration_min" and value == -1 %}
+                    <div class="form-text">
+                        Your firmware may not support stack settings; using the device default (-1).
+                    </div>
+                {% endif %}
+            </th>
+            {% if value is true or value is false %}
+                <td>
+                    {% if value is true %}
+                        <input class="form-check-input me-1" type="radio" id="{{ key }}_enable" name="{{ key }}" value="{{ value }}" checked>
+                        <label class="me-3" for="{{ key }}_enable">Enable</label>
+                        <input class="form-check-input me-1" type="radio" id="{{ key }}_disable" name="{{ key }}" value="false">
+                        <label for="{{ key }}_disable">Disable</label>
+                    {% else %}
+                        <input class="form-check-input me-1" type="radio" id="{{ key }}_enable" name="{{ key }}" value="true">
+                        <label class="me-3" for="{{ key }}_enable">Enable</label>
+                        <input class="form-check-input me-1" type="radio" id="{{ key }}_disable" name="{{ key }}" value="{{ value }}" checked>
+                        <label for="{{ key }}_disable">Disable</label>
+                    {% endif %}
+                </td>
+            {% elif key == "temp_unit" %}
+                <td>
+                    <input class="form-control" type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}" required pattern="[Cc]|[Ff]" aria-describedby="cfHelp">
+                    <div id="cfHelp" class="form-text">C/F</div>
+                </td>
+            {% elif value is number %}
+                {% if key == "exp_ms_stack_l" %}
+                    <td>
+                        <input class="form-control" type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" min="5" max="90000" required aria-describedby="numberHelp">
+                        <div id="numberHelp" class="form-text">Numbers Only (5ms-90000ms)</div>
+                    </td>
+                {% elif key == "stack_dither_pix" %}
+                    <td>
+                        <input class="form-control" type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" min="10" max="200" required aria-describedby="numberHelp">
+                        <div id="numberHelp" class="form-text">Numbers only 10 - 200 pixels)</div>
+                    </td>
+                {% else %}
+                    <td>
+                        <input class="form-control" type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" required aria-describedby="numberHelp">
+                        <div id="numberHelp" class="form-text">Numbers Only</div>
+                    </td>
+                {% endif %}
+            {% else %}
+                <td><input class="form-control" type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}" required></td>
+            {% endif %}
+        </tr>
+    {%- endmacro -%}
+
     {% if firmware_ver_int is defined %}
         {% set fw = firmware_ver_int|int %}
     {% endif %}
@@ -35,20 +101,14 @@
                 <div class="table-responsive">
                 <table class="table table-striped align-middle mb-3">
                     <tbody>
-                    {% set ns = namespace(current_group="") %}
-                    {% for key, value in settings.items() %}
-                        {% set key_l = key|lower %}
-                        {% if "gain" in key_l or "exp" in key_l or "stack" in key_l or "frame" in key_l or "light" in key_l %}
-                            {% set group = "Imaging" %}
-                        {% elif "temp" in key_l or "heater" in key_l or "dew" in key_l %}
-                            {% set group = "Environment" %}
-                        {% elif "dither" in key_l or "focus" in key_l or "track" in key_l or "mount" in key_l %}
-                            {% set group = "Mount and Focus" %}
-                        {% else %}
-                            {% set group = "General" %}
-                        {% endif %}
-                        {% if group != ns.current_group %}
-                            {% set ns.current_group = group %}
+                    {% for group in ["Imaging", "Environment", "Mount and Focus", "General"] %}
+                        {% set ns = namespace(has_rows=false) %}
+                        {% for key, value in settings.items() %}
+                            {% if group_for_key(key) == group %}
+                                {% set ns.has_rows = true %}
+                            {% endif %}
+                        {% endfor %}
+                        {% if ns.has_rows %}
                             <tr>
                                 <td colspan="2" class="pt-3 pb-2">
                                     <div class="form-group-head">
@@ -56,57 +116,12 @@
                                     </div>
                                 </td>
                             </tr>
+                            {% for key, value in settings.items() %}
+                                {% if group_for_key(key) == group %}
+                                    {{ render_setting_row(key, value) }}
+                                {% endif %}
+                            {% endfor %}
                         {% endif %}
-                        <tr class="setting-row">
-                            <th class="col">
-                                {{ settings_friendly_names[key] }}
-                                <div class="form-text">{{ settings_helper_text[key] }}</div>
-                                {% if key == "light_duration_min" and value == -1 %}
-                                    <div class="form-text">
-                                        Your firmware may not support stack settings; using the device default (-1).
-                                    </div>
-                                {% endif %}
-                            </th>
-                            {% if value is true or value is false %}
-                                <td>
-                                    {% if value is true %}
-                                        <input class="form-check-input me-1" type="radio" id="{{ key }}_enable" name="{{ key }}" value="{{ value }}" checked>
-                                        <label class="me-3" for="{{ key }}_enable">Enable</label>
-                                        <input class="form-check-input me-1" type="radio" id="{{ key }}_disable" name="{{ key }}" value="false">
-                                        <label for="{{ key }}_disable">Disable</label>
-                                    {% else %}
-                                        <input class="form-check-input me-1" type="radio" id="{{ key }}_enable" name="{{ key }}" value="true">
-                                        <label class="me-3" for="{{ key }}_enable">Enable</label>
-                                        <input class="form-check-input me-1" type="radio" id="{{ key }}_disable" name="{{ key }}" value="{{ value }}" checked>
-                                        <label for="{{ key }}_disable">Disable</label>
-                                    {% endif %}
-                                </td>
-                            {% elif key == "temp_unit" %}
-                                <td>
-                                    <input class="form-control" type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}" required pattern="[Cc]|[Ff]" aria-describedby="cfHelp">
-                                    <div id="cfHelp" class="form-text">C/F</div>
-                                </td>
-                            {% elif value is number %}
-                                {% if key == "exp_ms_stack_l" %}
-                                    <td>
-                                        <input class="form-control" type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" min="5" max="90000" required aria-describedby="numberHelp">
-                                        <div id="numberHelp" class="form-text">Numbers Only (5ms-90000ms)</div>
-                                    </td>
-                                {% elif key == "stack_dither_pix" %}
-                                    <td>
-                                        <input class="form-control" type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" min="10" max="200" required aria-describedby="numberHelp">
-                                        <div id="numberHelp" class="form-text">Numbers only 10 - 200 pixels)</div>
-                                    </td>
-                                {% else %}
-                                    <td>
-                                        <input class="form-control" type="number" id="{{ key }}" name="{{ key }}" value="{{ value }}" required aria-describedby="numberHelp">
-                                        <div id="numberHelp" class="form-text">Numbers Only</div>
-                                    </td>
-                                {% endif %}
-                            {% else %}
-                                <td><input class="form-control" type="text" id="{{ key }}" name="{{ key }}" value="{{ value }}" required></td>
-                            {% endif %}
-                        </tr>
                     {% endfor %}
                     </tbody>
                 </table>
