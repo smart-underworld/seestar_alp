@@ -653,6 +653,17 @@ def method_sync(method, telescope_id=1, **kwargs):
     # print(f"method_sync {out=}")
 
     def err_extractor(obj):
+        # Some firmware/proxy combinations wrap the RPC payload under
+        # a device-number key, even for single-device requests.
+        if (
+            isinstance(obj, dict)
+            and "result" not in obj
+            and "error" not in obj
+            and len(obj) == 1
+        ):
+            inner = next(iter(obj.values()))
+            if isinstance(inner, dict):
+                obj = inner
         if obj and obj.get("error"):
             logger.warn(f"method_sync: {method} - {obj['error']}")
             result = {"command": method, "status": "error", "result": obj["error"]}
@@ -3584,6 +3595,10 @@ class SettingsResource(BaseResource):
             if action_output.get("ErrorNumber", -1) != 0:
                 return False
             value = action_output.get("Value")
+            if isinstance(value, dict) and "code" not in value and len(value) == 1:
+                inner = next(iter(value.values()))
+                if isinstance(inner, dict):
+                    value = inner
             if isinstance(value, dict):
                 if value.get("error"):
                     return False
@@ -3647,14 +3662,30 @@ class SettingsResource(BaseResource):
                 }
 
         FormattedNewStackSettings = {}
-        if "save_discrete_frame" in PostedSettings and "save_discrete_ok_frame" in PostedSettings:
+        has_stack_settings_input = any(
+            key in PostedSettings
+            for key in (
+                "save_discrete_frame",
+                "save_discrete_ok_frame",
+                "light_duration_min",
+                "stack_capt_type",
+                "stack_capt_num",
+                "stack_brightness",
+                "stack_contrast",
+                "stack_saturation",
+                "stack_dbe_enable",
+            )
+        )
+        if has_stack_settings_input:
             FormattedNewStackSettings = {
-                "save_discrete_frame": str2bool(PostedSettings["save_discrete_frame"]),
+                "save_discrete_frame": str2bool(
+                    PostedSettings.get("save_discrete_frame", False)
+                ),
                 "save_discrete_ok_frame": str2bool(
-                    PostedSettings["save_discrete_ok_frame"]
+                    PostedSettings.get("save_discrete_ok_frame", False)
                 ),
                 "light_duration_min": _safe_int(
-                    PostedSettings["light_duration_min"], -1
+                    PostedSettings.get("light_duration_min"), -1
                 ),
                 "capt_type": PostedSettings.get("stack_capt_type", "stack"),
                 "capt_num": _safe_int(PostedSettings.get("stack_capt_num"), 0),
