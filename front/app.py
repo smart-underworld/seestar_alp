@@ -681,11 +681,13 @@ def get_firmware_ver_int(telescope_id):
         return pydash.get(state, "device.firmware_ver_int", 0)
     return 0
 
+
 def get_device_model(telescope_id):
     if check_api_state(telescope_id):
         state = method_sync("get_device_state", telescope_id)
         return pydash.get(state, "device.product_model", 0)
     return 0
+
 
 def get_guestmode_state(telescope_id):
     state = {}
@@ -3492,7 +3494,11 @@ class SettingsResource(BaseResource):
             {"method": "set_setting", "params": DrizzleModeSettings},
         )
         star_trails_output = {"ErrorNumber": 0}
-        if fw <= 2597 and model == "Seestar S30 Pro" and "stack_star_trails" in PostedSettings:
+        if (
+            fw <= 2597
+            and model == "Seestar S30 Pro"
+            and "stack_star_trails" in PostedSettings
+        ):
             StarTrailsSettings = {
                 "stack": {"star_trails": str2bool(PostedSettings["stack_star_trails"])}
             }
