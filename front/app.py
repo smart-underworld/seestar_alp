@@ -3691,14 +3691,12 @@ class SettingsResource(BaseResource):
                 ]
             )
             viewplan_gohome = str2bool(PostedSettings["viewplan_gohome"])
-            viewplan_gohome_output, viewplan_gohome_success = (
-                _try_set_setting_variants(
-                    [
-                        {"viewplan_gohome": viewplan_gohome},
-                        {"viewplan_go_home": viewplan_gohome},
-                        {"viewplan": {"go_home": viewplan_gohome}},
-                    ]
-                )
+            viewplan_gohome_output, viewplan_gohome_success = _try_set_setting_variants(
+                [
+                    {"viewplan_gohome": viewplan_gohome},
+                    {"viewplan_go_home": viewplan_gohome},
+                    {"viewplan": {"go_home": viewplan_gohome}},
+                ]
             )
         star_trails_output = {"ErrorNumber": 0}
         if fw <= 2597 and "stack_star_trails" in PostedSettings:

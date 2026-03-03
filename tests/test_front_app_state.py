@@ -302,12 +302,23 @@ def test_settings_post_tries_fallback_variants_for_firmware_specific_keys(monkey
     monkeypatch.setattr(
         front_app.SettingsResource,
         "render_settings",
-        staticmethod(lambda _req, _resp, _tid, output: captured.__setitem__("output", output)),
+        staticmethod(
+            lambda _req, _resp, _tid, output: captured.__setitem__("output", output)
+        ),
     )
 
     front_app.SettingsResource().on_post(DummyReq(), object(), 1)
 
     assert captured["output"] == "Successfully Updated Settings."
-    assert ("method_sync", {"method": "set_setting", "params": {"stack_cont_capt": True}}) in captured["calls"]
-    assert ("method_sync", {"method": "set_setting", "params": {"plan": {"target_af": True}}}) in captured["calls"]
-    assert ("method_sync", {"method": "set_setting", "params": {"viewplan_go_home": True}}) in captured["calls"]
+    assert (
+        "method_sync",
+        {"method": "set_setting", "params": {"stack_cont_capt": True}},
+    ) in captured["calls"]
+    assert (
+        "method_sync",
+        {"method": "set_setting", "params": {"plan": {"target_af": True}}},
+    ) in captured["calls"]
+    assert (
+        "method_sync",
+        {"method": "set_setting", "params": {"viewplan_go_home": True}},
+    ) in captured["calls"]
