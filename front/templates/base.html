@@ -732,6 +732,15 @@
             transition: none;
         }
 
+        /* Keep Bootstrap modals above sticky nav/quickbar/custom layers. */
+        .modal {
+            z-index: 1060;
+        }
+
+        .modal-backdrop {
+            z-index: 1055;
+        }
+
         img#liveViewImg {
             border-radius: 0.9rem;
             border: 1px solid var(--ui-border-soft);
