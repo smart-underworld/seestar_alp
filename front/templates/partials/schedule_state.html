@@ -77,6 +77,22 @@
 </div>
 
 <script>
+    function getActionModalEl() {
+        const modalEl = document.getElementById("actionModal");
+        if (!modalEl) {
+            return null;
+        }
+        if (modalEl.parentElement !== document.body) {
+            document.body.appendChild(modalEl);
+        }
+        return modalEl;
+    }
+
+    const initialActionModalEl = getActionModalEl();
+    if (initialActionModalEl) {
+        bootstrap.Modal.getOrCreateInstance(initialActionModalEl);
+    }
+
     function handleAction() {
         let selectedValue = document.getElementById("actionSelector").value;
         let formContainer = document.getElementById("formContainer");
@@ -146,7 +162,11 @@
             // Update the modal title and form content for other options
             modalTitle.innerText = titles[selectedValue]; // Update modal title
             formContainer.innerHTML = forms[selectedValue]; // Load the corresponding form
-            let modal = new bootstrap.Modal(document.getElementById("actionModal"));
+            const modalEl = getActionModalEl();
+            if (!modalEl) {
+                return;
+            }
+            let modal = bootstrap.Modal.getOrCreateInstance(modalEl);
             modal.show();
         }
     }

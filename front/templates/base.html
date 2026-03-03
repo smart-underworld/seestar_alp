@@ -1092,6 +1092,16 @@
 <script src="/public/main.js"></script>
 <script>
   document.addEventListener("DOMContentLoaded", function () {
+    const hoistModalsToBody = function (root) {
+      const source = root || document;
+      if (!source.querySelectorAll) return;
+      source.querySelectorAll(".modal").forEach(function (modalEl) {
+        if (modalEl.parentElement !== document.body) {
+          document.body.appendChild(modalEl);
+        }
+      });
+    };
+
     const markLoading = function (target) {
       if (!target) return;
       if (target.classList.contains("no-htmx-fx")) return;
@@ -1107,10 +1117,13 @@
     });
     document.body.addEventListener("htmx:afterSwap", function (evt) {
       clearLoading(evt.detail.target);
+      hoistModalsToBody(evt.detail.target);
     });
     document.body.addEventListener("htmx:responseError", function (evt) {
       clearLoading(evt.detail.target);
     });
+
+    hoistModalsToBody(document);
   });
 </script>
 
