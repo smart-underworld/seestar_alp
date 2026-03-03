@@ -201,3 +201,124 @@ def test_get_csc_sites_data_uses_in_memory_cache(monkeypatch, tmp_path):
 
     assert first == second
     assert calls["count"] == 1
+
+
+def test_get_device_settings_uses_fallback_keys_for_newer_firmware(monkeypatch):
+    monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2670)
+
+    def fake_method_sync(method, telescope_id=1, **kwargs):
+        if method == "get_setting":
+            return {
+                "stack_dither": {"pix": 10, "interval": 2, "enable": True},
+                "exp_ms": {"stack_l": 10000, "continuous": 500},
+                "auto_3ppa_calib": True,
+                "frame_calib": True,
+                "focal_pos": 1500,
+                "heater_enable": False,
+                "auto_power_off": False,
+                "stack_lenhance": False,
+                "dark_mode": False,
+                "stack_cont_capt": True,
+                "stack": {"drizzle2x": False},
+                "plan": {"target_af": True},
+                "viewplan_go_home": True,
+                "expert_mode": False,
+            }
+        raise AssertionError(f"Unexpected method call: {method}")
+
+    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
+
+    settings = front_app.get_device_settings(1)
+
+    assert settings["stack_cont_capt"] is True
+    assert settings["plan_target_af"] is True
+    assert settings["viewplan_gohome"] is True
+
+
+def test_settings_post_tries_fallback_variants_for_firmware_specific_keys(monkeypatch):
+    class DummyReq:
+        def __init__(self):
+            self.media = {
+                "stack_lenhance": "false",
+                "stack_dither_pix": "10",
+                "stack_dither_interval": "2",
+                "stack_dither_enable": "true",
+                "exp_ms_stack_l": "10000",
+                "exp_ms_continuous": "500",
+                "focal_pos": "1500",
+                "auto_power_off": "false",
+                "auto_3ppa_calib": "true",
+                "frame_calib": "true",
+                "plan_target_af": "true",
+                "viewplan_gohome": "true",
+                "expert_mode": "false",
+                "save_discrete_frame": "false",
+                "save_discrete_ok_frame": "true",
+                "light_duration_min": "10",
+                "stack_capt_type": "stack",
+                "stack_capt_num": "1",
+                "stack_brightness": "0",
+                "stack_contrast": "0",
+                "stack_saturation": "0",
+                "stack_dbe_enable": "false",
+                "heater_enable": "false",
+                "dark_mode": "false",
+                "stack_cont_capt": "true",
+                "stack_drizzle2x": "false",
+            }
+
+    captured = {"output": None, "calls": []}
+
+    def fake_do_action_device(action, dev_num, parameters, is_schedule=False):
+        captured["calls"].append((action, parameters))
+        if action == "method_async":
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+        method = parameters.get("method")
+        params = parameters.get("params", {})
+        if method != "set_setting":
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+        if params == {"stack": {"cont_capt": True}}:
+            return {"ErrorNumber": 0, "Value": {"code": -1, "error": "unsupported"}}
+        if params == {"stack_cont_capt": True}:
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+        if params == {"plan_target_af": True}:
+            return {"ErrorNumber": 0, "Value": {"code": -1, "error": "unsupported"}}
+        if params == {"plan": {"target_af": True}}:
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+        if params == {"viewplan_gohome": True}:
+            return {"ErrorNumber": 0, "Value": {"code": -1, "error": "unsupported"}}
+        if params == {"viewplan_go_home": True}:
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+        return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2670)
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+    monkeypatch.setattr(
+        front_app.SettingsResource,
+        "render_settings",
+        staticmethod(
+            lambda _req, _resp, _tid, output: captured.__setitem__("output", output)
+        ),
+    )
+
+    front_app.SettingsResource().on_post(DummyReq(), object(), 1)
+
+    assert captured["output"] == "Successfully Updated Settings."
+    assert (
+        "method_sync",
+        {"method": "set_setting", "params": {"stack_cont_capt": True}},
+    ) in captured["calls"]
+    assert (
+        "method_sync",
+        {"method": "set_setting", "params": {"plan": {"target_af": True}}},
+    ) in captured["calls"]
+    assert (
+        "method_sync",
+        {"method": "set_setting", "params": {"viewplan_go_home": True}},
+    ) in captured["calls"]

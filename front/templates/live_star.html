@@ -23,6 +23,22 @@
 
     <aside class="live-sidebar">
       <div class="live-side-card">
+        <div class="live-video-heading h3 mb-0">
+          <span>Video</span>
+          <button type="button"
+                  id="liveRotateButton"
+                  class="btn btn-outline-primary btn-sm live-rotate-btn"
+                  aria-label="Rotate live view"
+                  title="Rotate live view 90 degrees"
+                  onclick="rotateLiveView()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+              <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 7.083.5.5 0 1 1 .908.418A6 6 0 1 1 8 2V.5a.5.5 0 0 1 .854-.354l2 2a.5.5 0 0 1 0 .708l-2 2A.5.5 0 0 1 8 4.5z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="live-side-card">
         {% include 'partials/live_movement_control.html' with context %}
       </div>
 

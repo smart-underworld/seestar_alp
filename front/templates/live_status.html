@@ -54,18 +54,34 @@
     {#    {% endif %}#}
     <div class="row border-bottom py-1 text-start">
         <div class="col fw-bold">RA</div>
-        <div class="col text-monospace">{{ state.ra | round(4) }}</div>
+        <div class="col text-monospace">
+            {% if state.has_equ_coord %}
+                {{ state.ra | round(4) }}
+            {% else %}
+                --
+            {% endif %}
+        </div>
     </div>
     <div class="row border-bottom py-1 text-start">
         <div class="col fw-bold">Dec</div>
-        <div class="col text-monospace">{{ state.dec | round(4) }}</div>
+        <div class="col text-monospace">
+            {% if state.has_equ_coord %}
+                {{ state.dec | round(4) }}
+            {% else %}
+                --
+            {% endif %}
+        </div>
     </div>
-    {% if state.snr %}
     <div class="row border-bottom py-1 text-start">
         <div class="col fw-bold">SNR</div>
-        <div class="col">{{ state.snr | round(2) }}</div>
+        <div class="col">
+            {% if state.snr is not none %}
+                {{ state.snr | round(2) }}
+            {% else %}
+                Calculating...
+            {% endif %}
+        </div>
     </div>
-    {% endif %}
     {% if state.stats %}
         <div class="row border-bottom py-1 text-start">
             <div class="col fw-bold">Integration Time</div>

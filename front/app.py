@@ -916,6 +916,12 @@ def get_device_settings(telescope_id):
             settings_result, "stack.save_discrete_frame", False
         )
 
+        stack_cont_capt = pydash.get(settings_result, "stack.cont_capt")
+        if stack_cont_capt is None:
+            stack_cont_capt = pydash.get(settings_result, "stack_cont_capt")
+        if stack_cont_capt is None:
+            stack_cont_capt = pydash.get(settings_result, "cont_capt")
+
         settings = {
             "stack_dither_pix": pydash.get(settings_result, "stack_dither.pix"),
             "stack_dither_interval": pydash.get(
@@ -931,11 +937,21 @@ def get_device_settings(telescope_id):
             "auto_power_off": pydash.get(settings_result, "auto_power_off"),
             "stack_lenhance": pydash.get(settings_result, "stack_lenhance"),
             "dark_mode": pydash.get(settings_result, "dark_mode"),
-            "stack_cont_capt": pydash.get(settings_result, "stack.cont_capt"),
+            "stack_cont_capt": stack_cont_capt,
             "stack_drizzle2x": pydash.get(settings_result, "stack.drizzle2x"),
         }
 
         if fw > 2597:
+            plan_target_af = pydash.get(settings_result, "plan_target_af")
+            if plan_target_af is None:
+                plan_target_af = pydash.get(settings_result, "plan.target_af")
+
+            viewplan_gohome = pydash.get(settings_result, "viewplan_gohome")
+            if viewplan_gohome is None:
+                viewplan_gohome = pydash.get(settings_result, "viewplan_go_home")
+            if viewplan_gohome is None:
+                viewplan_gohome = pydash.get(settings_result, "viewplan.go_home")
+
             settings |= {
                 "save_discrete_ok_frame": pydash.get(
                     stack_settings_result,
@@ -964,9 +980,11 @@ def get_device_settings(telescope_id):
                 "stack_dbe_enable": pydash.get(
                     stack_settings_result, "dbe_enable", False
                 ),
-                "plan_target_af": pydash.get(settings_result, "plan_target_af", False),
-                "viewplan_gohome": pydash.get(
-                    settings_result, "viewplan_gohome", False
+                "plan_target_af": (
+                    plan_target_af if plan_target_af is not None else False
+                ),
+                "viewplan_gohome": (
+                    viewplan_gohome if viewplan_gohome is not None else False
                 ),
                 "expert_mode": pydash.get(settings_result, "expert_mode", False),
             }
@@ -1922,6 +1940,15 @@ def get_live_status(telescope_id: int):
                 "elapsed": human_ts(stack["lapse_ms"]),
             }
 
+        snr_value = imager.snr
+        if (
+            snr_value is None
+            or not isinstance(snr_value, (int, float))
+            or not math.isfinite(snr_value)
+            or snr_value < 0
+        ):
+            snr_value = None
+
         response = {
             "target_name": pydash.get(dev.view_state, "target_name"),
             "state": state,
@@ -1933,10 +1960,11 @@ def get_live_status(telescope_id: int):
             "substage_percent": substage_percent,
             "stats": stats,
             "mode": mode,
-            "snr": imager.snr,
+            "snr": snr_value,
             "lapse_ms": human_ts(pydash.get(dev.view_state, "lapse_ms")),
             "ra": dev.ra,
             "dec": dev.dec,
+            "has_equ_coord": bool(getattr(dev, "has_equ_coord", False)),
         }
 
         status_update_frame = (
@@ -2056,9 +2084,6 @@ class HomeTelescopeResource:
 
 
 class HomeContentResource:
-    _last_render_by_key = {}
-    _lock = threading.Lock()
-
     @staticmethod
     def on_get(req, resp, telescope_id=0):
         telescopes = get_telescopes_state()
@@ -2075,12 +2100,6 @@ class HomeContentResource:
             "partials/home_content.html",
             telescopes=telescopes,
             **context,
-        )
-        respond_204_if_unchanged(
-            resp,
-            HomeContentResource._last_render_by_key,
-            HomeContentResource._lock,
-            ("home-content", context_id),
         )
 
 
@@ -3529,6 +3548,33 @@ class SettingsResource(BaseResource):
             except (TypeError, ValueError):
                 return default
 
+        def _did_set_setting_succeed(action_output):
+            if not action_output:
+                return False
+            if action_output.get("ErrorNumber", -1) != 0:
+                return False
+            value = action_output.get("Value")
+            if isinstance(value, dict):
+                if value.get("error"):
+                    return False
+                code = value.get("code")
+                if code is not None and code != 0:
+                    return False
+            return True
+
+        def _try_set_setting_variants(setting_variants):
+            last_output = {"ErrorNumber": 1, "ErrorMessage": "No variants attempted"}
+            for params in setting_variants:
+                out = do_action_device(
+                    "method_sync",
+                    telescope_id,
+                    {"method": "set_setting", "params": params},
+                )
+                last_output = out or last_output
+                if _did_set_setting_succeed(out):
+                    return out, True
+            return last_output, False
+
         # Convert the form names back into the required format
         FormattedNewSettings = {
             "stack_lenhance": str2bool(PostedSettings["stack_lenhance"]),
@@ -3549,8 +3595,6 @@ class SettingsResource(BaseResource):
 
         if fw >= 2670:
             FormattedNewSettings |= {
-                "plan_target_af": str2bool(PostedSettings["plan_target_af"]),
-                "viewplan_gohome": str2bool(PostedSettings["viewplan_gohome"]),
                 "expert_mode": str2bool(PostedSettings["expert_mode"]),
             }
         else:
@@ -3619,11 +3663,12 @@ class SettingsResource(BaseResource):
         )
         # Live Stack Mode is another one like dark_mode.
         cont_capt = str2bool(PostedSettings["stack_cont_capt"])
-        LiveModeSettings = {"stack": {"cont_capt": cont_capt}}
-        live_mode_output = do_action_device(
-            "method_sync",
-            telescope_id,
-            {"method": "set_setting", "params": LiveModeSettings},
+        live_mode_output, live_mode_success = _try_set_setting_variants(
+            [
+                {"stack": {"cont_capt": cont_capt}},
+                {"stack_cont_capt": cont_capt},
+                {"cont_capt": cont_capt},
+            ]
         )
         # 4k Mode is another one like cont_capt
         drizzle2x = str2bool(PostedSettings["stack_drizzle2x"])
@@ -3633,6 +3678,26 @@ class SettingsResource(BaseResource):
             telescope_id,
             {"method": "set_setting", "params": DrizzleModeSettings},
         )
+        plan_target_af_output = {"ErrorNumber": 0}
+        plan_target_af_success = True
+        viewplan_gohome_output = {"ErrorNumber": 0}
+        viewplan_gohome_success = True
+        if fw >= 2670:
+            plan_target_af = str2bool(PostedSettings["plan_target_af"])
+            plan_target_af_output, plan_target_af_success = _try_set_setting_variants(
+                [
+                    {"plan_target_af": plan_target_af},
+                    {"plan": {"target_af": plan_target_af}},
+                ]
+            )
+            viewplan_gohome = str2bool(PostedSettings["viewplan_gohome"])
+            viewplan_gohome_output, viewplan_gohome_success = _try_set_setting_variants(
+                [
+                    {"viewplan_gohome": viewplan_gohome},
+                    {"viewplan_go_home": viewplan_gohome},
+                    {"viewplan": {"go_home": viewplan_gohome}},
+                ]
+            )
         star_trails_output = {"ErrorNumber": 0}
         if fw <= 2597 and "stack_star_trails" in PostedSettings:
             StarTrailsSettings = {
@@ -3666,6 +3731,9 @@ class SettingsResource(BaseResource):
             or dark_mode_output["ErrorNumber"]
             or drizzle_mode_output["ErrorNumber"]
             or star_trails_output["ErrorNumber"]
+            or not live_mode_success
+            or not plan_target_af_success
+            or not viewplan_gohome_success
         ):
             output = "Error Updating Settings."
         else:

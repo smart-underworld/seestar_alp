@@ -101,6 +101,7 @@ class Seestar:
         self.site_elevation: float = 0
         self.ra: float = 0.0
         self.dec: float = 0.0
+        self.has_equ_coord: bool = False
         self.is_watch_events: bool = (
             False  # Tracks if device has been started even if it never connected
         )
@@ -319,6 +320,7 @@ class Seestar:
             data_result = parsed_data["result"]
             self.ra = float(data_result["ra"])
             self.dec = float(data_result["dec"])
+            self.has_equ_coord = True
 
     def update_view_state(self, parsed_data):
         if parsed_data["method"] == "get_view_state" and "result" in parsed_data:

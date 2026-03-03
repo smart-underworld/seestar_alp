@@ -365,11 +365,13 @@ def test_get_socket_msg_paths(monkeypatch, seestar):
 
 
 def test_update_equ_coord_and_view_state(seestar):
+    assert seestar.has_equ_coord is False
     seestar.update_equ_coord(
         {"method": "scope_get_equ_coord", "result": {"ra": "1.25", "dec": "2.5"}}
     )
     assert seestar.ra == 1.25
     assert seestar.dec == 2.5
+    assert seestar.has_equ_coord is True
 
     seestar.update_view_state(
         {"method": "get_view_state", "result": {"View": {"a": 1}}}
