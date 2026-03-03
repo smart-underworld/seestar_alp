@@ -914,7 +914,10 @@ def get_device_settings(telescope_id):
         model = get_device_model(telescope_id)
         settings_result = method_sync("get_setting", telescope_id) or {}
         stack_settings_result = method_sync("get_stack_setting", telescope_id) or {}
-        stack_settings_error = not isinstance(stack_settings_result, dict) or "error" in stack_settings_result
+        stack_settings_error = (
+            not isinstance(stack_settings_result, dict)
+            or "error" in stack_settings_result
+        )
 
         # Different firmware families expose stack settings in different places.
         # Merge them and prefer get_stack_setting when it returns data.
@@ -925,9 +928,15 @@ def get_device_settings(telescope_id):
         if not stack_settings_error and isinstance(stack_settings_result, dict):
             merged_stack_settings.update(stack_settings_result)
 
-        fallback_light_duration_min = pydash.get(settings_result, "stack.light_duration_min")
-        fallback_save_discrete_ok_frame = pydash.get(settings_result, "stack.save_discrete_ok_frame")
-        fallback_save_discrete_frame = pydash.get(settings_result, "stack.save_discrete_frame")
+        fallback_light_duration_min = pydash.get(
+            settings_result, "stack.light_duration_min"
+        )
+        fallback_save_discrete_ok_frame = pydash.get(
+            settings_result, "stack.save_discrete_ok_frame"
+        )
+        fallback_save_discrete_frame = pydash.get(
+            settings_result, "stack.save_discrete_frame"
+        )
 
         stack_cont_capt = pydash.get(settings_result, "stack.cont_capt")
         if stack_cont_capt is None:
@@ -3801,7 +3810,9 @@ class SettingsResource(BaseResource):
                 if k in FormattedNewStackSettings
             }
             if fw > 2597:
-                method_variants = [("set_setting", {"stack": FormattedNewStackSettings})]
+                method_variants = [
+                    ("set_setting", {"stack": FormattedNewStackSettings})
+                ]
                 if stack_save_compat_settings:
                     method_variants.append(
                         ("set_stack_setting", stack_save_compat_settings)
