@@ -3647,7 +3647,7 @@ class SettingsResource(BaseResource):
                 }
 
         FormattedNewStackSettings = {}
-        if fw > 2597:
+        if "save_discrete_frame" in PostedSettings and "save_discrete_ok_frame" in PostedSettings:
             FormattedNewStackSettings = {
                 "save_discrete_frame": str2bool(PostedSettings["save_discrete_frame"]),
                 "save_discrete_ok_frame": str2bool(
@@ -3775,9 +3775,13 @@ class SettingsResource(BaseResource):
                     method_variants.append(
                         ("set_stack_setting", stack_save_compat_settings)
                     )
+                    method_variants.append(
+                        ("set_stack_settings", stack_save_compat_settings)
+                    )
             else:
                 method_variants = [
                     ("set_stack_setting", FormattedNewStackSettings),
+                    ("set_stack_settings", FormattedNewStackSettings),
                     ("set_setting", {"stack": FormattedNewStackSettings}),
                 ]
             stack_settings_output, stack_settings_success = _try_method_sync_variants(
