@@ -1102,22 +1102,44 @@
       });
     };
 
+    const isUnsafeLoadingTarget = function (target) {
+      if (!target || !target.classList) return true;
+      return target === document.body || target === document.documentElement;
+    };
+
     const markLoading = function (target) {
-      if (!target) return;
+      if (isUnsafeLoadingTarget(target)) return;
       if (target.classList.contains("no-htmx-fx")) return;
       target.classList.add("is-loading");
     };
+
     const clearLoading = function (target) {
-      if (!target) return;
+      if (!target || !target.classList) return;
       target.classList.remove("is-loading");
     };
 
     document.body.addEventListener("htmx:beforeRequest", function (evt) {
       markLoading(evt.detail.target);
     });
+    document.body.addEventListener("htmx:beforeSwap", function (evt) {
+      const target = evt.detail.target;
+      if (!target || !target.id) return;
+      if (!["home-content", "stats-content", "guestmode-content"].includes(target.id)) return;
+
+      const xhr = evt.detail.xhr;
+      if (!xhr) return;
+      const responseText = typeof xhr.responseText === "string" ? xhr.responseText.trim() : "";
+      if (xhr.status === 204 || responseText === "") {
+        evt.detail.shouldSwap = false;
+        clearLoading(target);
+      }
+    });
     document.body.addEventListener("htmx:afterSwap", function (evt) {
       clearLoading(evt.detail.target);
       hoistModalsToBody(evt.detail.target);
+    });
+    document.body.addEventListener("htmx:afterRequest", function (evt) {
+      clearLoading(evt.detail.target);
     });
     document.body.addEventListener("htmx:responseError", function (evt) {
       clearLoading(evt.detail.target);

@@ -2056,9 +2056,6 @@ class HomeTelescopeResource:
 
 
 class HomeContentResource:
-    _last_render_by_key = {}
-    _lock = threading.Lock()
-
     @staticmethod
     def on_get(req, resp, telescope_id=0):
         telescopes = get_telescopes_state()
@@ -2075,12 +2072,6 @@ class HomeContentResource:
             "partials/home_content.html",
             telescopes=telescopes,
             **context,
-        )
-        respond_204_if_unchanged(
-            resp,
-            HomeContentResource._last_render_by_key,
-            HomeContentResource._lock,
-            ("home-content", context_id),
         )
 
 
