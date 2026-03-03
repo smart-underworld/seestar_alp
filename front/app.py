@@ -712,6 +712,13 @@ def get_firmware_ver_int(telescope_id):
     return 0
 
 
+def get_device_model(telescope_id):
+    if check_api_state(telescope_id):
+        state = method_sync("get_device_state", telescope_id)
+        return pydash.get(state, "device.product_model", 0)
+    return 0
+
+
 def get_guestmode_state(telescope_id):
     state = {}
     if check_api_state(telescope_id):
@@ -893,6 +900,7 @@ def get_device_settings(telescope_id):
     settings = None
     if get_client_master(telescope_id):
         fw = get_firmware_ver_int(telescope_id)
+        model = get_device_model(telescope_id)
         settings_result = method_sync("get_setting", telescope_id)
         stack_settings_result = {}
         stack_settings_error = False
@@ -993,10 +1001,13 @@ def get_device_settings(telescope_id):
                 "af_before_stack": pydash.get(
                     settings_result, "af_before_stack", False
                 ),
-                "stack_star_trails": pydash.get(
-                    settings_result, "stack.star_trails", False
-                ),
             }
+            if model == "Seestar S30 Pro":
+                settings |= {
+                    "stack_star_trails": pydash.get(
+                        settings_result, "stack.star_trails", False
+                    ),
+                }
     return settings
 
 
@@ -1551,9 +1562,11 @@ def do_command(req, resp, telescope_id):
                 {"method": "scope_park", "params": {"equ_mode": False}},
             )
             return output
+        case "get_remote_state":
+            output = method_sync("get_device_state, telescope_id")
+            return output
         case _:
             logger.warn("No command found: %s", value)
-    # print ("Output: ", output)
 
 
 def do_support_bundle(req, telescope_id=1):
@@ -3531,6 +3544,7 @@ class SettingsResource(BaseResource):
     def on_post(self, req, resp, telescope_id=0):
         PostedSettings = req.media
         fw = get_firmware_ver_int(telescope_id)
+        model = get_device_model(telescope_id)
 
         def _safe_int(value, default):
             try:
@@ -3699,7 +3713,11 @@ class SettingsResource(BaseResource):
                 ]
             )
         star_trails_output = {"ErrorNumber": 0}
-        if fw <= 2597 and "stack_star_trails" in PostedSettings:
+        if (
+            fw <= 2597
+            and model == "Seestar S30 Pro"
+            and "stack_star_trails" in PostedSettings
+        ):
             StarTrailsSettings = {
                 "stack": {"star_trails": str2bool(PostedSettings["stack_star_trails"])}
             }
