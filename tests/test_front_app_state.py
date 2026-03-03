@@ -425,3 +425,70 @@ def test_settings_post_saves_discrete_flags_under_stack_payload(monkeypatch):
     assert captured["stack_payload"] is not None
     assert captured["stack_payload"]["save_discrete_frame"] is True
     assert captured["stack_payload"]["save_discrete_ok_frame"] is False
+
+
+def test_settings_post_falls_back_to_set_stack_setting_for_discrete_flags(monkeypatch):
+    class DummyReq:
+        def __init__(self):
+            self.media = {
+                "stack_lenhance": "false",
+                "stack_dither_pix": "10",
+                "stack_dither_interval": "2",
+                "stack_dither_enable": "true",
+                "exp_ms_stack_l": "10000",
+                "exp_ms_continuous": "500",
+                "focal_pos": "1500",
+                "auto_power_off": "false",
+                "auto_3ppa_calib": "true",
+                "frame_calib": "true",
+                "plan_target_af": "false",
+                "viewplan_gohome": "false",
+                "expert_mode": "false",
+                "save_discrete_frame": "true",
+                "save_discrete_ok_frame": "false",
+                "light_duration_min": "15",
+                "stack_capt_type": "stack",
+                "stack_capt_num": "2",
+                "stack_brightness": "0",
+                "stack_contrast": "0",
+                "stack_saturation": "0",
+                "stack_dbe_enable": "false",
+                "heater_enable": "false",
+                "dark_mode": "false",
+                "stack_cont_capt": "false",
+                "stack_drizzle2x": "false",
+            }
+
+    captured = {"output": None, "stack_fallback_called": False}
+
+    def fake_do_action_device(action, dev_num, parameters, is_schedule=False):
+        if action == "method_async":
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+        method = parameters.get("method")
+        params = parameters.get("params", {})
+        if method == "set_setting" and params == {"stack": {"cont_capt": False}}:
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+        if method == "set_setting" and isinstance(params, dict) and "stack" in params:
+            # Simulate firmware that rejects stack payload via set_setting.
+            return {"ErrorNumber": 0, "Value": {"code": -1, "error": "unsupported"}}
+        if method == "set_stack_setting":
+            captured["stack_fallback_called"] = True
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+        return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2670)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+    monkeypatch.setattr(
+        front_app.SettingsResource,
+        "render_settings",
+        staticmethod(
+            lambda _req, _resp, _tid, output: captured.__setitem__("output", output)
+        ),
+    )
+
+    front_app.SettingsResource().on_post(DummyReq(), object(), 1)
+
+    assert captured["stack_fallback_called"] is True
+    assert captured["output"] == "Successfully Updated Settings."

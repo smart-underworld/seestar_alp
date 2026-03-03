@@ -3605,6 +3605,19 @@ class SettingsResource(BaseResource):
                     return out, True
             return last_output, False
 
+        def _try_method_sync_variants(method_variants):
+            last_output = {"ErrorNumber": 1, "ErrorMessage": "No variants attempted"}
+            for method_name, params in method_variants:
+                out = do_action_device(
+                    "method_sync",
+                    telescope_id,
+                    {"method": method_name, "params": params},
+                )
+                last_output = out or last_output
+                if _did_set_setting_succeed(out):
+                    return out, True
+            return last_output, False
+
         # Convert the form names back into the required format
         FormattedNewSettings = {
             "stack_lenhance": str2bool(PostedSettings["stack_lenhance"]),
@@ -3742,25 +3755,39 @@ class SettingsResource(BaseResource):
                 telescope_id,
                 {"method": "set_setting", "params": StarTrailsSettings},
             )
-        if fw > 2597:
-            stack_settings_output = do_action_device(
-                "method_sync",
-                telescope_id,
-                {
-                    "method": "set_setting",
-                    "params": {"stack": FormattedNewStackSettings},
-                },
-            )
-        else:
-            stack_settings_output = do_action_device(
-                "method_sync",
-                telescope_id,
-                {"method": "set_stack_setting", "params": FormattedNewStackSettings},
+        stack_settings_output = {"ErrorNumber": 0}
+        stack_settings_success = True
+        if FormattedNewStackSettings:
+            # Some firmware accepts stack fields via set_setting(stack=...),
+            # while others still require set_stack_setting.
+            stack_save_compat_settings = {
+                k: FormattedNewStackSettings[k]
+                for k in (
+                    "save_discrete_frame",
+                    "save_discrete_ok_frame",
+                    "light_duration_min",
+                )
+                if k in FormattedNewStackSettings
+            }
+            if fw > 2597:
+                method_variants = [("set_setting", {"stack": FormattedNewStackSettings})]
+                if stack_save_compat_settings:
+                    method_variants.append(
+                        ("set_stack_setting", stack_save_compat_settings)
+                    )
+            else:
+                method_variants = [
+                    ("set_stack_setting", FormattedNewStackSettings),
+                    ("set_setting", {"stack": FormattedNewStackSettings}),
+                ]
+            stack_settings_output, stack_settings_success = _try_method_sync_variants(
+                method_variants
             )
 
         if (
             settings_output["ErrorNumber"]
             or stack_settings_output["ErrorNumber"]
+            or not stack_settings_success
             or live_mode_output["ErrorNumber"]
             or dark_mode_output["ErrorNumber"]
             or drizzle_mode_output["ErrorNumber"]
