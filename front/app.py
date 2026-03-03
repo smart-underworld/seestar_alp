@@ -901,28 +901,22 @@ def get_device_settings(telescope_id):
     if get_client_master(telescope_id):
         fw = get_firmware_ver_int(telescope_id)
         model = get_device_model(telescope_id)
-        settings_result = method_sync("get_setting", telescope_id)
-        stack_settings_result = {}
-        stack_settings_error = False
+        settings_result = method_sync("get_setting", telescope_id) or {}
+        stack_settings_result = method_sync("get_stack_setting", telescope_id) or {}
+        stack_settings_error = not isinstance(stack_settings_result, dict) or "error" in stack_settings_result
 
-        if fw > 2597:
-            stack_settings_result = pydash.get(settings_result, "stack", {})
-        else:
-            stack_settings_result = method_sync("get_stack_setting", telescope_id)
-            stack_settings_error = (
-                stack_settings_result is None or "error" in stack_settings_result
-            )
+        # Different firmware families expose stack settings in different places.
+        # Merge them and prefer get_stack_setting when it returns data.
+        merged_stack_settings = {}
+        stack_from_get_setting = pydash.get(settings_result, "stack", {})
+        if isinstance(stack_from_get_setting, dict):
+            merged_stack_settings.update(stack_from_get_setting)
+        if not stack_settings_error and isinstance(stack_settings_result, dict):
+            merged_stack_settings.update(stack_settings_result)
 
-        # Some firmware builds don't support get_stack_setting; fall back to get_setting.
-        fallback_light_duration_min = pydash.get(
-            settings_result, "stack.light_duration_min"
-        )
-        fallback_save_discrete_ok_frame = pydash.get(
-            settings_result, "stack.save_discrete_ok_frame", False
-        )
-        fallback_save_discrete_frame = pydash.get(
-            settings_result, "stack.save_discrete_frame", False
-        )
+        fallback_light_duration_min = pydash.get(settings_result, "stack.light_duration_min")
+        fallback_save_discrete_ok_frame = pydash.get(settings_result, "stack.save_discrete_ok_frame")
+        fallback_save_discrete_frame = pydash.get(settings_result, "stack.save_discrete_frame")
 
         stack_cont_capt = pydash.get(settings_result, "stack.cont_capt")
         if stack_cont_capt is None:
@@ -962,31 +956,31 @@ def get_device_settings(telescope_id):
 
             settings |= {
                 "save_discrete_ok_frame": pydash.get(
-                    stack_settings_result,
+                    merged_stack_settings,
                     "save_discrete_ok_frame",
                     fallback_save_discrete_ok_frame,
                 ),
                 "save_discrete_frame": pydash.get(
-                    stack_settings_result,
+                    merged_stack_settings,
                     "save_discrete_frame",
                     fallback_save_discrete_frame,
                 ),
                 "light_duration_min": (
                     fallback_light_duration_min
                     if stack_settings_error
-                    else pydash.get(stack_settings_result, "light_duration_min")
+                    else pydash.get(merged_stack_settings, "light_duration_min")
                 ),
-                "stack_capt_type": pydash.get(stack_settings_result, "capt_type"),
-                "stack_capt_num": pydash.get(stack_settings_result, "capt_num"),
+                "stack_capt_type": pydash.get(merged_stack_settings, "capt_type"),
+                "stack_capt_num": pydash.get(merged_stack_settings, "capt_num"),
                 "stack_brightness": pydash.get(
-                    stack_settings_result, "brightness", 0.0
+                    merged_stack_settings, "brightness", 0.0
                 ),
-                "stack_contrast": pydash.get(stack_settings_result, "contrast", 0.0),
+                "stack_contrast": pydash.get(merged_stack_settings, "contrast", 0.0),
                 "stack_saturation": pydash.get(
-                    stack_settings_result, "saturation", 0.0
+                    merged_stack_settings, "saturation", 0.0
                 ),
                 "stack_dbe_enable": pydash.get(
-                    stack_settings_result, "dbe_enable", False
+                    merged_stack_settings, "dbe_enable", False
                 ),
                 "plan_target_af": (
                     plan_target_af if plan_target_af is not None else False
@@ -1008,6 +1002,28 @@ def get_device_settings(telescope_id):
                         settings_result, "stack.star_trails", False
                     ),
                 }
+
+        # If either endpoint reports these stack-save fields, expose them.
+        for key, value in (
+            (
+                "save_discrete_ok_frame",
+                pydash.get(
+                    merged_stack_settings,
+                    "save_discrete_ok_frame",
+                    fallback_save_discrete_ok_frame,
+                ),
+            ),
+            (
+                "save_discrete_frame",
+                pydash.get(
+                    merged_stack_settings,
+                    "save_discrete_frame",
+                    fallback_save_discrete_frame,
+                ),
+            ),
+        ):
+            if value is not None:
+                settings[key] = value
     return settings
 
 
@@ -3800,8 +3816,8 @@ class SettingsResource(BaseResource):
             "dark_mode": 0,
             "stack_cont_capt": 0,
             "stack_drizzle2x": 0,
-            "save_discrete_ok_frame": 2598,
-            "save_discrete_frame": 2598,
+            "save_discrete_ok_frame": 0,
+            "save_discrete_frame": 0,
             "light_duration_min": 2598,
             "stack_capt_type": 2598,
             "stack_capt_num": 2598,
