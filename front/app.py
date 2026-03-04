@@ -199,6 +199,7 @@ def _get_context_real(telescope_id, req):
     client_master = get_client_master(telescope_id)
     segments = req.relative_uri.lstrip("/").split("/", 1)
     partial_path = segments[1] if len(segments) > 1 else segments[0]
+    partial_path = partial_path.split("?", 1)[0].split("#", 1)[0].strip("/")
     experimental = Config.experimental
     confirm = Config.confirm
     uitheme = Config.uitheme
