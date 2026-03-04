@@ -1,5 +1,5 @@
 import json
-
+import pytest
 import front.app as front_app
 from device.config import Config
 
@@ -18,6 +18,80 @@ class DummyResp:
     def set_cookie(self, key, value, path="/"):
         self.cookies.append((key, value, path))
 
+    def unset_cookie(self, key, path="/"):
+        self.cookies = [c for c in self.cookies if c[0] != key]
+
+
+class DummyHTMXReq(DummyReq):
+    def __init__(
+        self,
+        host="localhost:5432",
+        scheme="http",
+        relative_uri="/1/",
+        params=None,
+        headers=None,
+    ):
+        super().__init__(host=host, scheme=scheme)
+        self.relative_uri = relative_uri
+        self._params = params or {}
+        self._headers = headers or {}
+
+    def get_param(self, key, default=None):
+        return self._params.get(key, default)
+
+    def get_header(self, key):
+        return self._headers.get(key)
+
+    def get_cookie_values(self, _key):
+        return []
+
+
+def _render_nav(partial_path):
+    template = front_app.fetch_template("nav.html")
+    telescopes = [
+        {"device_num": 1, "name": "Seestar Alpha", "ip_address": "192.168.11.124"},
+    ]
+    context = {
+        "root": "/1",
+        "telescope": telescopes[0],
+        "telescopes": telescopes,
+        "partial_path": partial_path,
+        "experimental": True,
+        "platform": "raspberry_pi",
+        "uitheme": "dark",
+    }
+    return template.render(**context)
+
+
+def _minimal_context(partial_path, online=True):
+    telescope = {
+        "device_num": 1,
+        "name": "Seestar Alpha",
+        "ip_address": "192.168.11.124",
+    }
+    return {
+        "telescope": telescope,
+        "telescopes": [telescope],
+        "root": "/1",
+        "partial_path": partial_path,
+        "online": online,
+        "imager_root": "http://localhost:7556/1",
+        "experimental": True,
+        "confirm": False,
+        "uitheme": "dark",
+        "webui_text_color": None,
+        "webui_font_family": None,
+        "webui_font_url": None,
+        "webui_link_color": None,
+        "webui_accent_color": None,
+        "client_master": True,
+        "current_item": None,
+        "current_stack": None,
+        "platform": "raspberry_pi",
+        "defgain": 80,
+        "current_exp": None,
+    }
+
 
 def test_flash_and_get_messages_roundtrip():
     front_app.messages.clear()
@@ -27,6 +101,29 @@ def test_flash_and_get_messages_roundtrip():
     assert resp.cookies == [("flash_cookie", "hello", "/")]
     assert front_app.get_messages() == ["hello"]
     assert front_app.get_messages() == []
+
+
+def test_nav_shows_federation_option_on_home():
+    html = _render_nav("")
+    assert "Seestar Federation" in html
+    assert 'href="/0/"' in html
+
+
+def test_nav_shows_federation_option_for_supported_pages():
+    partial_paths = [
+        "command",
+        "guestmode",
+        "live",
+        "planning",
+        "config",
+        "stats",
+        "platform-rpi",
+        "support",
+    ]
+    for path in partial_paths:
+        html = _render_nav(path)
+        assert "Seestar Federation" in html
+        assert f'href="/0/{path}"' in html
 
 
 def test_get_root_and_imager_root(monkeypatch):
@@ -630,3 +727,192 @@ def test_settings_post_missing_light_duration_min_does_not_raise(monkeypatch):
 
     assert captured["stack_payload"] is not None
     assert captured["stack_payload"]["light_duration_min"] == -1
+
+
+def test_home_content_endpoint_returns_non_empty_html(monkeypatch):
+    monkeypatch.setattr(
+        front_app,
+        "get_telescopes_state",
+        lambda: [
+            {
+                "device_num": 1,
+                "name": "Seestar Alpha",
+                "ip_address": "192.168.11.124",
+                "stats": {"View State": "Idle", "Wi-Fi Signal": "-62 dBm"},
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        front_app,
+        "get_context",
+        lambda _tid, _req: _minimal_context("home-content", online=True),
+    )
+    req = DummyHTMXReq(relative_uri="/1/home-content")
+    resp = DummyResp()
+
+    front_app.HomeContentResource.on_get(req, resp, telescope_id=1)
+
+    assert "Welcome to the Simple Seestar" in resp.text
+    assert "Seestar Alpha" in resp.text
+
+
+def test_stats_content_endpoint_returns_non_empty_html(monkeypatch):
+    front_app.StatsContentResource._last_render_by_key.clear()
+    monkeypatch.setattr(
+        front_app,
+        "get_device_state",
+        lambda _tid: {"View State": "Idle", "Wi-Fi Signal": "-62 dBm"},
+    )
+    monkeypatch.setattr(
+        front_app,
+        "get_context",
+        lambda _tid, _req: _minimal_context("stats-content", online=True),
+    )
+    req = DummyHTMXReq(relative_uri="/1/stats-content")
+    resp = DummyResp()
+
+    front_app.StatsContentResource.on_get(req, resp, telescope_id=1)
+
+    assert "Wi-Fi Signal" in resp.text
+
+
+def test_guestmode_content_endpoint_handles_sparse_state(monkeypatch):
+    front_app.GuestModeContentResource._last_render_by_key.clear()
+    monkeypatch.setattr(
+        front_app,
+        "get_context",
+        lambda _tid, _req: _minimal_context("guestmode-content", online=True),
+    )
+    monkeypatch.setattr(
+        front_app,
+        "get_guestmode_state",
+        lambda _tid: {"guest_mode": False},
+    )
+    req = DummyHTMXReq(relative_uri="/1/guestmode-content")
+    resp = DummyResp()
+
+    front_app.GuestModeContentResource.on_get(req, resp, telescope_id=1)
+
+    assert "Guest mode is unavailable" in resp.text
+
+
+def test_eventstatus_endpoint_handles_empty_event_result(monkeypatch):
+    front_app.EventStatus._last_render_by_key.clear()
+    monkeypatch.setattr(
+        front_app,
+        "get_context",
+        lambda _tid, _req: _minimal_context("eventstatus", online=True),
+    )
+    monkeypatch.setattr(
+        front_app,
+        "do_action_device",
+        lambda *_args, **_kwargs: {"Value": {"result": {}}},
+    )
+    req = DummyHTMXReq(
+        relative_uri="/1/eventstatus",
+        params={"action": "goto"},
+        headers={
+            "User-Agent": "pytest-agent",
+            "HX-Current-URL": "http://localhost/1/goto",
+        },
+    )
+    resp = DummyResp()
+
+    front_app.EventStatus.on_get(req, resp, telescope_id=1)
+
+    assert "Current Status of Devices" in resp.text
+    assert "No results available." in resp.text
+
+
+@pytest.mark.parametrize(
+    "stack_from_get_setting,stack_from_get_stack_setting,expected_discrete",
+    [
+        (
+            {"save_discrete_frame": False, "save_discrete_ok_frame": True},
+            {},
+            (False, True),
+        ),
+        (
+            {},
+            {"save_discrete_frame": True, "save_discrete_ok_frame": False},
+            (True, False),
+        ),
+    ],
+)
+def test_get_device_settings_discrete_flags_compat_matrix(
+    monkeypatch,
+    stack_from_get_setting,
+    stack_from_get_stack_setting,
+    expected_discrete,
+):
+    monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2670)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+
+    def fake_method_sync(method, telescope_id=1, **kwargs):
+        if method == "get_setting":
+            return {
+                "stack_dither": {"pix": 10, "interval": 2, "enable": True},
+                "exp_ms": {"stack_l": 10000, "continuous": 500},
+                "auto_3ppa_calib": True,
+                "frame_calib": True,
+                "focal_pos": 1500,
+                "heater_enable": False,
+                "auto_power_off": False,
+                "stack_lenhance": False,
+                "dark_mode": False,
+                "stack_cont_capt": True,
+                "stack": {"drizzle2x": False, **stack_from_get_setting},
+                "plan": {"target_af": True},
+                "viewplan_go_home": True,
+                "expert_mode": False,
+            }
+        if method == "get_stack_setting":
+            return stack_from_get_stack_setting
+        raise AssertionError(f"Unexpected method call: {method}")
+
+    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
+
+    settings = front_app.get_device_settings(1)
+
+    assert settings["save_discrete_frame"] is expected_discrete[0]
+    assert settings["save_discrete_ok_frame"] is expected_discrete[1]
+
+
+@pytest.mark.parametrize(
+    "template_name,context",
+    [
+        (
+            "partials/home_content.html",
+            {
+                "telescopes": [
+                    {
+                        "device_num": 1,
+                        "name": "Seestar Alpha",
+                        "ip_address": "192.168.11.124",
+                        "stats": {},
+                    }
+                ],
+                "version": "test",
+            },
+        ),
+        (
+            "partials/guestmode_content.html",
+            {
+                "online": True,
+                "state": {"guest_mode": False},
+                "action": "/1/guestmode",
+                "version": "test",
+            },
+        ),
+        (
+            "eventstatus.html",
+            {"results": [], "events": [], "now": "now"},
+        ),
+    ],
+)
+def test_sparse_template_contexts_render_without_error(template_name, context):
+    template = front_app.fetch_template(template_name)
+    html = template.render(**context)
+    assert isinstance(html, str)
+    assert len(html) > 0
