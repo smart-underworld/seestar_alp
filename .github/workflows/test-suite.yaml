@@ -42,7 +42,10 @@ jobs:
         run: ruff format --check
 
       - name: Run backend tests
-        run: pytest --cov=device --cov=front --cov-report=term --cov-fail-under=30.0 -q
+        run: pytest -m "not integration" --cov=device --cov=front --cov-report=term --cov-fail-under=30.0 -q
+
+      - name: Run simulator integration tests
+        run: pytest -m integration tests/integration -q
 
       - name: Install frontend test dependencies
         run: npm ci
