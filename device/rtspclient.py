@@ -23,6 +23,7 @@ class RtspClient:
         self.logger = logger
 
         self._bg_run = False
+        self._queue = None
         self.open()
 
     def __enter__(self, *args, **kwargs):
@@ -62,7 +63,7 @@ class RtspClient:
             return (
                 (self._stream is not None) and self._stream.isOpened() and self._bg_run
             )
-        except:
+        except Exception:
             self.close()
             return False
 
@@ -84,7 +85,7 @@ class RtspClient:
                 return self._queue
             else:
                 return Image.fromarray(cv2.cvtColor(self._queue, cv2.COLOR_BGR2RGB))
-        except:
+        except Exception:
             return None
 
 

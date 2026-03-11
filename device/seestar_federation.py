@@ -66,23 +66,21 @@ class Seestar_Federation:
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                result[key] = result[key] = self.seestar_devices[key].stop_goto_target()
+                result[key] = self.seestar_devices[key].stop_goto_target()
         return result
 
     def is_goto(self):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                result[key] = result[key] = self.seestar_devices[key].is_goto()
+                result[key] = self.seestar_devices[key].is_goto()
         return result
 
     def is_goto_completed_ok(self):
         result = {}
         for key in self.seestar_devices:
             if self.seestar_devices[key].is_connected:
-                result[key] = result[key] = self.seestar_devices[
-                    key
-                ].is_goto_completed_ok()
+                result[key] = self.seestar_devices[key].is_goto_completed_ok()
         return result
 
     def set_below_horizon_dec_offset(self, offset):
@@ -227,29 +225,6 @@ class Seestar_Federation:
         new_item = self.construct_schedule_item(params)
         self.schedule["list"].append(new_item)
         return self.schedule
-        ###
-        item = params.copy()
-        if item["action"] == "start_mosaic":
-            mosaic_params = item["params"]
-            if isinstance(mosaic_params["ra"], str):
-                # try to trim the seconds to 1 decimal
-                mosaic_params["ra"] = Util.trim_seconds(mosaic_params["ra"])
-                mosaic_params["dec"] = Util.trim_seconds(mosaic_params["dec"])
-            elif isinstance(mosaic_params["ra"], float):
-                if mosaic_params["ra"] < 0:
-                    self.logger.warn(
-                        "Failed. Must specify an proper coordinate for a federated schedule."
-                    )
-                    raise Exception(
-                        "Failed. Must specify an proper coordinate for a federated schedule."
-                    )
-                mosaic_params["ra"] = round(mosaic_params["ra"], 4)
-                mosaic_params["dec"] = round(mosaic_params["dec"], 4)
-        item["schedule_item_id"] = str(uuid.uuid4())
-        self.schedule["list"].append(item)
-        return self.schedule
-
-    ###
 
     def remove_schedule_item(self, params):
         targeted_item_id = params["schedule_item_id"]
@@ -364,7 +339,10 @@ class Seestar_Federation:
         for i in device_id_list:
             if start_index >= num_panels:
                 break
-            result[i] = f"{result[i]};{panel_array[start_index]}"
+            if i in result:
+                result[i] = f"{result[i]};{panel_array[start_index]}"
+            else:
+                result[i] = panel_array[start_index]
             start_index += 1
 
         return result

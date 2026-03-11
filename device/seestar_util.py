@@ -91,17 +91,17 @@ class Util:
         return coord
 
     @staticmethod
-    def get_altaz(self, ra: float, dec: float, coord_frame: AltAz) -> SkyCoord:
-        coord = self.get_JNow(ra, dec)
+    def get_altaz(util, ra: float, dec: float, coord_frame: AltAz) -> SkyCoord:
+        coord = util.get_JNow(ra, dec)
         return coord.transform_to(coord_frame)
 
     @staticmethod
-    def get_altaz_deg(self, ra: float, dec: float, coord_frame: AltAz) -> np.ndarray:
-        coord = self.get_altaz(ra, dec, coord_frame)
+    def get_altaz_deg(util, ra: float, dec: float, coord_frame: AltAz) -> np.ndarray:
+        coord = util.get_altaz(ra, dec, coord_frame)
         return np.asarray([coord.alt.deg, coord.az.deg])
 
     @staticmethod
-    def get_altaz_frame(self, site_ra: float, site_dec: float) -> AltAz:
-        site = self.get_JNow(site_ra, site_dec)
+    def get_altaz_frame(util, site_ra: float, site_dec: float) -> AltAz:
+        site = util.get_JNow(site_ra, site_dec)
         altaz_frame = AltAz(location=site)
         return altaz_frame
