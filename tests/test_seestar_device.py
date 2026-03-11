@@ -203,7 +203,18 @@ def test_goto_target_sends_expected_request(monkeypatch, seestar):
 
 def test_parse_dec_to_float_positive_and_negative(seestar):
     assert seestar.parse_dec_to_float("12:30:00") == 12.5
-    assert seestar.parse_dec_to_float("-12:30:00") == -11.5
+    assert seestar.parse_dec_to_float("-12:30:00") == -12.5
+
+
+def test_parse_dec_to_float_sign_applies_to_whole_value(seestar):
+    """Regression: sign must apply to the full degrees+minutes+seconds sum, not just degrees."""
+    # -0:30:00 = -0.5, not +0.5
+    assert seestar.parse_dec_to_float("-0:30:00") == -0.5
+    # -89:59:59.9 ≈ -89.9999... (close to south pole)
+    result = seestar.parse_dec_to_float("-89:59:60")
+    assert result < -89.9
+    # +0:15:00 = +0.25
+    assert seestar.parse_dec_to_float("0:15:00") == 0.25
 
 
 def test_get_pa_error_defaults_when_unknown(seestar):
@@ -488,9 +499,17 @@ def test_sync_and_move_helpers(monkeypatch, seestar):
     seestar.send_message_param_sync = lambda _d: {"ok": True}
     assert seestar.move_scope(10, 100) is True
 
-    seestar.schedule["state"] = "stopped"
+    # sync_target: blocked when scheduler is working
+    seestar.schedule["state"] = "working"
     msg = seestar.sync_target([1.0, 2.0])
     assert "Cannot sync target while scheduler is active" in msg
+
+    # sync_target: allowed when scheduler is stopped or complete
+    seestar.send_message_param_sync = lambda _d: {"result": "ok"}
+    seestar.schedule["state"] = "stopped"
+    assert seestar.sync_target([1.0, 2.0]) == {"result": "ok"}
+    seestar.schedule["state"] = "complete"
+    assert seestar.sync_target([1.0, 2.0]) == {"result": "ok"}
 
 
 def test_receive_message_thread_updates_state_and_callbacks(monkeypatch, seestar):

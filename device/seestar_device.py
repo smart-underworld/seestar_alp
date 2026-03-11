@@ -731,7 +731,7 @@ class Seestar:
         return self.wait_end_op("goto_target")
 
     def sync_target(self, params):
-        if self.schedule["state"] != "stopped" or self.schedule["state"] != "complete":
+        if self.schedule["state"] != "stopped" and self.schedule["state"] != "complete":
             msg = f"Cannot sync target while scheduler is active: {self.schedule['state']}"
             self.logger.warn(msg)
             return msg
@@ -2384,7 +2384,7 @@ class Seestar:
         degrees, minutes, seconds = map(float, dec_string.split(":"))
 
         # Convert to decimal degrees
-        dec_decimal = sign * degrees + minutes / 60 + seconds / 3600
+        dec_decimal = sign * (degrees + minutes / 60 + seconds / 3600)
 
         return dec_decimal
 

@@ -246,6 +246,35 @@ def test_get_section_array_for_mosaic_raises_without_devices():
         federation.get_section_array_for_mosaic([], {"ra_num": 1, "dec_num": 1})
 
 
+def test_get_section_array_for_mosaic_more_devices_than_panels():
+    """Regression: when num_panels < num_devices, remainder loop must not KeyError."""
+    federation = Seestar_Federation(DummyLogger(), {})
+    # 3 panels across 5 devices — num_panels_per_device = 0, all panels go via remainder
+    result = federation.get_section_array_for_mosaic(
+        [1, 2, 3, 4, 5],
+        {"selected_panels": "11;21;31"},
+    )
+    # Each panel must be assigned to exactly one device
+    all_panels = []
+    for v in result.values():
+        all_panels.extend(v.split(";"))
+    assert sorted(all_panels) == ["11", "21", "31"]
+    # At most 3 devices can have work; the others get nothing (not in result)
+    assert len(result) == 3
+
+
+def test_get_section_array_for_mosaic_one_panel_per_device():
+    """Exact fit: 3 panels, 3 devices — every device should get exactly 1 panel."""
+    federation = Seestar_Federation(DummyLogger(), {})
+    result = federation.get_section_array_for_mosaic(
+        [10, 20, 30],
+        {"selected_panels": "A;B;C"},
+    )
+    assert len(result) == 3
+    all_panels = sorted(p for v in result.values() for p in v.split(";"))
+    assert all_panels == ["A", "B", "C"]
+
+
 def test_schedule_item_remove_and_insert_before():
     federation = Seestar_Federation(DummyLogger(), {})
     a = federation.construct_schedule_item({"action": "wait_for", "params": {}})

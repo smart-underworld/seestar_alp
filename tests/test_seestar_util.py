@@ -78,7 +78,7 @@ def test_get_altaz_helpers(monkeypatch):
 
         @staticmethod
         def get_altaz(ra, dec, frame):
-            return Util.get_altaz(Helper, ra, dec, frame)
+            return Util.get_altaz(Helper, ra, dec, frame)  # passes Helper as util arg
 
     altaz = Util.get_altaz(Helper, 1.0, 2.0, object())
     assert altaz.alt.deg == 11.1
@@ -91,3 +91,104 @@ def test_get_altaz_helpers(monkeypatch):
     )
     frame = Util.get_altaz_frame(Helper, 3.0, 4.0)
     assert frame[0] == "altaz"
+
+
+# ---------------------------------------------------------------------------
+# parse_coordinate — additional edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_parse_coordinate_numeric_j2000_transforms(monkeypatch):
+    """Numeric J2000 coordinates should be created then transformed to JNow."""
+    transformed = []
+
+    class FakeCoord:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def transform_to(self, _fk5):
+            transformed.append(self.kwargs)
+            return "jnow_result"
+
+    monkeypatch.setattr("device.seestar_util.SkyCoord", FakeCoord)
+
+    result = Util.parse_coordinate(True, 6.0, -30.0)
+    assert result == "jnow_result"
+    assert len(transformed) == 1
+
+
+def test_parse_coordinate_frame_differs_j2000_vs_jnow(monkeypatch):
+    """J2000=False uses an FK5 frame; J2000=True uses 'icrs' then transforms."""
+    frames_used = []
+
+    class FakeCoord:
+        def __init__(self, **kwargs):
+            frames_used.append(kwargs.get("frame"))
+
+        def transform_to(self, _fk5):
+            return self
+
+    monkeypatch.setattr("device.seestar_util.SkyCoord", FakeCoord)
+
+    Util.parse_coordinate(False, 0.0, 0.0)
+    # FK5 frame is an object, not the string "icrs"
+    assert frames_used[-1] != "icrs"
+
+    Util.parse_coordinate(True, 0.0, 0.0)
+    assert frames_used[-1] == "icrs"
+
+
+# ---------------------------------------------------------------------------
+# mosaic_next_center_spacing — boundary and overlap variants
+# ---------------------------------------------------------------------------
+
+
+def test_mosaic_spacing_south_pole_boundary():
+    """Declinations <= -85 should also trigger the safe RA-step fallback."""
+    ra_step, dec_step = Util.mosaic_next_center_spacing(0.0, -86.0, 0)
+    assert ra_step == 1.0
+    assert math.isclose(dec_step, 1.29, rel_tol=1e-6)
+
+
+def test_mosaic_spacing_exactly_at_boundary_is_not_safe():
+    """dec=85.0 is NOT > 85, so the normal cos-corrected path should run (not the 1.0 fallback)."""
+    ra_step, dec_step = Util.mosaic_next_center_spacing(0.0, 85.0, 0)
+    # cos(85°) ≈ 0.0872 → delta_RA is magnified but stays below 1.0 for this FOV
+    # The key assertion: result must differ from the safe-fallback value of 1.0
+    assert ra_step != 1.0
+    # And it must be larger than the equator step (0.05) due to cos correction
+    assert ra_step > 0.05
+
+
+def test_mosaic_spacing_full_overlap_gives_zero_step():
+    """100% overlap produces zero-sized steps."""
+    ra_step, dec_step = Util.mosaic_next_center_spacing(0.0, 0.0, 100)
+    assert ra_step == 0.0
+    assert dec_step == 0.0
+
+
+def test_mosaic_spacing_partial_overlap_scales_correctly():
+    """50% overlap should halve the step relative to 0% overlap."""
+    ra_0, dec_0 = Util.mosaic_next_center_spacing(0.0, 0.0, 0)
+    ra_50, dec_50 = Util.mosaic_next_center_spacing(0.0, 0.0, 50)
+    assert math.isclose(ra_50, ra_0 * 0.5, rel_tol=1e-6)
+    assert math.isclose(dec_50, dec_0 * 0.5, rel_tol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# trim_seconds — additional edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_trim_seconds_whole_seconds():
+    """Whole-number seconds should still get a .0 decimal."""
+    assert Util.trim_seconds("5h10m30s") == "5h10m30.0s"
+
+
+def test_trim_seconds_already_one_decimal():
+    """Values already at one decimal should be unchanged."""
+    assert Util.trim_seconds("1h2m3.4s") == "1h2m3.4s"
+
+
+def test_trim_seconds_empty_string_passthrough():
+    assert Util.trim_seconds("") == ""

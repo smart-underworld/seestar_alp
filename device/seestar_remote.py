@@ -168,7 +168,7 @@ class SeestarRemote(AbstractDevice):
         return self._do_action_device("replace_schedule_item", params)
 
     def remove_schedule_item(self, params):
-        return self._do_action_device("remote_schedule_item", params)
+        return self._do_action_device("remove_schedule_item", params)
 
     def start_mosaic(self, cur_params):
         return self._do_action_device("start_mosaic", cur_params)

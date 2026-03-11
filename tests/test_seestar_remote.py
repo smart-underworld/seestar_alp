@@ -87,7 +87,7 @@ def test_remote_basic_properties_and_wrappers(monkeypatch):
     assert remote.add_schedule_item({})["a"] == "add_schedule_item"
     assert remote.insert_schedule_item_before({})["a"] == "insert_schedule_item_before"
     assert remote.replace_schedule_item({})["a"] == "replace_schedule_item"
-    assert remote.remove_schedule_item({})["a"] == "remote_schedule_item"
+    assert remote.remove_schedule_item({})["a"] == "remove_schedule_item"
     assert remote.start_mosaic({})["a"] == "start_mosaic"
     assert remote.start_scheduler({})["a"] == "start_scheduler"
     assert remote.stop_scheduler({})["a"] == "stop_scheduler"
