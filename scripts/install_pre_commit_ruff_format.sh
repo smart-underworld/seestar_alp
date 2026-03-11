@@ -25,6 +25,13 @@ fi
 
 echo "pre-commit: running ruff format on staged Python files..."
 ruff format "${files[@]}"
+
+echo "pre-commit: running ruff check --fix on staged Python files..."
+ruff check --fix "${files[@]}" || {
+  echo "pre-commit: ruff check found unfixable issues; please fix them before committing."
+  exit 1
+}
+
 git add -- "${files[@]}"
 HOOK
 
