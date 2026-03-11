@@ -1,7 +1,6 @@
 """Tests for device/rtspclient.py"""
 
 import numpy as np
-import pytest
 
 from device.rtspclient import RtspClient
 
