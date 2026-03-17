@@ -3039,6 +3039,11 @@ class ScheduleRefreshResource(BaseResource):
             else:
                 ScheduleRefreshResource._last_render_by_key[cache_key] = html
 
+        # Always send fresh HTML while schedule is running so item highlights
+        # stay in sync — the cache only suppresses updates when nothing is changing.
+        if state == "working":
+            changed = True
+
         resp.media = {"state": state, "changed": changed}
         if changed:
             resp.media["html"] = html

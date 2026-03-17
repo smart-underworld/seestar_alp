@@ -1,10 +1,9 @@
 {% for item in schedule.list %}
-  <div class="position-relative">
-    <div class="position-absolute" style="left: -25px; top: 50%; transform: translateY(-50%); z-index: 10;">
-      <input type="checkbox" class="form-check-input position-relative"
+  <div class="row border-bottom py-2 text-start position-relative {% if current_item['schedule_item_id'] == item['schedule_item_id'] %}bg-primary{% endif %}">
+    <div class="col-auto d-flex align-items-center">
+      <input type="checkbox" class="form-check-input"
              name="selected_items" value="{{ item['schedule_item_id'] }}">
     </div>
-    <div class="row border-bottom py-2 text-start position-relative {% if current_item['schedule_item_id'] == item['schedule_item_id'] %}bg-primary{% endif %}">
       {% if item["action"] == 'start_mosaic' %}
         {% if current_item['schedule_item_id'] == item['schedule_item_id'] %}
           <!-- Current item, button for start_mosaic -->
@@ -210,7 +209,7 @@
         {% endif %}
       {% else %}
         <!-- Render non-collapsible actions (no button) -->
-        <div class="col-2 align-self-start">
+        <div class="col align-self-start">
           {% if item["action"] == 'wait_until' %}
             Wait Until: {{ item["params"]["local_time"] }}
           {% elif item["action"] == 'wait_for' %}
@@ -249,6 +248,5 @@
           {% endif %}
         </div>
       {% endif %}
-    </div>
   </div>
 {% endfor %}
