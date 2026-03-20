@@ -144,7 +144,7 @@ class Seestar:
         self.site_altaz_frame = None
 
         self.connect_count: int = 0
-        self.view_state: dict = {}  # todo : wrap this in a lock!
+        self.view_state: dict = {}
 
         # self.event_queue = queue.Queue()
         self.event_queue = collections.deque(maxlen=20)
@@ -205,7 +205,7 @@ class Seestar:
             if self.is_watch_events and self.reconnect():
                 return self.send_message(data)
             return False
-        except:
+        except Exception:
             self.logger.error("General error trying to send message: ", data)
             return False
 
@@ -214,7 +214,7 @@ class Seestar:
             try:
                 self.s.close()
                 self.s = None
-            except:
+            except Exception:
                 pass
 
     def disconnect(self) -> None:
@@ -224,6 +224,7 @@ class Seestar:
 
     def send_udp_intro(self) -> None:
         # {"id":1,"method":"scan_iscope","params":""}
+        sock = None
         try:
             # Create a UDP socket
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -256,8 +257,8 @@ class Seestar:
             self.logger.info(f"Error sending broadcast message: {e}")
 
         finally:
-            # Close the socket
-            sock.close()
+            if sock is not None:
+                sock.close()
 
     def reconnect(self) -> bool:
         if self.is_connected:
@@ -279,11 +280,12 @@ class Seestar:
             self.is_connected = True
             return True
         except socket.error:
-            # Let's just delay a fraction of a second to avoid reconnecting too quickly
+            self.socket_force_close()
             self.is_connected = False
             sleep(1)
             return False
         except Exception:
+            self.socket_force_close()
             self.is_connected = False
             sleep(1)
             return False
@@ -325,7 +327,8 @@ class Seestar:
         if parsed_data["method"] == "get_view_state" and "result" in parsed_data:
             view = parsed_data["result"].get("View")
             if view:
-                self.view_state = view
+                with self.lock:
+                    self.view_state = view
                 # also todo : also update view_state_timestamp
             # else:
             #    self.view_state = {}
@@ -537,6 +540,8 @@ class Seestar:
         return self.response_dict[cur_cmdid]
 
     def get_event_state(self, params=None):
+        if "scheduler" not in self.event_state:
+            self.event_state["scheduler"] = {}
         self.event_state["scheduler"]["Event"] = "Scheduler"
         self.event_state["scheduler"]["state"] = self.schedule["state"]
         self.event_state["scheduler"]["is_stacking"] = self.schedule.get(
@@ -677,13 +682,13 @@ class Seestar:
                 self.event_state[event_watch]["state"] == "working"
                 or self.event_state[event_watch]["state"] == "start"
             )
-        except:
+        except (KeyError, TypeError):
             return False
 
     def is_goto_completed_ok(self):
         try:
             return self.event_state["AutoGoto"]["state"] == "complete"
-        except:
+        except (KeyError, TypeError):
             return False
 
     # synchronise call. Will return only if there's result
@@ -2584,5 +2589,5 @@ class Seestar:
                 yield frame
             except GeneratorExit:
                 break
-            except:
+            except Exception:
                 time.sleep(1)

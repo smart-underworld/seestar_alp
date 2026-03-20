@@ -146,9 +146,8 @@ def get_telescopes():
 
 def get_telescope(telescope_id):
     telescopes = get_telescopes()
-    return list(
-        filter(lambda telescope: telescope["device_num"] == telescope_id, telescopes)
-    )[0]
+    matches = list(filter(lambda tel: tel["device_num"] == telescope_id, telescopes))
+    return matches[0] if matches else None
 
 
 def get_root(telescope_id):
@@ -173,9 +172,10 @@ def get_imager_root(telescope_id, req):
         # if len(telescopes) == 1:
         #     return ""
 
-        telescope = list(
+        matches = list(
             filter(lambda tel: tel["device_num"] == telescope_id, telescopes)
-        )[0]
+        )
+        telescope = matches[0] if matches else None
         if telescope:
             # req.host may already include an incoming port, and Firefox rejects
             # malformed host:port:port URLs. Build a clean origin explicitly.
@@ -210,6 +210,12 @@ def _get_context_real(telescope_id, req):
     defgain = Config.init_gain
     if telescope_id > 0:
         telescope = get_telescope(telescope_id)
+        if telescope is None:
+            telescope = {
+                "device_num": telescope_id,
+                "name": f"Device {telescope_id}",
+                "ip_address": "",
+            }
     else:
         telescope = {
             "device_num": 0,
@@ -543,15 +549,15 @@ def _check_api_state_cached(telescope_id):
         r.raise_for_status()
         response = r.json()
         if response.get("ErrorNumber") == 1031 or not response.get("Value"):
-            logger.warn(f"Telescope {telescope_id} API is not connected. {url=}")
+            logger.warning(f"Telescope {telescope_id} API is not connected. {url=}")
             return False
     except requests.exceptions.ConnectionError:
-        logger.warn(
+        logger.warning(
             f"Telescope {telescope_id} API is not online. (ConnectionError) {url=}"
         )
         return False
     except requests.exceptions.RequestException:
-        logger.warn(
+        logger.warning(
             f"Telescope {telescope_id} API is not online. (RequestException) {url=}"
         )
         return False
@@ -665,7 +671,7 @@ def method_sync(method, telescope_id=1, **kwargs):
             if isinstance(inner, dict):
                 obj = inner
         if obj and obj.get("error"):
-            logger.warn(f"method_sync: {method} - {obj['error']}")
+            logger.warning(f"method_sync: {method} - {obj['error']}")
             result = {"command": method, "status": "error", "result": obj["error"]}
             return result
         elif obj:
@@ -1602,7 +1608,7 @@ def do_command(req, resp, telescope_id):
             output = method_sync("get_device_state, telescope_id")
             return output
         case _:
-            logger.warn("No command found: %s", value)
+            logger.warning("No command found: %s", value)
 
 
 def do_support_bundle(req, telescope_id=1):
@@ -1826,7 +1832,7 @@ def import_csv_schedule(input, telescope_id):
         action = row.pop("action", None)
 
         if not action:
-            logger.warn("Skipping row without an action.")
+            logger.warning("Skipping row without an action.")
             continue
 
         params = {key: value for key, value in row.items() if value.strip()}
@@ -1905,11 +1911,11 @@ def import_csv_schedule(input, telescope_id):
                                 "set_wheel_position", [position], telescope_id
                             )
                         except ValueError:
-                            logger.warn(
+                            logger.warning(
                                 f"Invalid wheel position value: {position}. Skipping."
                             )
                 else:
-                    logger.warn("Missing 'params' for set_wheel_position.")
+                    logger.warning("Missing 'params' for set_wheel_position.")
             case "action_set_dew_heater":
                 heater_value = int(params.get("heater", 0))
                 do_schedule_action_device(
@@ -1925,7 +1931,7 @@ def import_csv_schedule(input, telescope_id):
                     "start_up_sequence", startup_params, telescope_id
                 )
             case "_":
-                logger.warn(f"Unknown action '{action}' encountered; skipping.")
+                logger.warning(f"Unknown action '{action}' encountered; skipping.")
 
 
 def get_live_status(telescope_id: int):
@@ -4268,7 +4274,7 @@ class SimbadResource:
         )  # get the name to lookup from the request
         try:
             r = requests.get(simbad_url + objName, timeout=10)
-        except:
+        except Exception:
             resp.status = falcon.HTTP_500
             resp.content_type = "application/text"
             resp.text = "Request had communications error."
@@ -4379,7 +4385,7 @@ class StellariumResource:
         try:
             r = requests.get(stellarium_url + "?format=json")
             html_content = r.text
-        except:
+        except Exception:
             resp.status = falcon.HTTP_404
             resp.content_type = "application/text"
             resp.text = "Requst had communications error."
@@ -4397,7 +4403,7 @@ class StellariumResource:
             try:
                 r = requests.get(stellarium_url)
                 html_content = r.text
-            except:
+            except Exception:
                 resp.status = falcon.HTTP_404
                 resp.content_type = "application/text"
                 resp.text = "Requst had communications error."
@@ -4959,7 +4965,7 @@ def searchMinorPlanet(name):
 def searchLocal(object):
     try:
         con = sqlite3.connect("data/alp.dat")
-    except:
+    except Exception:
         return
 
     cursor = con.cursor()
