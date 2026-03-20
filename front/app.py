@@ -1804,6 +1804,8 @@ def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, err
         values=values,
         files=files,
         state=state,
+        pa_threshold_deg=Config.pa_threshold_deg,
+        pa_max_tries=Config.pa_max_tries,
         **context,
     )
 
@@ -4192,6 +4194,8 @@ class StartupResource(BaseResource):
             schedule=schedule,
             action=f"/{telescope_id}/startup",
             output=output,
+            pa_threshold_deg=Config.pa_threshold_deg,
+            pa_max_tries=Config.pa_max_tries,
             **context,
         )
 

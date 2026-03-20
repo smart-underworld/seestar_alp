@@ -10,7 +10,8 @@
         </div>
         <div class="form-check ms-3">
           <input class="form-check-input" type="checkbox" id="pa_verify" name="pa_verify">
-          <label class="form-check-label" for="pa_verify">Verify with plate solve (loops until within threshold)</label>
+          <label class="form-check-label" for="pa_verify"
+                 title="After 3PPA, verifies accuracy with a plate solve and repeats until polar axis error is under {{ pa_threshold_deg }}° (up to {{ pa_max_tries }} attempts). Configurable in config.toml.">Verify with plate solve (loops until within threshold)</label>
         </div>
         <div class="form-check">
           <input class="form-check-input" type="checkbox" id="auto_focus" name="auto_focus" checked>

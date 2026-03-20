@@ -237,6 +237,12 @@
               <p class="mt-0 mb-0">auto_focus: {{ item["params"]["auto_focus"] }}</p>
               <p class="mt-0 mb-0">dark_frames: {{ item["params"]["dark_frames"] }}</p>
             </div>
+          {% elif item["action"] == 'action_polar_align_and_verify' %}
+            <div class="col-2 align-self-start">PA Verify</div>
+            <div class="col align-self-start">
+              <p class="mt-0 mb-0">threshold: {{ item["params"].get("threshold_deg", pa_threshold_deg) }}°</p>
+              <p class="mt-0 mb-0">max tries: {{ item["params"].get("max_tries", pa_max_tries) }}</p>
+            </div>
           {% elif item["action"] == 'adjust_focus' %}
             Adjust Focus: {{ item["params"]["steps"] }} steps
           {% elif item["action"] == 'set_wheel_position' %}
