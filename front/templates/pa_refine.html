@@ -119,8 +119,11 @@
 </div>
 <pre class="output"></pre>
 <!-- <form method="post" action="{{ action }}" class="d-inline"> -->
-<div>
-		<button id="start_stop_btn" class="btn btn-primary btn-lg" type="button">Start</button>
+<div class="d-flex align-items-center gap-2 mt-2">
+	<button id="start_stop_btn" class="btn btn-primary btn-lg" type="button">Start</button>
+	<button id="refresh_btn" class="btn btn-secondary btn-lg" type="button">Refresh Deviation</button>
+	<span id="refresh_spinner" class="spinner-border spinner-border-sm text-secondary d-none" role="status" aria-hidden="true"></span>
+	<span id="refresh_status" class="text-muted small"></span>
 </div>
 <!-- </form> -->
 
@@ -264,4 +267,59 @@
 
 
   startStopButton.addEventListener("click", toggleStateAlignment);
+
+  const refreshBtn = document.getElementById("refresh_btn");
+  const refreshSpinner = document.getElementById("refresh_spinner");
+  const refreshStatus = document.getElementById("refresh_status");
+  var refresh_poll_interval;
+
+  async function pollSolveState() {
+    try {
+      const r = await fetch(get_pa_refine_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "solve_state" }),
+        headers: { "Content-type": "application/json; charset=UTF-8" }
+      });
+      const data = await r.json();
+      const state = data["pa_solve_state"];
+      if (state === "complete") {
+        clearInterval(refresh_poll_interval);
+        refreshSpinner.classList.add("d-none");
+        refreshBtn.disabled = false;
+        refreshStatus.textContent = "Deviation updated.";
+        update_pa_error();
+      } else if (state === "fail") {
+        clearInterval(refresh_poll_interval);
+        refreshSpinner.classList.add("d-none");
+        refreshBtn.disabled = false;
+        refreshStatus.textContent = "Solve failed — try again.";
+      }
+      // still "solving" → keep polling
+    } catch (err) {
+      clearInterval(refresh_poll_interval);
+      refreshSpinner.classList.add("d-none");
+      refreshBtn.disabled = false;
+      refreshStatus.textContent = "Error polling solve state.";
+    }
+  }
+
+  async function refreshDeviation() {
+    refreshBtn.disabled = true;
+    refreshSpinner.classList.remove("d-none");
+    refreshStatus.textContent = "Solving…";
+    try {
+      await fetch(get_pa_refine_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "refresh" }),
+        headers: { "Content-type": "application/json; charset=UTF-8" }
+      });
+      refresh_poll_interval = setInterval(pollSolveState, 1000);
+    } catch (err) {
+      refreshSpinner.classList.add("d-none");
+      refreshBtn.disabled = false;
+      refreshStatus.textContent = "Error starting solve.";
+    }
+  }
+
+  refreshBtn.addEventListener("click", refreshDeviation);
 </script>

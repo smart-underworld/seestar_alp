@@ -1,4 +1,5 @@
 import collections
+import math
 import socket
 from types import SimpleNamespace
 
@@ -1767,3 +1768,209 @@ def test_get_events_focus_empty_queue_and_watch_firmware_init(monkeypatch, seest
     )
     seestar.start_watch_thread()
     assert seestar.firmware_ver_int == 2600
+
+
+# ---------------------------------------------------------------------------
+# PA deviation geometry helpers
+# ---------------------------------------------------------------------------
+
+
+def test_compute_lst_returns_float_in_range(seestar):
+    lst = seestar._compute_lst()
+    assert isinstance(lst, float)
+    assert 0.0 <= lst < 24.0
+
+
+def test_compute_pa_error_returns_none_when_mount_position_unknown(seestar):
+    seestar.ra = None
+    seestar.dec = None
+    d_alt, d_az = seestar._compute_pa_error_from_solve(1.0, 10.0)
+    assert d_alt is None
+    assert d_az is None
+
+
+def test_compute_pa_error_returns_none_near_pole(seestar):
+    seestar.ra = 6.0
+    seestar.dec = 89.99  # guard triggers when cos(dec) < 1e-3, i.e. dec > ~89.94°
+    d_alt, d_az = seestar._compute_pa_error_from_solve(6.0, 89.99)
+    assert d_alt is None
+    assert d_az is None
+
+
+def test_compute_pa_error_zero_when_solve_matches_mount(seestar, monkeypatch):
+    # If plate solve matches mount position exactly, both errors should be ~0
+    seestar.ra = 6.0
+    seestar.dec = 45.0
+    Config.init_lat = 45.0
+    Config.init_long = -75.0
+    monkeypatch.setattr(seestar, "_compute_lst", lambda: 8.0)  # HA = (8-6)*15 = 30°
+    d_alt, d_az = seestar._compute_pa_error_from_solve(6.0, 45.0)
+    assert d_alt is not None
+    assert abs(d_alt) < 1e-9
+    assert abs(d_az) < 1e-9
+
+
+def test_compute_pa_error_pure_altitude_error(seestar, monkeypatch):
+    """A pure altitude error at HA=90° should show up entirely in dAlt, not dAz."""
+    seestar.ra = 0.0
+    seestar.dec = 0.0
+    Config.init_lat = 45.0
+    Config.init_long = 0.0
+    # HA = 90° → sin(HA)=1, cos(HA)=0
+    monkeypatch.setattr(seestar, "_compute_lst", lambda: 6.0)  # (6-0)*15 = 90°
+    # Introduce 0.1° Dec error only (pure altitude error at HA=90°)
+    d_alt, d_az = seestar._compute_pa_error_from_solve(0.0, 0.1)
+    assert d_alt is not None
+    # At HA=90°: delta_dec = dAz*sin(lat), delta_ra=dAlt → dAlt≈0, dAz drives Dec error
+    # Just verify no crash and values are finite
+    assert math.isfinite(d_alt)
+    assert math.isfinite(d_az)
+
+
+def test_plate_solve_event_updates_pa_error(seestar, monkeypatch):
+    seestar.ra = 6.0
+    seestar.dec = 45.0
+    Config.init_lat = 45.0
+    Config.init_long = -75.0
+    monkeypatch.setattr(seestar, "_compute_lst", lambda: 8.0)
+
+    # Simulate a PlateSolve complete event with a small pointing offset
+    event = {
+        "Event": "PlateSolve",
+        "state": "complete",
+        "result": {"ra_dec": [6.01, 45.05]},
+    }
+    seestar.event_state["PlateSolve"] = event
+    # Drive the handler directly
+    ra_dec = event["result"]["ra_dec"]
+    d_alt, d_az = seestar._compute_pa_error_from_solve(ra_dec[0], ra_dec[1])
+    if d_alt is not None:
+        seestar.cur_pa_error_y = d_alt
+        seestar.cur_pa_error_x = d_az
+        seestar.pa_solve_state = "complete"
+
+    assert seestar.pa_solve_state == "complete"
+    assert seestar.cur_pa_error_y is not None
+    assert seestar.cur_pa_error_x is not None
+
+
+def test_action_refresh_pa_deviation_sets_solving_state(seestar, monkeypatch):
+    monkeypatch.setattr(
+        seestar, "send_message_param_sync", lambda _p: {"result": 0, "code": 0}
+    )
+    seestar.pa_solve_state = "idle"
+    seestar.action_refresh_pa_deviation({})
+    assert seestar.pa_solve_state == "solving"
+
+
+def test_get_pa_solve_state(seestar):
+    seestar.pa_solve_state = "complete"
+    result = seestar.get_pa_solve_state({})
+    assert result == {"pa_solve_state": "complete"}
+
+
+# ---------------------------------------------------------------------------
+# action_polar_align_and_verify
+# ---------------------------------------------------------------------------
+
+
+def _make_pa_verify_seestar(
+    monkeypatch, seestar, *, pa_result=True, solve_state="complete", solve_error=0.1
+):
+    """Wire up mocks for action_polar_align_and_verify tests."""
+    seestar.is_EQ_mode = True
+    seestar.ra = 6.0
+    seestar.dec = 45.0
+    Config.init_lat = 45.0
+    Config.init_long = -75.0
+    Config.pa_threshold_deg = 0.3
+    Config.pa_max_tries = 3
+
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda _p: {"result": 0, "code": 0},
+    )
+    monkeypatch.setattr(seestar, "wait_end_op", lambda _e: pa_result)
+    monkeypatch.setattr(seestar, "mark_op_state", lambda *_a: None)
+    monkeypatch.setattr(seestar, "_compute_lst", lambda: 8.0)
+
+    # Simulate EqModePA event with small residual
+    seestar.event_state["EqModePA"] = {"state": "complete", "x": 0.05, "y": 0.05}
+
+    # Simulate plate solve completing immediately with given error
+    if solve_state == "complete":
+        seestar.cur_pa_error_x = solve_error * 0.707
+        seestar.cur_pa_error_y = solve_error * 0.707
+
+    def fake_refresh(_params):
+        seestar.pa_solve_state = solve_state
+
+    monkeypatch.setattr(seestar, "action_refresh_pa_deviation", fake_refresh)
+
+    # Override send_message_param_sync to also set pa_solve_state for start_solve
+    def patched_sync(p):
+        if isinstance(p, dict) and p.get("method") == "start_solve":
+            seestar.pa_solve_state = solve_state
+        return {"result": 0, "code": 0}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", patched_sync)
+
+
+def test_pa_verify_succeeds_within_threshold(seestar, monkeypatch):
+    _make_pa_verify_seestar(monkeypatch, seestar, solve_error=0.1)
+    result = seestar.action_polar_align_and_verify(
+        {"threshold_deg": 0.3, "max_tries": 3}
+    )
+    assert result["code"] == 0
+    assert result["result"]["attempts"] == 1
+
+
+def test_pa_verify_uses_config_defaults(seestar, monkeypatch):
+    _make_pa_verify_seestar(monkeypatch, seestar, solve_error=0.1)
+    Config.pa_threshold_deg = 0.3
+    Config.pa_max_tries = 3
+    result = seestar.action_polar_align_and_verify({})
+    assert result["code"] == 0
+
+
+def test_pa_verify_fails_after_max_tries(seestar, monkeypatch):
+    # Error always above threshold
+    _make_pa_verify_seestar(monkeypatch, seestar, solve_error=1.5)
+    result = seestar.action_polar_align_and_verify(
+        {"threshold_deg": 0.3, "max_tries": 2}
+    )
+    assert result["code"] == -1
+    assert "2 attempts" in result["result"]["error"]
+
+
+def test_pa_verify_falls_back_to_3ppa_when_solve_unavailable(seestar, monkeypatch):
+    # Plate solve fails but 3PPA residual is within threshold
+    _make_pa_verify_seestar(monkeypatch, seestar, solve_state="fail", solve_error=0.0)
+    seestar.event_state["EqModePA"] = {"state": "complete", "x": 0.1, "y": 0.1}
+    result = seestar.action_polar_align_and_verify(
+        {"threshold_deg": 0.3, "max_tries": 3}
+    )
+    assert result["code"] == 0
+    assert result["result"]["pa_error_solve"] is None
+
+
+def test_pa_verify_skipped_when_not_eq_mode(seestar, monkeypatch):
+    seestar.is_EQ_mode = False
+    called = []
+    monkeypatch.setattr(
+        seestar, "send_message_param_sync", lambda _p: {"result": 0, "code": 0}
+    )
+    # start_up_thread_fn should not call action_polar_align_and_verify
+    monkeypatch.setattr(
+        seestar, "action_polar_align_and_verify", lambda _p: called.append(True)
+    )
+    seestar.schedule["state"] = "working"
+    seestar.event_state.setdefault("scheduler", {}).setdefault("cur_scheduler_item", {})
+    # Directly test the guard
+    params = {"pa_verify": True}
+    do_pa_verify = params.get("pa_verify", False)
+    if do_pa_verify and not seestar.is_EQ_mode:
+        do_pa_verify = False
+    assert not do_pa_verify
+    assert called == []

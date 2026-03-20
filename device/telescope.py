@@ -291,6 +291,15 @@ class action:
             elif action_name == "get_pa_error":
                 result = cur_dev.get_pa_error(params)
                 resp.text = MethodResponse(req, value=result).json
+            elif action_name == "action_refresh_pa_deviation":
+                result = cur_dev.action_refresh_pa_deviation(params)
+                resp.text = MethodResponse(req, value=result).json
+            elif action_name == "action_polar_align_and_verify":
+                result = cur_dev.action_polar_align_and_verify(params)
+                resp.text = MethodResponse(req, value=result).json
+            elif action_name == "get_pa_solve_state":
+                result = cur_dev.get_pa_solve_state(params)
+                resp.text = MethodResponse(req, value=result).json
             elif action_name == "pause_scheduler":
                 result = cur_dev.pause_scheduler(params)
                 resp.text = MethodResponse(req, value=result).json

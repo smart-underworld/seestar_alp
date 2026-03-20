@@ -2536,6 +2536,7 @@ class ScheduleStartupResource:
         data = req.media
         auto_focus = data.get("auto_focus") == "on"
         polar_align = data.get("polar_align") == "on"
+        pa_verify = data.get("pa_verify") == "on"
         dark_frames = data.get("dark_frames") == "on"
         action = data.get("action", "")
         selected_items = data.get("selected_items", [])
@@ -2544,30 +2545,81 @@ class ScheduleStartupResource:
         if not online:
             telescope_id = 0
 
+        startup_params = {
+            "auto_focus": auto_focus,
+            "dark_frames": dark_frames,
+            "3ppa": polar_align,
+            "pa_verify": pa_verify,
+        }
         if action == "append":
-            do_schedule_action_device(
-                "start_up_sequence",
-                {
-                    "auto_focus": auto_focus,
-                    "dark_frames": dark_frames,
-                    "3ppa": polar_align,
-                },
-                telescope_id,
-            )
+            do_schedule_action_device("start_up_sequence", startup_params, telescope_id)
         else:
             do_insert_schedule_item(
-                "start_up_sequence",
-                {
-                    "auto_focus": auto_focus,
-                    "dark_frames": dark_frames,
-                    "3ppa": polar_align,
-                },
-                selected_items,
-                telescope_id,
+                "start_up_sequence", startup_params, selected_items, telescope_id
             )
 
         render_schedule_tab(
             req, resp, telescope_id, "schedule_startup.html", "startup", {}, {}
+        )
+
+
+class SchedulePAVerifyResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
+        render_schedule_tab(
+            req,
+            resp,
+            telescope_id,
+            "schedule_pa_verify.html",
+            "pa-verify",
+            {},
+            {
+                "pa_threshold_deg": Config.pa_threshold_deg,
+                "pa_max_tries": Config.pa_max_tries,
+            },
+        )
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        data = req.media
+        action = data.get("action", "")
+        selected_items = data.get("selected_items", [])
+
+        raw_threshold = data.get("pa_threshold_deg", "").strip()
+        raw_tries = data.get("pa_max_tries", "").strip()
+        params = {}
+        if raw_threshold:
+            params["threshold_deg"] = float(raw_threshold)
+        if raw_tries:
+            params["max_tries"] = int(raw_tries)
+
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
+
+        if action == "append":
+            do_schedule_action_device(
+                "action_polar_align_and_verify", params, telescope_id
+            )
+        else:
+            do_insert_schedule_item(
+                "action_polar_align_and_verify", params, selected_items, telescope_id
+            )
+
+        render_schedule_tab(
+            req,
+            resp,
+            telescope_id,
+            "schedule_pa_verify.html",
+            "pa-verify",
+            {},
+            {
+                "pa_threshold_deg": Config.pa_threshold_deg,
+                "pa_max_tries": Config.pa_max_tries,
+            },
         )
 
 
@@ -4097,12 +4149,14 @@ class StartupResource(BaseResource):
             auto_focus = form.get("auto_focus", "False").strip() == "on"
             dark_frames = form.get("dark_frames", "False").strip() == "on"
             polar_align = form.get("polar_align", "False").strip() == "on"
+            pa_verify = form.get("pa_verify", "False").strip() == "on"
             dec_pos_index = form.get("dec-offset", Config.dec_pos_index)
 
             params = {
                 "auto_focus": auto_focus,
                 "dark_frames": dark_frames,
                 "3ppa": polar_align,
+                "pa_verify": pa_verify,
                 "dec_pos_index": int(dec_pos_index),
             }
 
@@ -4703,6 +4757,21 @@ class BlindPolarAlignResource:
                 resp.status = falcon.HTTP_200
                 resp.content_type = "application/json"
                 resp.text = json.dumps(pa_data)
+        elif action == "refresh":
+            do_action_device("action_refresh_pa_deviation", telescope_id, {})
+            resp.status = falcon.HTTP_200
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"ok": True})
+        elif action == "solve_state":
+            result = do_action_device("get_pa_solve_state", telescope_id, {})
+            state = (
+                result.get("Value", {}).get("pa_solve_state", "idle")
+                if result
+                else "idle"
+            )
+            resp.status = falcon.HTTP_200
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"pa_solve_state": state})
         elif action == "runpa":
             polar_align = PostedForm.get("polar_align", "False").strip() == "on"
             do_action_device(
@@ -5106,6 +5175,7 @@ class FrontMain:
         app.add_route("/schedule/mosaic", ScheduleMosaicResource())
         app.add_route("/schedule/refresh", ScheduleRefreshResource())
         app.add_route("/schedule/startup", ScheduleStartupResource())
+        app.add_route("/schedule/pa-verify", SchedulePAVerifyResource())
         app.add_route("/schedule/shutdown", ScheduleShutdownResource())
         app.add_route("/schedule/park", ScheduleParkResource())
         app.add_route("/schedule/lpf", ScheduleLpfResource())
@@ -5165,6 +5235,9 @@ class FrontMain:
         app.add_route("/{telescope_id:int}/schedule/import", ScheduleImportResource())
         app.add_route("/{telescope_id:int}/schedule/mosaic", ScheduleMosaicResource())
         app.add_route("/{telescope_id:int}/schedule/startup", ScheduleStartupResource())
+        app.add_route(
+            "/{telescope_id:int}/schedule/pa-verify", SchedulePAVerifyResource()
+        )
         app.add_route(
             "/{telescope_id:int}/schedule/shutdown", ScheduleShutdownResource()
         )

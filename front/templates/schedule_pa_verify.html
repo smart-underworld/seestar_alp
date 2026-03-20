@@ -1,0 +1,25 @@
+{% extends 'schedule_base.html' %}
+
+{% block schedule_tab_content %}
+  <div class="card border-primary mb-3">
+    <div class="card-body">
+      <p class="card-text text-muted mb-3">
+        Runs 3-Point Polar Alignment, then verifies the result with a plate solve.
+        Repeats until the measured error is within the threshold, or max attempts are reached.
+        Leave fields blank to use the defaults from config.
+      </p>
+      <div class="mb-3">
+        <label for="pa_threshold_deg" class="form-label">Threshold (degrees)</label>
+        <input type="number" class="form-control" id="pa_threshold_deg" name="pa_threshold_deg"
+               step="0.05" min="0.05" placeholder="{{ pa_threshold_deg }}">
+        <div class="form-text">Max acceptable PA error. Default: {{ pa_threshold_deg }}°</div>
+      </div>
+      <div class="mb-3">
+        <label for="pa_max_tries" class="form-label">Max attempts</label>
+        <input type="number" class="form-control" id="pa_max_tries" name="pa_max_tries"
+               step="1" min="1" placeholder="{{ pa_max_tries }}">
+        <div class="form-text">Max 3PPA+verify loops before giving up. Default: {{ pa_max_tries }}</div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

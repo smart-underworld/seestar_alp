@@ -141,6 +141,7 @@ class Seestar:
 
         self.cur_pa_error_x: float = None
         self.cur_pa_error_y: float = None
+        self.pa_solve_state: str = "idle"  # idle | solving | complete | fail
         self.site_altaz_frame = None
 
         self.connect_count: int = 0
@@ -350,6 +351,150 @@ class Seestar:
         tmp = self.send_message_param_sync({"method": "start_solve"})
         self.logger.info(f"requested plate solve for BPA: {tmp}")
 
+    def action_polar_align_and_verify(self, params):
+        """Run 3PPA then verify with a plate solve, looping until within threshold.
+
+        Params (all optional — fall back to Config values):
+          threshold_deg  Max acceptable total PA error in degrees (default Config.pa_threshold_deg)
+          max_tries      Max 3PPA+verify loops (default Config.pa_max_tries)
+          dec_pos_index  Passed through to start_polar_align
+        """
+        max_tries = int(params.get("max_tries", Config.pa_max_tries))
+        threshold = float(params.get("threshold_deg", Config.pa_threshold_deg))
+        dec_pos_index = int(params.get("dec_pos_index", Config.dec_pos_index))
+
+        def _set_action(msg):
+            self.logger.info(msg)
+            if "scheduler" in self.event_state:
+                self.event_state["scheduler"].setdefault("cur_scheduler_item", {})[
+                    "action"
+                ] = msg
+
+        for attempt in range(1, max_tries + 1):
+            _set_action(f"PA align+verify attempt {attempt}/{max_tries}")
+
+            # ── Step 1: 3PPA ──────────────────────────────────────────────
+            self.mark_op_state("EqModePA", "working")
+            time.sleep(1.0)
+            response = self.send_message_param_sync(
+                {
+                    "method": "start_polar_align",
+                    "params": {"restart": True, "dec_pos_index": dec_pos_index},
+                }
+            )
+            if response.get("code", -1) != 0:
+                self.logger.warning(
+                    f"PA align+verify: start_polar_align rejected on attempt {attempt}: {response}"
+                )
+                continue
+
+            result = self.wait_end_op("EqModePA")
+            self.mark_op_state("EqModePA", "complete")
+            self.send_message_param_sync({"method": "iscope_stop_view"})
+
+            if not result:
+                self.logger.warning(
+                    f"PA align+verify: 3PPA failed on attempt {attempt}"
+                )
+                continue
+
+            eq_event = self.event_state.get("EqModePA", {})
+            pa_err_x = eq_event.get("x")
+            pa_err_y = eq_event.get("y")
+            if pa_err_x is None or pa_err_y is None:
+                self.logger.warning(
+                    f"PA align+verify: 3PPA attempt {attempt} completed but no residual values"
+                )
+                continue
+
+            pa_magnitude = math.sqrt(pa_err_x**2 + pa_err_y**2)
+            _set_action(
+                f"PA align+verify attempt {attempt}/{max_tries} — 3PPA done "
+                f"({pa_magnitude:.3f}°), plate solving…"
+            )
+
+            # ── Step 2: Plate solve to verify ─────────────────────────────
+            time.sleep(2)  # let scope settle
+            self.pa_solve_state = "solving"
+            self.send_message_param_sync({"method": "start_solve"})
+
+            solve_timeout = 60
+            elapsed = 0
+            while self.pa_solve_state == "solving" and elapsed < solve_timeout:
+                time.sleep(1)
+                elapsed += 1
+
+            if self.pa_solve_state == "complete" and self.cur_pa_error_x is not None:
+                solve_magnitude = math.sqrt(
+                    self.cur_pa_error_x**2 + self.cur_pa_error_y**2
+                )
+                delta = abs(pa_magnitude - solve_magnitude)
+                self.logger.info(
+                    f"PA align+verify attempt {attempt}: "
+                    f"3PPA={pa_magnitude:.4f}°  solve={solve_magnitude:.4f}°  "
+                    f"delta={delta:.4f}°"
+                )
+                if delta > 0.5:
+                    self.logger.warning(
+                        f"PA align+verify: 3PPA and plate solve disagree by {delta:.4f}° "
+                        "— using plate solve as truth"
+                    )
+                verify_error = solve_magnitude
+            else:
+                self.logger.warning(
+                    f"PA align+verify: plate solve unavailable on attempt {attempt}, "
+                    "falling back to 3PPA residual"
+                )
+                verify_error = pa_magnitude
+
+            if verify_error <= threshold:
+                msg = (
+                    f"PA verify succeeded on attempt {attempt}: "
+                    f"error={verify_error:.4f}° (threshold={threshold}°)"
+                )
+                _set_action(msg)
+                return self.json_result(
+                    "polar_align_and_verify",
+                    0,
+                    {
+                        "attempts": attempt,
+                        "pa_error_3ppa": pa_magnitude,
+                        "pa_error_solve": (
+                            solve_magnitude
+                            if self.pa_solve_state == "complete"
+                            else None
+                        ),
+                    },
+                )
+
+            _set_action(
+                f"PA align+verify attempt {attempt}/{max_tries} — "
+                f"error {verify_error:.3f}° > threshold {threshold}°, retrying…"
+            )
+
+        msg = (
+            f"PA verify: failed to reach threshold {threshold}° "
+            f"after {max_tries} attempts"
+        )
+        self.logger.warning(msg)
+        return self.json_result("polar_align_and_verify", -1, {"error": msg})
+
+    def action_refresh_pa_deviation(self, params):
+        """Trigger a single plate solve and derive polar-alignment deviation from the result.
+
+        Non-blocking: returns immediately. The PlateSolve event handler updates
+        cur_pa_error_x/y and pa_solve_state when the solve completes.
+        """
+        self.pa_solve_state = "solving"
+        self.logger.info("PA deviation refresh: requesting plate solve")
+        response = self.send_message_param_sync({"method": "start_solve"})
+        self.logger.info(f"PA deviation refresh: start_solve response: {response}")
+        return response
+
+    def get_pa_solve_state(self, params):
+        """Return the current plate-solve state for the PA deviation refresh flow."""
+        return {"pa_solve_state": self.pa_solve_state}
+
     def receive_message_thread_fn(self) -> None:
         msg_remainder = ""
         while self.is_watch_events:
@@ -409,6 +554,32 @@ class Seestar:
                             elif parsed_data["state"] == "complete":
                                 self.cur_pa_error_x = parsed_data["x"]
                                 self.cur_pa_error_y = parsed_data["y"]
+                        elif event_name == "PlateSolve" and "state" in parsed_data:
+                            state = parsed_data["state"]
+                            if (
+                                state == "working"
+                                or state == "start"
+                                or state == "solving"
+                            ):
+                                self.pa_solve_state = "solving"
+                            elif state == "fail":
+                                self.pa_solve_state = "fail"
+                                self.logger.warning("PA plate solve failed")
+                            elif state == "complete":
+                                result = parsed_data.get("result", {})
+                                ra_dec = result.get("ra_dec")
+                                if ra_dec and len(ra_dec) == 2:
+                                    d_alt, d_az = self._compute_pa_error_from_solve(
+                                        ra_dec[0], ra_dec[1]
+                                    )
+                                    if d_alt is not None and d_az is not None:
+                                        self.cur_pa_error_y = d_alt
+                                        self.cur_pa_error_x = d_az
+                                        self.pa_solve_state = "complete"
+                                    else:
+                                        self.pa_solve_state = "fail"
+                                else:
+                                    self.pa_solve_state = "fail"
                         elif (
                             event_name == "Simu_Stack"
                         ):  # The stack event is normally received in the imaging code, but the simulator will send them here
@@ -582,6 +753,76 @@ class Seestar:
         )
         self.logger.info(f"coord in az-alt: {altaz.az.deg}, {altaz.alt.deg}")
         return [altaz.alt.deg, altaz.az.deg]
+
+    def _compute_lst(self) -> float:
+        """Return Local Sidereal Time in decimal hours for the configured longitude."""
+        import datetime as _dt
+
+        now = _dt.datetime.now(_dt.timezone.utc)
+        jd = now.timestamp() / 86400.0 + 2440587.5
+        t = (jd - 2451545.0) / 36525.0
+        # Greenwich Mean Sidereal Time in degrees (IAU formula)
+        gst = (
+            280.46061837
+            + 360.98564736629 * (jd - 2451545.0)
+            + t * t * (0.000387933 - t / 38710000.0)
+        ) % 360.0
+        lst = (gst + Config.init_long) % 360.0
+        return lst / 15.0  # → decimal hours
+
+    def _compute_pa_error_from_solve(
+        self, solve_ra: float, solve_dec: float
+    ) -> tuple[float | None, float | None]:
+        """Compute polar-axis altitude and azimuth error (degrees) from a plate solve.
+
+        Uses the instantaneous pointing error between the mount's claimed position
+        (self.ra / self.dec, from scope_get_equ_coord) and the plate-solve result to
+        solve a 2×2 linear system for dAlt and dAz.
+
+        Returns (None, None) when the geometry is degenerate (pointing near the
+        meridian, near the celestial pole, or mount position unknown).
+        """
+        if self.ra is None or self.dec is None:
+            self.logger.warning(
+                "PA solve: mount RA/Dec not yet known; skipping computation"
+            )
+            return None, None
+
+        lat = math.radians(Config.init_lat)
+        lst = self._compute_lst()
+        ha = math.radians(((lst - self.ra) * 15.0) % 360.0)  # hour angle in radians
+        dec = math.radians(self.dec)
+
+        # Guard: near the celestial pole tan(dec) blows up
+        if abs(math.cos(dec)) < 1e-3:
+            self.logger.warning(
+                "PA solve: pointing too close to pole; skipping computation"
+            )
+            return None, None
+
+        # Pointing error in degrees, then radians
+        delta_dec = math.radians(solve_dec - self.dec)
+        delta_ra_cos_dec = math.radians((solve_ra - self.ra) * 15.0 * math.cos(dec))
+
+        # 2×2 system:
+        #   delta_dec          = dAlt·cos(ha) + dAz·sin(lat)·sin(ha)
+        #   delta_ra_cos_dec   = dAlt·sin(ha) − dAz·(cos(lat)·cos(ha) + sin(lat)·tan(dec))
+        a1 = math.cos(ha)
+        b1 = math.sin(lat) * math.sin(ha)
+        a2 = math.sin(ha)
+        b2 = -(math.cos(lat) * math.cos(ha) + math.sin(lat) * math.tan(dec))
+
+        det = a1 * b2 - a2 * b1
+        if abs(det) < 1e-6:
+            self.logger.warning(
+                "PA solve: ill-conditioned geometry (near meridian?); skipping"
+            )
+            return None, None
+
+        d_alt = math.degrees((delta_dec * b2 - delta_ra_cos_dec * b1) / det)
+        d_az = math.degrees((delta_ra_cos_dec * a1 - delta_dec * a2) / det)
+        self.logger.info(f"PA solve result: dAlt={d_alt:.4f}°  dAz={d_az:.4f}°")
+        return d_alt, d_az
 
     def get_pa_error(self, param):
         if self.cur_pa_error_x is None or self.cur_pa_error_y is None:
@@ -1052,6 +1293,7 @@ class Seestar:
 
             do_AF = params.get("auto_focus", False)
             do_3PPA = params.get("3ppa", False)
+            do_pa_verify = params.get("pa_verify", False)
             do_dark_frames = params.get("dark_frames", False)
             dec_pos_index = params.get("dec_pos_index", Config.dec_pos_index)
 
@@ -1162,9 +1404,12 @@ class Seestar:
                 )
                 self.logger.info(f"EQ mode from device state: {self.is_EQ_mode}")
 
-            if do_3PPA and not self.is_EQ_mode:
-                self.logger.warning("Cannot do 3PPA without EQ mode. Will skip 3PPA.")
+            if (do_3PPA or do_pa_verify) and not self.is_EQ_mode:
+                self.logger.warning(
+                    "Cannot do 3PPA/PA verify without EQ mode. Will skip."
+                )
                 do_3PPA = False
+                do_pa_verify = False
 
             if self.firmware_ver_int < 2427:
                 msg = "Your firmware version is too old. Please update to at least 4.27 or use the older version of the app (e.g., 2.5.x)"
@@ -1175,7 +1420,23 @@ class Seestar:
 
             result = True
 
-            if do_3PPA:
+            if do_pa_verify:
+                msg = "perform PA alignment with verification"
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+                self.logger.info(msg)
+                self.action_polar_align_and_verify(
+                    {
+                        "dec_pos_index": dec_pos_index,
+                        "threshold_deg": params.get(
+                            "pa_threshold_deg", Config.pa_threshold_deg
+                        ),
+                        "max_tries": params.get("pa_max_tries", Config.pa_max_tries),
+                    }
+                )
+                result = (
+                    True  # action_polar_align_and_verify handles its own logging/state
+                )
+            elif do_3PPA:
                 msg = "perform PA Alignment"
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
                 self.logger.info(msg)
@@ -2294,6 +2555,14 @@ class Seestar:
                 while startup_thread.is_alive():
                     update_time()
                     time.sleep(2)
+            elif action == "action_polar_align_and_verify":
+                item_state: SchedulerItemState = {
+                    "type": "polar_align_verify",
+                    "schedule_item_id": self.schedule["current_item_id"],
+                    "action": "polar align and verify",
+                }
+                self.update_scheduler_state_obj(item_state)
+                self.action_polar_align_and_verify(cur_schedule_item.get("params", {}))
             elif action == "action_set_dew_heater":
                 self.logger.info(
                     f"Trying to set dew heater to {cur_schedule_item['params']}"

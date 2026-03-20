@@ -226,6 +226,8 @@ class _Config:
         self.init_guest_mode: bool = self.get_toml(section, "guest_mode_init", True)
         self.battery_low_limit: int = self.get_toml(section, "battery_low_limit", 3)
         self.dec_pos_index: int = self.get_toml(section, "dec_pos_index", 3)
+        self.pa_threshold_deg: float = self.get_toml(section, "pa_threshold_deg", 0.3)
+        self.pa_max_tries: int = self.get_toml(section, "pa_max_tries", 3)
         self.is_frame_calibrated: bool = self.get_toml(
             section, "is_frame_calibrated", True
         )
@@ -385,6 +387,20 @@ class _Config:
             "seestar_initialization",
             "battery_low_limit",
             int(req.media["battery_low_limit"]),
+        )
+        self.set_toml(
+            "seestar_initialization",
+            "pa_threshold_deg",
+            float(
+                req.media.get(
+                    "pa_threshold_deg", getattr(self, "pa_threshold_deg", 0.3)
+                )
+            ),
+        )
+        self.set_toml(
+            "seestar_initialization",
+            "pa_max_tries",
+            int(req.media.get("pa_max_tries", getattr(self, "pa_max_tries", 3))),
         )
         self.load(self.path_to_dat, preloaded_dict=self._dict)
 
@@ -879,6 +895,18 @@ class _Config:
                     "Battery low limit percentage:",
                     self.battery_low_limit,
                     "Lower limit for battery, before safe shutdown",
+                )
+                + self.render_text(
+                    "pa_threshold_deg",
+                    "PA verify threshold (degrees):",
+                    self.pa_threshold_deg,
+                    "Max acceptable polar alignment error for PA verify loop (default 0.3°)",
+                )
+                + self.render_text(
+                    "pa_max_tries",
+                    "PA verify max attempts:",
+                    self.pa_max_tries,
+                    "Max number of 3PPA+verify loops before giving up (default 3)",
                 ),
             )
             + self.render_config_section(

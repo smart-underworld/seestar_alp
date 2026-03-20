@@ -52,6 +52,8 @@ dew_heater_power = 0                # 0 - 100; 0 is off, 100 is max
 guest_mode_init = true
 battery_low_limit = 3
 dec_pos_index = 3       # 1-5; 1 = Dec Arm pointing North,  3 = Dec Arm pointing at Zenith, 5 = Dec Arm pointing South
+pa_threshold_deg = 0.3  # max acceptable polar alignment error (degrees) for the PA verify loop
+pa_max_tries = 3        # max 3PPA+verify attempts before giving up
 is_frame_calibrated = true
 
 [logging]
