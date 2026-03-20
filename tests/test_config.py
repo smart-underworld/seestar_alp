@@ -528,3 +528,18 @@ def test_load_from_form_sets_network_values(monkeypatch):
 
     assert cfg._dict["network"]["ip_address"] == "10.1.2.3"
     assert cfg._dict["network"]["port"] == 6666
+
+
+def test_load_from_form_no_seestars_key_in_dict(monkeypatch):
+    """load_from_form must not crash when _dict has no seestars key (fresh config)."""
+    cfg = make_loaded_config()
+    monkeypatch.setattr(cfg, "load", lambda path, preloaded_dict=None: None)
+
+    # Simulate a fresh TOML dict that never had a [[seestars]] section
+    del cfg._dict["seestars"]
+
+    req = FakeRequest(_base_form_media())
+    cfg.load_from_form(req)  # must not raise NonExistentKey
+
+    assert len(cfg.seestars) == 1
+    assert cfg.seestars[0]["name"] == "Test Scope"

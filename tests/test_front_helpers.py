@@ -2,6 +2,7 @@ import threading
 
 import front.app as front_app
 from front.app import (
+    get_root,
     EventStatus,
     LiveVideoResource,
     check_dec_value,
@@ -259,3 +260,29 @@ def test_live_video_cache_is_scoped_per_client(monkeypatch):
     resource.on_get(req_a, resp_a2, telescope_id=1)
     assert resp_a2.status == "204 No Content"
     assert resp_a2.text == ""
+
+
+def test_get_root_returns_device_path(monkeypatch):
+    """get_root returns /N for a known device_num."""
+    monkeypatch.setattr(
+        front_app.Config,
+        "seestars",
+        [{"device_num": 1, "name": "Alpha", "ip_address": "127.0.0.1"}],
+    )
+    assert get_root(1) == "/1"
+
+
+def test_get_root_federation_always_returns_zero(monkeypatch):
+    """get_root always returns /0 for the federation device (telescope_id=0)."""
+    monkeypatch.setattr(front_app.Config, "seestars", [])
+    assert get_root(0) == "/0"
+
+
+def test_get_root_unknown_device_returns_empty_string(monkeypatch):
+    """get_root returns '' rather than crashing when telescope_id is not configured."""
+    monkeypatch.setattr(
+        front_app.Config,
+        "seestars",
+        [{"device_num": 1, "name": "Alpha", "ip_address": "127.0.0.1"}],
+    )
+    assert get_root(99) == ""
