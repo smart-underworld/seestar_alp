@@ -77,13 +77,10 @@ def start_seestar_device(
     ip_address: str,
     port: int,
     device_num: int,
-    is_EQ_mode: bool,
 ):  # type: ignore
     # logger = logger
     global seestar_dev
-    seestar_dev[device_num] = Seestar(
-        logger, ip_address, port, name, device_num, is_EQ_mode, True
-    )
+    seestar_dev[device_num] = Seestar(logger, ip_address, port, name, device_num, True)
     seestar_dev[device_num].start_watch_thread()
     return seestar_dev[device_num]
 

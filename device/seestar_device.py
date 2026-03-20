@@ -84,11 +84,10 @@ class Seestar:
         port: int,
         device_name: str,
         device_num: int,
-        is_EQ_mode: bool,
         is_debug=False,
     ):
         logger.info(
-            f"Initialize the new instance of Seestar: {host}:{port}, name:{device_name}, num:{device_num}, is_EQ_mode:{is_EQ_mode}, is_debug:{is_debug}"
+            f"Initialize the new instance of Seestar: {host}:{port}, name:{device_name}, num:{device_num}, is_debug:{is_debug}"
         )
 
         self.host: str = host
@@ -150,7 +149,7 @@ class Seestar:
         # self.event_queue = queue.Queue()
         self.event_queue = collections.deque(maxlen=20)
         self.eventbus = signal(f"{self.device_name}.eventbus")
-        self.is_EQ_mode: bool = is_EQ_mode
+        self.is_EQ_mode: bool = False  # updated from device state on startup
         # self.trace = MessageTrace(self.device_num, self.port)
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
@@ -1051,10 +1050,6 @@ class Seestar:
             do_dark_frames = params.get("dark_frames", False)
             dec_pos_index = params.get("dec_pos_index", Config.dec_pos_index)
 
-            if do_3PPA and not self.is_EQ_mode:
-                self.logger.warn("Cannot do 3PPA without EQ mode. Will skip 3PPA.")
-                do_3PPA = False
-
             self.logger.info(
                 f"begin start_up sequence with seestar_alp version {Version.app_version()}"
             )
@@ -1154,6 +1149,18 @@ class Seestar:
             # make sure we have the right firmware version here
             self.firmware_ver_int = response["result"]["device"]["firmware_ver_int"]
             self.logger.info(f"Firmware version: {self.firmware_ver_int}")
+
+            # Update EQ mode from actual device state; config value may not reflect the mount
+            if "mount" in response.get("result", {}):
+                self.is_EQ_mode = response["result"]["mount"].get(
+                    "equ_mode", self.is_EQ_mode
+                )
+                self.logger.info(f"EQ mode from device state: {self.is_EQ_mode}")
+
+            if do_3PPA and not self.is_EQ_mode:
+                self.logger.warn("Cannot do 3PPA without EQ mode. Will skip 3PPA.")
+                do_3PPA = False
+
             if self.firmware_ver_int < 2427:
                 msg = "Your firmware version is too old. Please update to at least 4.27 or use the older version of the app (e.g., 2.5.x)"
                 self.logger.error(msg)

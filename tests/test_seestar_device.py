@@ -24,7 +24,7 @@ class DummyLogger:
 
 @pytest.fixture
 def seestar():
-    return Seestar(DummyLogger(), "127.0.0.1", 4700, "TestScope", 1, False, True)
+    return Seestar(DummyLogger(), "127.0.0.1", 4700, "TestScope", 1, True)
 
 
 def test_should_inject_verify_respects_config_and_firmware(seestar):
