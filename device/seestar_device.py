@@ -463,6 +463,13 @@ class Seestar:
                 existing_params = data.get("params")
 
                 if isinstance(existing_params, dict):
+                    # Firmware 7.06+ (2706+) rejects verify injected into dict params:
+                    #   - {"verify": true} inside the dict → code 109 "unexpected param"
+                    #   - [dict, "verify"] list-wrap → code 107 "expected object param"
+                    # The device is SSL-authenticated (is_verified: True) so dict-param
+                    # commands don't need verify at all on 7.06+.
+                    if getattr(self, "firmware_ver_int", 0) >= 2706:
+                        return data
                     if "verify" not in existing_params:
                         existing_params["verify"] = True
                     data["params"] = existing_params
@@ -789,7 +796,6 @@ class Seestar:
         self.logger.info("trying auto_focus...")
         focus_count = 0
         result = False
-        self.mark_op_state("AutoFocus", "working")
         while focus_count < try_count:
             focus_count += 1
             self.logger.info(
@@ -800,6 +806,9 @@ class Seestar:
             )
             if focus_count > 1:
                 time.sleep(5)
+            # Reset state to "working" before each attempt so that wait_end_op
+            # doesn't immediately return the stale result from the previous try.
+            self.mark_op_state("AutoFocus", "working")
             if self._start_auto_focus():
                 result = self.wait_end_op("AutoFocus")
                 if result:
@@ -2182,6 +2191,12 @@ class Seestar:
                     "action": "auto focus",
                 }
                 self.update_scheduler_state_obj(item_state)
+                # Ensure the device is in star-view mode before requesting AF.
+                # Newer firmware (7.06+) requires this; older firmware was lenient.
+                self.send_message_param_sync(
+                    {"method": "iscope_start_view", "params": {"mode": "star"}}
+                )
+                time.sleep(2)
                 self.try_auto_focus(cur_schedule_item["params"]["try_count"])
             elif action == "adjust_focus":
                 item_state: SchedulerItemState = {
@@ -2273,6 +2288,12 @@ class Seestar:
                 )
                 self.action_set_dew_heater(cur_schedule_item["params"])
             elif action == "action_set_exposure":
+                item_state: SchedulerItemState = {
+                    "type": "action_set_exposure",
+                    "schedule_item_id": self.schedule["current_item_id"],
+                    "action": "set exposure",
+                }
+                self.update_scheduler_state_obj(item_state)
                 self.logger.info(
                     f"Trying to set exposure to {cur_schedule_item['params']}"
                 )
@@ -2348,9 +2369,11 @@ class Seestar:
             result = self.is_goto_completed_ok()
         else:
             # self.event_state[in_op_name] = {"state":"stopped"}
+            # "cancel" is treated as a terminal failure state — firmware can send this when
+            # an operation is pre-empted or the device is not in the right mode (e.g. 7.06+).
+            terminal_states = {"complete", "fail", "cancel"}
             while in_op_name not in self.event_state or (
-                self.event_state[in_op_name]["state"] != "complete"
-                and self.event_state[in_op_name]["state"] != "fail"
+                self.event_state[in_op_name]["state"] not in terminal_states
             ):
                 time.sleep(1)
             result = self.event_state[in_op_name]["state"] == "complete"

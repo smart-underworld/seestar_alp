@@ -47,14 +47,33 @@ def test_should_inject_verify_respects_config_and_firmware(seestar):
 
 
 def test_transform_message_for_verify_dict_params(seestar):
-    seestar.firmware_ver_int = 3000
     old_setting = Config.verify_injection
     try:
         Config.verify_injection = True
+
+        # Pre-7.06 firmware: verify injected as a key inside the dict params.
+        seestar.firmware_ver_int = 2705
         msg = {"method": "set_setting", "params": {"a": 1}}
         out = seestar.transform_message_for_verify(msg)
         assert out["params"]["verify"] is True
-        assert "verify" not in msg["params"]
+        assert "verify" not in msg["params"]  # original not mutated
+
+        # 7.06+ firmware: verify must NOT be injected into dict params at all.
+        # Both {"verify": true} (code 109) and [dict, "verify"] (code 107) are rejected.
+        # The device is SSL-authenticated so dict-param commands don't need verify.
+        seestar.firmware_ver_int = 2706
+        out = seestar.transform_message_for_verify(
+            {"method": "set_setting", "params": {"a": 1}}
+        )
+        assert out["params"] == {"a": 1}
+        assert "verify" not in out["params"]
+
+        seestar.firmware_ver_int = 3000
+        out = seestar.transform_message_for_verify(
+            {"method": "set_setting", "params": {"a": 1}}
+        )
+        assert out["params"] == {"a": 1}
+        assert "verify" not in out["params"]
     finally:
         Config.verify_injection = old_setting
 
