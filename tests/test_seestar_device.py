@@ -18,13 +18,16 @@ class DummyLogger:
     def warn(self, *args, **kwargs):
         return None
 
+    def warning(self, *args, **kwargs):
+        return None
+
     def error(self, *args, **kwargs):
         return None
 
 
 @pytest.fixture
 def seestar():
-    return Seestar(DummyLogger(), "127.0.0.1", 4700, "TestScope", 1, False, True)
+    return Seestar(DummyLogger(), "127.0.0.1", 4700, "TestScope", 1, True)
 
 
 def test_should_inject_verify_respects_config_and_firmware(seestar):
@@ -1065,7 +1068,7 @@ def test_schedule_crud_import_export_and_shortcuts(monkeypatch, seestar, tmp_pat
 def test_json_result_adjust_focus_and_reset(monkeypatch, seestar):
     warn_calls = []
     debug_calls = []
-    seestar.logger.warn = lambda *a, **k: warn_calls.append(a)
+    seestar.logger.warning = lambda *a, **k: warn_calls.append(a)
     seestar.logger.debug = lambda *a, **k: debug_calls.append(a)
 
     assert seestar.json_result("x", -1, "bad")["code"] == -1

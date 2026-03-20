@@ -40,13 +40,11 @@ def test_load_renumbers_invalid_device_numbers():
                 {
                     "name": "A",
                     "ip_address": "10.0.0.1",
-                    "is_EQ_mode": False,
                     "device_num": 99,
                 },
                 {
                     "name": "B",
                     "ip_address": "10.0.0.2",
-                    "is_EQ_mode": True,
                     "device_num": 100,
                 },
             ]
@@ -65,13 +63,11 @@ def test_load_preserves_valid_device_numbers():
                 {
                     "name": "A",
                     "ip_address": "10.0.0.1",
-                    "is_EQ_mode": False,
                     "device_num": 1,
                 },
                 {
                     "name": "B",
                     "ip_address": "10.0.0.2",
-                    "is_EQ_mode": True,
                     "device_num": 2,
                 },
             ]
@@ -313,13 +309,11 @@ def test_render_seestars_shows_all_devices():
                     "name": "Alpha",
                     "ip_address": "10.0.0.1",
                     "device_num": 1,
-                    "is_EQ_mode": False,
                 },
                 {
                     "name": "Beta",
                     "ip_address": "10.0.0.2",
                     "device_num": 2,
-                    "is_EQ_mode": True,
                 },
             ]
         },
@@ -329,25 +323,6 @@ def test_render_seestars_shows_all_devices():
     assert "Beta" in html
     assert "device_div_1" in html
     assert "device_div_2" in html
-
-
-def test_render_seestars_eq_mode_checked():
-    cfg = make_config()
-    cfg.load(
-        "",
-        preloaded_dict={
-            "seestars": [
-                {
-                    "name": "X",
-                    "ip_address": "1.2.3.4",
-                    "device_num": 1,
-                    "is_EQ_mode": True,
-                },
-            ]
-        },
-    )
-    html = cfg.render_seestars()
-    assert "checked" in html
 
 
 # ---------------------------------------------------------------------------
@@ -482,7 +457,6 @@ dither_length_pixel = 50
 dither_frequency = 10
 activate_LP_filter = false
 dew_heater_power = 0
-is_EQ_mode = false
 guest_mode_init = true
 dec_pos_index = 3
 battery_low_limit = 3
@@ -491,7 +465,6 @@ battery_low_limit = 3
 name = "Alpha"
 ip_address = "10.0.0.1"
 device_num = 1
-is_EQ_mode = false
 """)
     cfg._dict = raw_toml
     cfg.seestars = list(raw_toml["seestars"])
@@ -555,3 +528,18 @@ def test_load_from_form_sets_network_values(monkeypatch):
 
     assert cfg._dict["network"]["ip_address"] == "10.1.2.3"
     assert cfg._dict["network"]["port"] == 6666
+
+
+def test_load_from_form_no_seestars_key_in_dict(monkeypatch):
+    """load_from_form must not crash when _dict has no seestars key (fresh config)."""
+    cfg = make_loaded_config()
+    monkeypatch.setattr(cfg, "load", lambda path, preloaded_dict=None: None)
+
+    # Simulate a fresh TOML dict that never had a [[seestars]] section
+    del cfg._dict["seestars"]
+
+    req = FakeRequest(_base_form_media())
+    cfg.load_from_form(req)  # must not raise NonExistentKey
+
+    assert len(cfg.seestars) == 1
+    assert cfg.seestars[0]["name"] == "Test Scope"

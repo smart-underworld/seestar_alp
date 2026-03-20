@@ -646,3 +646,198 @@ def test_22_response_delay_resilience(front_sim_bridge):
     resp = front_sim_bridge["client"].simulate_get("/1/home-content")
     assert resp.status_code in (200, 204)
     front_sim_bridge["response_delay_ms"]["value"] = 0
+
+
+# ---------------------------------------------------------------------------
+# Two-device federation integration tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def two_simulator_servers():
+    """Start two independent simulator instances on separate ports."""
+    host = "127.0.0.1"
+    sims = [
+        {
+            "name": f"sim{i}",
+            "tcp_port": _find_free_port(),
+            "udp_port": _find_free_port(),
+        }
+        for i in range(1, 3)
+    ]
+    logger = logging.getLogger("two-sim-integration")
+    listeners, threads = [], []
+    for sim in sims:
+        lst = SocketListener(
+            logger, host=host, tcp_port=sim["tcp_port"], udp_port=sim["udp_port"]
+        )
+        t = threading.Thread(target=lst._start_socket_listener, daemon=True)
+        t.start()
+        _wait_for_tcp(host, sim["tcp_port"])
+        listeners.append(lst)
+        threads.append(t)
+
+    yield {"host": host, "sim1": sims[0], "sim2": sims[1]}
+
+    for lst in listeners:
+        lst.shutdown_event.set()
+        if lst.tcp_socket:
+            lst.tcp_socket.close()
+        if lst.udp_socket:
+            lst.udp_socket.close()
+    for t in threads:
+        t.join(timeout=2)
+
+
+@pytest.fixture
+def two_device_federation(monkeypatch, two_simulator_servers):
+    """
+    Wires the device layer to two real simulator instances and exposes both a
+    device-layer TestClient and a front-layer TestClient for end-to-end testing.
+    """
+    import device.app as device_app
+    import device.telescope as tel_module
+    from device.shr import set_shr_logger
+
+    host = two_simulator_servers["host"]
+    port1 = two_simulator_servers["sim1"]["tcp_port"]
+    port2 = two_simulator_servers["sim2"]["tcp_port"]
+    logger = logging.getLogger("federation-fixture")
+    set_shr_logger(logger)
+
+    # Clean slate for the telescope module's global device registry
+    tel_module.seestar_dev.clear()
+    tel_module.start_seestar_federation(logger)
+    dev1 = tel_module.start_seestar_device(logger, "Seestar Alpha", host, port1, 1)
+    dev2 = tel_module.start_seestar_device(logger, "Seestar Beta", host, port2, 2)
+
+    # Wait for both simulators to accept the device connections
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        if dev1.is_connected and dev2.is_connected:
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail("Timed out waiting for both simulators to connect")
+
+    # Device-layer Falcon app (routes to seestar_dev via telescope module globals)
+    device_falc_app = falcon.App()
+    device_app.init_routes(device_falc_app, "telescope", tel_module)
+    device_client = testing.TestClient(device_falc_app)
+
+    def _alpaca_action(dev_num, action, parameters):
+        """PUT to the device-layer action endpoint with required ALPACA fields."""
+        return device_client.simulate_put(
+            f"/api/v1/telescope/{dev_num}/action",
+            json={
+                "Action": action,
+                "Parameters": json.dumps(parameters),
+                "ClientID": 1,
+                "ClientTransactionID": 1,
+            },
+        )
+
+    # Bridge the front layer to the device layer without a real HTTP server
+    def _device_action(action, dev_num, parameters, is_schedule=False):
+        resp = _alpaca_action(dev_num, action, parameters)
+        if resp.status_code == 200:
+            return resp.json
+        return None
+
+    monkeypatch.setattr(
+        Config,
+        "seestars",
+        [
+            {"device_num": 1, "name": "Seestar Alpha", "ip_address": host},
+            {"device_num": 2, "name": "Seestar Beta", "ip_address": host},
+        ],
+    )
+    monkeypatch.setattr(front_app, "do_action_device", _device_action)
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_listening_ip", lambda: "127.0.0.1")
+    monkeypatch.setattr(front_app, "get_twilight_times", lambda: {"sunset": "18:00"})
+    monkeypatch.setattr(
+        front_app,
+        "get_nearest_csc",
+        lambda: {"status_msg": "SUCCESS", "href": "", "full_img": ""},
+    )
+    monkeypatch.setattr(
+        front_app,
+        "get_planning_cards",
+        lambda: [{"card_name": "twilight_times", "planning_page_enable": True}],
+    )
+
+    front_app._context_cached.clear()
+    front_app._last_context_get_time.clear()
+    front_app.StatsContentResource._last_render_by_key.clear()
+    front_app.GuestModeContentResource._last_render_by_key.clear()
+    front_app.EventStatus._last_render_by_key.clear()
+
+    front_client = testing.TestClient(_build_front_test_app())
+
+    yield {
+        "device_client": device_client,
+        "alpaca_action": _alpaca_action,
+        "front_client": front_client,
+        "dev1": dev1,
+        "dev2": dev2,
+        "host": host,
+    }
+
+    tel_module.end_seestar_device(1)
+    tel_module.end_seestar_device(2)
+    tel_module.seestar_dev.clear()
+
+
+def test_23_two_devices_both_connect_to_simulators(two_device_federation):
+    """Both Seestar instances establish a live TCP connection to their simulator."""
+    assert two_device_federation["dev1"].is_connected, "device 1 not connected"
+    assert two_device_federation["dev2"].is_connected, "device 2 not connected"
+
+
+def test_24_two_devices_respond_to_method_sync(two_device_federation):
+    """Device-layer action endpoint responds correctly for both device numbers."""
+    alpaca_action = two_device_federation["alpaca_action"]
+    for devnum in (1, 2):
+        resp = alpaca_action(devnum, "method_sync", {"method": "get_device_state"})
+        assert resp.status_code == 200, (
+            f"device {devnum} action endpoint returned {resp.status_code}"
+        )
+        body = resp.json
+        assert body["ErrorNumber"] == 0, f"device {devnum} returned error: {body}"
+        assert "device" in body.get("Value", {}).get("result", {}), (
+            f"device {devnum} response missing device info"
+        )
+
+
+def test_25_two_devices_have_independent_simulator_state(two_device_federation):
+    """Commands to device 1 and device 2 reach independent simulators."""
+    alpaca_action = two_device_federation["alpaca_action"]
+    results = {}
+    for devnum in (1, 2):
+        resp = alpaca_action(devnum, "method_sync", {"method": "get_device_state"})
+        assert resp.status_code == 200
+        results[devnum] = resp.json.get("Value", {}).get("result", {})
+
+    # Both simulators report their own device state independently
+    assert "device" in results[1]
+    assert "device" in results[2]
+
+
+def test_26_front_home_pages_render_for_both_devices(two_device_federation):
+    """Individual device home pages render without crashing for both devices."""
+    front_client = two_device_federation["front_client"]
+    for devnum in (1, 2):
+        resp = front_client.simulate_get(f"/{devnum}/")
+        assert resp.status_code == 200, (
+            f"home page for device {devnum} returned {resp.status_code}"
+        )
+        assert "Seestar" in resp.text, f"device {devnum} home page missing Seestar name"
+
+
+def test_27_federation_home_lists_both_devices(two_device_federation):
+    """Federation home page (devnum=0) lists both configured Seestar devices."""
+    resp = two_device_federation["front_client"].simulate_get("/0/")
+    assert resp.status_code == 200
+    assert "Seestar Alpha" in resp.text
+    assert "Seestar Beta" in resp.text

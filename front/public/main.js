@@ -525,19 +525,4 @@ function delSeestar() {
 
 }
 
-// Create event listener to monitor the seestar checkboxes.  Upon change of the checkbox state,
-// update the associated hidden checkbox with True / False so we have somthing to send back upon unchecked.
-
-document.querySelectorAll('[id^=ss_is_EQ_mode_]:not([id^=is_EQ_mode_hidden_])').forEach(function(element) {
-    element.addEventListener('change', function(event) {
-        // Directly access the changed element
-        var changedElement = event.target;
-        var elementNumber = changedElement.id.split("_").pop();
-        var hiddenInput = document.getElementById('ss_is_EQ_mode_hidden_' + elementNumber);
-
-        // Correctly update the hidden input value
-        hiddenInput.value = changedElement.checked ? 'True' : 'False';
-    });
-});
-
 

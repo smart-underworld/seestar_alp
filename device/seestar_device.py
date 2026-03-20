@@ -84,11 +84,10 @@ class Seestar:
         port: int,
         device_name: str,
         device_num: int,
-        is_EQ_mode: bool,
         is_debug=False,
     ):
         logger.info(
-            f"Initialize the new instance of Seestar: {host}:{port}, name:{device_name}, num:{device_num}, is_EQ_mode:{is_EQ_mode}, is_debug:{is_debug}"
+            f"Initialize the new instance of Seestar: {host}:{port}, name:{device_name}, num:{device_num}, is_debug:{is_debug}"
         )
 
         self.host: str = host
@@ -145,12 +144,12 @@ class Seestar:
         self.site_altaz_frame = None
 
         self.connect_count: int = 0
-        self.view_state: dict = {}  # todo : wrap this in a lock!
+        self.view_state: dict = {}
 
         # self.event_queue = queue.Queue()
         self.event_queue = collections.deque(maxlen=20)
         self.eventbus = signal(f"{self.device_name}.eventbus")
-        self.is_EQ_mode: bool = is_EQ_mode
+        self.is_EQ_mode: bool = False  # updated from device state on startup
         # self.trace = MessageTrace(self.device_num, self.port)
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
@@ -188,7 +187,7 @@ class Seestar:
     def send_message(self, data):
         try:
             if self.s is None:
-                self.logger.warn("socket not initialized!")
+                self.logger.warning("socket not initialized!")
                 time.sleep(3)
                 return False
             # todo : don't send if not connected or socket is null?
@@ -206,7 +205,7 @@ class Seestar:
             if self.is_watch_events and self.reconnect():
                 return self.send_message(data)
             return False
-        except:
+        except Exception:
             self.logger.error("General error trying to send message: ", data)
             return False
 
@@ -215,7 +214,7 @@ class Seestar:
             try:
                 self.s.close()
                 self.s = None
-            except:
+            except Exception:
                 pass
 
     def disconnect(self) -> None:
@@ -225,6 +224,7 @@ class Seestar:
 
     def send_udp_intro(self) -> None:
         # {"id":1,"method":"scan_iscope","params":""}
+        sock = None
         try:
             # Create a UDP socket
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -257,8 +257,8 @@ class Seestar:
             self.logger.info(f"Error sending broadcast message: {e}")
 
         finally:
-            # Close the socket
-            sock.close()
+            if sock is not None:
+                sock.close()
 
     def reconnect(self) -> bool:
         if self.is_connected:
@@ -280,11 +280,12 @@ class Seestar:
             self.is_connected = True
             return True
         except socket.error:
-            # Let's just delay a fraction of a second to avoid reconnecting too quickly
+            self.socket_force_close()
             self.is_connected = False
             sleep(1)
             return False
         except Exception:
+            self.socket_force_close()
             self.is_connected = False
             sleep(1)
             return False
@@ -292,12 +293,12 @@ class Seestar:
     def get_socket_msg(self) -> str | None:
         try:
             if self.s is None:
-                self.logger.warn("socket not initialized!")
+                self.logger.warning("socket not initialized!")
                 time.sleep(3)
                 return None
             data = self.s.recv(1024 * 60)  # comet data is >50kb
         except socket.timeout:
-            self.logger.warn("Socket timeout")
+            self.logger.warning("Socket timeout")
             return None
         except socket.error as e:
             # todo : if general socket error, close socket, and kick off reconnect?
@@ -326,7 +327,8 @@ class Seestar:
         if parsed_data["method"] == "get_view_state" and "result" in parsed_data:
             view = parsed_data["result"].get("View")
             if view:
-                self.view_state = view
+                with self.lock:
+                    self.view_state = view
                 # also todo : also update view_state_timestamp
             # else:
             #    self.view_state = {}
@@ -529,7 +531,7 @@ class Seestar:
                     data["result"] = "Error: Exceeded allotted wait time for result"
                     return data
                 else:
-                    self.logger.warn(
+                    self.logger.warning(
                         f"SLOW message response.  {elapsed} seconds. {cur_cmdid=} {data=}"
                     )
                     # todo : dump out stats.  last run time on threads, connection status, etc.
@@ -538,6 +540,8 @@ class Seestar:
         return self.response_dict[cur_cmdid]
 
     def get_event_state(self, params=None):
+        if "scheduler" not in self.event_state:
+            self.event_state["scheduler"] = {}
         self.event_state["scheduler"]["Event"] = "Scheduler"
         self.event_state["scheduler"]["state"] = self.schedule["state"]
         self.event_state["scheduler"]["is_stacking"] = self.schedule.get(
@@ -569,7 +573,7 @@ class Seestar:
 
     def get_altaz_from_eq(self, in_ra, in_dec, obs_time):
         if self.site_altaz_frame is None:
-            self.logger.warn("SCC has a rouge thread trying to call BPA error!")
+            self.logger.warning("SCC has a rouge thread trying to call BPA error!")
             return [9999.9, 9999.9]
         radec = Util.parse_coordinate(is_j2000=False, in_ra=in_ra, in_dec=in_dec)
         # Convert RA/Dec to Alt/Az
@@ -678,13 +682,13 @@ class Seestar:
                 self.event_state[event_watch]["state"] == "working"
                 or self.event_state[event_watch]["state"] == "start"
             )
-        except:
+        except (KeyError, TypeError):
             return False
 
     def is_goto_completed_ok(self):
         try:
             return self.event_state["AutoGoto"]["state"] == "complete"
-        except:
+        except (KeyError, TypeError):
             return False
 
     # synchronise call. Will return only if there's result
@@ -732,7 +736,7 @@ class Seestar:
         self.mark_op_state("goto_target", "stopped")
         result = self.send_message_param_sync(data)
         if "error" in result:
-            self.logger.warn("Error while trying to move: %s", result)
+            self.logger.warning("Error while trying to move: %s", result)
             return False
 
         return self.wait_end_op("goto_target")
@@ -740,7 +744,7 @@ class Seestar:
     def sync_target(self, params):
         if self.schedule["state"] != "stopped" and self.schedule["state"] != "complete":
             msg = f"Cannot sync target while scheduler is active: {self.schedule['state']}"
-            self.logger.warn(msg)
+            self.logger.warning(msg)
             return msg
         else:
             return self._sync_target(params)
@@ -775,7 +779,7 @@ class Seestar:
             in_dur,
         )
         if self.is_goto():
-            self.logger.warn("Failed to move scope: mount is in goto routine.")
+            self.logger.warning("Failed to move scope: mount is in goto routine.")
             return False
         data: MessageParams = {
             "method": "scope_speed_move",
@@ -851,7 +855,7 @@ class Seestar:
             )
             time.sleep(1)
         else:
-            self.logger.warn("Create dark frame data failed.")
+            self.logger.warning("Create dark frame data failed.")
         return result
 
     def stop_stack(self):
@@ -961,7 +965,7 @@ class Seestar:
         )
         if "error" in result:
             # try again:
-            self.logger.warn("Failed to start stack. Trying again...")
+            self.logger.warning("Failed to start stack. Trying again...")
             time.sleep(2)
             result = self.send_message_param_sync(
                 {
@@ -1050,10 +1054,6 @@ class Seestar:
             do_3PPA = params.get("3ppa", False)
             do_dark_frames = params.get("dark_frames", False)
             dec_pos_index = params.get("dec_pos_index", Config.dec_pos_index)
-
-            if do_3PPA and not self.is_EQ_mode:
-                self.logger.warn("Cannot do 3PPA without EQ mode. Will skip 3PPA.")
-                do_3PPA = False
 
             self.logger.info(
                 f"begin start_up sequence with seestar_alp version {Version.app_version()}"
@@ -1154,6 +1154,18 @@ class Seestar:
             # make sure we have the right firmware version here
             self.firmware_ver_int = response["result"]["device"]["firmware_ver_int"]
             self.logger.info(f"Firmware version: {self.firmware_ver_int}")
+
+            # Update EQ mode from actual device state; config value may not reflect the mount
+            if "mount" in response.get("result", {}):
+                self.is_EQ_mode = response["result"]["mount"].get(
+                    "equ_mode", self.is_EQ_mode
+                )
+                self.logger.info(f"EQ mode from device state: {self.is_EQ_mode}")
+
+            if do_3PPA and not self.is_EQ_mode:
+                self.logger.warning("Cannot do 3PPA without EQ mode. Will skip 3PPA.")
+                do_3PPA = False
+
             if self.firmware_ver_int < 2427:
                 msg = "Your firmware version is too old. Please update to at least 4.27 or use the older version of the app (e.g., 2.5.x)"
                 self.logger.error(msg)
@@ -1182,7 +1194,7 @@ class Seestar:
                 self.send_message_param_sync({"method": "iscope_stop_view"})
                 if not result:
                     msg = "Failed to perform polar alignment."
-                    self.logger.warn(msg)
+                    self.logger.warning(msg)
                     self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
 
             if self.schedule["state"] != "working":
@@ -1201,7 +1213,7 @@ class Seestar:
 
             if do_AF:
                 if not do_3PPA:
-                    self.logger.warn(
+                    self.logger.warning(
                         "Seestar starts in a parked position. Performing Auto Focus without Polar Alignment will result in a failed Auto Focus. Skipping."
                     )
 
@@ -1218,7 +1230,7 @@ class Seestar:
                     result = self.try_auto_focus(2)
                     if not result:
                         msg = "Auto focus was unsuccessful."
-                        self.logger.warn(msg)
+                        self.logger.warning(msg)
                         self.schedule["state"] = "stopping"
                         self.event_state["scheduler"]["cur_scheduler_item"][
                             "action"
@@ -1236,7 +1248,7 @@ class Seestar:
                 if not result:
                     msg = "Failed to take dark frame data."
                     self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
-                    self.logger.warn(msg)
+                    self.logger.warning(msg)
                     self.schedule["state"] = "stopping"
                     return
                 else:
@@ -1279,7 +1291,7 @@ class Seestar:
             )
             return self.stop_stack()
         else:
-            self.logger.warn("scheduler is not stacking, so nothing to pause")
+            self.logger.warning("scheduler is not stacking, so nothing to pause")
             return self.json_result("pause_scheduler", -1, "Scheduler is not stacking.")
 
     def continue_scheduler(self, params):
@@ -1301,7 +1313,7 @@ class Seestar:
                     "continue_scheduler", -1, "Failed to continue stacking."
                 )
         else:
-            self.logger.warn("scheduler was not paused, so nothing to do")
+            self.logger.warning("scheduler was not paused, so nothing to do")
             return self.json_result(
                 "pause_scheduler", -1, "Scheduler was not paused stacking."
             )
@@ -1325,7 +1337,7 @@ class Seestar:
 
         else:
             msg = "scheduler is not working or skip was already requested, so nothing to skip"
-            self.logger.warn(msg)
+            self.logger.warning(msg)
             return self.json_result("skip_scheduler_cur_item", -1, msg)
 
     def action_set_dew_heater(self, params):
@@ -1693,7 +1705,7 @@ class Seestar:
                     # if we failed goto
                     if not result:
                         msg = f"Failed to goto target after {num_tries} tries."
-                        self.logger.warn(msg)
+                        self.logger.warning(msg)
                         self.event_state["scheduler"]["cur_scheduler_item"][
                             "action"
                         ] = msg
@@ -1710,7 +1722,7 @@ class Seestar:
 
                     if not self.start_stack({"gain": gain, "restart": True}):
                         msg = "Failed to start stacking."
-                        self.logger.warn(msg)
+                        self.logger.warning(msg)
                         self.event_state["scheduler"]["cur_scheduler_item"][
                             "action"
                         ] = msg
@@ -1927,7 +1939,7 @@ class Seestar:
                     "schedule_item_id", "UNKNOWN"
                 )
                 if item_id == targeted_item_id:
-                    self.logger.warn(
+                    self.logger.warning(
                         "Cannot insert schedule item that has already been executed"
                     )
                     return self.schedule
@@ -1955,7 +1967,7 @@ class Seestar:
                     "schedule_item_id", "UNKNOWN"
                 )
                 if item_id == targeted_item_id:
-                    self.logger.warn(
+                    self.logger.warning(
                         "Cannot insert schedule item that has already been executed"
                     )
                     return self.schedule
@@ -1983,7 +1995,7 @@ class Seestar:
                     "schedule_item_id", "UNKNOWN"
                 )
                 if item_id == targeted_item_id:
-                    self.logger.warn(
+                    self.logger.warning(
                         "Cannot remove schedule item that has already been executed"
                     )
                     return self.schedule
@@ -2063,7 +2075,7 @@ class Seestar:
 
     def json_result(self, command_name, code, result):
         if code != 0:
-            self.logger.warn(
+            self.logger.warning(
                 f"Returning not normal result for command {command_name}, code: {code}, result: {result}."
             )
         else:
@@ -2444,7 +2456,7 @@ class Seestar:
                 try:
                     user_hooks.append(ConfigFactory.parse_file(filepath))
                 except Exception:
-                    self.logger.warn(
+                    self.logger.warning(
                         "Unable to decode user_hooks/{filename} - parsing error"
                     )
         for hook in user_hooks:
@@ -2577,5 +2589,5 @@ class Seestar:
                 yield frame
             except GeneratorExit:
                 break
-            except:
+            except Exception:
                 time.sleep(1)

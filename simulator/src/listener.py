@@ -23,7 +23,6 @@ class SocketListener:
             port=self.tcp_port,
             device_name="Seestar Simulator",
             device_num=1,
-            is_EQ_mode=True,
             is_debug=True,
         )
 

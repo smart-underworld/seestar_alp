@@ -7,15 +7,12 @@ from config import Config
 
 
 class SeestarSimulator:
-    def __init__(
-        self, logger, host, port, device_name, device_num, is_EQ_mode, is_debug=False
-    ):
+    def __init__(self, logger, host, port, device_name, device_num, is_debug=False):
         self.logger = logger
         self.host = host
         self.port = port
         self.device_name = device_name
         self.device_num = device_num
-        self.is_EQ_mode = is_EQ_mode
         self.is_debug = is_debug
         self.cmdid = 10000
         self.scope_radec = [0.0, 0.0]  # Simulated RA/Dec coordinates
