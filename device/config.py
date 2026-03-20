@@ -236,7 +236,7 @@ class _Config:
         """
         # Reset arrays
         self.seestars = []
-        self._dict["seestars"].clear()
+        self._dict["seestars"] = tomlkit.aot()
 
         # Check if 'ss_name' is a list
         if isinstance(req.media["ss_name"], list):

@@ -159,12 +159,11 @@ def get_root(telescope_id):
         telescopes = get_telescopes()
         # if len(telescopes) == 1:
         #     return ""
-        telescope = list(
+        matches = list(
             filter(lambda tel: tel["device_num"] == telescope_id, telescopes)
-        )[0]
-        if telescope:
-            root = f"/{telescope['device_num']}"
-            return root
+        )
+        if matches:
+            return f"/{matches[0]['device_num']}"
     return ""
 
 
