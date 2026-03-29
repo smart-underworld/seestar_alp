@@ -166,6 +166,12 @@ PYINDI_REQ=$(grep '^pyindi' "$REPO_ROOT/requirements.txt")
 mkdir -p "$APP/wheels"
 python3 -m pip wheel --no-deps --wheel-dir "$APP/wheels" "$PYINDI_REQ" 2>&1 | tail -3
 
+# Rewrite requirements.txt to reference the bundled wheel via a file:// URL
+# so uv does not need git on the install target.
+PYINDI_WHEEL=$(basename "$APP/wheels"/pyindi*.whl)
+sed "s|^pyindi.*|pyindi @ file:///opt/seestar_alp/wheels/${PYINDI_WHEEL}|" \
+    "$REPO_ROOT/requirements.txt" > "$APP/requirements.txt"
+
 # ---------------------------------------------------------------------------
 # Systemd service units
 # ---------------------------------------------------------------------------
