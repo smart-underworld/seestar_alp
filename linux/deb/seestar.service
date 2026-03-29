@@ -1,0 +1,20 @@
+[Unit]
+Description=SeeStar ALP communications
+After=network-online.target
+
+[Service]
+User=seestar
+Group=seestar
+Type=notify
+Restart=always
+EnvironmentFile=/etc/seestar/seestar.env
+WorkingDirectory=/opt/seestar_alp
+ExecStart=/opt/seestar_alp/.venv/bin/python /opt/seestar_alp/root_app.py
+
+# Hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ReadWritePaths=/opt/seestar_alp/logs /opt/seestar_alp/.venv /opt/seestar_alp/.local /opt/seestar_alp/.cache
+
+[Install]
+WantedBy=network-online.target

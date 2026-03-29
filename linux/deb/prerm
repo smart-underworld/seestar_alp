@@ -1,0 +1,9 @@
+#!/bin/bash
+set -e
+
+if [ "$1" = "remove" ] || [ "$1" = "upgrade" ] || [ "$1" = "purge" ]; then
+    systemctl stop seestar.service 2>/dev/null || true
+    systemctl stop INDI.service 2>/dev/null || true
+    systemctl disable seestar.service 2>/dev/null || true
+    systemctl disable INDI.service 2>/dev/null || true
+fi

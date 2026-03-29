@@ -1,0 +1,98 @@
+#!/bin/bash
+set -e
+
+APP_DIR=/opt/seestar_alp
+SEESTAR_USER=seestar
+CONFIG_DIR=/etc/seestar
+
+# Create dedicated system user if it doesn't exist
+if ! id -u "$SEESTAR_USER" >/dev/null 2>&1; then
+    useradd --system --no-create-home --shell /usr/sbin/nologin \
+        --home-dir "$APP_DIR" "$SEESTAR_USER"
+fi
+
+# Create log directory writable by the service user
+mkdir -p "$APP_DIR/logs"
+chown "$SEESTAR_USER:$SEESTAR_USER" "$APP_DIR/logs"
+
+# Create config directory
+mkdir -p "$CONFIG_DIR"
+
+# On first install, generate config.toml from the bundled example.
+# On upgrade, the existing config is left untouched.
+if [ ! -f "$CONFIG_DIR/config.toml" ]; then
+    cp "$APP_DIR/device/config.toml.example" "$CONFIG_DIR/config.toml"
+    # Default to listening on all interfaces (not just loopback)
+    sed -i 's/127\.0\.0\.1/0.0.0.0/g' "$CONFIG_DIR/config.toml"
+    sed -i 's|^log_prefix =.*|log_prefix = "logs/"|g' "$CONFIG_DIR/config.toml"
+fi
+
+# Symlink the config into the location the app expects.
+# Force-create so upgrades replace any stale regular file the app may have
+# created (config.py copies the example if the target is missing and writable).
+ln -sf "$CONFIG_DIR/config.toml" "$APP_DIR/device/config.toml"
+
+# Install uv by downloading the binary directly as root — avoids the installer
+# script's attempts to modify shell profile files.
+if ! command -v uv >/dev/null 2>&1 && [ ! -x "$APP_DIR/.local/bin/uv" ]; then
+    echo "Installing uv package manager..."
+    mkdir -p "$APP_DIR/.local/bin"
+    case "$(uname -m)" in
+        aarch64) UV_ARCH="aarch64-unknown-linux-gnu" ;;
+        armv7l)  UV_ARCH="armv7-unknown-linux-gnueabihf" ;;
+        x86_64)  UV_ARCH="x86_64-unknown-linux-gnu" ;;
+        *) echo "Unsupported architecture: $(uname -m)"; exit 1 ;;
+    esac
+    curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-${UV_ARCH}.tar.gz" \
+        | tar -xz --strip-components=1 -C "$APP_DIR/.local/bin" \
+            "uv-${UV_ARCH}/uv" "uv-${UV_ARCH}/uvx"
+fi
+
+# Ensure the seestar user owns all directories uv will write to
+mkdir -p "$APP_DIR/.local" "$APP_DIR/.cache/uv"
+chown -R "$SEESTAR_USER:$SEESTAR_USER" "$APP_DIR/.local" "$APP_DIR/.cache"
+
+# Resolve uv binary
+if command -v uv >/dev/null 2>&1; then
+    UV=uv
+else
+    UV="$APP_DIR/.local/bin/uv"
+fi
+
+# Create venv and install all Python dependencies.
+# Uses requirements.txt (the same source as setup.sh) rather than uv.lock,
+# which may lag behind. uv downloads the required Python version automatically.
+echo "Installing Python dependencies (this may take a few minutes on first install)..."
+mkdir -p "$APP_DIR/.venv"
+chown -R "$SEESTAR_USER:$SEESTAR_USER" "$APP_DIR/.venv" "$APP_DIR/.local"
+HOME="$APP_DIR" su -s /bin/sh "$SEESTAR_USER" -c "
+    '$UV' venv --python 3.13 '$APP_DIR/.venv' &&
+    '$UV' pip install --python '$APP_DIR/.venv/bin/python' \
+        -r '$APP_DIR/requirements.txt'
+" 2>&1 | tail -10
+
+# Apply sysctl settings (IPv6 disable)
+if command -v sysctl >/dev/null 2>&1; then
+    sysctl --system >/dev/null 2>&1 || true
+fi
+
+# Enable and start the main seestar service
+systemctl daemon-reload
+systemctl enable seestar.service
+systemctl restart seestar.service
+
+# The INDI service is installed but left disabled — enable it manually if needed:
+#   systemctl enable INDI.service && systemctl start INDI.service
+systemctl disable INDI.service 2>/dev/null || true
+
+HOSTNAME=$(hostname -I 2>/dev/null | awk '{print $1}' || hostname)
+echo ""
+echo "|---------------------------------------------|"
+echo "| Seestar ALP installation complete            |"
+echo "|                                             |"
+printf "| Access at: http://%-26s|\n" "${HOSTNAME}:5432"
+echo "|                                             |"
+echo "| Logs:   journalctl -u seestar               |"
+echo "| Status: systemctl status seestar            |"
+echo "| Config: /etc/seestar/config.toml            |"
+echo "|---------------------------------------------|"
