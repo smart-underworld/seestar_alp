@@ -179,8 +179,8 @@ Section: science
 Priority: optional
 Architecture: ${ARCH}
 Installed-Size: ${INSTALLED_SIZE}
-Depends: curl, ca-certificates, git, rsync, indi-bin
-Recommends: avahi-daemon
+Depends: curl, ca-certificates, git, rsync
+Recommends: avahi-daemon, indi-bin
 Maintainer: smart-underworld <https://github.com/smart-underworld/seestar_alp>
 Homepage: https://github.com/smart-underworld/seestar_alp
 Description: Seestar ALP telescope controller
@@ -196,6 +196,6 @@ EOF
 dpkg-deb --build --root-owner-group "$STAGE" "$DEB_FILE"
 echo "Built: $DEB_FILE ($(du -h "$DEB_FILE" | cut -f1))"
 echo ""
-echo "Install with:  sudo dpkg -i $(basename "$DEB_FILE")"
+echo "Install with:  sudo apt install ./$(basename "$DEB_FILE")"
 echo "Remove with:   sudo apt remove seestar-alp"
 echo "Purge with:    sudo apt purge seestar-alp   (removes config + venv)"
