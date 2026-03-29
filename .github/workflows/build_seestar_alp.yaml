@@ -130,6 +130,40 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
+  build-linux-deb:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64, armhf]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: sudo apt-get install -y --no-install-recommends rsync
+
+      - name: Build .deb (${{ matrix.arch }})
+        run: |
+          ARCH=${{ matrix.arch }} ./linux/deb/build-deb.sh
+          git_version=$(git describe --tags --always --exclude='*[0-9]-g*' --match='v*')
+          echo "deb_version=${git_version}" >> $GITHUB_ENV
+          if [[ $git_version =~ .*[0-9]*-g.* ]]; then
+            echo "deb_prerelease=true"  >> $GITHUB_ENV
+          else
+            echo "deb_prerelease=false" >> $GITHUB_ENV
+          fi
+
+      - name: Upload .deb as release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: seestar-alp_*_${{ matrix.arch }}.deb
+          tag_name: ${{ env.deb_version }}
+          prerelease: ${{ env.deb_prerelease }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
   build-MacOS-x86:
     runs-on: "macos-26-intel"
 

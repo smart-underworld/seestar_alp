@@ -1,0 +1,19 @@
+#!/bin/bash
+set -e
+
+systemctl daemon-reload 2>/dev/null || true
+
+if [ "$1" = "purge" ]; then
+    # Remove all runtime-created files not tracked by dpkg
+    rm -f  /opt/seestar_alp/device/config.toml   # symlink created by postinst
+    rm -rf /opt/seestar_alp/.venv
+    rm -rf /opt/seestar_alp/.local
+    rm -rf /opt/seestar_alp/.cache
+    rm -rf /opt/seestar_alp/logs
+    # Remove the user config directory
+    rm -rf /etc/seestar
+    # Remove the service user
+    userdel seestar 2>/dev/null || true
+    # Remove the now-empty app directory
+    rmdir /opt/seestar_alp 2>/dev/null || true
+fi
