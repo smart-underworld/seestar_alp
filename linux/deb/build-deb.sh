@@ -139,6 +139,23 @@ fi
 echo "$APP_VERSION" > "$APP/device/version.txt"
 
 # ---------------------------------------------------------------------------
+# Bundle uv binary for the target architecture
+# Downloading at install time requires working SSL and network access.
+# Bundling it avoids both problems and makes offline installs possible.
+# ---------------------------------------------------------------------------
+echo "Bundling uv..."
+case "$ARCH" in
+    amd64) UV_ARCH="x86_64-unknown-linux-gnu" ;;
+    arm64) UV_ARCH="aarch64-unknown-linux-gnu" ;;
+    armhf) UV_ARCH="armv7-unknown-linux-gnueabihf" ;;
+    *)     echo "No uv binary known for arch: $ARCH"; exit 1 ;;
+esac
+mkdir -p "$APP/.local/bin"
+curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-${UV_ARCH}.tar.gz" \
+    | tar -xz --strip-components=1 -C "$APP/.local/bin" \
+        "uv-${UV_ARCH}/uv" "uv-${UV_ARCH}/uvx"
+
+# ---------------------------------------------------------------------------
 # Pre-build pyindi wheel
 # pyindi is specified as a git URL in requirements.txt, so git is required on
 # the build host but not on the install target.  The resulting wheel is
@@ -190,7 +207,7 @@ Section: science
 Priority: optional
 Architecture: ${ARCH}
 Installed-Size: ${INSTALLED_SIZE}
-Depends: curl, ca-certificates, rsync
+Depends: rsync
 Recommends: avahi-daemon, indi-bin
 Maintainer: smart-underworld <https://github.com/smart-underworld/seestar_alp>
 Homepage: https://github.com/smart-underworld/seestar_alp
