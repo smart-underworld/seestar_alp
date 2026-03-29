@@ -32,12 +32,6 @@ fi
 # created (config.py copies the example if the target is missing and writable).
 ln -sf "$CONFIG_DIR/config.toml" "$APP_DIR/device/config.toml"
 
-# Ensure git is available — required by uv to install pyindi from its git URL.
-if ! command -v git >/dev/null 2>&1; then
-    echo "Installing git..."
-    apt-get install -y --no-install-recommends git
-fi
-
 # Install uv by downloading the binary directly as root — avoids the installer
 # script's attempts to modify shell profile files.
 if ! command -v uv >/dev/null 2>&1 && [ ! -x "$APP_DIR/.local/bin/uv" ]; then

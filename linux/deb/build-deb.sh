@@ -179,7 +179,7 @@ Section: science
 Priority: optional
 Architecture: ${ARCH}
 Installed-Size: ${INSTALLED_SIZE}
-Depends: curl, ca-certificates, rsync
+Depends: curl, ca-certificates, git, rsync
 Recommends: avahi-daemon, indi-bin
 Maintainer: smart-underworld <https://github.com/smart-underworld/seestar_alp>
 Homepage: https://github.com/smart-underworld/seestar_alp
