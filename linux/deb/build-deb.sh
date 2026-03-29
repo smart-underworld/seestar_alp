@@ -139,6 +139,40 @@ fi
 echo "$APP_VERSION" > "$APP/device/version.txt"
 
 # ---------------------------------------------------------------------------
+# Bundle uv binary for the target architecture
+# Downloading at install time requires working SSL and network access.
+# Bundling it avoids both problems and makes offline installs possible.
+# ---------------------------------------------------------------------------
+echo "Bundling uv..."
+case "$ARCH" in
+    amd64) UV_ARCH="x86_64-unknown-linux-gnu" ;;
+    arm64) UV_ARCH="aarch64-unknown-linux-gnu" ;;
+    armhf) UV_ARCH="armv7-unknown-linux-gnueabihf" ;;
+    *)     echo "No uv binary known for arch: $ARCH"; exit 1 ;;
+esac
+mkdir -p "$APP/.local/bin"
+curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-${UV_ARCH}.tar.gz" \
+    | tar -xz --strip-components=1 -C "$APP/.local/bin" \
+        "uv-${UV_ARCH}/uv" "uv-${UV_ARCH}/uvx"
+
+# ---------------------------------------------------------------------------
+# Pre-build pyindi wheel
+# pyindi is specified as a git URL in requirements.txt, so git is required on
+# the build host but not on the install target.  The resulting wheel is
+# architecture-independent (pure Python) and is bundled into the package.
+# ---------------------------------------------------------------------------
+echo "Pre-building pyindi wheel..."
+PYINDI_REQ=$(grep '^pyindi' "$REPO_ROOT/requirements.txt")
+mkdir -p "$APP/wheels"
+python3 -m pip wheel --no-deps --wheel-dir "$APP/wheels" "$PYINDI_REQ" 2>&1 | tail -3
+
+# Rewrite requirements.txt to reference the bundled wheel via a file:// URL
+# so uv does not need git on the install target.
+PYINDI_WHEEL=$(basename "$APP/wheels"/pyindi*.whl)
+sed "s|^pyindi.*|pyindi @ file:///opt/seestar_alp/wheels/${PYINDI_WHEEL}|" \
+    "$REPO_ROOT/requirements.txt" > "$APP/requirements.txt"
+
+# ---------------------------------------------------------------------------
 # Systemd service units
 # ---------------------------------------------------------------------------
 cp "$SCRIPT_DIR/seestar.service" "$SYSTEMD/seestar.service"
@@ -179,8 +213,8 @@ Section: science
 Priority: optional
 Architecture: ${ARCH}
 Installed-Size: ${INSTALLED_SIZE}
-Depends: curl, ca-certificates, git, rsync, indi-bin
-Recommends: avahi-daemon
+Depends: rsync, libxml2-dev, libxslt1-dev
+Recommends: avahi-daemon, indi-bin
 Maintainer: smart-underworld <https://github.com/smart-underworld/seestar_alp>
 Homepage: https://github.com/smart-underworld/seestar_alp
 Description: Seestar ALP telescope controller
@@ -196,6 +230,6 @@ EOF
 dpkg-deb --build --root-owner-group "$STAGE" "$DEB_FILE"
 echo "Built: $DEB_FILE ($(du -h "$DEB_FILE" | cut -f1))"
 echo ""
-echo "Install with:  sudo dpkg -i $(basename "$DEB_FILE")"
+echo "Install with:  sudo apt install ./$(basename "$DEB_FILE")"
 echo "Remove with:   sudo apt remove seestar-alp"
 echo "Purge with:    sudo apt purge seestar-alp   (removes config + venv)"
