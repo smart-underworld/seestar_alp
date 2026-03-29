@@ -68,6 +68,7 @@ chown -R "$SEESTAR_USER:$SEESTAR_USER" "$APP_DIR/.venv" "$APP_DIR/.local"
 HOME="$APP_DIR" su -s /bin/sh "$SEESTAR_USER" -c "
     '$UV' venv --python 3.13 '$APP_DIR/.venv' &&
     '$UV' pip install --python '$APP_DIR/.venv/bin/python' \
+        --find-links '$APP_DIR/wheels' \
         -r '$APP_DIR/requirements.txt'
 " 2>&1 | tail -10
 

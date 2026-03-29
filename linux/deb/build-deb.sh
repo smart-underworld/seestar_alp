@@ -139,6 +139,17 @@ fi
 echo "$APP_VERSION" > "$APP/device/version.txt"
 
 # ---------------------------------------------------------------------------
+# Pre-build pyindi wheel
+# pyindi is specified as a git URL in requirements.txt, so git is required on
+# the build host but not on the install target.  The resulting wheel is
+# architecture-independent (pure Python) and is bundled into the package.
+# ---------------------------------------------------------------------------
+echo "Pre-building pyindi wheel..."
+PYINDI_REQ=$(grep '^pyindi' "$REPO_ROOT/requirements.txt")
+mkdir -p "$APP/wheels"
+python3 -m pip wheel --no-deps --wheel-dir "$APP/wheels" "$PYINDI_REQ" 2>&1 | tail -3
+
+# ---------------------------------------------------------------------------
 # Systemd service units
 # ---------------------------------------------------------------------------
 cp "$SCRIPT_DIR/seestar.service" "$SYSTEMD/seestar.service"
@@ -179,7 +190,7 @@ Section: science
 Priority: optional
 Architecture: ${ARCH}
 Installed-Size: ${INSTALLED_SIZE}
-Depends: curl, ca-certificates, git, rsync
+Depends: curl, ca-certificates, rsync
 Recommends: avahi-daemon, indi-bin
 Maintainer: smart-underworld <https://github.com/smart-underworld/seestar_alp>
 Homepage: https://github.com/smart-underworld/seestar_alp
