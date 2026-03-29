@@ -59,12 +59,6 @@ else
     UV="$APP_DIR/.local/bin/uv"
 fi
 
-# Install build-time dependencies needed to compile lxml (pulled in by pyindi).
-# These are only needed during the pip install step; mark them for autoremoval
-# so they are cleaned up on the next `apt autoremove`.
-apt-get install -y --no-install-recommends libxml2-dev libxslt1-dev
-apt-mark auto libxml2-dev libxslt1-dev
-
 # Create venv and install all Python dependencies.
 # Uses requirements.txt (the same source as setup.sh) rather than uv.lock,
 # which may lag behind. uv downloads the required Python version automatically.
