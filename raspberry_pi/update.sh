@@ -24,6 +24,27 @@ function update() {
         export SEESTAR_PROXY_UPSTREAM="$2"
         shift 2
         ;;
+      --help|-h)
+        cat <<_EOF
+Usage: update.sh [OPTIONS]
+
+Update seestar_alp to the latest version from the remote repository.
+
+Options:
+  --force           Force update even if already up-to-date
+  --with-proxy      Install/update seestar-proxy alongside seestar_alp.
+                    Auto-detected on subsequent runs if already installed.
+  --seestar-ip IP   Upstream Seestar IP or hostname for seestar-proxy
+                    (default: seestar.local)
+  -h, --help        Show this help message
+
+Examples:
+  raspberry_pi/update.sh
+  raspberry_pi/update.sh --force
+  raspberry_pi/update.sh --with-proxy --seestar-ip 192.168.1.42
+_EOF
+        exit 0
+        ;;
       *)
         shift
         ;;
