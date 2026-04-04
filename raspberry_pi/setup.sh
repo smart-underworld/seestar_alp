@@ -116,12 +116,16 @@ function install_seestar_proxy {
     echo "seestar-proxy: preserving existing /etc/seestar-proxy/config.toml"
   fi
 
-  # Drop-in: adds EnvironmentFile to the deb-provided service so hook env vars
-  # are available without modifying the upstream service file.
+  # Drop-in: adds EnvironmentFile and disables namespace-based hardening that
+  # is incompatible with older Raspberry Pi kernels (status=226/NAMESPACE).
   sudo mkdir -p /etc/systemd/system/seestar-proxy.service.d
   cat <<_EOF | sudo tee /etc/systemd/system/seestar-proxy.service.d/seestar-alp.conf > /dev/null
 [Service]
 EnvironmentFile=-/etc/seestar-proxy/proxy.env
+ProtectSystem=false
+ProtectHome=false
+NoNewPrivileges=false
+ReadWritePaths=
 _EOF
 
   # Write proxy.env from --proxy-env flags, or create an empty placeholder so
