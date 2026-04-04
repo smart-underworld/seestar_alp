@@ -277,6 +277,10 @@ _EOF
 |                                     |
 | seestar-proxy is enabled            |
 $(printf "| %-36s|" "  upstream: ${SEESTAR_PROXY_UPSTREAM}")
+|                                     |
+| Proxy dashboard:                    |
+$(printf "| %-36s|" "http://${host}.local:4090")
+|                                     |
 | journalctl -u seestar-proxy         |
 | systemctl status seestar-proxy      |
 _EOF
