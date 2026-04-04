@@ -31,6 +31,13 @@ function update() {
         export SEESTAR_PROXY_CONFIG_DIRTY=true
         shift 2
         ;;
+      --proxy-env)
+        export WITH_PROXY=true
+        _existing=$(printf '%s' "${SEESTAR_PROXY_ENV_B64}" | base64 -d 2>/dev/null || true)
+        export SEESTAR_PROXY_ENV_B64=$(printf '%s\n%s' "${_existing}" "$2" | sed '/^$/d' | base64 -w0)
+        export SEESTAR_PROXY_CONFIG_DIRTY=true
+        shift 2
+        ;;
       --help|-h)
         cat <<_EOF
 Usage: update.sh [OPTIONS]
@@ -38,21 +45,25 @@ Usage: update.sh [OPTIONS]
 Update seestar_alp to the latest version from the remote repository.
 
 Options:
-  --force              Force update even if already up-to-date
-  --with-proxy         Install/update seestar-proxy alongside seestar_alp.
-                       Auto-detected on subsequent runs if already installed.
-  --seestar-ip IP      Upstream Seestar IP or hostname for seestar-proxy
-                       (default: seestar.local). Rewrites proxy config.
-  --proxy-hook PATH    Lua hook script for seestar-proxy. Can be repeated.
-                       Rewrites proxy config. Example:
-                         --proxy-hook ~/hooks/authenticate.lua
-  -h, --help           Show this help message
+  --force                Force update even if already up-to-date
+  --with-proxy           Install/update seestar-proxy alongside seestar_alp.
+                         Auto-detected on subsequent runs if already installed.
+  --seestar-ip IP        Upstream Seestar IP or hostname for seestar-proxy
+                         (default: seestar.local). Rewrites proxy config.
+  --proxy-hook PATH      Lua hook script for seestar-proxy. Can be repeated.
+                         Rewrites proxy config.
+  --proxy-env KEY=VALUE  Environment variable for seestar-proxy (e.g. for Lua
+                         hooks). Can be repeated. Writes /etc/seestar-proxy/proxy.env.
+                         You may also edit that file directly.
+  -h, --help             Show this help message
 
 Examples:
   raspberry_pi/update.sh
   raspberry_pi/update.sh --force
   raspberry_pi/update.sh --with-proxy --seestar-ip 192.168.1.42
-  raspberry_pi/update.sh --proxy-hook ~/hooks/authenticate.lua
+  raspberry_pi/update.sh --proxy-hook /home/pi/hooks/authenticate.lua \\
+                         --proxy-env KEY_PATH=/home/pi/seestar.pem \\
+                         --proxy-env LUA_CPATH=/usr/lib/aarch64-linux-gnu/lua/5.1/?.so
 _EOF
         exit 0
         ;;

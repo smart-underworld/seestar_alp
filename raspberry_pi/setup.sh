@@ -4,6 +4,7 @@
 WITH_PROXY="${WITH_PROXY:-false}"
 SEESTAR_PROXY_UPSTREAM="${SEESTAR_PROXY_UPSTREAM:-seestar.local}"
 SEESTAR_PROXY_HOOKS="${SEESTAR_PROXY_HOOKS:-}"        # colon-separated hook paths
+SEESTAR_PROXY_ENV_B64="${SEESTAR_PROXY_ENV_B64:-}"   # base64-encoded KEY=VALUE lines for proxy.env
 SEESTAR_PROXY_CONFIG_DIRTY="${SEESTAR_PROXY_CONFIG_DIRTY:-false}"  # rewrite config only when explicitly changed
 
 #
@@ -113,6 +114,29 @@ function install_seestar_proxy {
     echo "seestar-proxy: wrote /etc/seestar-proxy/config.toml"
   else
     echo "seestar-proxy: preserving existing /etc/seestar-proxy/config.toml"
+  fi
+
+  # Drop-in: adds EnvironmentFile to the deb-provided service so hook env vars
+  # are available without modifying the upstream service file.
+  sudo mkdir -p /etc/systemd/system/seestar-proxy.service.d
+  cat <<_EOF | sudo tee /etc/systemd/system/seestar-proxy.service.d/seestar-alp.conf > /dev/null
+[Service]
+EnvironmentFile=-/etc/seestar-proxy/proxy.env
+_EOF
+
+  # Write proxy.env from --proxy-env flags, or create an empty placeholder so
+  # users know where to add env vars (e.g. KEY_PATH=, LUA_CPATH=).
+  if [ -n "${SEESTAR_PROXY_ENV_B64}" ]; then
+    printf '%s' "${SEESTAR_PROXY_ENV_B64}" | base64 -d | sudo tee /etc/seestar-proxy/proxy.env > /dev/null
+    echo "seestar-proxy: wrote /etc/seestar-proxy/proxy.env"
+  elif [ ! -e /etc/seestar-proxy/proxy.env ]; then
+    cat <<_EOF | sudo tee /etc/seestar-proxy/proxy.env > /dev/null
+# Environment variables for seestar-proxy (e.g. for Lua hooks).
+# Add KEY=VALUE entries here, one per line.
+# Example:
+#   KEY_PATH=/home/${user}/seestar.pem
+#   LUA_CPATH=/usr/lib/aarch64-linux-gnu/lua/5.1/?.so
+_EOF
   fi
 
   sudo systemctl daemon-reload
@@ -274,6 +298,13 @@ function setup() {
       --proxy-hook)
         export WITH_PROXY=true
         export SEESTAR_PROXY_HOOKS="${SEESTAR_PROXY_HOOKS:+${SEESTAR_PROXY_HOOKS}:}$2"
+        export SEESTAR_PROXY_CONFIG_DIRTY=true
+        shift 2
+        ;;
+      --proxy-env)
+        export WITH_PROXY=true
+        _existing=$(printf '%s' "${SEESTAR_PROXY_ENV_B64}" | base64 -d 2>/dev/null || true)
+        export SEESTAR_PROXY_ENV_B64=$(printf '%s\n%s' "${_existing}" "$2" | sed '/^$/d' | base64 -w0)
         export SEESTAR_PROXY_CONFIG_DIRTY=true
         shift 2
         ;;
