@@ -61,7 +61,7 @@ Examples:
   raspberry_pi/update.sh
   raspberry_pi/update.sh --force
   raspberry_pi/update.sh --with-proxy --seestar-ip 192.168.1.42
-  raspberry_pi/update.sh --proxy-hook /home/pi/hooks/authenticate.lua \\
+  raspberry_pi/update.sh --proxy-hook /home/pi/hooks/customize.lua \\
                          --proxy-env FOO=bar \\
                          --proxy-env LUA_CPATH=/usr/lib/aarch64-linux-gnu/lua/5.1/?.so
 _EOF
