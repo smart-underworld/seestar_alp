@@ -134,7 +134,7 @@ _EOF
 # Environment variables for seestar-proxy (e.g. for Lua hooks).
 # Add KEY=VALUE entries here, one per line.
 # Example:
-#   KEY_PATH=/home/${user}/client.pem
+#   FOO=bar
 #   LUA_CPATH=/usr/lib/aarch64-linux-gnu/lua/5.1/?.so
 _EOF
   fi
