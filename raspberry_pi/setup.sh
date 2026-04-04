@@ -153,9 +153,9 @@ _EOF
   fi
 
   if ! $(systemctl is-active --quiet seestar-proxy); then
-    echo "ERROR: seestar-proxy service is not running"
-    systemctl status seestar-proxy
-    exit 255
+    echo "Note: seestar-proxy is not yet active (upstream '${upstream_ip}' may be offline)."
+    echo "      It will start automatically when the telescope is reachable."
+    echo "      Check status with: systemctl status seestar-proxy"
   fi
 
   echo "seestar-proxy ${version} installed (upstream: ${upstream_ip})"
