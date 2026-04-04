@@ -62,7 +62,7 @@ Examples:
   raspberry_pi/update.sh --force
   raspberry_pi/update.sh --with-proxy --seestar-ip 192.168.1.42
   raspberry_pi/update.sh --proxy-hook /home/pi/hooks/authenticate.lua \\
-                         --proxy-env KEY_PATH=/home/pi/seestar.pem \\
+                         --proxy-env KEY_PATH=/home/pi/client.pem \\
                          --proxy-env LUA_CPATH=/usr/lib/aarch64-linux-gnu/lua/5.1/?.so
 _EOF
         exit 0
