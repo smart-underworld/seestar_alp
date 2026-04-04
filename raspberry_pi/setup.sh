@@ -1,5 +1,12 @@
 #!/bin/bash -e
 
+# Optional proxy integration flags (may be set by caller or inherited via env)
+WITH_PROXY="${WITH_PROXY:-false}"
+SEESTAR_PROXY_UPSTREAM="${SEESTAR_PROXY_UPSTREAM:-seestar.local}"
+SEESTAR_PROXY_HOOKS="${SEESTAR_PROXY_HOOKS:-}"        # colon-separated hook paths
+SEESTAR_PROXY_ENV_B64="${SEESTAR_PROXY_ENV_B64:-}"   # base64-encoded KEY=VALUE lines for proxy.env
+SEESTAR_PROXY_CONFIG_DIRTY="${SEESTAR_PROXY_CONFIG_DIRTY:-false}"  # rewrite config only when explicitly changed
+
 #
 # common functions
 #
@@ -54,6 +61,104 @@ function config_toml_setup {
   else
     cp device/config.toml device/config.toml.bak
   fi
+  if [ "${WITH_PROXY}" = "true" ]; then
+    sed -i -e 's|ip_address = "seestar.local"|ip_address = "127.0.0.1"|g' device/config.toml
+    echo "config.toml: seestars ip_address set to 127.0.0.1 (seestar-proxy)"
+  fi
+}
+
+function install_seestar_proxy {
+  local upstream_ip="${SEESTAR_PROXY_UPSTREAM:-seestar.local}"
+  local api_url="https://api.github.com/repos/astrophotograph/seestar-proxy/releases/latest"
+
+  echo "Fetching latest seestar-proxy release..."
+  local version
+  version=$(curl -fsSL "${api_url}" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+  if [ -z "${version}" ]; then
+    echo "ERROR: Could not determine latest seestar-proxy version"
+    exit 1
+  fi
+
+  # The deb ships the binary (/usr/bin/seestar-proxy) and systemd service
+  local deb_name="seestar-proxy_${version#v}_arm64.deb"
+  local download_url="https://github.com/astrophotograph/seestar-proxy/releases/download/${version}/${deb_name}"
+  echo "Downloading ${deb_name}..."
+  curl -fSL -o /tmp/seestar-proxy.deb "${download_url}"
+  sudo dpkg -i /tmp/seestar-proxy.deb
+  rm /tmp/seestar-proxy.deb
+
+  # Write /etc/seestar-proxy/config.toml on first install or when explicitly changed.
+  # Preserves manual edits on plain updates.
+  sudo mkdir -p /etc/seestar-proxy
+  if [ ! -e /etc/seestar-proxy/config.toml ] || [ "${SEESTAR_PROXY_CONFIG_DIRTY}" = "true" ]; then
+    # Build optional hooks array
+    local hooks_line=""
+    if [ -n "${SEESTAR_PROXY_HOOKS}" ]; then
+      hooks_line='hooks = ['
+      local first=true
+      local IFS_ORIG="${IFS}"
+      IFS=':'
+      for hook in ${SEESTAR_PROXY_HOOKS}; do
+        [ "${first}" = "true" ] && hooks_line="${hooks_line}\"${hook}\"" || hooks_line="${hooks_line}, \"${hook}\""
+        first=false
+      done
+      IFS="${IFS_ORIG}"
+      hooks_line="${hooks_line}]"
+    fi
+
+    {
+      echo "upstream = \"${upstream_ip}\""
+      echo "discovery = true"
+      [ -n "${hooks_line}" ] && echo "${hooks_line}"
+    } | sudo tee /etc/seestar-proxy/config.toml > /dev/null
+    echo "seestar-proxy: wrote /etc/seestar-proxy/config.toml"
+  else
+    echo "seestar-proxy: preserving existing /etc/seestar-proxy/config.toml"
+  fi
+
+  # Drop-in: adds EnvironmentFile and disables namespace-based hardening that
+  # is incompatible with older Raspberry Pi kernels (status=226/NAMESPACE).
+  sudo mkdir -p /etc/systemd/system/seestar-proxy.service.d
+  cat <<_EOF | sudo tee /etc/systemd/system/seestar-proxy.service.d/seestar-alp.conf > /dev/null
+[Service]
+EnvironmentFile=-/etc/seestar-proxy/proxy.env
+ProtectSystem=false
+ProtectHome=false
+NoNewPrivileges=false
+ReadWritePaths=
+_EOF
+
+  # Write proxy.env from --proxy-env flags, or create an empty placeholder so
+  # users know where to add env vars (e.g. KEY_PATH=, LUA_CPATH=).
+  if [ -n "${SEESTAR_PROXY_ENV_B64}" ]; then
+    printf '%s' "${SEESTAR_PROXY_ENV_B64}" | base64 -d | sudo tee /etc/seestar-proxy/proxy.env > /dev/null
+    echo "seestar-proxy: wrote /etc/seestar-proxy/proxy.env"
+  elif [ ! -e /etc/seestar-proxy/proxy.env ]; then
+    cat <<_EOF | sudo tee /etc/seestar-proxy/proxy.env > /dev/null
+# Environment variables for seestar-proxy (e.g. for Lua hooks).
+# Add KEY=VALUE entries here, one per line.
+# Example:
+#   FOO=bar
+#   LUA_CPATH=/usr/lib/aarch64-linux-gnu/lua/5.1/?.so
+_EOF
+  fi
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable seestar-proxy
+
+  if $(systemctl is-active --quiet seestar-proxy); then
+    sudo systemctl restart seestar-proxy
+  else
+    sudo systemctl start seestar-proxy
+  fi
+
+  if ! $(systemctl is-active --quiet seestar-proxy); then
+    echo "Note: seestar-proxy is not yet active (upstream '${upstream_ip}' may be offline)."
+    echo "      It will start automatically when the telescope is reachable."
+    echo "      Check status with: systemctl status seestar-proxy"
+  fi
+
+  echo "seestar-proxy ${version} installed (upstream: ${upstream_ip})"
 }
 
 function python_virtualenv_setup {
@@ -166,14 +271,57 @@ $(printf "| %-36s|" "http://${host}.local:5432")
 | Current status can be viewed via    |
 | systemctl status seestar            |
 | systemctl status INDI               |
-|-------------------------------------|
 _EOF
+  if [ "${WITH_PROXY}" = "true" ]; then
+    cat <<_EOF
+|                                     |
+| seestar-proxy is enabled            |
+$(printf "| %-36s|" "  upstream: ${SEESTAR_PROXY_UPSTREAM}")
+|                                     |
+| Proxy dashboard:                    |
+$(printf "| %-36s|" "http://${host}.local:4090")
+|                                     |
+| journalctl -u seestar-proxy         |
+| systemctl status seestar-proxy      |
+_EOF
+  fi
+  echo "|-------------------------------------|"
 }
 
 #
 # main setup script
 #
 function setup() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --with-proxy)
+        export WITH_PROXY=true
+        shift
+        ;;
+      --seestar-ip)
+        export SEESTAR_PROXY_UPSTREAM="$2"
+        export SEESTAR_PROXY_CONFIG_DIRTY=true
+        shift 2
+        ;;
+      --proxy-hook)
+        export WITH_PROXY=true
+        export SEESTAR_PROXY_HOOKS="${SEESTAR_PROXY_HOOKS:+${SEESTAR_PROXY_HOOKS}:}$2"
+        export SEESTAR_PROXY_CONFIG_DIRTY=true
+        shift 2
+        ;;
+      --proxy-env)
+        export WITH_PROXY=true
+        _existing=$(printf '%s' "${SEESTAR_PROXY_ENV_B64}" | base64 -d 2>/dev/null || true)
+        export SEESTAR_PROXY_ENV_B64=$(printf '%s\n%s' "${_existing}" "$2" | sed '/^$/d' | base64 -w0)
+        export SEESTAR_PROXY_CONFIG_DIRTY=true
+        shift 2
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+
   validate_access
 
   if [ -e seestar_alp ] || [ -e ~/seestar_alp ]; then
@@ -195,6 +343,9 @@ function setup() {
   python_virtualenv_setup
   network_config
   systemd_service_setup
+  if [ "${WITH_PROXY}" = "true" ]; then
+    install_seestar_proxy
+  fi
   print_banner "setup"
 }
 
