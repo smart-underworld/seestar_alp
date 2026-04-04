@@ -22,6 +22,13 @@ function update() {
         ;;
       --seestar-ip)
         export SEESTAR_PROXY_UPSTREAM="$2"
+        export SEESTAR_PROXY_CONFIG_DIRTY=true
+        shift 2
+        ;;
+      --proxy-hook)
+        export WITH_PROXY=true
+        export SEESTAR_PROXY_HOOKS="${SEESTAR_PROXY_HOOKS:+${SEESTAR_PROXY_HOOKS}:}$2"
+        export SEESTAR_PROXY_CONFIG_DIRTY=true
         shift 2
         ;;
       --help|-h)
@@ -31,17 +38,21 @@ Usage: update.sh [OPTIONS]
 Update seestar_alp to the latest version from the remote repository.
 
 Options:
-  --force           Force update even if already up-to-date
-  --with-proxy      Install/update seestar-proxy alongside seestar_alp.
-                    Auto-detected on subsequent runs if already installed.
-  --seestar-ip IP   Upstream Seestar IP or hostname for seestar-proxy
-                    (default: seestar.local)
-  -h, --help        Show this help message
+  --force              Force update even if already up-to-date
+  --with-proxy         Install/update seestar-proxy alongside seestar_alp.
+                       Auto-detected on subsequent runs if already installed.
+  --seestar-ip IP      Upstream Seestar IP or hostname for seestar-proxy
+                       (default: seestar.local). Rewrites proxy config.
+  --proxy-hook PATH    Lua hook script for seestar-proxy. Can be repeated.
+                       Rewrites proxy config. Example:
+                         --proxy-hook ~/hooks/authenticate.lua
+  -h, --help           Show this help message
 
 Examples:
   raspberry_pi/update.sh
   raspberry_pi/update.sh --force
   raspberry_pi/update.sh --with-proxy --seestar-ip 192.168.1.42
+  raspberry_pi/update.sh --proxy-hook ~/hooks/authenticate.lua
 _EOF
         exit 0
         ;;

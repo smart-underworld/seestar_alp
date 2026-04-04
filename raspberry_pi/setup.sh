@@ -3,6 +3,8 @@
 # Optional proxy integration flags (may be set by caller or inherited via env)
 WITH_PROXY="${WITH_PROXY:-false}"
 SEESTAR_PROXY_UPSTREAM="${SEESTAR_PROXY_UPSTREAM:-seestar.local}"
+SEESTAR_PROXY_HOOKS="${SEESTAR_PROXY_HOOKS:-}"        # colon-separated hook paths
+SEESTAR_PROXY_CONFIG_DIRTY="${SEESTAR_PROXY_CONFIG_DIRTY:-false}"  # rewrite config only when explicitly changed
 
 #
 # common functions
@@ -84,12 +86,34 @@ function install_seestar_proxy {
   sudo dpkg -i /tmp/seestar-proxy.deb
   rm /tmp/seestar-proxy.deb
 
-  # Write /etc/seestar-proxy/config.toml with upstream IP and discovery
+  # Write /etc/seestar-proxy/config.toml on first install or when explicitly changed.
+  # Preserves manual edits on plain updates.
   sudo mkdir -p /etc/seestar-proxy
-  cat <<_EOF | sudo tee /etc/seestar-proxy/config.toml > /dev/null
-upstream = "${upstream_ip}"
-discovery = true
-_EOF
+  if [ ! -e /etc/seestar-proxy/config.toml ] || [ "${SEESTAR_PROXY_CONFIG_DIRTY}" = "true" ]; then
+    # Build optional hooks array
+    local hooks_line=""
+    if [ -n "${SEESTAR_PROXY_HOOKS}" ]; then
+      hooks_line='hooks = ['
+      local first=true
+      local IFS_ORIG="${IFS}"
+      IFS=':'
+      for hook in ${SEESTAR_PROXY_HOOKS}; do
+        [ "${first}" = "true" ] && hooks_line="${hooks_line}\"${hook}\"" || hooks_line="${hooks_line}, \"${hook}\""
+        first=false
+      done
+      IFS="${IFS_ORIG}"
+      hooks_line="${hooks_line}]"
+    fi
+
+    {
+      echo "upstream = \"${upstream_ip}\""
+      echo "discovery = true"
+      [ -n "${hooks_line}" ] && echo "${hooks_line}"
+    } | sudo tee /etc/seestar-proxy/config.toml > /dev/null
+    echo "seestar-proxy: wrote /etc/seestar-proxy/config.toml"
+  else
+    echo "seestar-proxy: preserving existing /etc/seestar-proxy/config.toml"
+  fi
 
   sudo systemctl daemon-reload
   sudo systemctl enable seestar-proxy
@@ -244,6 +268,13 @@ function setup() {
         ;;
       --seestar-ip)
         export SEESTAR_PROXY_UPSTREAM="$2"
+        export SEESTAR_PROXY_CONFIG_DIRTY=true
+        shift 2
+        ;;
+      --proxy-hook)
+        export WITH_PROXY=true
+        export SEESTAR_PROXY_HOOKS="${SEESTAR_PROXY_HOOKS:+${SEESTAR_PROXY_HOOKS}:}$2"
+        export SEESTAR_PROXY_CONFIG_DIRTY=true
         shift 2
         ;;
       *)
