@@ -1,5 +1,9 @@
 #!/bin/bash -e
 
+# Optional proxy integration flags (may be set by caller or inherited via env)
+WITH_PROXY="${WITH_PROXY:-false}"
+SEESTAR_PROXY_UPSTREAM="${SEESTAR_PROXY_UPSTREAM:-seestar.local}"
+
 #
 # common functions
 #
@@ -54,6 +58,55 @@ function config_toml_setup {
   else
     cp device/config.toml device/config.toml.bak
   fi
+  if [ "${WITH_PROXY}" = "true" ]; then
+    sed -i -e 's|ip_address = "seestar.local"|ip_address = "127.0.0.1"|g' device/config.toml
+    echo "config.toml: seestars ip_address set to 127.0.0.1 (seestar-proxy)"
+  fi
+}
+
+function install_seestar_proxy {
+  local upstream_ip="${SEESTAR_PROXY_UPSTREAM:-seestar.local}"
+  local api_url="https://api.github.com/repos/astrophotograph/seestar-proxy/releases/latest"
+
+  echo "Fetching latest seestar-proxy release..."
+  local version
+  version=$(curl -fsSL "${api_url}" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+  if [ -z "${version}" ]; then
+    echo "ERROR: Could not determine latest seestar-proxy version"
+    exit 1
+  fi
+
+  # The deb ships the binary (/usr/bin/seestar-proxy) and systemd service
+  local deb_name="seestar-proxy_${version#v}_arm64.deb"
+  local download_url="https://github.com/astrophotograph/seestar-proxy/releases/download/${version}/${deb_name}"
+  echo "Downloading ${deb_name}..."
+  curl -fSL -o /tmp/seestar-proxy.deb "${download_url}"
+  sudo dpkg -i /tmp/seestar-proxy.deb
+  rm /tmp/seestar-proxy.deb
+
+  # Write /etc/seestar-proxy/config.toml with upstream IP and discovery
+  sudo mkdir -p /etc/seestar-proxy
+  cat <<_EOF | sudo tee /etc/seestar-proxy/config.toml > /dev/null
+upstream = "${upstream_ip}"
+discovery = true
+_EOF
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable seestar-proxy
+
+  if $(systemctl is-active --quiet seestar-proxy); then
+    sudo systemctl restart seestar-proxy
+  else
+    sudo systemctl start seestar-proxy
+  fi
+
+  if ! $(systemctl is-active --quiet seestar-proxy); then
+    echo "ERROR: seestar-proxy service is not running"
+    systemctl status seestar-proxy
+    exit 255
+  fi
+
+  echo "seestar-proxy ${version} installed (upstream: ${upstream_ip})"
 }
 
 function python_virtualenv_setup {
@@ -166,14 +219,39 @@ $(printf "| %-36s|" "http://${host}.local:5432")
 | Current status can be viewed via    |
 | systemctl status seestar            |
 | systemctl status INDI               |
-|-------------------------------------|
 _EOF
+  if [ "${WITH_PROXY}" = "true" ]; then
+    cat <<_EOF
+|                                     |
+| seestar-proxy is enabled            |
+$(printf "| %-36s|" "  upstream: ${SEESTAR_PROXY_UPSTREAM}")
+| journalctl -u seestar-proxy         |
+| systemctl status seestar-proxy      |
+_EOF
+  fi
+  echo "|-------------------------------------|"
 }
 
 #
 # main setup script
 #
 function setup() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --with-proxy)
+        export WITH_PROXY=true
+        shift
+        ;;
+      --seestar-ip)
+        export SEESTAR_PROXY_UPSTREAM="$2"
+        shift 2
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+
   validate_access
 
   if [ -e seestar_alp ] || [ -e ~/seestar_alp ]; then
@@ -195,6 +273,9 @@ function setup() {
   python_virtualenv_setup
   network_config
   systemd_service_setup
+  if [ "${WITH_PROXY}" = "true" ]; then
+    install_seestar_proxy
+  fi
   print_banner "setup"
 }
 

@@ -5,14 +5,40 @@ source ${src_home}/raspberry_pi/setup.sh
 function update() {
   validate_access
 
-  if [ "$1" = "--force" ]; then
-      FORCE=true
-  fi
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --force)
+        FORCE=true
+        shift
+        ;;
+      --relaunch)
+        FORCE=true
+        RELAUNCH=true
+        shift
+        ;;
+      --with-proxy)
+        export WITH_PROXY=true
+        shift
+        ;;
+      --seestar-ip)
+        export SEESTAR_PROXY_UPSTREAM="$2"
+        shift 2
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
 
-  # internal parameter used to re-launch self with new source
-  if [ "$1" = "--relaunch" ]; then
-      FORCE=true
-      RELAUNCH=true
+  # Auto-detect proxy if already installed, unless explicitly disabled by the
+  # caller.  Reads upstream from the existing config so it is preserved.
+  if [ "${WITH_PROXY}" != "true" ] && [ -e /etc/seestar-proxy/config.toml ]; then
+    export WITH_PROXY=true
+    if [ "${SEESTAR_PROXY_UPSTREAM}" = "seestar.local" ]; then
+      detected=$(grep '^upstream' /etc/seestar-proxy/config.toml | sed 's/upstream *= *"\(.*\)"/\1/')
+      [ -n "${detected}" ] && export SEESTAR_PROXY_UPSTREAM="${detected}"
+    fi
+    echo "seestar-proxy detected — will update (upstream: ${SEESTAR_PROXY_UPSTREAM})"
   fi
 
   # check if update is required
@@ -26,7 +52,8 @@ function update() {
   cd ${src_home}
   git pull
 
-  # Update script needs to relaunch itsself, to pick up source changes
+  # Update script needs to relaunch itself, to pick up source changes.
+  # WITH_PROXY / SEESTAR_PROXY_UPSTREAM are exported so they survive exec.
   if [ -z "${RELAUNCH}" ]; then
     echo "Re-launching update script with new source"
     exec ${src_home}/raspberry_pi/update.sh --relaunch
@@ -55,6 +82,9 @@ function update() {
   python_virtualenv_setup
   network_config
   systemd_service_setup
+  if [ "${WITH_PROXY}" = "true" ]; then
+    install_seestar_proxy
+  fi
   print_banner "update"
 }
 
