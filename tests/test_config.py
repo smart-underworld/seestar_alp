@@ -394,6 +394,7 @@ def _base_form_media(**overrides):
         "init_dew_heater_power": "0",
         "dec_pos_index": "3",
         "battery_low_limit": "3",
+        "interop_pem": "",
     }
     media.update(overrides)
     return media

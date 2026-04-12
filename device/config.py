@@ -229,6 +229,8 @@ class _Config:
         self.is_frame_calibrated: bool = self.get_toml(
             section, "is_frame_calibrated", True
         )
+        # Path to PEM key used for Seestar firmware 7.18+ challenge-response authentication
+        self.seestar_interop_pem: str = self.get_toml(section, "interop_pem", "")
 
     def load_from_form(self, req):
         """
@@ -385,6 +387,11 @@ class _Config:
             "seestar_initialization",
             "battery_low_limit",
             int(req.media["battery_low_limit"]),
+        )
+        self.set_toml(
+            "seestar_initialization",
+            "interop_pem",
+            req.media["interop_pem"],
         )
         self.load(self.path_to_dat, preloaded_dict=self._dict)
 
@@ -879,6 +886,12 @@ class _Config:
                     "Battery low limit percentage:",
                     self.battery_low_limit,
                     "Lower limit for battery, before safe shutdown",
+                )
+                + self.render_text(
+                    "interop_pem",
+                    "Interop PEM path:",
+                    self.seestar_interop_pem,
+                    "Path to PEM key for Seestar firmware 7.18+ authentication (e.g. /etc/seestar/seestar_client_key.pem)",
                 ),
             )
             + self.render_config_section(
