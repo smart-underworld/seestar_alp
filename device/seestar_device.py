@@ -1,6 +1,8 @@
 import socket
 import json
 import time
+import base64
+from pathlib import Path
 from datetime import datetime
 import threading
 import os
@@ -111,6 +113,8 @@ class Seestar:
         self.response_dict: OrderedDict[int, dict] = FixedSizeOrderedDict(max=100)
         self.logger = logger
         self.is_connected: bool = False
+        # PEM key bytes (lazy loaded)
+        self._interop_pem: Optional[bytes] = None
         self.is_slewing: bool = False
         self.target_dec: float = 0
         self.target_ra: float = 0
@@ -151,6 +155,112 @@ class Seestar:
         self.eventbus = signal(f"{self.device_name}.eventbus")
         self.is_EQ_mode: bool = False  # updated from device state on startup
         # self.trace = MessageTrace(self.device_num, self.port)
+
+    def _load_interop_pem(self) -> None:
+        """Load interop PEM key from configured path if available."""
+        if self._interop_pem is not None:
+            return
+        key_path = getattr(Config, "seestar_interop_pem", "")
+        if not key_path:
+            self.logger.debug("No interop PEM path configured")
+            return
+        kp = Path(key_path)
+        if not kp.is_absolute():
+            # make relative to project root (device/..)
+            kp = Path(__file__).resolve().parent.parent / kp
+        try:
+            with open(kp, "rb") as f:
+                self._interop_pem = f.read()
+                self.logger.info(f"Loaded interop PEM key from {kp}")
+        except FileNotFoundError:
+            self.logger.warning(f"Interop PEM key not found at {kp}")
+            self._interop_pem = None
+        except Exception as e:
+            self.logger.warning(f"Failed to load interop PEM key at {kp}: {e}")
+            self._interop_pem = None
+
+    def _sign_challenge(self, challenge_str: str) -> str:
+        """Sign the challenge string using SHA1withRSA and return base64 signature."""
+        try:
+            from cryptography.hazmat.backends import default_backend
+            from cryptography.hazmat.primitives import hashes, serialization
+            from cryptography.hazmat.primitives.asymmetric import padding
+        except Exception:
+            self.logger.error(
+                "cryptography library not available; install 'cryptography' to enable Seestar authentication"
+            )
+            raise
+
+        self._load_interop_pem()
+        if not self._interop_pem:
+            raise Exception("No interop PEM key available for signing")
+
+        private_key = serialization.load_pem_private_key(
+            self._interop_pem,
+            password=None,
+            backend=default_backend(),
+        )
+
+        signature = private_key.sign(
+            challenge_str.encode("utf-8"), padding.PKCS1v15(), hashes.SHA1()
+        )
+        return base64.b64encode(signature).decode("utf-8")
+
+    def authenticate(self) -> bool:
+        """Perform 2-step authentication expected by firmware 7.18+.
+
+        Returns True if authentication succeeded.
+        """
+        try:
+            self.logger.info("Requesting authentication challenge (get_verify_str)")
+            resp = self.send_message_param_sync({"method": "get_verify_str"})
+            challenge_str = ""
+            if isinstance(resp, dict):
+                challenge_str = resp.get("result", {}).get("str", "")
+
+            if not challenge_str:
+                self.logger.warning(f"No challenge string received: {resp}")
+                return False
+
+            self.logger.info("Signing challenge and sending verify_client")
+            signed = self._sign_challenge(challenge_str)
+            verify_params = {"sign": signed, "data": challenge_str}
+            verify_resp = self.send_message_param_sync(
+                {"method": "verify_client", "params": verify_params}
+            )
+
+            # Accept either result==0 or code==0 depending on firmware responses
+            ok = False
+            if isinstance(verify_resp, dict):
+                if verify_resp.get("result", verify_resp.get("code", -1)) == 0:
+                    ok = True
+
+            if not ok:
+                self.logger.warning(f"verify_client failed: {verify_resp}")
+                return False
+
+            # sanity check
+            try:
+                verified = self.send_message_param_sync({"method": "pi_is_verified"})
+                is_verified = (
+                    verified.get("result", {}).get("is_verified", False)
+                    if isinstance(verified, dict)
+                    else False
+                )
+                if not is_verified:
+                    self.logger.warning(
+                        f"Device did not report verified after verify_client: {verified}"
+                    )
+                    return False
+            except Exception:
+                # If we cannot check, consider auth successful because verify_client succeeded
+                self.logger.debug("pi_is_verified check failed (non-fatal)")
+
+            self.logger.info("Authentication successful")
+            return True
+        except Exception as e:
+            self.logger.warning(f"Authentication error: {e}")
+            return False
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
     #       "result":0, "error":"dummy error",
@@ -278,6 +388,21 @@ class Seestar:
             self.s.connect((self.host, self.port))
             # self.s.settimeout(None)
             self.is_connected = True
+            # If an interop PEM key is configured, attempt firmware 7.18+ authentication
+            try:
+                if getattr(Config, "seestar_interop_pem", ""):
+                    ok = self.authenticate()
+                    if not ok:
+                        self.logger.warning(
+                            "Authentication failed after connect; closing socket"
+                        )
+                        self.disconnect()
+                        return False
+            except Exception as e:
+                self.logger.warning(f"Authentication raised exception: {e}")
+                self.disconnect()
+                return False
+
             return True
         except socket.error:
             self.socket_force_close()
@@ -456,9 +581,12 @@ class Seestar:
             firmware_ver_int == 0 or firmware_ver_int > 2582
         )
 
+    # Methods used for the auth handshake itself must never have ["verify"] injected
+    _AUTH_METHODS = frozenset({"get_verify_str", "verify_client", "pi_is_verified"})
+
     def transform_message_for_verify(self, data: MessageParams) -> MessageParams:
         data = copy.deepcopy(data)
-        if not self.should_inject_verify():
+        if not self.should_inject_verify() or data.get("method") in self._AUTH_METHODS:
             return data
         else:
             if "params" in data:
