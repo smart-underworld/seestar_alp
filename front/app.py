@@ -2116,7 +2116,8 @@ class HomeResource:
         telescopes = get_telescopes_state()
         telescope = telescopes[0]  # We just force it to first telescope
         context = get_context(telescope["device_num"], req)
-        del context["telescopes"]
+        if "telescopes" in context:
+            del context["telescopes"]
         if len(telescopes) > 1:
             redirect(f"/{telescope['device_num']}/")
         else:

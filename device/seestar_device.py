@@ -2598,6 +2598,20 @@ class Seestar:
         else:
             self.is_watch_events = True
 
+            # Start the receive thread before the first reconnect so that the
+            # firmware-7.18+ PEM auth handshake (issued inside reconnect()) can
+            # actually observe the device's replies — response_dict is populated
+            # only by this thread. get_socket_msg() handles self.s is None by
+            # sleeping, so starting early is safe.
+            try:
+                self.get_msg_thread = threading.Thread(
+                    target=self.receive_message_thread_fn, daemon=True
+                )
+                self.get_msg_thread.name = f"IncomingMsgThread:{self.device_name}"
+                self.get_msg_thread.start()
+            except Exception:
+                pass
+
             for i in range(3, 0, -1):
                 if self.reconnect():
                     self.logger.info(f"{self.device_name} Connected")
@@ -2613,14 +2627,6 @@ class Seestar:
                 )
 
             try:
-                # Start up heartbeat and receive threads
-
-                self.get_msg_thread = threading.Thread(
-                    target=self.receive_message_thread_fn, daemon=True
-                )
-                self.get_msg_thread.name = f"IncomingMsgThread:{self.device_name}"
-                self.get_msg_thread.start()
-
                 self.heartbeat_msg_thread = threading.Thread(
                     target=self.heartbeat_message_thread_fn, daemon=True
                 )

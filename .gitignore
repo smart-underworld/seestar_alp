@@ -1,3 +1,4 @@
+interop_pem.pem
 .git
 .pytest_cache
 .venv
@@ -30,3 +31,6 @@ messages*.db
 test_schedule_1.json
 test_schedule.json
 alpyca_EQFirmware.log
+
+# Auto-level run logs (captured per-run JSON for offline math replay)
+auto_level_logs/
