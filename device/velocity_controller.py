@@ -51,9 +51,9 @@ MIN_DUR_S = 5                 # firmware floor; dur_sec < 5 not used by conventi
 DUR_SEC_CAP = 10              # firmware ignores dur_sec > 10
 MAIN_SPEED = 1440             # firmware-clamped max speed
 MAIN_RATE_DEGS = 6.0          # ~6.09 °/s at speed=1440 (10 s burst avg)
-PLAN_MAX_RATE_DEGS = 6.0      # Per-axis max rate (°/s). Matches firmware clamp at
-                              # speed=1440. Firmware clamps per-axis independently,
-                              # so diagonal moves can exceed this in total magnitude.
+PLAN_MAX_RATE_DEGS = 5.0      # Per-axis planner cap (°/s). 1°/s below the firmware
+                              # clamp (~6°/s at speed=1440) so the feedback loop has
+                              # headroom to add correction velocity without saturating.
 
 
 # ---------------------------------------------------------------------------
@@ -517,8 +517,8 @@ def move_azimuth_to_ff(
     tag: str = "",
     position_logger: Any = None,
     v_max: float = PLAN_MAX_RATE_DEGS,
-    a_max: float = 10.0,
-    j_max: float = 40.0,
+    a_max: float = 4.0,
+    j_max: float = 12.0,
     tick_dt: float = 0.5,
     settle_s: float = 1.5,
     cold_start_lag_s: float = 0.0,
@@ -712,10 +712,13 @@ def move_azimuth_to_ff(
 
         # Total commanded velocity, clamped to plant rate.
         cmd_vel = ref.vel + v_corr
-        if cmd_vel > v_max:
-            cmd_vel = v_max
-        elif cmd_vel < -v_max:
-            cmd_vel = -v_max
+        # Clamp at the PLANT's max rate (MAIN_RATE_DEGS), not the planner's
+        # cruise speed (v_max). This leaves headroom above the planned
+        # trajectory for the feedback correction to close tracking error.
+        if cmd_vel > MAIN_RATE_DEGS:
+            cmd_vel = MAIN_RATE_DEGS
+        elif cmd_vel < -MAIN_RATE_DEGS:
+            cmd_vel = -MAIN_RATE_DEGS
 
         # Convert to firmware (speed, angle).
         if abs(cmd_vel) < 1e-6:
@@ -846,8 +849,8 @@ def move_azimuth_to_with_correction(
     position_logger: Any = None,
     arrive_tolerance_deg: float = 0.3,
     v_max: float = PLAN_MAX_RATE_DEGS,
-    a_max: float = 10.0,
-    j_max: float = 40.0,
+    a_max: float = 4.0,
+    j_max: float = 12.0,
     tick_dt: float = 0.5,
     settle_s: float = 1.5,
     cold_start_lag_s: float = 0.0,
@@ -963,8 +966,8 @@ def move_elevation_to_ff(
     tag: str = "",
     position_logger: Any = None,
     v_max: float = PLAN_MAX_RATE_DEGS,
-    a_max: float = 10.0,
-    j_max: float = 40.0,
+    a_max: float = 4.0,
+    j_max: float = 12.0,
     tick_dt: float = 0.5,
     settle_s: float = 1.5,
     profile: str = "scurve",
@@ -1080,10 +1083,13 @@ def move_elevation_to_ff(
             v_corr = -v_corr_max
 
         cmd_vel = ref.vel + v_corr
-        if cmd_vel > v_max:
-            cmd_vel = v_max
-        elif cmd_vel < -v_max:
-            cmd_vel = -v_max
+        # Clamp at the PLANT's max rate (MAIN_RATE_DEGS), not the planner's
+        # cruise speed (v_max). This leaves headroom above the planned
+        # trajectory for the feedback correction to close tracking error.
+        if cmd_vel > MAIN_RATE_DEGS:
+            cmd_vel = MAIN_RATE_DEGS
+        elif cmd_vel < -MAIN_RATE_DEGS:
+            cmd_vel = -MAIN_RATE_DEGS
 
         if abs(cmd_vel) < 1e-6:
             speed_cmd = 0
@@ -1184,8 +1190,8 @@ def move_to_ff(
     tag: str = "",
     position_logger: Any = None,
     v_max: float = PLAN_MAX_RATE_DEGS,
-    a_max: float = 10.0,
-    j_max: float = 40.0,
+    a_max: float = 4.0,
+    j_max: float = 12.0,
     tick_dt: float = 0.5,
     settle_s: float = 1.5,
     profile: str = "scurve",
@@ -1336,8 +1342,8 @@ def move_to_ff(
         # 1440 for diagonal moves (e.g. speed=2036 at angle=45° gives each
         # axis its full 6°/s). We mirror that here by clamping per-axis
         # rather than the magnitude.
-        v_cmd_az = max(-v_max, min(v_max, v_cmd_az))
-        v_cmd_el = max(-v_max, min(v_max, v_cmd_el))
+        v_cmd_az = max(-MAIN_RATE_DEGS, min(MAIN_RATE_DEGS, v_cmd_az))
+        v_cmd_el = max(-MAIN_RATE_DEGS, min(MAIN_RATE_DEGS, v_cmd_el))
         v_mag = math.sqrt(v_cmd_az * v_cmd_az + v_cmd_el * v_cmd_el)
 
         if v_mag < 1e-6:
