@@ -1622,9 +1622,10 @@ class PositionLogger:
     record. Also exposes `mark_event(name, **extra)` to write one-off
     event records interleaved with the polled samples.
 
-    Alpaca exposes no subscription API for position, so this polls
-    `scope_get_equ_coord` and converts to alt/az via astropy. Polling at
-    0.5 s is safe — probed at 0.3 s without cancelling scope_speed_move.
+    Position source: `scope_get_horiz_coord` → raw motor encoder
+    `[alt, az]`. This is always live (unlike `scope_get_equ_coord`
+    which goes stale without plate-solve alignment). Polling at 0.5 s
+    is safe — probed at 0.3 s without cancelling scope_speed_move.
     """
 
     def __init__(
@@ -1725,15 +1726,13 @@ class PositionLogger:
                 break
 
     def _sample(self) -> dict:
-        resp = self.cli.method_sync("scope_get_equ_coord")
-        ra = float(resp["result"]["ra"])
-        dec = float(resp["result"]["dec"])
-        aa = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg).transform_to(
-            AltAz(obstime=Time.now(), location=self.loc)
-        )
-        alt = float(aa.alt.deg)
-        az = wrap_pm180(float(aa.az.deg))
-        ts_raw = resp.get("Timestamp") if isinstance(resp, dict) else None
+        resp = self.cli.method_sync("scope_get_horiz_coord")
+        if not isinstance(resp, dict) or "result" not in resp:
+            raise RuntimeError(f"scope_get_horiz_coord bad response: {resp!r}")
+        result = resp["result"]
+        alt = float(result[0])
+        az = wrap_pm180(float(result[1]))
+        ts_raw = resp.get("Timestamp")
         fw_t: Optional[float] = None
         if ts_raw is not None:
             try:
@@ -1751,8 +1750,6 @@ class PositionLogger:
             "kind": "sample",
             "phase": phase,
             "step": step,
-            "ra_h": ra,
-            "dec_deg": dec,
             "alt_deg": alt,
             "az_deg": az,
             "commanded_az_deg": cmd_az,

@@ -286,38 +286,80 @@
     // target, not just the final setpoint step.
     // Inserts {y: null} markers in gaps > 2 s so Chart.js breaks the line
     // between successive moves (each setpoint step is a distinct segment).
-    function buildTrajectoryRef(events, key){
-      const out = [];
+    // Build trajectory-ref + tracking-error from controller tick events.
+    // Accepts any event name containing "ff_tick" (covers ff_tick,
+    // el_ff_tick, 2d_ff_tick).
+    function buildTrajectoryRef(events, eventNames, posKey, measKey, errKey){
+      const ref = [], err = [];
       const GAP_S = 2.0;
       let prevEpoch = null;
       for (const e of events){
-        if (e.name !== 'ff_tick') continue;
-        const v = e[key];
-        if (v === undefined || v === null) continue;
+        if (!eventNames.includes(e.event)) continue;
+        const refVal = e[posKey];
+        if (refVal === undefined || refVal === null) continue;
         const tRel = e.t - t0;
         if (prevEpoch !== null && (e.t - prevEpoch) > GAP_S){
-          out.push({ x: tRel, y: null });
+          ref.push({ x: tRel, y: null });
+          err.push({ x: tRel, y: null });
         }
-        out.push({ x: tRel, y: v });
+        ref.push({ x: tRel, y: refVal });
+        // Tracking error: prefer the controller's pre-computed field,
+        // then fall back to computing ref − meas.
+        const posErr = e[errKey] ?? e.position_error_deg;
+        if (posErr !== undefined && posErr !== null){
+          err.push({ x: tRel, y: posErr });
+        } else {
+          const measVal = e[measKey];
+          if (measVal !== undefined && measVal !== null){
+            const d = posKey.includes('az') || posKey === 'ref_pos'
+              ? wrapPm180(refVal - measVal) : (refVal - measVal);
+            err.push({ x: tRel, y: d });
+          }
+        }
         prevEpoch = e.t;
       }
-      return out;
+      return { ref, err };
     }
 
-    const azRefFromFF = buildTrajectoryRef(events, 'ref_pos');
-    // Use ff-derived ref when present, else the legacy step-setpoint.
-    azChart.data.datasets[0].data = azErr;
-    azChart.data.datasets[1].data = azRefFromFF.length > 0 ? azRefFromFF : azSet;
-    azChart.data.datasets[1].label = azRefFromFF.length > 0
+    // Az: from ff_tick (uses ref_pos, position_error_deg) and
+    //     2d_ff_tick (uses ref_az, err_az).
+    let azFF = buildTrajectoryRef(events,
+      ['ff_tick'], 'ref_pos', 'meas_az', 'position_error_deg');
+    const azFF2d = buildTrajectoryRef(events,
+      ['2d_ff_tick'], 'ref_az', 'meas_az', 'err_az');
+    if (azFF2d.ref.length > 0){
+      azFF.ref.push(...azFF2d.ref);
+      azFF.err.push(...azFF2d.err);
+    }
+
+    // El: from el_ff_tick (uses ref_pos, position_error_deg) and
+    //     2d_ff_tick (uses ref_el, err_el).
+    let elFF = buildTrajectoryRef(events,
+      ['el_ff_tick'], 'ref_pos', 'meas_el', 'position_error_deg');
+    const elFF2d = buildTrajectoryRef(events,
+      ['2d_ff_tick'], 'ref_el', 'meas_el', 'err_el');
+    if (elFF2d.ref.length > 0){
+      elFF.ref.push(...elFF2d.ref);
+      elFF.err.push(...elFF2d.err);
+    }
+
+    // Az chart: use FF-derived trajectory ref + tracking error when present.
+    azChart.data.datasets[0].data = azFF.err.length > 0 ? azFF.err : azErr;
+    azChart.data.datasets[0].label = azFF.err.length > 0
+      ? 'tracking error (°)' : 'error (°)';
+    azChart.data.datasets[1].data = azFF.ref.length > 0 ? azFF.ref : azSet;
+    azChart.data.datasets[1].label = azFF.ref.length > 0
       ? 'trajectory ref (°)' : 'setpoint (°)';
     azChart.data.datasets[2].data = azCmd;
     azChart.update();
 
-    // Elevation stays on the legacy step-setpoint for now — the FF
-    // controller is az-only, so ff_tick events don't carry el ref_pos.
-    elChart.data.datasets[0].data = elErr;
-    elChart.data.datasets[1].data = elSet;
-    elChart.data.datasets[1].label = 'setpoint (°)';
+    // El chart: same pattern — FF-derived when present, else legacy.
+    elChart.data.datasets[0].data = elFF.err.length > 0 ? elFF.err : elErr;
+    elChart.data.datasets[0].label = elFF.err.length > 0
+      ? 'tracking error (°)' : 'error (°)';
+    elChart.data.datasets[1].data = elFF.ref.length > 0 ? elFF.ref : elSet;
+    elChart.data.datasets[1].label = elFF.ref.length > 0
+      ? 'trajectory ref (°)' : 'setpoint (°)';
     elChart.data.datasets[2].data = elCmd;
     elChart.update();
 
@@ -337,29 +379,28 @@
       : `${samples.length} samples`;
     metaEl.textContent = `${data.name}  |  ${windowText}, ${events.length} events, elapsed ${lastT.toFixed(1)}s, phase=${currentPhase}, step=${currentStep}, poll=${pollDt}s`;
 
-    // Prefer the latest ff_tick ref_pos as the displayed "az setpoint"
-    // when the FF controller is driving — that's the instantaneous
-    // trajectory reference. Falls back to the final-target setpoint for
-    // legacy / PD runs.
-    let latestAzRef = null;
-    if (azRefFromFF.length > 0){
-      for (let i = azRefFromFF.length - 1; i >= 0; i--){
-        if (azRefFromFF[i].y !== null){ latestAzRef = azRefFromFF[i].y; break; }
-      }
+    // Latest values from FF-derived series for KPIs.
+    function lastNonNull(arr){
+      for (let i = arr.length - 1; i >= 0; i--)
+        if (arr[i].y !== null) return arr[i].y;
+      return null;
     }
-    const displayAzSet = latestAzRef !== null ? latestAzRef : latestAzSet;
+    const displayAzSet = azFF.ref.length > 0 ? lastNonNull(azFF.ref) : latestAzSet;
+    const displayAzErr = azFF.err.length > 0 ? lastNonNull(azFF.err) : latestAzErr;
+    const displayElSet = elFF.ref.length > 0 ? lastNonNull(elFF.ref) : latestElSet;
+    const displayElErr = elFF.err.length > 0 ? lastNonNull(elFF.err) : latestElErr;
 
     // KPIs.
     const fmt = (v, d=3) => v === null || v === undefined ? '—' : `${v.toFixed(d)}°`;
     const kpis = [
       { k: 'phase',             v: currentPhase },
       { k: 'step',              v: `${currentStep}` },
-      { k: 'az setpoint',       v: fmt(displayAzSet) },
+      { k: 'az ref',            v: fmt(displayAzSet) },
       { k: 'az measured',       v: fmt(latestAz) },
-      { k: 'az error',          v: fmt(latestAzErr) },
-      { k: 'el setpoint',       v: fmt(latestElSet) },
+      { k: 'az error',          v: fmt(displayAzErr) },
+      { k: 'el ref',            v: fmt(displayElSet) },
       { k: 'el measured',       v: fmt(latestEl) },
-      { k: 'el error',          v: fmt(latestElErr) },
+      { k: 'el error',          v: fmt(displayElErr) },
     ];
     kpiRowEl.innerHTML = kpis.map(k => `<div class="kpi"><div class="k">${k.k}</div><div class="v">${k.v}</div></div>`).join('');
   }
