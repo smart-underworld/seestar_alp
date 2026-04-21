@@ -1,0 +1,9 @@
+{
+  "ccw_hard_stop_cum_deg": -450.0,
+  "cw_hard_stop_cum_deg": 450.0,
+  "padding_deg": 15.0,
+  "ccw_hard_stop_wrapped_deg": -90.266,
+  "cw_hard_stop_wrapped_deg": 90.58,
+  "measurement_source": "sysid.py --mode limits 2026-04-21; symmetrized to \u00b1450 hard / \u00b1435 usable per user (center stop switch imprecise across power cycles)",
+  "measurement_date": "2026-04-21T13:15:22.915981"
+}

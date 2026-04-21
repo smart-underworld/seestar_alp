@@ -7,15 +7,80 @@ uses the identified plant to evaluate candidate control algorithms, and
 ends with a validated controller that can handle the ~0.3-0.7 s variable
 RPC latency.
 
-Position sensor throughout: encoder-integrated RPC (`scope_get_equ_coord`).
-Plate-solve is out of scope for this plan.
+---
 
-**Azimuth wrap:** the S50 spins infinitely in azimuth (no cable-wrap limits).
-The existing `wrap_pm180` keeps measured az in [-180, +180) and per-sample
-rate is computed from `wrap_pm180(az_new - az_prev)` which is correct as
-long as |true delta| < 180. For fitting we need a continuous cumulative
-position; add `unwrap_az_series` that integrates wrapped per-sample deltas.
-Elevation has physical limits and needs no unwrap.
+## Executive summary — what to do next (for a fresh Claude Code session)
+
+**Where we are:** The azimuth closed-loop FF+FB velocity controller is
+working. Position feedback is via `scope_get_horiz_coord` (raw motor
+encoder). S-curve trajectory planner + P-gain position feedback runs
+in a single loop (no separate nudge/correction phase). Cable-wrap
+limits (±435° usable from home) are measured and integrated into the
+planner. Run 11 met the Phase-2 exit criterion (|residual| mean
+0.14°, 0 fallbacks, 183 s wall). Changes from 2026-04-21 are NOT YET
+COMMITTED — see file list in Phase 3 below.
+
+**What to do next (priority order):**
+
+1. **Commit the 2026-04-21 changes.** Large batch: closed-loop
+   controller, `scope_get_horiz_coord` switch, plant_limits module,
+   S-curve default, velocity_controller page overlay, sysid limits
+   probe. See "Files changed" in Phase 3 for the full list.
+
+2. **Run a clean 6-setpoint sweep** with the cumulative-limits-aware
+   planner to confirm end-to-end (Run 15 was interrupted at step 3
+   but the 3 steps that ran were all ≤ 0.08° residual).
+
+3. **Add elevation control (Phase 4 — PRIORITY).** The building blocks
+   are all in place from az. Steps:
+   - 4.1: Probe el limits (`sysid.py --mode limits --direction up/down`). ~10 min.
+   - 4.2 (optional): El sysid (step_response on el axis). ~30 min. Skip if
+     first el run converges with az-derived tau.
+   - 4.3: `move_elevation_to_ff` — copy az controller for el axis
+     (angle=90/270, no wrap, simple min/max limits). ~1 hr.
+   - 4.4: Combined `move_to_ff(az, el)` with 2D velocity composition
+     (`speed = |v_vec| · 237, angle = atan2(v_el, v_az)`). ~2 hr.
+   See Phase 4 section for full details.
+
+4. **Streaming trajectory consumer** for dynamic targets (plane chase,
+   sidereal tracking). Builds on the 2D controller from 4.4.
+
+**Session-restart cheat-sheet** is in Phase 3 below. Key commands:
+```bash
+# Unit tests (38 should pass):
+uv run python -m pytest tests/test_auto_level.py tests/test_trajectory.py -q
+
+# Hardware setpoint sweep (loads plant_limits.json automatically):
+uv run python scripts/tune_vc.py --control feedforward \
+  --setpoints=-170,+30,-60,+90,-30,+170 --tol 0.3 --alt 10
+
+# Probe elevation limits:
+uv run python scripts/sysid.py --mode limits --direction up --speed 500 --max-dur 60
+uv run python scripts/sysid.py --mode limits --direction down --speed 500 --max-dur 60
+```
+
+> Jump to [Phase 3](#phase-3-closed-loop-ffFB--cable-wrap-calibration-2026-04-21)
+> for full session context, or [Phase 4](#phase-4-elevation-control--2-axis-motion-next)
+> for the elevation plan.
+
+---
+
+Position sensor: raw motor encoder via **`scope_get_horiz_coord`** (as of
+2026-04-21). Older sections still reference `scope_get_equ_coord`; that
+path is unreliable when the scope hasn't plate-solve-aligned in the
+current power session. See Phase 3 for details.
+
+**Azimuth wrap (CORRECTED 2026-04-21):** the S50 does NOT spin infinitely
+in azimuth — it has a finite cable wrap of **~900° (~2.5 turns)** total
+travel, symmetric about the power-on home position. Both hard stops are
+mechanical, detectable via stall when commanded speed stops producing
+motion. Measured limits and cumulative-az tracking live in
+`device/plant_limits.py` (`AzimuthLimits`, `CumulativeAzTracker`,
+`pick_cum_target`) with persisted calibration in
+`device/plant_limits.json`. `wrap_pm180` still applies per-sample (true
+delta stays < 180°); the planner can now operate in cumulative
+(unwrapped) coordinates for multi-turn safety via `wrap_target=False`.
+Elevation has physical limits — not yet characterised.
 
 See `scripts/auto_level_tuning.md` for the per-run tuning log and
 `plans/auto_level_control_loop_todo.md` for near-term triaged tasks.
@@ -672,3 +737,264 @@ Benefit of Tier 2 over Tier-1 sequential single-axis moves: for a
 Tier 2 takes ~7 s (single sqrt(2) diagonal at the magnitude limit).
 Bigger benefit for tracking: Tier 2 is natural; Tier 1 doesn't apply
 because both axes move continuously.
+
+---
+
+## Phase 3: closed-loop FF+FB + cable-wrap calibration (2026-04-21)
+
+### Summary of session
+
+This session re-architected the controller (removing post-hoc nudge
+loops in favor of in-motion position feedback) and discovered / measured
+the mount's finite cable-wrap limits.
+
+### Key discoveries
+
+1. **Mount has finite cable wrap (~900° = 2.5 turns)**, NOT infinite
+   azimuth rotation. Hard stops are symmetric about the power-on home
+   position (±450° each side). Measured via `sysid.py --mode limits`
+   with dithered command re-issue + retry-on-stall detection. The
+   firmware silently drops repeated identical `scope_speed_move`
+   commands at ~80s intervals, producing spurious "stalls" (detected
+   and bypassed by the retry mechanism). Saved to
+   `device/plant_limits.json`; usable range set to **±435°** (15°
+   padding on each side).
+
+2. **`scope_get_equ_coord` (RA/Dec) does NOT track encoder motion live
+   unless plate-solve-aligned.** Without alignment (e.g. after a cold
+   power-up), RA/Dec is stale and the astropy-converted az is useless.
+   Switched `measure_altaz_timed` to `scope_get_horiz_coord` which
+   returns **raw motor-encoder [alt, az]** — always live, always
+   mount-frame, never compass-influenced. This is the correct data
+   source for closed-loop control.
+
+3. **Encoder az is NOT compass-influenced.** Verified by rotating the
+   tripod ~120° while powered: encoder az unchanged, compass direction
+   changed by the expected amount. Encoder az is a pure mount-internal
+   readout, zeroed at each power-on to the home (cable midpoint)
+   position. The firmware also exposes `compass_sensor.direction`
+   (MEMS magnetometer, `cali=0`) separately — the two are independent.
+
+4. **Startup (power-on) position = cable midpoint.** Verified: mount
+   spins ~1.25 turns CW during power-off → parks at midpoint.
+   Symmetric: ±450° of cable from there. The center wrapped-az at
+   power-on is approximately 0° in the encoder frame (but the
+   firmware's internal "home" is at horiz_coord[1] ≈ 0° ± some noise;
+   not the same as compass heading or sky azimuth).
+
+### Architectural changes
+
+**Closed-loop FF+FB controller** (`move_azimuth_to_ff`):
+- At every tick: `v_cmd = v_ff(t) + clamp(kp_pos · pos_error, ±v_corr_max)`.
+- Firmware timestamps (`scope_get_horiz_coord.Timestamp`) align ref
+  with measurement RPC-jitter-free.
+- After trajectory ends, loop continues at `ref_vel=0 + feedback` until
+  `|pos_error| ≤ arrive_tolerance_deg` for `converged_ticks_required`
+  consecutive ticks, or `settle_max_s` timeout.
+- **No separate nudge / correction phase.** The nudge loop and its
+  adaptive-speed logic are deleted.
+- Defaults: `kp_pos=0.5 /s`, `v_corr_max=2.0 °/s`, `v_max=5.0 °/s`
+  (via `PLAN_MAX_RATE_DEGS`), `profile=scurve`, `cold_start_lag_s=0`.
+
+**S-curve as default profile**: S-curve's jerk-limited accel ramp gives
+the firmware smoother first-tick commands, avoiding the "step velocity
+change" that trapezoid + cold-start-hold produced (which caused the
+Run 9 short-move regression). S-curve is strictly better on the
+hardware runs than trapezoid for both long and short moves.
+
+**Cable-wrap-aware planning** (`device/plant_limits.py`):
+- `AzimuthLimits` dataclass with `usable_ccw_cum_deg`, `usable_cw_cum_deg`.
+- `CumulativeAzTracker`: integrates wrapped encoder deltas into
+  unwrapped cumulative az.
+- `pick_cum_target(cum_cur, wrapped_cur, wrapped_target, limits)`:
+  picks short or long path such that the cumulative target stays
+  within the usable cable range.
+- `trapezoidal_profile` / `scurve_profile` accept `wrap_target=False`:
+  in cumulative mode the planner uses `delta = p_target - p0` verbatim
+  (no wrap_pm180, no az_forbidden check). Caller is responsible for
+  computing a valid cumulative target beforehand.
+- `unwind_azimuth(cli, loc, tracker, limits, ...)`: moves mount back
+  to cumulative 0 (cable midpoint) if |cum| > threshold_deg. Called
+  before dynamic tracking to restore cable headroom.
+
+**`measure_altaz_timed` switched to `scope_get_horiz_coord`**: returns
+raw motor-encoder `[alt, az]`. `loc` parameter kept for backward compat
+but unused. This fixes the stale-RA/Dec problem and removes the astropy
+conversion overhead + time/location dependency from the measurement path.
+
+**Velocity controller page** (`/velocity_controller`): azimuth chart
+dataset 1 now reads `ff_tick.ref_pos` from JSONL events (the trajectory
+reference curve), not the flat step-setpoint. Falls back to legacy
+`commanded_az_deg` when no `ff_tick` events are in the window.
+
+### Hardware run results
+
+| Run | Config | Wall | \|res\| mean | FBs | Notes |
+|---|---|---|---|---|---|
+| 8 | trap no-comp (PD+pred) | 229 s | 0.32° | 1 | old baseline |
+| 9 | trap + cold_start 0.5 | 338 s | 2.54° | 3 | cold-start hold hurt short moves |
+| 10 | scurve no-comp | 359 s | 2.06° | 3 | scurve better FF, but nudges too weak |
+| 11 | scurve + adaptive nudge | **183 s** | **0.14°** | **0** | Phase-2 exit met (max |res| 0.225°) |
+| 12 | same @ v_max=5 | 284 s | 17.9° | 2 | hardware-state failure steps 3,5 |
+| 13 | closed-loop FF+FB (no nudge) | — | — | — | step-2 errored (firmware hiccup) |
+| 14v2 | closed-loop FF+FB | 185 s | 16.9° | 2 | controller clean where mount moves; steps 3,5 hit +5° CCW cable-wrap limit |
+| 15 (partial, 3 steps) | CL + az_forbidden=7 | — | steps 1-3 ≤ 0.08° | 0 | planner correctly routed step 3 the long way CW |
+
+### Files changed (not yet committed)
+
+```
+device/velocity_controller.py   — measure_altaz_timed switched to scope_get_horiz_coord;
+                                   closed-loop FF+FB; unwind_azimuth; az_limits/az_tracker plumbing;
+                                   PLAN_MAX_RATE_DEGS=5.0; scurve as default profile
+device/trajectory.py            — t_offset, az_forbidden_deg, wrap_target params
+device/plant_limits.py          — NEW: AzimuthLimits, CumulativeAzTracker, pick_cum_target
+device/plant_limits.json        — NEW: measured cable-wrap calibration (±450 hard, ±435 usable)
+tests/test_trajectory.py        — 4 t_offset tests, 4 az_forbidden tests (38 total, all pass)
+scripts/tune_vc.py              — scurve + closed-loop defaults; --kp-pos, --v-corr-max,
+                                   --profile, --az-forbidden, --no-az-limits; loads plant_limits.json
+scripts/sysid.py                — --mode limits (dithered, retry-on-stall);
+                                   --mode trajectory_track + --profile/--cold-start-lag flags
+front/templates/velocity_controller.html — trajectory-ref overlay from ff_tick events
+```
+
+### Session-restart cheat-sheet (next session)
+
+- **Current architecture:** closed-loop FF+FB in `move_azimuth_to_ff`.
+  `v_cmd = v_ff(t) + kp_pos * pos_err`. No nudge loop, no separate
+  correction wrapper. `move_azimuth_to_with_correction` is a thin
+  alias.
+- **Position readout:** `measure_altaz_timed` → `scope_get_horiz_coord`
+  → raw encoder `[alt, az]`. NOT `scope_get_equ_coord` (stale without
+  plate-solve alignment).
+- **Cable-wrap limits:** ±450° hard, ±435° usable. Loaded from
+  `device/plant_limits.json` by `tune_vc.py`. Planner uses cumulative
+  coordinates when limits are active (`wrap_target=False`).
+- **Defaults:** `profile=scurve`, `kp_pos=0.5`, `v_corr_max=2.0`,
+  `v_max=5.0` (via `PLAN_MAX_RATE_DEGS`), `cold_start_lag_s=0.0`.
+- **Firmware dither:** the probe (`sysid.py --mode limits`) randomizes
+  `dur_sec` on re-issue to avoid firmware command dedup. The closed-loop
+  FF controller doesn't need dither because each tick's `v_cmd` varies
+  naturally with the trajectory + feedback.
+- **Unit tests:** `uv run python -m pytest tests/test_auto_level.py
+  tests/test_trajectory.py -q` — 38 tests should pass.
+- **Hardware test:** after power-on, the mount homes to cable midpoint
+  (encoder az ≈ 0°). Run
+  ```
+  uv run python scripts/tune_vc.py --control feedforward \
+    --setpoints=-170,+30,-60,+90,-30,+170 --tol 0.3 --alt 10
+  ```
+  (defaults load plant_limits.json, scurve profile, closed-loop FF+FB).
+
+---
+
+## Phase 4: elevation control + 2-axis motion (NEXT)
+
+Priority: add elevation control to match the working azimuth controller.
+The goal is independent el control first (sequential az→el moves), then
+2D diagonal motion via composed (speed, angle) commands.
+
+### How far away
+
+The building blocks exist: the closed-loop controller, S-curve planner,
+encoder readout, limits infrastructure are all working for az. Elevation
+reuse is nearly mechanical:
+
+| Step | Est. time | Description |
+|---|---|---|
+| 4.1 **El limits probe** | 10 min | `sysid.py --mode limits --direction up/down`. El has firm physical limits (horizon, zenith). |
+| 4.2 **El sysid (optional)** | 30 min | `sysid.py --mode step_response` on el axis (angle=90/270). Skip if we assume τ=0.348 s matches az. |
+| 4.3 **Independent el controller** | 1 hr | Copy az pattern for el: `move_elevation_to_ff`. Internally uses `scope_speed_move(speed, 90/270, dur)` and reads `horiz_coord[0]`. No wrap (el doesn't go past ±180). |
+| 4.4 **Combined `move_to_ff(az, el)`** | 2 hr | 2D trajectory planner (independent-axis or diagonal). Each tick: compose `(v_az, v_el)` → `speed = \|v\| · 237`, `angle = atan2(v_el, v_az)`. Single `scope_speed_move` per tick. |
+| 4.5 **Streaming trajectory consumer** | 3+ hr | For dynamic targets (plane chase, sidereal track): feed a time-varying (az, el) reference. Low-bandwidth bias estimator trims drift. |
+
+Steps 4.1–4.3 can be done in a single session (~2 hr). Step 4.4
+(diagonal motion) is a natural follow-on in the same or next session.
+
+### 4.1 Elevation limits probe
+
+Run `sysid.py --mode limits --direction up` and `--direction down` at
+speed=500. Stall detection + retry works the same as az. Expect limits
+at roughly `[−90°, 0°]` or `[−90°, +10°]` encoder-frame (the mount
+parks at horiz_coord[0] = −89.8°, which is near the physical down
+stop; "up" is toward 0° in this frame).
+
+Save to `plant_limits.json` as `el_min_deg`, `el_max_deg`. No cable-
+wrap (el is < 180° range), so no cumulative tracking needed — simple
+min/max clamp suffices.
+
+### 4.2 Elevation sysid (optional)
+
+If the el axis has a different tau due to gravity loading, a quick step-
+response will reveal it. Expected: tau ≈ 0.35 s (same stepper/gearing
+as az; gravity at low el angles is mostly axial to the stepper shaft).
+Skip if initial el hardware runs converge well with az-derived tau.
+
+### 4.3 Independent elevation controller
+
+- New function `move_elevation_to_ff(cli, target_el_deg, cur_el_deg,
+  ...)` in `device/velocity_controller.py`.
+- Uses S-curve planner with `v_max`, `a_max`, `j_max` (same defaults
+  as az initially). No wrap (`wrap_target=False` since el doesn't wrap).
+- Firmware command: `scope_speed_move(speed, 90, dur)` for up,
+  `scope_speed_move(speed, 270, dur)` for down.
+- Position feedback from `scope_get_horiz_coord[0]`.
+- `el_limits` (simple min/max, no cumulative) checked before planning.
+- `tune_vc.py --mode setpoints_el` for setpoint sweeps on el.
+
+### 4.4 Combined 2-axis controller
+
+Once both axes are independently proven:
+- `move_to_ff(cli, target_az, target_el, ...)` plans both axes
+  simultaneously (either independent concurrent trajectories with a
+  shared clock, or a single 2D diagonal trajectory).
+- Each tick: read both horiz_coord[0] (el) and horiz_coord[1] (az),
+  compute v_cmd_az and v_cmd_el, compose into firmware
+  `(speed, angle)`.
+- The 2D velocity composition:
+  `speed = sqrt(v_az² + v_el²) * SPEED_PER_DEG_PER_SEC`
+  `angle = atan2(v_el, v_az)` (firmware convention: 0=+az, 90=+el).
+- Rate cap: `|v_vec| ≤ v_max` (not per-axis — so diagonal moves are
+  faster than sequential single-axis by √2 only when both axes are
+  near peak).
+
+### 4.5 Streaming trajectory consumer (future)
+
+For plane tracking or sidereal: an external source feeds `(t, az, el)`
+references. The 2D controller tracks them with closed-loop feedback.
+`unwind_azimuth` is called before each new tracking session if
+cumulative az has drifted > 180° from cable center.
+
+### Alternative approaches to consider
+
+1. **Skip independent el controller; go straight to 2D.** Saves code
+   duplication. Risk: debugging is harder if el doesn't respond as
+   expected (can't isolate the axis). Recommendation: do 4.3 first for
+   one quick hardware validation, then merge into 4.4.
+
+2. **Rate-limit firmware commands during the closed-loop settle phase.**
+   Currently the loop issues `speed_move` every tick (~0.5 s) even
+   when vel is tiny during settle. If the firmware has a minimum
+   commandable rate (stiction floor) we're already clipping below
+   `VC_FINE_MIN_SPEED`. Could add a "coast to stop" phase that stops
+   commanding entirely and just monitors position error.
+
+3. **Integral term on position feedback.** Currently P-only. If there's
+   a DC bias (e.g. mount tilt causing gravity-driven drift on el), a
+   small `kI` would close it. Add anti-windup (clamp integral when at
+   velocity cap). Only add if empirical el runs show a persistent
+   nonzero residual.
+
+### Open items from 2026-04-21 session (not yet done)
+
+- [ ] Commit all changes from this session (see file list above).
+- [ ] Full 6-setpoint sweep with closed-loop + cumulative limits
+      loaded (Run 15 was interrupted at step 3; steps 1-3 were clean).
+- [ ] Investigate / fix firmware `scope_get_equ_coord` stale-data
+      behavior. Currently we bypass it via `scope_get_horiz_coord`,
+      but `issue_slew`/iscope gotos still use RA/Dec which may explain
+      why all iscope gotos miss by 30-100°.
+- [ ] Add elevation limits + `move_elevation_to_ff` (Phase 4.1–4.3).
+- [ ] 2D combined controller (Phase 4.4).
+- [ ] Cable-wrap cumulative-az state persisted across restarts of
+      tune_vc (currently resets to first reading each run; fine for
+      sweeps from home, risky for multi-session tracking).

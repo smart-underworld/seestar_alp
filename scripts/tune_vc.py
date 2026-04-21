@@ -57,6 +57,7 @@ from datetime import datetime  # noqa: E402
 from device.alpaca_client import AlpacaClient  # noqa: E402
 from device.config import Config  # noqa: E402
 from device import velocity_controller as vc  # noqa: E402
+from device.plant_limits import AzimuthLimits, CumulativeAzTracker  # noqa: E402
 from device.velocity_controller import (  # noqa: E402
     PositionLogger,
     ensure_scenery_mode,
@@ -196,6 +197,22 @@ def run_setpoints(cli: InstrumentedAlpacaClient, args) -> int:
     )
     print(f"PositionLogger → {log_path}")
 
+    # Load cable-wrap limits (optional). If present, the FF controller
+    # will plan in cumulative (unwrapped) space and refuse targets that
+    # would exceed the measured usable range.
+    az_limits: AzimuthLimits | None = None
+    az_tracker: CumulativeAzTracker | None = None
+    if getattr(args, "use_az_limits", True):
+        az_limits = AzimuthLimits.load()
+        if az_limits is not None:
+            az_tracker = CumulativeAzTracker()
+            print(f"AzimuthLimits loaded: usable "
+                  f"[{az_limits.usable_ccw_cum_deg:+.1f}°, "
+                  f"{az_limits.usable_cw_cum_deg:+.1f}°] "
+                  f"(hard stops ±{az_limits.total_travel_deg/2:.1f}°)")
+        else:
+            print("No plant_limits.json found — skipping cable-wrap enforcement.")
+
     try:
         print("Entering scenery mode...")
         ensure_scenery_mode(cli)
@@ -218,7 +235,12 @@ def run_setpoints(cli: InstrumentedAlpacaClient, args) -> int:
             print(f"  (warning: initial goto did not reach 3° — dist={init_dist})")
         time.sleep(1.0)
         _, cur_az = _measure_altaz(cli, loc)
-        print(f"Initial arrived: measured_az={cur_az:+.3f}°")
+        if az_tracker is not None:
+            az_tracker.update(cur_az)
+            print(f"Initial arrived: measured_az={cur_az:+.3f}°  "
+                  f"cum_az={az_tracker.cum_az_deg:+.3f}°")
+        else:
+            print(f"Initial arrived: measured_az={cur_az:+.3f}°")
         print()
 
         results: list[StepResult] = []
@@ -233,40 +255,34 @@ def run_setpoints(cli: InstrumentedAlpacaClient, args) -> int:
             print(f"{tag} START  (cur={cur_az:+.3f}°, delta={delta:+.3f}°)", flush=True)
             try:
                 if args.control in ("feedforward", "ff_pure"):
-                    if args.control == "ff_pure":
-                        _, meas_az, stats = move_azimuth_to_ff(
-                            cli,
-                            target_az_deg=target,
-                            cur_az_deg=cur_az,
-                            loc=loc,
-                            target_alt_deg=args.alt,
-                            tag=tag,
-                            position_logger=logger,
-                            v_max=args.max_rate,
-                            a_max=args.a_max,
-                            tick_dt=args.loop_dt,
-                            settle_s=args.settle if args.settle > 0 else 1.5,
-                            fallback_residual_deg=args.ff_fallback_residual,
-                            fallback_goto_fn=iscope_fallback_goto,
-                        )
-                    else:
-                        _, meas_az, stats = move_azimuth_to_with_correction(
-                            cli,
-                            target_az_deg=target,
-                            cur_az_deg=cur_az,
-                            loc=loc,
-                            target_alt_deg=args.alt,
-                            tag=tag,
-                            position_logger=logger,
-                            arrive_tolerance_deg=args.tol,
-                            max_corrections=args.ff_max_corrections,
-                            v_max=args.max_rate,
-                            a_max=args.a_max,
-                            tick_dt=args.loop_dt,
-                            settle_s=args.settle if args.settle > 0 else 1.5,
-                            fallback_residual_deg=args.ff_fallback_residual,
-                            fallback_goto_fn=iscope_fallback_goto,
-                        )
+                    # ff_pure forces kp_pos=0 (pure open-loop FF);
+                    # feedforward uses the configured kp_pos (closed-loop).
+                    kp_pos_use = 0.0 if args.control == "ff_pure" else args.kp_pos
+                    _, meas_az, stats = move_azimuth_to_ff(
+                        cli,
+                        target_az_deg=target,
+                        cur_az_deg=cur_az,
+                        loc=loc,
+                        target_alt_deg=args.alt,
+                        tag=tag,
+                        position_logger=logger,
+                        v_max=args.max_rate,
+                        a_max=args.a_max,
+                        j_max=args.j_max,
+                        tick_dt=args.loop_dt,
+                        settle_s=args.settle if args.settle > 0 else 1.5,
+                        cold_start_lag_s=args.cold_start_lag,
+                        profile=args.profile,
+                        az_forbidden_deg=args.az_forbidden,
+                        az_limits=az_limits,
+                        az_tracker=az_tracker,
+                        kp_pos=kp_pos_use,
+                        v_corr_max=args.v_corr_max,
+                        arrive_tolerance_deg=args.tol,
+                        settle_max_s=args.settle_max_s,
+                        fallback_residual_deg=args.ff_fallback_residual,
+                        fallback_goto_fn=iscope_fallback_goto,
+                    )
                 else:
                     _, meas_az, stats = move_azimuth_to_velocity(
                         cli,
@@ -736,7 +752,9 @@ def main() -> int:
     p.add_argument("--setpoints", default="-170,+30,-60,+90,-30,+170")
     p.add_argument("--kp", type=float, default=0.3)
     p.add_argument("--kd", type=float, default=0.4)
-    p.add_argument("--max-rate", type=float, default=6.0)
+    p.add_argument("--max-rate", type=float, default=5.0,
+                   help="Max velocity (°/s) for the FF planner. Default 5.0 "
+                        "leaves 1°/s headroom below the firmware cap (~6°/s).")
     p.add_argument("--loop-dt", type=float, default=0.5)
     p.add_argument("--min-speed", type=int, default=100)
     p.add_argument("--fine-min-speed", type=int, default=80)
@@ -759,11 +777,34 @@ def main() -> int:
                         "only, no correction — for evaluating raw FF).")
     p.add_argument("--a-max", type=float, default=10.0,
                    help="FF: max accel (°/s²) for trajectory planner.")
-    p.add_argument("--ff-max-corrections", type=int, default=3,
-                   help="FF: max post-move slow-nudge corrections "
-                        "(only with --control feedforward).")
+    p.add_argument("--j-max", type=float, default=40.0,
+                   help="FF: max jerk (°/s³) for the S-curve profile.")
+    p.add_argument("--profile", choices=["trapezoid", "scurve"],
+                   default="scurve",
+                   help="FF: trajectory profile. S-curve (default) ramps "
+                        "accel at j_max for smoother commanded-rate changes.")
+    p.add_argument("--cold-start-lag", type=float, default=0.0,
+                   help="FF: cold-start dead-time compensation (s). Only "
+                        "useful with --control ff_pure; closed-loop FF+FB "
+                        "absorbs cold-start via feedback.")
+    p.add_argument("--az-forbidden", type=float, default=None,
+                   help="Single forbidden azimuth (°). Kept for compatibility; "
+                        "prefer the cumulative bounds loaded from plant_limits.json.")
+    p.add_argument("--no-az-limits", dest="use_az_limits",
+                   action="store_false", default=True,
+                   help="Ignore plant_limits.json even if present (disables "
+                        "cumulative cable-wrap bounds enforcement).")
     p.add_argument("--ff-fallback-residual", type=float, default=2.0,
                    help="FF: invoke iscope fallback if final |residual| > this.")
+    p.add_argument("--kp-pos", type=float, default=0.5,
+                   help="FF+FB: P-gain on position error (1/s). "
+                        "v_corr = kp_pos · pos_err. Set 0 for pure-FF.")
+    p.add_argument("--v-corr-max", type=float, default=2.0,
+                   help="FF+FB: clamp on |v_corr| (deg/s). Prevents "
+                        "windup during cold-start dead time.")
+    p.add_argument("--settle-max-s", type=float, default=5.0,
+                   help="FF+FB: max post-trajectory time to wait for "
+                        "convergence before exiting the loop.")
 
     # Step-response mode args.
     p.add_argument("--step-speeds", default="100,300,700,1440",

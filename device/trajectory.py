@@ -78,6 +78,79 @@ class PlannedTrajectory:
 _POS_EPS_DEG = 0.01  # below this, consider "already at target"
 
 
+def _path_crosses_forbidden(p0: float, delta_signed: float, az_forbidden: float) -> bool:
+    """Does traveling from p0 by signed-delta cross az_forbidden (interior)?
+
+    Crossing means the forbidden point is strictly between p0 and p0+delta
+    along the direction of travel. Endpoint-equal doesn't count as crossing
+    (the trajectory stops before the forbidden angle).
+    """
+    # wrap_pm180 puts the answer in (-180, +180]. 0 means "same angle",
+    # positive means "CW from p0", negative means "CCW from p0".
+    d_to_fbd = wrap_pm180(az_forbidden - p0)
+    if delta_signed > 0:
+        return 0 < d_to_fbd < delta_signed
+    if delta_signed < 0:
+        return delta_signed < d_to_fbd < 0
+    return False
+
+
+def _select_delta(
+    p0: float, p_target: float, az_forbidden: float | None,
+) -> float:
+    """Compute the signed delta from p0 to p_target, avoiding az_forbidden
+    if set. Returns a delta in the shorter path whenever that's feasible;
+    otherwise, the long way (|delta| > 180).
+    """
+    short_delta = wrap_pm180(p_target - p0)
+    if az_forbidden is None:
+        return short_delta
+    if not _path_crosses_forbidden(p0, short_delta, az_forbidden):
+        return short_delta
+    # Short path crosses the forbidden azimuth — take the long way.
+    long_delta = short_delta - 360.0 if short_delta >= 0 else short_delta + 360.0
+    if _path_crosses_forbidden(p0, long_delta, az_forbidden):
+        # Impossible geometrically (only occurs if p0 or p_target sits
+        # exactly on the forbidden angle); prefer the short path and let
+        # the caller decide.
+        return short_delta
+    return long_delta
+
+
+def _apply_t_offset(
+    traj: PlannedTrajectory, t_offset: float, tick_dt: float,
+) -> PlannedTrajectory:
+    """Prepend a hold phase of `t_offset` seconds at (p0, v=0, a=0) and shift
+    every existing sample by `+t_offset`.
+
+    Models the cold-start dead time between the FF controller starting its
+    wall clock and the plant actually accepting its first motion command.
+    During that window the trajectory reports a static hold at the starting
+    position, so the FF controller issues a zero/idle command instead of
+    chasing a reference that has already begun accelerating.
+    """
+    if t_offset <= 0.0 or not traj.points:
+        return traj
+    p0 = traj.points[0].pos
+    hold_points: list[TrajectoryPoint] = []
+    k = 0
+    while k * tick_dt < t_offset - 1e-9:
+        hold_points.append(TrajectoryPoint(
+            t=k * tick_dt, pos=p0, vel=0.0, acc=0.0,
+        ))
+        k += 1
+    shifted = tuple(
+        TrajectoryPoint(
+            t=p.t + t_offset, pos=p.pos, vel=p.vel, acc=p.acc,
+        )
+        for p in traj.points
+    )
+    return PlannedTrajectory(
+        points=tuple(hold_points) + shifted,
+        total_duration=traj.total_duration + t_offset,
+    )
+
+
 def _sample_phase(
     out: list, t_start: float, p_start: float, v_start: float,
     a: float, dur: float, tick_dt: float,
@@ -115,27 +188,46 @@ def trapezoidal_profile(
     p0: float, v0: float, p_target: float,
     v_max: float, a_max: float,
     tick_dt: float = 0.1,
+    t_offset: float = 0.0,
+    az_forbidden_deg: float | None = None,
+    wrap_target: bool = True,
 ) -> PlannedTrajectory:
     """Accel → cruise → decel profile that reaches `p_target` with
     v_end = 0 under |v| ≤ v_max and |acc| ≤ a_max.
 
-    Wrap-aware: `delta = wrap_pm180(p_target - p0)` picks the shorter
-    path through the ±180° boundary.
+    When `wrap_target=True` (default), `delta = wrap_pm180(p_target - p0)`
+    picks the shorter path through the ±180° boundary, and
+    `az_forbidden_deg` (if set) forces the long way when the short path
+    would cross a forbidden azimuth.
+
+    When `wrap_target=False`, the planner treats `p0` and `p_target` as
+    **cumulative / unwrapped** positions and uses `delta = p_target - p0`
+    verbatim. This is the right mode for multi-turn cable-wrap planning
+    where the caller has already picked which cumulative target to reach
+    (see `device.plant_limits.pick_cum_target`). `az_forbidden_deg` is
+    ignored in this mode.
 
     Non-zero `v0` is handled by first bringing the velocity to zero (or
-    to the cruise direction) before the normal trapezoid; the planner
-    chooses the shortest feasible way to reach rest at p_target.
+    to the cruise direction) before the normal trapezoid.
+
+    `t_offset > 0` prepends a hold at (p0, v=0, a=0) for that many seconds
+    before the motion starts — for firmware cold-start compensation.
     """
     assert v_max > 0
     assert a_max > 0
+    assert t_offset >= 0
 
-    delta_signed = wrap_pm180(p_target - p0)
+    if wrap_target:
+        delta_signed = _select_delta(p0, p_target, az_forbidden_deg)
+    else:
+        delta_signed = p_target - p0
 
     if abs(delta_signed) < _POS_EPS_DEG and abs(v0) < 1e-6:
-        return PlannedTrajectory(
+        base = PlannedTrajectory(
             points=(TrajectoryPoint(t=0.0, pos=p0, vel=v0, acc=0.0),),
             total_duration=0.0,
         )
+        return _apply_t_offset(base, t_offset, tick_dt)
 
     # Direction of net motion.
     dir_sign = 1.0 if delta_signed >= 0 else -1.0
@@ -223,13 +315,17 @@ def trapezoidal_profile(
         else:
             dedup.append(pt)
 
-    return PlannedTrajectory(points=tuple(dedup), total_duration=t_cur)
+    base = PlannedTrajectory(points=tuple(dedup), total_duration=t_cur)
+    return _apply_t_offset(base, t_offset, tick_dt)
 
 
 def scurve_profile(
     p0: float, v0: float, p_target: float,
     v_max: float, a_max: float, j_max: float,
     tick_dt: float = 0.1,
+    t_offset: float = 0.0,
+    az_forbidden_deg: float | None = None,
+    wrap_target: bool = True,
 ) -> PlannedTrajectory:
     """Jerk-limited (S-curve) version of `trapezoidal_profile`.
 
@@ -246,10 +342,19 @@ def scurve_profile(
     For v0 != 0 this delegates to `trapezoidal_profile` to first bring v
     to zero, then builds an S-curve from rest — simpler than a proper
     v0-aware S-curve, adequate for our Phase 2 needs.
+
+    `t_offset > 0` behaves as in `trapezoidal_profile`: a lead-in hold at
+    (p0, v=0, a=0) prepended to the final trajectory.
+
+    `az_forbidden_deg` picks the non-crossing path (short or long) so the
+    trajectory never traverses the forbidden azimuth.
     """
+    assert t_offset >= 0
+
     if abs(v0) > 1e-6:
         # Bring to rest first via trapezoid (uses a_max without S-curving
-        # the v0 decel), then append an S-curve from rest.
+        # the v0 decel), then append an S-curve from rest. The lead-in
+        # hold for t_offset is applied only at the outer return.
         pre = trapezoidal_profile(
             p0=p0, v0=v0, p_target=p0,  # "rest in place"; trapezoid handles it
             v_max=v_max, a_max=a_max, tick_dt=tick_dt,
@@ -259,6 +364,8 @@ def scurve_profile(
         tail = scurve_profile(
             p0=pre_end.pos, v0=0.0, p_target=p_target,
             v_max=v_max, a_max=a_max, j_max=j_max, tick_dt=tick_dt,
+            az_forbidden_deg=az_forbidden_deg,
+            wrap_target=wrap_target,
         )
         # Concatenate (shift tail by pre.total_duration).
         shifted = tuple(
@@ -267,18 +374,23 @@ def scurve_profile(
             )
             for p in tail.points
         )
-        return PlannedTrajectory(
+        combined = PlannedTrajectory(
             points=pre.points + shifted[1:],  # skip duplicated boundary
             total_duration=pre.total_duration + tail.total_duration,
         )
+        return _apply_t_offset(combined, t_offset, tick_dt)
 
     # Rest-to-rest S-curve.
-    delta_signed = wrap_pm180(p_target - p0)
+    if wrap_target:
+        delta_signed = _select_delta(p0, p_target, az_forbidden_deg)
+    else:
+        delta_signed = p_target - p0
     if abs(delta_signed) < _POS_EPS_DEG:
-        return PlannedTrajectory(
+        base = PlannedTrajectory(
             points=(TrajectoryPoint(t=0.0, pos=p0, vel=0.0, acc=0.0),),
             total_duration=0.0,
         )
+        return _apply_t_offset(base, t_offset, tick_dt)
     dir_sign = 1.0 if delta_signed >= 0 else -1.0
     abs_delta = abs(delta_signed)
 
@@ -320,10 +432,13 @@ def scurve_profile(
         # Not enough distance for a full trapezoidal-in-accel profile.
         # Fall back to trapezoidal (no S-curve). This trades off smoothness
         # for keeping the planner simple; Phase 2 acceptance criteria
-        # don't require S-curve in short-move cases.
+        # don't require S-curve in short-move cases. Pass t_offset through
+        # so the lead-in hold still happens.
         return trapezoidal_profile(
             p0=p0, v0=0.0, p_target=p_target,
             v_max=v_max, a_max=a_max, tick_dt=tick_dt,
+            t_offset=t_offset, az_forbidden_deg=az_forbidden_deg,
+            wrap_target=wrap_target,
         )
 
     # Build the 7-segment profile at rest-to-rest.
@@ -424,4 +539,5 @@ def scurve_profile(
         else:
             dedup.append(pt)
 
-    return PlannedTrajectory(points=tuple(dedup), total_duration=t_cur)
+    base = PlannedTrajectory(points=tuple(dedup), total_duration=t_cur)
+    return _apply_t_offset(base, t_offset, tick_dt)

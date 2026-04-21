@@ -51,6 +51,8 @@ MIN_DUR_S = 5                 # firmware floor; dur_sec < 5 not used by conventi
 DUR_SEC_CAP = 10              # firmware ignores dur_sec > 10
 MAIN_SPEED = 1440             # firmware-clamped max speed
 MAIN_RATE_DEGS = 6.0          # ~6.09 °/s at speed=1440 (10 s burst avg)
+PLAN_MAX_RATE_DEGS = 5.0      # FF planner cap — 1°/s headroom below plant cap
+                              # so the firmware can actually hit the commanded rate.
 
 
 # ---------------------------------------------------------------------------
@@ -187,33 +189,51 @@ def measure_altaz(cli: MountClient, loc: EarthLocation) -> tuple[float, float]:
 def measure_altaz_timed(
     cli: MountClient, loc: EarthLocation,
 ) -> tuple[float, float, Optional[float]]:
-    """Like `measure_altaz` but also returns the firmware timestamp at
-    which the position was captured (seconds, monotonic firmware uptime).
+    """Read raw motor-encoder alt/az + firmware timestamp.
 
-    Returns `(alt, az, firmware_t)`; `firmware_t` is None if the response
-    lacks a `Timestamp` field (e.g. a non-firmware mock). The firmware
-    timestamp eliminates HTTP-latency jitter from dt computations and is
-    the correct clock for motion-onset / plant-fitting dt.
+    Source: `scope_get_horiz_coord` → `[alt_encoder, az_encoder]`. Both
+    values are in the mount's internal encoder frame — NOT sky alt/az.
+    They're invariant to tripod rotation, independent of compass, and
+    update live whenever the respective motor moves.
 
-    Format reference: device/seestar_device.py:500 — responses look like
-        {"jsonrpc":"2.0","Timestamp":"9507.244805160","method":...,
-         "result":{"ra":...,"dec":...},"code":0,"id":...}
+    Previously this used `scope_get_equ_coord` + astropy conversion,
+    which only tracks live when the scope has been plate-solve-aligned
+    in the current power session — without alignment, ra/dec is stale.
+    The raw encoder path is always correct, so we use it unconditionally.
+
+    `loc` is kept in the signature for backward compat but unused.
+
+    Returns `(alt, az, firmware_t)`. `az` is wrapped to `[-180, +180)`.
+    On a malformed response, retry once before raising — single-sample
+    glitches shouldn't tear down a multi-second trajectory.
     """
-    resp = cli.method_sync("scope_get_equ_coord")
+    del loc  # intentionally unused; raw encoder values are location-agnostic
+
+    def _call_once():
+        resp = cli.method_sync("scope_get_horiz_coord")
+        if not isinstance(resp, dict) or "result" not in resp:
+            return None, resp
+        return resp, resp
+    resp, raw = _call_once()
+    if resp is None:
+        time.sleep(0.1)
+        resp, raw = _call_once()
+    if resp is None:
+        raise RuntimeError(
+            f"scope_get_horiz_coord returned unexpected payload: {raw!r}"
+        )
     result = resp["result"]
-    ra_h = float(result["ra"])
-    dec_deg = float(result["dec"])
-    aa = SkyCoord(ra=ra_h * u.hourangle, dec=dec_deg * u.deg).transform_to(
-        AltAz(obstime=Time.now(), location=loc)
-    )
-    ts_raw = resp.get("Timestamp") if isinstance(resp, dict) else None
+    # Firmware returns [alt, az] as a 2-element list.
+    alt_deg = float(result[0])
+    az_deg = float(result[1])
+    ts_raw = resp.get("Timestamp")
     fw_t: Optional[float] = None
     if ts_raw is not None:
         try:
             fw_t = float(ts_raw)
         except (TypeError, ValueError):
             fw_t = None
-    return float(aa.alt.deg), wrap_pm180(float(aa.az.deg)), fw_t
+    return alt_deg, wrap_pm180(az_deg), fw_t
 
 
 def set_tracking(cli: MountClient, enabled: bool) -> None:
@@ -495,39 +515,74 @@ def move_azimuth_to_ff(
     target_alt_deg: float,
     tag: str = "",
     position_logger: Any = None,
-    v_max: float = MAIN_RATE_DEGS,
+    v_max: float = PLAN_MAX_RATE_DEGS,
     a_max: float = 10.0,
+    j_max: float = 40.0,
     tick_dt: float = 0.5,
     settle_s: float = 1.5,
+    cold_start_lag_s: float = 0.0,
+    profile: str = "scurve",
+    az_forbidden_deg: Optional[float] = None,
+    az_limits: Optional[Any] = None,  # plant_limits.AzimuthLimits
+    az_tracker: Optional[Any] = None,  # plant_limits.CumulativeAzTracker
+    kp_pos: float = 0.5,
+    v_corr_max: float = 2.0,
+    arrive_tolerance_deg: float = 0.3,
+    settle_max_s: float = 5.0,
+    converged_ticks_required: int = 2,
     fallback_residual_deg: float = 2.0,
     fallback_goto_fn: Optional[FallbackGotoFn] = None,
 ) -> tuple[float, float, dict]:
-    """Pure-feedforward azimuth mover: commands v_cmd(t) from a trapezoidal
-    velocity profile, no closed-loop position feedback.
+    """Closed-loop FF+FB azimuth mover.
+
+    At every tick: `v_cmd = v_ff(t) + kp_pos * position_error`, clamped
+    to ±v_corr_max for the correction term and ±v_max for the total.
+
+    The plant's trajectory-time is derived from the firmware `Timestamp`
+    (not host monotonic) so the error is compared against the correct
+    reference despite RPC latency jitter. After the trajectory ends the
+    loop keeps running at ref_vel=0 + correction until |error| is within
+    `arrive_tolerance_deg` for `converged_ticks_required` consecutive
+    ticks or `settle_max_s` elapses.
 
     Plant model: first-order lag with tau = VC_TAU_S (~0.348 s), k_dc ≈ 1.
-    Phase 1 + Checkpoint B showed warm transitions have ~0 pure dead time;
-    cold-start has ~0.5 s dead time before the tau ramp. This mover
-    accepts the cold-start lag (the trajectory's accel phase spans many
-    tau) and relies on the trajectory's symmetric end-decel + `settle_s`
-    to let the plant catch up before the final position read.
+    Phase 1 showed warm dead time ≈ 0 s; cold-start is ~0.5 s. The
+    closed-loop P feedback absorbs cold-start lag automatically
+    (position error accumulates during dead time → v_corr saturates to
+    v_corr_max → plant catches up once warm). `cold_start_lag_s` > 0
+    adds a pre-trajectory hold, only useful when running pure-FF
+    (kp_pos=0) for research.
 
     Args:
-        v_max, a_max: trajectory planner limits (defaults from Phase 1).
-        tick_dt: command-issue interval (s).
-        settle_s: delay after the last commanded zero before reading
-            final position. Default 1.5 s covers ~4 tau of first-order
-            settling plus HTTP poll wiggle.
+        v_max, a_max, j_max: trajectory planner limits.
+        profile: "scurve" (default, smoother first-tick cmd) or "trapezoid".
+        tick_dt: command-issue interval (s). ~0.5 s given RPC round-trip.
+        settle_s: delay after the final `speed=0` stop before reading
+            final position. Covers plant first-order decay + poll wiggle.
+        kp_pos: position-error gain (1/s). v_corr = kp_pos · pos_err.
+            Set 0 to disable feedback (legacy pure-FF).
+        v_corr_max: max |v_corr| in deg/s. Keeps v_corr bounded during
+            cold-start windup.
+        arrive_tolerance_deg: post-trajectory convergence threshold.
+        settle_max_s: max time after trajectory end to wait for convergence.
+        converged_ticks_required: # consecutive ticks below tolerance
+            required to exit early.
         fallback_residual_deg: if final |residual| exceeds this and
             fallback_goto_fn is provided, invoke iscope fallback.
 
     Returns (measured_alt, measured_az, stats).
     """
     # Import here to avoid circular imports (trajectory depends on vc).
-    from device.trajectory import trapezoidal_profile
+    from device.trajectory import scurve_profile, trapezoidal_profile
+
+    if profile not in ("trapezoid", "scurve"):
+        raise ValueError(f"unknown profile {profile!r}; expected trapezoid or scurve")
 
     stats = {
-        "controller": "ff",
+        "controller": "ff_fb" if kp_pos > 0 else "ff",
+        "profile": profile,
+        "kp_pos": kp_pos,
+        "v_corr_max": v_corr_max,
         "trajectory_duration_s": 0.0,
         "commands_issued": 0,
         "ticks": 0,
@@ -536,8 +591,13 @@ def move_azimuth_to_ff(
         "final_residual_deg": None,
         "max_tracking_err_deg": 0.0,
         "mean_tracking_err_deg": 0.0,
+        "max_position_error_deg": 0.0,
+        "max_v_corr_degs": 0.0,
+        "settle_time_s": 0.0,
+        "converged": False,
         "fallback_goto_used": False,
         "wall_time_s": 0.0,
+        "cold_start_lag_s": cold_start_lag_s,
         # Compat keys for StepResult harness (shared with PD/velocity mode)
         "iterations": 0,
         "sign_flips": 0,
@@ -547,10 +607,41 @@ def move_azimuth_to_ff(
         "stuck_bail": False,
     }
 
-    traj = trapezoidal_profile(
-        p0=cur_az_deg, v0=0.0, p_target=target_az_deg,
-        v_max=v_max, a_max=a_max, tick_dt=tick_dt,
-    )
+    # Cable-wrap-aware planning: when `az_limits` + `az_tracker` are
+    # given, pick a cumulative target that stays within the mount's
+    # usable cable range, and plan in cumulative (unwrapped) space via
+    # `wrap_target=False`. Otherwise fall back to the legacy wrapped
+    # planner with `az_forbidden_deg`.
+    use_cumulative = az_limits is not None and az_tracker is not None
+    if use_cumulative:
+        from device.plant_limits import pick_cum_target
+        p0_plan = az_tracker.cum_az_deg
+        p_target_plan = pick_cum_target(
+            cum_cur_deg=p0_plan,
+            wrapped_cur_deg=cur_az_deg,
+            wrapped_target_deg=target_az_deg,
+            limits=az_limits,
+        )
+    else:
+        p0_plan = cur_az_deg
+        p_target_plan = target_az_deg
+
+    if profile == "scurve":
+        traj = scurve_profile(
+            p0=p0_plan, v0=0.0, p_target=p_target_plan,
+            v_max=v_max, a_max=a_max, j_max=j_max, tick_dt=tick_dt,
+            t_offset=cold_start_lag_s,
+            az_forbidden_deg=az_forbidden_deg,
+            wrap_target=not use_cumulative,
+        )
+    else:
+        traj = trapezoidal_profile(
+            p0=p0_plan, v0=0.0, p_target=p_target_plan,
+            v_max=v_max, a_max=a_max, tick_dt=tick_dt,
+            t_offset=cold_start_lag_s,
+            az_forbidden_deg=az_forbidden_deg,
+            wrap_target=not use_cumulative,
+        )
     stats["trajectory_duration_s"] = traj.total_duration
 
     if traj.total_duration == 0.0:
@@ -565,52 +656,93 @@ def move_azimuth_to_ff(
             "ff_start",
             target_az=target_az_deg, cur_az=cur_az_deg,
             traj_duration_s=traj.total_duration,
-            v_max=v_max, a_max=a_max, tick_dt=tick_dt,
+            v_max=v_max, a_max=a_max, j_max=j_max, tick_dt=tick_dt,
+            cold_start_lag_s=cold_start_lag_s, profile=profile,
+            kp_pos=kp_pos, v_corr_max=v_corr_max,
+            az_forbidden_deg=az_forbidden_deg,
         )
 
+    # Prime: baseline fw_t so `t_plant = fw_t - fw_t_start` maps firmware
+    # clock into trajectory time. The first sample is taken here, and the
+    # trajectory-time clock begins from this fw_t.
+    _, _, fw_t_start = measure_altaz_timed(cli, loc)
     t_wall_start = time.monotonic()
+
     tick_dts: list[float] = []
     tracking_errs: list[float] = []
+    position_errs_abs: list[float] = []
     prev_tick_t = t_wall_start
     tick_idx = 0
+    converged_count = 0
+    t_settle_enter = None  # wall time when loop entered post-trajectory phase
 
-    # Execute the trajectory by issuing speed_move at each tick.
     while True:
         now = time.monotonic()
         t_rel = now - t_wall_start
 
-        # Reference from trajectory at wall time t_rel.
-        ref = traj.sample(t_rel)
-        ref_vel = ref.vel
+        # Measure plant first so the correction uses fresh data.
+        _, measured_az, fw_t_now = measure_altaz_timed(cli, loc)
+
+        # Advance cumulative tracker (if any) with the fresh wrapped reading.
+        if az_tracker is not None:
+            az_tracker.update(measured_az)
+
+        # Plant's trajectory-time (fw-clock based for RPC-jitter immunity).
+        if fw_t_now is not None and fw_t_start is not None:
+            t_plant = fw_t_now - fw_t_start
+        else:
+            t_plant = t_rel  # fallback if firmware lacks Timestamp
+        t_plant_clamped = max(0.0, min(t_plant, traj.total_duration))
+
+        # Single reference: use t_plant so ref.pos is compared against the
+        # plant state at the same timestamp (error signal) AND ref.vel
+        # is the trajectory rate at "now" as the plant sees it. Splitting
+        # into two refs (one at t_rel for cmd, one at t_plant for error)
+        # introduces a phase offset equal to RPC latency.
+        ref = traj.sample(t_plant_clamped)
+        position_error = wrap_pm180(ref.pos - measured_az)
+
+        # P-term feedback with clamp.
+        v_corr = kp_pos * position_error
+        if v_corr > v_corr_max:
+            v_corr = v_corr_max
+        elif v_corr < -v_corr_max:
+            v_corr = -v_corr_max
+
+        # Total commanded velocity, clamped to plant rate.
+        cmd_vel = ref.vel + v_corr
+        if cmd_vel > v_max:
+            cmd_vel = v_max
+        elif cmd_vel < -v_max:
+            cmd_vel = -v_max
 
         # Convert to firmware (speed, angle).
-        if abs(ref_vel) < 1e-6:
+        if abs(cmd_vel) < 1e-6:
             speed_cmd = 0
             angle_cmd = 0
         else:
-            speed_cmd = _rate_to_speed(ref_vel)
-            # Clamp to stiction floor (below this the firmware ignores;
-            # from Phase 1 the floor is < 20 but we use the controller's
-            # VC_FINE_MIN_SPEED as a safety margin).
+            speed_cmd = _rate_to_speed(abs(cmd_vel))
             if speed_cmd < VC_FINE_MIN_SPEED:
                 speed_cmd = 0
-            angle_cmd = 0 if ref_vel > 0 else 180
+            angle_cmd = 0 if cmd_vel > 0 else 180
 
-        # Issue.
         speed_move(cli, speed_cmd, angle_cmd, VC_CMD_DUR_S)
         stats["commands_issued"] += 1
 
-        # Passive position sample for the log + tracking stats.
-        _, measured_az, fw_t = measure_altaz_timed(cli, loc)
-        tracking_err = abs(wrap_pm180(ref.pos - measured_az))
-        tracking_errs.append(tracking_err)
+        tracking_errs.append(abs(position_error))
+        position_errs_abs.append(abs(position_error))
+        if abs(v_corr) > stats["max_v_corr_degs"]:
+            stats["max_v_corr_degs"] = abs(v_corr)
 
         if position_logger is not None:
             position_logger.mark_event(
                 "ff_tick",
-                t_rel=t_rel, fw_t=fw_t,
-                ref_pos=ref.pos, ref_vel=ref_vel, ref_acc=ref.acc,
-                meas_az=measured_az, tracking_err_deg=tracking_err,
+                t_rel=t_rel, fw_t=fw_t_now, t_plant=t_plant,
+                ref_pos=ref.pos, ref_vel=ref.vel, ref_acc=ref.acc,
+                meas_az=measured_az,
+                tracking_err_deg=abs(position_error),
+                position_error_deg=position_error,
+                v_corr_degs=v_corr, cmd_vel_degs=cmd_vel,
                 cmd_speed=speed_cmd, cmd_angle=angle_cmd,
             )
 
@@ -618,9 +750,24 @@ def move_azimuth_to_ff(
         prev_tick_t = now
         tick_idx += 1
 
-        # Terminate when trajectory complete + settle.
-        if t_rel >= traj.total_duration:
-            break
+        # Termination — two distinct phases.
+        if t_plant < traj.total_duration:
+            # Still following the trajectory; keep going.
+            pass
+        else:
+            # Past the trajectory; ref_vel=0 from here on, feedback holds
+            # the plant at p_target. Count consecutive converged ticks.
+            if t_settle_enter is None:
+                t_settle_enter = now
+            if abs(position_error) <= arrive_tolerance_deg:
+                converged_count += 1
+            else:
+                converged_count = 0
+            if converged_count >= converged_ticks_required:
+                stats["converged"] = True
+                break
+            if (now - t_settle_enter) >= settle_max_s:
+                break
 
         # Deadline-based sleep to next tick.
         next_tick_t = t_wall_start + tick_idx * tick_dt
@@ -628,7 +775,7 @@ def move_azimuth_to_ff(
         if sleep_dt > 0:
             time.sleep(sleep_dt)
 
-    # Trajectory is complete — issue stop, wait for idle, settle, measure.
+    # Clean stop after the loop exits.
     speed_move(cli, 0, 0, 1)
     stats["commands_issued"] += 1
     wait_for_mount_idle(cli, timeout_s=3.0)
@@ -640,7 +787,6 @@ def move_azimuth_to_ff(
     stats["ticks"] = tick_idx
     stats["iterations"] = tick_idx  # compat
     if tick_dts:
-        # Drop the first (zero-referenced) entry if present.
         reals = tick_dts[1:] if len(tick_dts) > 1 else tick_dts
         stats["tick_dt_mean_s"] = sum(reals) / len(reals)
         stats["tick_dt_max_s"] = max(reals)
@@ -649,6 +795,10 @@ def move_azimuth_to_ff(
     if tracking_errs:
         stats["max_tracking_err_deg"] = max(tracking_errs)
         stats["mean_tracking_err_deg"] = sum(tracking_errs) / len(tracking_errs)
+    if position_errs_abs:
+        stats["max_position_error_deg"] = max(position_errs_abs)
+    if t_settle_enter is not None:
+        stats["settle_time_s"] = prev_tick_t - t_settle_enter
     stats["wall_time_s"] = time.monotonic() - t_wall_start
 
     if position_logger is not None:
@@ -656,6 +806,10 @@ def move_azimuth_to_ff(
             "ff_done",
             final_residual_deg=stats["final_residual_deg"],
             max_tracking_err_deg=stats["max_tracking_err_deg"],
+            max_position_error_deg=stats["max_position_error_deg"],
+            max_v_corr_degs=stats["max_v_corr_degs"],
+            converged=stats["converged"],
+            settle_time_s=stats["settle_time_s"],
             ticks=tick_idx,
         )
 
@@ -690,111 +844,109 @@ def move_azimuth_to_with_correction(
     tag: str = "",
     position_logger: Any = None,
     arrive_tolerance_deg: float = 0.3,
-    max_corrections: int = 3,
-    nudge_speed: int = VC_FINE_MIN_SPEED,
-    v_max: float = MAIN_RATE_DEGS,
+    v_max: float = PLAN_MAX_RATE_DEGS,
     a_max: float = 10.0,
+    j_max: float = 40.0,
     tick_dt: float = 0.5,
     settle_s: float = 1.5,
+    cold_start_lag_s: float = 0.0,
+    profile: str = "scurve",
+    az_forbidden_deg: Optional[float] = None,
+    az_limits: Optional[Any] = None,
+    az_tracker: Optional[Any] = None,
+    kp_pos: float = 0.5,
+    v_corr_max: float = 2.0,
+    settle_max_s: float = 5.0,
     fallback_residual_deg: float = 2.0,
     fallback_goto_fn: Optional[FallbackGotoFn] = None,
 ) -> tuple[float, float, dict]:
-    """FF main move + post-move slow-speed nudge loop to close residual.
+    """Alias for `move_azimuth_to_ff` with closed-loop feedback enabled.
 
-    Architecture:
-      1. `move_azimuth_to_ff` executes the main trajectory (pure open-loop).
-      2. Measure residual.
-      3. Up to `max_corrections` nudges at `nudge_speed` (default
-         VC_FINE_MIN_SPEED) close any remaining drift / gain / stiction
-         error.
-      4. If residual still > fallback_residual_deg, invoke fallback.
+    Historically this function ran the FF trajectory open-loop then did a
+    post-hoc nudge loop to close the residual. The closed-loop variant in
+    `move_azimuth_to_ff` (kp_pos > 0) holds the plant at the reference
+    during the move AND past the trajectory end, removing the need for a
+    separate correction phase.
 
-    Each nudge is a single scope_speed_move at `nudge_speed` for duration
-    `|residual| / nudge_rate`, clamped to [MIN_DUR_S, 10]. At the
-    Phase-1-calibrated nudge rate (speed=20 → 0.085 °/s), a 5 s nudge
-    covers 0.42°; three nudges reliably close residuals < ~1.5° even
-    with some quantization.
-
-    Does NOT do high-frequency in-motion feedback. For that future work
-    (streaming continuous trajectories for dynamic-target tracking),
-    the pattern will be a low-bandwidth bias estimator that trims the
-    trajectory reference — different architecture, handled elsewhere.
+    Kept as a named entry point so callers passing `arrive_tolerance_deg`
+    get the expected convergence semantics.
     """
-    # 1. Run the pure FF trajectory.
-    measured_alt, measured_az, ff_stats = move_azimuth_to_ff(
+    return move_azimuth_to_ff(
         cli, target_az_deg=target_az_deg, cur_az_deg=cur_az_deg, loc=loc,
         target_alt_deg=target_alt_deg, tag=tag, position_logger=position_logger,
-        v_max=v_max, a_max=a_max, tick_dt=tick_dt, settle_s=settle_s,
-        # Don't let the inner FF invoke its own fallback yet — the correction
-        # loop below is the first-line fallback.
-        fallback_residual_deg=1e9,
-        fallback_goto_fn=None,
+        v_max=v_max, a_max=a_max, j_max=j_max,
+        tick_dt=tick_dt, settle_s=settle_s,
+        cold_start_lag_s=cold_start_lag_s, profile=profile,
+        az_forbidden_deg=az_forbidden_deg,
+        az_limits=az_limits, az_tracker=az_tracker,
+        kp_pos=kp_pos, v_corr_max=v_corr_max,
+        arrive_tolerance_deg=arrive_tolerance_deg,
+        settle_max_s=settle_max_s,
+        fallback_residual_deg=fallback_residual_deg,
+        fallback_goto_fn=fallback_goto_fn,
     )
 
-    nudge_rate_degs = nudge_speed / SPEED_PER_DEG_PER_SEC
-    stats = dict(ff_stats)
-    stats["controller"] = "ff_with_correction"
-    stats["nudges_issued"] = 0
-    stats["pre_correction_residual_deg"] = ff_stats["final_residual_deg"]
 
-    # 2. Correction loop.
-    for attempt in range(max_corrections):
-        residual = wrap_pm180(target_az_deg - measured_az)
-        if abs(residual) <= arrive_tolerance_deg:
-            break
+# ---------------------------------------------------------------------------
+# Unwind helper (restore cable headroom before dynamic tracking)
+# ---------------------------------------------------------------------------
 
-        # Choose nudge duration to cover the residual at nudge_rate.
-        raw_dur_s = abs(residual) / max(nudge_rate_degs, 1e-6)
-        dur_s = max(MIN_DUR_S, min(DUR_SEC_CAP, raw_dur_s))
-        # Actual expected motion at this duration
-        expected_motion = nudge_rate_degs * dur_s
-        angle = 0 if residual > 0 else 180
 
-        print(f"{tag} FF correction {attempt+1}/{max_corrections}: "
-              f"residual={residual:+.3f}°  nudge speed={nudge_speed} "
-              f"dur={dur_s:.1f}s (expected ~{expected_motion:.2f}°)",
-              flush=True)
-        if position_logger is not None:
-            position_logger.mark_event(
-                "ff_nudge",
-                attempt=attempt + 1,
-                residual=residual,
-                speed=nudge_speed, angle=angle, dur_sec=dur_s,
-            )
+def unwind_azimuth(
+    cli: MountClient,
+    loc: EarthLocation,
+    az_tracker: Any,
+    az_limits: Any,
+    threshold_deg: float = 180.0,
+    tag: str = "[unwind]",
+    position_logger: Any = None,
+    **move_kwargs: Any,
+) -> tuple[float, float, dict]:
+    """Move the mount back toward cumulative 0 (cable midpoint) if the
+    current cumulative az exceeds ``threshold_deg`` in either direction.
 
-        speed_move(cli, nudge_speed, angle, int(round(dur_s)))
-        stats["nudges_issued"] += 1
-        # Wait for nudge to complete.
-        time.sleep(dur_s + 0.3)
-        # Stop just in case the dur_sec was clamped up.
-        speed_move(cli, 0, 0, 1)
-        wait_for_mount_idle(cli, timeout_s=3.0)
-        time.sleep(0.3)
+    Why: dynamic tracking (e.g. chasing a plane) can burn cable budget
+    fast. Start each such track from near the midpoint so both sides
+    have ~full headroom. When already within `threshold_deg` of center,
+    no motion is issued and an informational stats dict is returned.
 
-        measured_alt, measured_az = measure_altaz(cli, loc)
-
-    final_residual = wrap_pm180(target_az_deg - measured_az)
-    stats["final_residual_deg"] = final_residual
-
-    # 3. Final fallback if still out of bounds.
-    if (
-        fallback_goto_fn is not None
-        and abs(final_residual) > fallback_residual_deg
-    ):
-        print(f"{tag} FF+correction: final residual "
-              f"{final_residual:+.3f}° still exceeds "
-              f"{fallback_residual_deg}° after {stats['nudges_issued']} "
-              f"nudges — iscope fallback", flush=True)
-        stats["fallback_goto_used"] = True
-        if position_logger is not None:
-            position_logger.set_phase("ff_fallback_goto")
-        ok = bool(fallback_goto_fn(cli, target_az_deg, target_alt_deg, loc))
-        if ok:
-            print(f"{tag} FF+correction: iscope arrived", flush=True)
-        measured_alt, measured_az = measure_altaz(cli, loc)
-        stats["final_residual_deg"] = wrap_pm180(target_az_deg - measured_az)
-
-    return measured_alt, measured_az, stats
+    Uses `move_azimuth_to_with_correction` to do the actual motion so
+    the closed-loop FF+FB controller handles convergence.
+    """
+    cum_cur = az_tracker.cum_az_deg
+    if abs(cum_cur) <= threshold_deg:
+        return (0.0, 0.0, {
+            "controller": "unwind_noop",
+            "cum_cur_deg": cum_cur,
+            "threshold_deg": threshold_deg,
+            "final_residual_deg": 0.0,
+            "fallback_goto_used": False,
+            "iterations": 0, "sign_flips": 0, "rate_ceiling_halvings": 0,
+            "commands_issued": 0, "loop_dt_mean_s": 0.0, "loop_dt_max_s": 0.0,
+            "stuck_bail": False, "wall_time_s": 0.0,
+        })
+    # Measure to anchor the tracker + get a wrapped-cur for picking the target.
+    _, wrapped_cur, _ = measure_altaz_timed(cli, loc)
+    az_tracker.update(wrapped_cur)
+    # We want cumulative to end up at 0 (cable midpoint). The equivalent
+    # wrapped target is:
+    target_wrapped = wrap_pm180(wrapped_cur - az_tracker.cum_az_deg)
+    print(f"{tag} unwind: cum={az_tracker.cum_az_deg:+.3f}° -> wrapped "
+          f"target={target_wrapped:+.3f}° (drive back to cable center)",
+          flush=True)
+    return move_azimuth_to_with_correction(
+        cli,
+        target_az_deg=target_wrapped,
+        cur_az_deg=wrapped_cur,
+        loc=loc,
+        target_alt_deg=0.0,  # unused when fallback_goto_fn is None
+        tag=tag,
+        position_logger=position_logger,
+        az_limits=az_limits,
+        az_tracker=az_tracker,
+        fallback_goto_fn=None,  # do not iscope-fallback during unwind
+        **move_kwargs,
+    )
 
 
 # ---------------------------------------------------------------------------

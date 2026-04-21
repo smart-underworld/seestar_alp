@@ -24,6 +24,21 @@ Modes (each writes JSONL under auto_level_logs/sysid/):
         v_cmd(t) = A * sin(2*pi*f(t)*t), issuing one scope_speed_move per
         control-loop tick. Held-out data for plant-model validation.
 
+    --mode limits
+        Slowly command motion in one direction (--direction cw|ccw|up|down)
+        and detect stall. Reports the azimuth/altitude at which the mount
+        stops responding — the physical hard limit in that direction.
+        ASSUMES the mount is pre-positioned; does NOT iscope-goto. Run
+        once per direction.
+
+    --mode trajectory_track
+        Build a trapezoidal velocity profile from the current az to
+        (cur_az + --delta), run it via `move_azimuth_to_ff`, and compute
+        the tracking RMSE (measured vs reference) across the trajectory.
+        Cleanly separates "does the planner's trajectory match reality?"
+        from "does the correction wrapper close residual?" Used to
+        validate cold-start compensation.
+
 Shared setup: enters scenery mode, disables tracking, does an iscope
 goto to a safe start position. All azimuth-only for now; elevation is a
 follow-up (hard altitude limits need extra guards).
@@ -711,6 +726,354 @@ def run_speed_transition(cli: TimedAlpacaClient, args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# mode: limits  (probe physical hard stops)
+# ---------------------------------------------------------------------------
+
+
+def run_limits(cli: TimedAlpacaClient, args) -> int:
+    """Slow-command motion in one direction and detect stall.
+
+    Safety rules:
+    - Does NOT call `_setup_mount` — assumes the user has manually
+      pre-positioned the mount (via `jog` or the web UI) away from the
+      suspected limit. Performing an iscope goto here could silently
+      land us against a limit before the probe starts.
+    - Uses a low speed so a missed stall detection just results in a
+      slow, gentle motion into the stop.
+    - Gives up after `--max-dur` seconds regardless.
+    """
+    loc = _make_loc()
+    direction = args.direction
+    if direction not in ("cw", "ccw", "up", "down"):
+        print(f"ERROR: unknown direction {direction!r}", file=sys.stderr)
+        return 2
+    speed = int(args.speed)
+    max_dur_s = float(args.max_dur)
+    sample_dt = float(args.sample_dt)
+    stall_window_s = float(args.stall_window)
+    stall_rate_threshold = float(args.stall_rate)
+    min_motion_deg = float(args.min_motion)
+
+    if direction == "cw":
+        angle = 0
+        axis_label = "az"
+    elif direction == "ccw":
+        angle = 180
+        axis_label = "az"
+    elif direction == "up":
+        angle = 90
+        axis_label = "alt"
+    else:  # down
+        angle = 270
+        axis_label = "alt"
+
+    print("=" * 78)
+    print(f"sysid limits — direction={direction} speed={speed} "
+          f"max_dur={max_dur_s}s")
+    print("Make sure the mount is pre-positioned AWAY from the suspected limit.")
+    print("=" * 78)
+
+    ensure_scenery_mode(cli)
+    # After a power-cycle the arm stays folded (mount.close=true) until
+    # the firmware finishes unfolding from scenery-view mode. speed_move
+    # is silently dropped while close=true, so poll until it clears.
+    deadline = time.monotonic() + 15.0
+    while time.monotonic() < deadline:
+        state = cli.method_sync("get_device_state").get("result", {})
+        if not state.get("mount", {}).get("close", True):
+            break
+        time.sleep(0.5)
+    set_tracking(cli, False)
+    wait_for_mount_idle(cli, timeout_s=5.0)
+
+    alt0, az0, fw_t0 = measure_altaz_timed(cli, loc)
+    print(f"Starting at alt={alt0:+.3f}° az={az0:+.3f}°")
+
+    log_path = _open_jsonl("limits")
+    _write_jsonl(log_path, {
+        "kind": "header", "mode": "limits", "direction": direction,
+        "angle": angle, "speed": speed,
+        "max_dur_s": max_dur_s, "sample_dt_s": sample_dt,
+        "stall_window_s": stall_window_s,
+        "stall_rate_degs": stall_rate_threshold,
+        "min_motion_deg": min_motion_deg,
+        "start_az": az0, "start_alt": alt0,
+        "n_speed_per_deg_per_sec": SPEED_PER_DEG_PER_SEC,
+    })
+
+    # Kick off the motion. scope_speed_move caps dur_sec at 10s, so we
+    # re-issue before that cap expires. Dither the re-issue interval and
+    # dur_sec so consecutive commands aren't byte-identical — firmware
+    # appears to silently drop duplicate speed_move requests, producing
+    # spurious "stalls" mid-probe. Alternating the dur_sec by ±1-2s and
+    # the re-issue cadence defeats the dedupe without changing mean rate.
+    import random as _rand
+    _rng = _rand.Random(0x5331d)  # deterministic for reproducible probes
+    _FIRMWARE_CAP_S = 10
+    def _dithered_dur() -> int:
+        return _rng.choice([6, 7, 8, 9, _FIRMWARE_CAP_S])
+    def _dithered_interval() -> float:
+        return _rng.uniform(4.5, 5.5)
+    t_start = time.monotonic()
+    init_dur = min(int(max_dur_s), _dithered_dur())
+    speed_move(cli, speed, angle, init_dur)
+    next_reissue_t = t_start + _dithered_interval()
+
+    samples: list[tuple[float, float | None, float, float]] = []  # t_rel, fw_t, az, alt
+    stalled = False
+    stall_at_az = None
+    stall_at_alt = None
+    next_sample_t = t_start + sample_dt
+    window_len = max(2, int(round(stall_window_s / sample_dt)))
+
+    # Track cumulative (unwrapped) azimuth motion so the stall-detect's
+    # min_motion check works through multi-turn probes without resetting
+    # whenever we cross the ±180° wrap boundary.
+    cum_az_motion = 0.0
+    prev_az = az0
+    retries_used = 0
+    max_retries = int(args.stall_retries)
+
+    def _retry_motion() -> tuple[bool, float]:
+        """Stop, pause, re-issue motion, sample briefly.
+
+        Returns (motion_resumed, motion_deg). motion_resumed is True
+        if the plant moved more than the stall rate threshold during
+        the verify window.
+        """
+        speed_move(cli, 0, 0, 1)
+        wait_for_mount_idle(cli, timeout_s=3.0)
+        time.sleep(0.8)
+        # Fresh command with a short (dithered) dur.
+        speed_move(cli, speed, angle, _dithered_dur())
+        # Watch for motion for ~2.5s (> cold-start 0.5s + a few rate samples).
+        verify_dur_s = 2.5
+        verify_start = time.monotonic()
+        _, az_v0, _ = measure_altaz_timed(cli, loc)
+        motion_deg = 0.0
+        while time.monotonic() - verify_start < verify_dur_s:
+            time.sleep(sample_dt)
+            _, az_v, _ = measure_altaz_timed(cli, loc)
+            motion_deg = abs(wrap_pm180(az_v - az_v0))
+            if motion_deg > 0.5:
+                return True, motion_deg
+        return False, motion_deg
+
+    while time.monotonic() - t_start < max_dur_s:
+        wait = next_sample_t - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        # Re-issue the motion command before the firmware cap expires,
+        # dithering dur_sec + cadence so consecutive frames aren't identical.
+        if time.monotonic() >= next_reissue_t:
+            remaining = max_dur_s - (time.monotonic() - t_start)
+            dur = int(max(MIN_DUR_S, min(remaining, _dithered_dur())))
+            speed_move(cli, speed, angle, dur)
+            next_reissue_t = time.monotonic() + _dithered_interval()
+        alt_i, az_i, fw_t_i = measure_altaz_timed(cli, loc)
+        t_rel = time.monotonic() - t_start
+        samples.append((t_rel, fw_t_i, az_i, alt_i))
+        next_sample_t += sample_dt
+
+        # Unwrapped cumulative motion (for az probes).
+        if axis_label == "az":
+            cum_az_motion += wrap_pm180(az_i - prev_az)
+            prev_az = az_i
+
+        # Stall test: look back `window_len` samples.
+        if len(samples) >= window_len:
+            recent = samples[-window_len:]
+            dt_win = recent[-1][0] - recent[0][0]
+            if axis_label == "az":
+                d_win = wrap_pm180(recent[-1][2] - recent[0][2])
+                total_motion = abs(cum_az_motion)
+            else:
+                d_win = recent[-1][3] - recent[0][3]
+                total_motion = abs(samples[-1][3] - alt0)
+            rate_win = abs(d_win / dt_win) if dt_win > 0 else 0.0
+            if total_motion > min_motion_deg and rate_win < stall_rate_threshold:
+                candidate_az = samples[-1][2]
+                candidate_alt = samples[-1][3]
+                print(f"  STALL-candidate at t={t_rel:.1f}s: "
+                      f"alt={candidate_alt:+.3f}° az={candidate_az:+.3f}° "
+                      f"cum_motion={cum_az_motion:+.1f}° "
+                      f"(window rate {rate_win:.3f}°/s)")
+                retries_used += 1
+                if retries_used > max_retries:
+                    stalled = True
+                    stall_at_az = candidate_az
+                    stall_at_alt = candidate_alt
+                    print(f"  CONFIRMED limit after {max_retries} retries.")
+                    break
+                print(f"  retry {retries_used}/{max_retries}: stop, pause, "
+                      "re-issue to verify…")
+                resumed, motion = _retry_motion()
+                if resumed:
+                    print(f"  -> motion RESUMED ({motion:.2f}° in verify window) "
+                          "— spurious stall, continuing probe.")
+                    # Reset rate-window so we don't immediately re-trigger.
+                    samples = samples[-1:]
+                    # Force a fresh re-issue next loop iteration.
+                    next_reissue_t = time.monotonic()
+                    next_sample_t = time.monotonic() + sample_dt
+                    continue
+                print(f"  -> motion did NOT resume ({motion:.2f}°); "
+                      f"still looks stalled (retry {retries_used}/{max_retries}).")
+
+        # Status line.
+        if axis_label == "az":
+            print(f"  t={t_rel:>5.1f}s  alt={alt_i:+.3f}° az={az_i:+.3f}°  "
+                  f"cum_motion={cum_az_motion:+.1f}°")
+        else:
+            print(f"  t={t_rel:>5.1f}s  alt={alt_i:+.3f}° az={az_i:+.3f}°  "
+                  f"|motion|={abs(alt_i - alt0):.3f}°")
+
+    # Stop.
+    speed_move(cli, 0, 0, 1)
+    wait_for_mount_idle(cli, timeout_s=4.0)
+    time.sleep(0.3)
+    alt_final, az_final, _ = measure_altaz_timed(cli, loc)
+    print()
+    print(f"Final position after stop: alt={alt_final:+.3f}° az={az_final:+.3f}°")
+
+    for (t, fw_t, az, alt) in samples:
+        _write_jsonl(log_path, {
+            "kind": "sample", "t": t, "fw_t": fw_t, "az": az, "alt": alt,
+        })
+    _write_jsonl(log_path, {
+        "kind": "result",
+        "stalled": stalled,
+        "stall_at_az": stall_at_az,
+        "stall_at_alt": stall_at_alt,
+        "final_az": az_final,
+        "final_alt": alt_final,
+        "cum_az_motion_deg": cum_az_motion,
+        "total_motion_deg": (
+            abs(cum_az_motion)
+            if axis_label == "az"
+            else abs(alt_final - alt0)
+        ),
+    })
+    if stalled:
+        print(f"Hard limit detected at {axis_label}={stall_at_az if axis_label == 'az' else stall_at_alt:+.3f}°")
+    else:
+        print("No stall detected in the probe window. Mount may have full travel "
+              "in this direction, or start point was too far from the limit "
+              "for the chosen speed/dur.")
+    print(f"wrote: {log_path}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# mode: trajectory_track  (planner-isolation validation)
+# ---------------------------------------------------------------------------
+
+
+class _CollectingLogger:
+    """Duck-typed stand-in for PositionLogger — captures `mark_event` calls
+    into an in-memory list so trajectory_track can post-process the
+    `ff_tick` stream emitted by `move_azimuth_to_ff`."""
+
+    def __init__(self) -> None:
+        self.events: list[dict] = []
+
+    def set_phase(self, *_a, **_kw) -> None:
+        pass
+
+    def set_target(self, *_a, **_kw) -> None:
+        pass
+
+    def mark_event(self, name: str, **fields) -> None:
+        self.events.append({"name": name, **fields})
+
+
+def run_trajectory_track(cli: TimedAlpacaClient, args) -> int:
+    from device.velocity_controller import move_azimuth_to_ff
+
+    loc = _make_loc()
+    delta = float(args.delta)
+    v_max = float(args.v_max)
+    a_max = float(args.a_max)
+    j_max = float(args.j_max)
+    profile = str(args.profile)
+    cold_start_lag = float(args.cold_start_lag)
+    tick_dt = float(args.tick_dt)
+
+    print("=" * 78)
+    print(f"sysid trajectory_track — delta={delta:+.1f}° profile={profile} "
+          f"v_max={v_max} a_max={a_max} j_max={j_max} "
+          f"cold_start_lag={cold_start_lag}s tick_dt={tick_dt}s")
+    print("=" * 78)
+
+    _setup_mount(cli, loc, args.start_az, args.alt)
+    set_tracking(cli, False)
+    _, cur_az = measure_altaz(cli, loc)
+    target_az = cur_az + delta  # planner wraps internally via wrap_pm180
+    print(f"start_az={cur_az:+.3f}°  target_az={target_az:+.3f}°")
+
+    logger = _CollectingLogger()
+    _, meas_az, stats = move_azimuth_to_ff(
+        cli,
+        target_az_deg=target_az,
+        cur_az_deg=cur_az,
+        loc=loc,
+        target_alt_deg=args.alt,
+        tag="[trajectory_track]",
+        position_logger=logger,
+        v_max=v_max,
+        a_max=a_max,
+        j_max=j_max,
+        tick_dt=tick_dt,
+        settle_s=1.5,
+        cold_start_lag_s=cold_start_lag,
+        profile=profile,
+        fallback_residual_deg=1e9,
+        fallback_goto_fn=None,
+    )
+
+    # Extract ff_tick events and compute tracking RMSE.
+    ticks = [e for e in logger.events if e["name"] == "ff_tick"]
+    errs = [float(t.get("tracking_err_deg", 0.0)) for t in ticks]
+    if errs:
+        rmse = math.sqrt(sum(e * e for e in errs) / len(errs))
+        mean = sum(errs) / len(errs)
+        peak = max(errs)
+    else:
+        rmse = mean = peak = float("nan")
+
+    final_residual = stats.get("final_residual_deg")
+    print()
+    print(f"ticks_captured={len(ticks)}  trajectory_duration={stats['trajectory_duration_s']:.2f}s")
+    print(f"tracking: mean={mean:.3f}°  peak={peak:.3f}°  RMSE={rmse:.3f}°")
+    if final_residual is not None:
+        print(f"final_residual={final_residual:+.3f}°  (measured_az={meas_az:+.3f}°)")
+
+    log_path = _open_jsonl("trajectory_track")
+    _write_jsonl(log_path, {
+        "kind": "header", "mode": "trajectory_track",
+        "delta_deg": delta, "profile": profile,
+        "v_max_degs": v_max, "a_max_degs2": a_max, "j_max_degs3": j_max,
+        "cold_start_lag_s": cold_start_lag, "tick_dt_s": tick_dt,
+        "start_az": cur_az, "target_az": target_az,
+        "n_speed_per_deg_per_sec": SPEED_PER_DEG_PER_SEC,
+    })
+    _write_jsonl(log_path, {
+        "kind": "summary",
+        "ticks_captured": len(ticks),
+        "tracking_mean_deg": mean,
+        "tracking_peak_deg": peak,
+        "tracking_rmse_deg": rmse,
+        "final_residual_deg": final_residual,
+        "trajectory_duration_s": stats["trajectory_duration_s"],
+        "wall_time_s": stats["wall_time_s"],
+    })
+    for ev in logger.events:
+        _write_jsonl(log_path, {"kind": "event", **ev})
+    print(f"wrote: {log_path}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -720,7 +1083,7 @@ def _build_parser() -> argparse.ArgumentParser:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--mode", required=True,
                    choices=["step_response", "deadband", "latency", "chirp",
-                            "speed_transition"])
+                            "speed_transition", "trajectory_track", "limits"])
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=5555)
     p.add_argument("--device", type=int, default=1)
@@ -772,6 +1135,41 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="speed_transition: seconds to watch for rate change "
                         "after commanding B.")
 
+    # limits
+    p.add_argument("--direction", choices=["cw", "ccw", "up", "down"],
+                   default="cw",
+                   help="limits: direction to probe (cw/ccw az, up/down el).")
+    p.add_argument("--max-dur", type=float, default=30.0,
+                   help="limits: max motion duration (s) before giving up.")
+    p.add_argument("--stall-window", type=float, default=1.5,
+                   help="limits: window (s) used to detect stall.")
+    p.add_argument("--stall-rate", type=float, default=0.05,
+                   help="limits: stall threshold |rate| (deg/s).")
+    p.add_argument("--min-motion", type=float, default=0.5,
+                   help="limits: ignore stalls before we've moved this "
+                        "much from start (skips cold-start dead time).")
+    p.add_argument("--stall-retries", type=int, default=2,
+                   help="limits: on stall detection, stop+pause+re-issue "
+                        "this many times to verify. Confirms only if no "
+                        "retry produces motion.")
+
+    # trajectory_track
+    p.add_argument("--delta", type=float, default=60.0,
+                   help="trajectory_track: signed azimuth delta (deg).")
+    p.add_argument("--v-max", type=float, default=5.0,
+                   help="trajectory_track: max velocity (deg/s) for the planner "
+                        "(headroom below firmware cap ~6°/s).")
+    p.add_argument("--a-max", type=float, default=10.0,
+                   help="trajectory_track: max accel (deg/s²) for the planner.")
+    p.add_argument("--j-max", type=float, default=40.0,
+                   help="trajectory_track: max jerk (deg/s³) for S-curve planner.")
+    p.add_argument("--profile", choices=["trapezoid", "scurve"],
+                   default="trapezoid",
+                   help="trajectory_track: trajectory profile (trapezoid|scurve).")
+    p.add_argument("--cold-start-lag", type=float, default=0.5,
+                   help="trajectory_track: cold-start dead-time compensation (s). "
+                        "Set 0 to disable the lead-in hold.")
+
     return p
 
 
@@ -788,6 +1186,10 @@ def main() -> int:
         return run_chirp(cli, args)
     elif args.mode == "speed_transition":
         return run_speed_transition(cli, args)
+    elif args.mode == "trajectory_track":
+        return run_trajectory_track(cli, args)
+    elif args.mode == "limits":
+        return run_limits(cli, args)
     return 1
 
 
