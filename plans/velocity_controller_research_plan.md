@@ -11,39 +11,58 @@ RPC latency.
 
 ## Executive summary — what to do next (for a fresh Claude Code session)
 
-**Where we are:** The azimuth closed-loop FF+FB velocity controller is
-working. Position feedback is via `scope_get_horiz_coord` (raw motor
-encoder). S-curve trajectory planner + P-gain position feedback runs
-in a single loop (no separate nudge/correction phase). Cable-wrap
-limits (±435° usable from home) are measured and integrated into the
-planner. Run 11 met the Phase-2 exit criterion (|residual| mean
-0.14°, 0 fallbacks, 183 s wall). Changes from 2026-04-21 are NOT YET
-COMMITTED — see file list in Phase 3 below.
+**Where we are (2026-04-21 end-of-session):** All three axes of work
+are functional: az closed-loop FF+FB, el closed-loop FF+FB, and 2D
+combined `move_to_ff(az, el)`. Everything committed to main.
+
+| Component | Status | Commits |
+|---|---|---|
+| Closed-loop FF+FB (az) | **done** — Run 11 met Phase-2 exit (0.14° mean, 0 FB) | `eb64a1d` |
+| Raw encoder readout (`scope_get_horiz_coord`) | **done** — replaces stale `scope_get_equ_coord` | `eb64a1d` |
+| Cable-wrap limits (±435° usable) | **done** — probed, saved, planner-integrated | `eb64a1d` |
+| Closed-loop FF+FB (el) | **done** — limits ±70.8° usable, 3 moves ≤ 0.13° | `ba8a679` |
+| 2D combined `move_to_ff(az, el)` | **done** — diagonal moves work, speed-sharing note below | `68f21f1` |
+
+**Known issue — diagonal speed sharing:** when both axes move
+simultaneously, the v_max budget is shared (`|v_vec| ≤ v_max`), so
+each axis moves slower than its individual trajectory planned at full
+v_max. The feedback closes the gap during the settle phase, but large
+diagonals may need `settle_max_s > 5 s` (the current default). Fix
+options: (a) increase settle_max_s, (b) plan each axis at
+`v_max / sqrt(2)` when both are active, (c) plan a true 2D trajectory
+with speed-budget-aware phasing.
 
 **What to do next (priority order):**
 
-1. **Commit the 2026-04-21 changes.** Large batch: closed-loop
-   controller, `scope_get_horiz_coord` switch, plant_limits module,
-   S-curve default, velocity_controller page overlay, sysid limits
-   probe. See "Files changed" in Phase 3 for the full list.
+1. **Fix the diagonal speed-sharing issue** — simplest: increase
+   settle_max_s to 15 s for move_to_ff, or plan with per-axis v_max
+   scaled by cos(diagonal_angle).
 
-2. **Run a clean 6-setpoint sweep** with the cumulative-limits-aware
-   planner to confirm end-to-end (Run 15 was interrupted at step 3
-   but the 3 steps that ran were all ≤ 0.08° residual).
+2. **Velocity controller page (`/velocity_controller`) improvements:**
+   - **Data source:** `PositionLogger` writes JSONL samples every
+     0.5 s → `auto_level_logs/<run>.positions.jsonl`. Backend parses
+     them in `front/app.py` `VelocityControllerLogResource`. FF tick
+     events (from the controller's `position_logger.mark_event(
+     "ff_tick", ...)`) are included in the same JSONL as `kind=event`.
+   - **Current state:** azimuth chart shows `ff_tick.ref_pos` as
+     trajectory reference when available (Phase 3 change). Elevation
+     chart and error computation still use the legacy `commanded_*`
+     (final setpoint step) from `PositionLogger.set_target()`.
+   - **To do:** (a) update the PositionLogger sample loop to read
+     `scope_get_horiz_coord` instead of `scope_get_equ_coord` (it
+     currently uses equ_coord which is stale without plate-solve).
+     (b) compute error as trajectory_ref − measured (from ff_tick
+     events), not final_setpoint − measured. (c) add elevation
+     trajectory reference from `el_ff_tick` / `2d_ff_tick` events.
 
-3. **Add elevation control (Phase 4 — PRIORITY).** The building blocks
-   are all in place from az. Steps:
-   - 4.1: Probe el limits (`sysid.py --mode limits --direction up/down`). ~10 min.
-   - 4.2 (optional): El sysid (step_response on el axis). ~30 min. Skip if
-     first el run converges with az-derived tau.
-   - 4.3: `move_elevation_to_ff` — copy az controller for el axis
-     (angle=90/270, no wrap, simple min/max limits). ~1 hr.
-   - 4.4: Combined `move_to_ff(az, el)` with 2D velocity composition
-     (`speed = |v_vec| · 237, angle = atan2(v_el, v_az)`). ~2 hr.
-   See Phase 4 section for full details.
+3. **Streaming trajectory consumer** for dynamic targets (plane chase,
+   sidereal tracking). Builds on `move_to_ff`. Needs: external source
+   feeding `(t, az, el)` reference stream, `unwind_azimuth` called
+   before each session if cable is wound.
 
-4. **Streaming trajectory consumer** for dynamic targets (plane chase,
-   sidereal tracking). Builds on the 2D controller from 4.4.
+4. **Run a clean full sweep with cumulative limits** to confirm no
+   cable-wrap regressions (Run 15 step 1 clean at +0.12° residual;
+   step 2 hit a network disconnect, not a controller bug).
 
 **Session-restart cheat-sheet** is in Phase 3 below. Key commands:
 ```bash
@@ -54,9 +73,14 @@ uv run python -m pytest tests/test_auto_level.py tests/test_trajectory.py -q
 uv run python scripts/tune_vc.py --control feedforward \
   --setpoints=-170,+30,-60,+90,-30,+170 --tol 0.3 --alt 10
 
-# Probe elevation limits:
-uv run python scripts/sysid.py --mode limits --direction up --speed 500 --max-dur 60
-uv run python scripts/sysid.py --mode limits --direction down --speed 500 --max-dur 60
+# Quick 2D test (both axes):
+uv run python -c "
+from device.velocity_controller import move_to_ff, measure_altaz_timed, ensure_scenery_mode
+# ... setup ...
+move_to_ff(cli, target_az_deg=30, target_el_deg=20,
+           cur_az_deg=cur_az, cur_el_deg=cur_el, loc=loc,
+           el_min_deg=-70.9, el_max_deg=70.8)
+"
 ```
 
 > Jump to [Phase 3](#phase-3-closed-loop-ffFB--cable-wrap-calibration-2026-04-21)
@@ -887,28 +911,17 @@ front/templates/velocity_controller.html — trajectory-ref overlay from ff_tick
 
 ---
 
-## Phase 4: elevation control + 2-axis motion (NEXT)
+## Phase 4: elevation control + 2-axis motion — DONE
 
-Priority: add elevation control to match the working azimuth controller.
-The goal is independent el control first (sequential az→el moves), then
-2D diagonal motion via composed (speed, angle) commands.
+### Status
 
-### How far away
-
-The building blocks exist: the closed-loop controller, S-curve planner,
-encoder readout, limits infrastructure are all working for az. Elevation
-reuse is nearly mechanical:
-
-| Step | Est. time | Description |
+| Step | Status | Details |
 |---|---|---|
-| 4.1 **El limits probe** | 10 min | `sysid.py --mode limits --direction up/down`. El has firm physical limits (horizon, zenith). |
-| 4.2 **El sysid (optional)** | 30 min | `sysid.py --mode step_response` on el axis (angle=90/270). Skip if we assume τ=0.348 s matches az. |
-| 4.3 **Independent el controller** | 1 hr | Copy az pattern for el: `move_elevation_to_ff`. Internally uses `scope_speed_move(speed, 90/270, dur)` and reads `horiz_coord[0]`. No wrap (el doesn't go past ±180). |
-| 4.4 **Combined `move_to_ff(az, el)`** | 2 hr | 2D trajectory planner (independent-axis or diagonal). Each tick: compose `(v_az, v_el)` → `speed = \|v\| · 237`, `angle = atan2(v_el, v_az)`. Single `scope_speed_move` per tick. |
-| 4.5 **Streaming trajectory consumer** | 3+ hr | For dynamic targets (plane chase, sidereal track): feed a time-varying (az, el) reference. Low-bandwidth bias estimator trims drift. |
-
-Steps 4.1–4.3 can be done in a single session (~2 hr). Step 4.4
-(diagonal motion) is a natural follow-on in the same or next session.
+| 4.1 **El limits probe** | **DONE** | hard stops ±85.8°, usable ±70.8° (15° padding). Saved in plant_limits.json. |
+| 4.2 **El sysid** | **skipped** | El converges with az-derived tau — no separate sysid needed. |
+| 4.3 **Independent el controller** | **DONE** | `move_elevation_to_ff` — 3 moves ≤ 0.13° (commit `ba8a679`). |
+| 4.4 **Combined `move_to_ff(az, el)`** | **DONE** | 2D velocity composition works. Diagonal speed-sharing is a known issue (commit `68f21f1`). |
+| 4.5 **Streaming trajectory consumer** | **pending** | Next priority. |
 
 ### 4.1 Elevation limits probe
 
