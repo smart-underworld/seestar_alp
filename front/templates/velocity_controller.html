@@ -428,8 +428,9 @@
       liveBuffer.push({
         t: now, kind: 'sample',
         alt_deg: snap.alt_deg, az_deg: snap.az_deg,
-        commanded_az_deg: null, commanded_alt_deg: null,
-        phase: 'live', step: null,
+        commanded_az_deg: snap.commanded_az_deg ?? snap.ref_az_deg ?? null,
+        commanded_alt_deg: snap.commanded_el_deg ?? snap.ref_el_deg ?? null,
+        phase: snap.phase || 'live', step: null,
       });
       // Trim to max size.
       while (liveBuffer.length > LIVE_BUFFER_MAX) liveBuffer.shift();

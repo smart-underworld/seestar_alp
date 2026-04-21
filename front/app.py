@@ -4111,45 +4111,101 @@ class VelocityControllerLiveResource:
     def on_get(req, resp, telescope_id=1):
         try:
             result = method_sync("scope_get_horiz_coord", telescope_id)
-            # method_sync may return:
-            #   - a list [alt, az] (direct result extraction)
-            #   - a dict {"result": [alt, az], "Timestamp": ...}
-            #   - a dict with "Value" wrapping
             if isinstance(result, list) and len(result) >= 2:
                 coords = result
-                fw_t = None
             elif isinstance(result, dict):
                 coords = result.get("result", result.get("Value"))
-                if isinstance(coords, list) and len(coords) >= 2:
-                    ts_raw = result.get("Timestamp")
-                    fw_t = None
-                    if ts_raw:
-                        try:
-                            fw_t = float(ts_raw)
-                        except (TypeError, ValueError):
-                            pass
-                else:
-                    payload = {"error": "unexpected dict", "raw": str(result)[:200]}
+                if not (isinstance(coords, list) and len(coords) >= 2):
                     resp.status = falcon.HTTP_200
                     resp.content_type = "application/json"
-                    resp.text = json.dumps(payload)
+                    resp.text = json.dumps({"error": "unexpected", "raw": str(result)[:200]})
                     return
             else:
-                payload = {"error": "unexpected type", "raw": str(result)[:200]}
                 resp.status = falcon.HTTP_200
                 resp.content_type = "application/json"
-                resp.text = json.dumps(payload)
+                resp.text = json.dumps({"error": "unexpected", "raw": str(result)[:200]})
                 return
-            alt = float(coords[0])
-            az = float(coords[1])
-            payload = {"alt_deg": alt, "az_deg": az}
-            if fw_t is not None:
-                payload["fw_t"] = fw_t
+            payload = {"alt_deg": float(coords[0]), "az_deg": float(coords[1])}
+            # Read the latest trajectory setpoint from the most recent
+            # PositionLogger JSONL (if one exists and is being written).
+            traj = VelocityControllerLiveResource._latest_trajectory_ref()
+            if traj:
+                payload.update(traj)
         except Exception as e:
             payload = {"error": str(e)}
         resp.status = falcon.HTTP_200
         resp.content_type = "application/json"
         resp.text = json.dumps(payload)
+
+    @staticmethod
+    def _latest_trajectory_ref():
+        """Read the tail of the newest .positions.jsonl and extract the
+        latest trajectory reference (from ff_tick / el_ff_tick / 2d_ff_tick
+        events) plus the commanded setpoint from the latest sample.
+
+        Returns a dict with ref_az, ref_el, commanded_az, commanded_el
+        (any may be None) or None if no recent log exists.
+        """
+        try:
+            log_dir = _AUTO_LEVEL_LOG_DIR
+            files = sorted(
+                (f for f in os.listdir(log_dir) if f.endswith(".positions.jsonl")),
+                reverse=True,
+            )
+            if not files:
+                return None
+            path = os.path.join(log_dir, files[0])
+            # Check freshness: skip if file hasn't been modified in > 30 s.
+            if time.time() - os.path.getmtime(path) > 30:
+                return None
+            # Read last ~20 lines (enough to find a recent tick event).
+            with open(path, "rb") as f:
+                f.seek(0, 2)
+                size = f.tell()
+                f.seek(max(0, size - 8192))
+                tail = f.read().decode("utf-8", errors="replace")
+            lines = tail.strip().split("\n")
+            ref_az = ref_el = cmd_az = cmd_el = phase = None
+            for line in reversed(lines[-30:]):
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                kind = rec.get("kind")
+                if kind == "sample":
+                    if cmd_az is None:
+                        cmd_az = rec.get("commanded_az_deg")
+                    if cmd_el is None:
+                        cmd_el = rec.get("commanded_alt_deg")
+                    if phase is None:
+                        phase = rec.get("phase")
+                elif kind == "event":
+                    ev = rec.get("event", "")
+                    if ev == "2d_ff_tick":
+                        if ref_az is None:
+                            ref_az = rec.get("ref_az")
+                        if ref_el is None:
+                            ref_el = rec.get("ref_el")
+                    elif ev == "ff_tick" and ref_az is None:
+                        ref_az = rec.get("ref_pos")
+                    elif ev == "el_ff_tick" and ref_el is None:
+                        ref_el = rec.get("ref_pos")
+                if ref_az is not None and ref_el is not None and cmd_az is not None:
+                    break
+            out = {}
+            if ref_az is not None:
+                out["ref_az_deg"] = ref_az
+            if ref_el is not None:
+                out["ref_el_deg"] = ref_el
+            if cmd_az is not None:
+                out["commanded_az_deg"] = cmd_az
+            if cmd_el is not None:
+                out["commanded_el_deg"] = cmd_el
+            if phase is not None:
+                out["phase"] = phase
+            return out if out else None
+        except Exception:
+            return None
 
 
 class VelocityControllerLogsResource:
