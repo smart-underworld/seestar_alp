@@ -1,25 +1,70 @@
 {% extends "base.html" %}
-{% block title %}Auto-Level Control-Loop Tuning{% endblock %}
+{% block title %}Velocity Controller — telescope {{ telescope_id }}{% endblock %}
 {% block content %}
 
 <style>
-  .tuning-wrap { padding: 12px; }
-  .tuning-wrap h2 { margin: 10px 0 4px; }
-  .tuning-wrap .meta { font-family: monospace; font-size: 12px; opacity: 0.7; margin-bottom: 8px; }
-  .tuning-wrap .controls { margin: 8px 0; font-family: monospace; font-size: 13px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
-  .tuning-wrap .chart-box { height: 260px; margin-bottom: 20px; background: rgba(0,0,0,0.02); padding: 4px 8px 8px; border: 1px solid rgba(0,0,0,0.12); border-radius: 6px; }
-  .tuning-wrap .kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin-bottom: 16px; font-family: monospace; font-size: 13px; }
-  .tuning-wrap .kpi { padding: 8px 10px; background: rgba(0,0,0,0.03); border-radius: 4px; }
-  .tuning-wrap .kpi .k { opacity: 0.6; font-size: 11px; }
-  .tuning-wrap .kpi .v { font-size: 15px; font-weight: bold; }
+  .vc-wrap { padding: 12px; }
+  .vc-wrap h2 { margin: 10px 0 4px; }
+  .vc-wrap .meta { font-family: monospace; font-size: 12px; opacity: 0.7; margin-bottom: 8px; }
+  .vc-wrap .controls { margin: 8px 0; font-family: monospace; font-size: 13px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .vc-wrap .chart-box { height: 260px; margin-bottom: 20px; background: rgba(0,0,0,0.02); padding: 4px 8px 8px; border: 1px solid rgba(0,0,0,0.12); border-radius: 6px; }
+  .vc-wrap .kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin-bottom: 16px; font-family: monospace; font-size: 13px; }
+  .vc-wrap .kpi { padding: 8px 10px; background: rgba(0,0,0,0.03); border-radius: 4px; }
+  .vc-wrap .kpi .k { opacity: 0.6; font-size: 11px; }
+  .vc-wrap .kpi .v { font-size: 15px; font-weight: bold; }
   .log-select { font-family: monospace; font-size: 12px; }
+
+  .vc-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-family: monospace;
+    font-size: 13px;
+    font-weight: bold;
+    margin-right: 10px;
+  }
+  .vc-status .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    display: inline-block;
+  }
+  .vc-status.live {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+  }
+  .vc-status.live .dot {
+    background: #22c55e;
+    box-shadow: 0 0 6px #22c55e;
+    animation: vc-pulse 1.2s ease-in-out infinite;
+  }
+  .vc-status.idle {
+    background: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+  }
+  .vc-status.idle .dot {
+    background: #94a3b8;
+  }
+  .vc-status.stale {
+    background: rgba(234, 179, 8, 0.15);
+    color: #eab308;
+  }
+  .vc-status.stale .dot {
+    background: #eab308;
+  }
+  @keyframes vc-pulse {
+    0%, 100% { transform: scale(1);   opacity: 1;   }
+    50%      { transform: scale(1.3); opacity: 0.6; }
+  }
 </style>
 
-<div class="tuning-wrap">
-  <h2>Auto-Level Control-Loop Tuning</h2>
-  <div class="meta" id="run-meta">Loading…</div>
+<div class="vc-wrap" data-telescope-id="{{ telescope_id }}">
+  <h2>Velocity Controller — telescope {{ telescope_id }}</h2>
 
   <div class="controls">
+    <span id="vc-status-pill" class="vc-status idle">
+      <span class="dot"></span><span id="vc-status-text">connecting…</span>
+    </span>
     <label>Log file:
       <select id="log-select" class="log-select"></select>
     </label>
@@ -27,6 +72,7 @@
     <span id="refresh-status"></span>
   </div>
 
+  <div class="meta" id="run-meta">Loading…</div>
   <div class="kpi-row" id="kpi-row"></div>
 
   <h3>Azimuth vs time</h3>
@@ -44,15 +90,25 @@
 
 <script>
 (function(){
+  const wrap = document.querySelector('.vc-wrap');
+  const telescopeId = wrap.dataset.telescopeId || '1';
+
   const selectEl = document.getElementById('log-select');
   const autoRefreshEl = document.getElementById('auto-refresh');
   const refreshStatusEl = document.getElementById('refresh-status');
   const metaEl = document.getElementById('run-meta');
   const kpiRowEl = document.getElementById('kpi-row');
+  const statusPill = document.getElementById('vc-status-pill');
+  const statusText = document.getElementById('vc-status-text');
 
   const azCtx = document.getElementById('azChart').getContext('2d');
   const errRateCtx = document.getElementById('errRateChart').getContext('2d');
   const cmdCtx = document.getElementById('cmdChart').getContext('2d');
+
+  // Consider the controller "LIVE" if the latest sample is within this many
+  // seconds of now. The PositionLogger's poll interval is typically 0.5 s,
+  // so 4 s gives us a comfortable window even with sample bursts.
+  const LIVE_WINDOW_S = 4.0;
 
   const azChart = new Chart(azCtx, {
     type: 'line',
@@ -61,9 +117,7 @@
       { label: 'commanded az (°)', borderColor: '#e07a2f', backgroundColor: '#e07a2f', data: [], parsing: false, pointRadius: 0, borderWidth: 2, borderDash: [4,4] },
     ]},
     options: {
-      animation: false,
-      responsive: true,
-      maintainAspectRatio: false,
+      animation: false, responsive: true, maintainAspectRatio: false,
       scales: {
         x: { type: 'linear', title: { display: true, text: 'elapsed (s)' } },
         y: { title: { display: true, text: 'az (°)' } },
@@ -79,9 +133,7 @@
       { label: 'measured rate (°/s)', yAxisID: 'y2', borderColor: '#319795', backgroundColor: '#319795', data: [], parsing: false, pointRadius: 0, borderWidth: 2 },
     ]},
     options: {
-      animation: false,
-      responsive: true,
-      maintainAspectRatio: false,
+      animation: false, responsive: true, maintainAspectRatio: false,
       scales: {
         x: { type: 'linear', title: { display: true, text: 'elapsed (s)' } },
         y1: { position: 'left', title: { display: true, text: 'error (°)' } },
@@ -97,9 +149,7 @@
       { label: 'commanded signed rate (°/s)', borderColor: '#2e7dd7', backgroundColor: '#2e7dd7', stepped: true, data: [], parsing: false, pointRadius: 0, borderWidth: 2 },
     ]},
     options: {
-      animation: false,
-      responsive: true,
-      maintainAspectRatio: false,
+      animation: false, responsive: true, maintainAspectRatio: false,
       scales: {
         x: { type: 'linear', title: { display: true, text: 'elapsed (s)' } },
         y: { title: { display: true, text: 'signed commanded rate (°/s)' } },
@@ -110,21 +160,48 @@
 
   const SPEED_PER_DEG_PER_SEC = 237; // stays in sync with controller constant
 
+  function apiUrl(path, params) {
+    const qs = new URLSearchParams(params || {});
+    return `/api/${telescopeId}/velocity_controller/${path}${qs.toString() ? '?' + qs.toString() : ''}`;
+  }
+
   async function fetchLogs() {
-    const r = await fetch('/api/tuning/logs');
+    const r = await fetch(apiUrl('logs'));
     if (!r.ok) return [];
     return (await r.json()).logs || [];
   }
 
   async function fetchLog(name) {
-    const r = await fetch(`/api/tuning/log?name=${encodeURIComponent(name)}`);
+    const r = await fetch(apiUrl('log', { name }));
     if (!r.ok) return null;
     return r.json();
+  }
+
+  function setStatus(kind, text){
+    statusPill.classList.remove('live', 'idle', 'stale');
+    statusPill.classList.add(kind);
+    statusText.textContent = text;
+  }
+
+  function updateLiveness(lastSampleEpoch) {
+    if (!lastSampleEpoch){
+      setStatus('idle', 'IDLE (no samples)');
+      return;
+    }
+    const ageS = Date.now() / 1000 - lastSampleEpoch;
+    if (ageS < LIVE_WINDOW_S) {
+      setStatus('live', `LIVE — last sample ${ageS.toFixed(1)}s ago`);
+    } else if (ageS < 30) {
+      setStatus('stale', `STALE — last sample ${ageS.toFixed(1)}s ago`);
+    } else {
+      setStatus('idle', `IDLE — last sample ${Math.round(ageS)}s ago`);
+    }
   }
 
   function update(data){
     if (!data || !data.samples || data.samples.length === 0){
       metaEl.textContent = `No samples yet in ${data && data.name ? data.name : '?'}`;
+      setStatus('idle', 'IDLE (no samples)');
       return;
     }
     const t0 = data.samples[0].t;
@@ -141,14 +218,13 @@
     azChart.data.datasets[1].data = samples.map(s => ({ x: s.t, y: s.cmd_az })).filter(p => p.y !== null && p.y !== undefined);
     azChart.update();
 
-    // Error & measured rate chart (derived).
+    // Error & measured rate.
     const errPoints = [];
     const ratePoints = [];
     for (let i = 0; i < samples.length; i++){
       const s = samples[i];
       if (s.cmd_az !== null && s.cmd_az !== undefined){
         let err = s.cmd_az - s.az;
-        // wrap to ±180°
         err = ((err + 540) % 360) - 180;
         errPoints.push({ x: s.t, y: err });
       }
@@ -157,16 +233,14 @@
         const dt = s.t - prev.t;
         let daz = s.az - prev.az;
         daz = ((daz + 540) % 360) - 180;
-        if (dt > 0){
-          ratePoints.push({ x: s.t, y: daz / dt });
-        }
+        if (dt > 0) ratePoints.push({ x: s.t, y: daz / dt });
       }
     }
     errRateChart.data.datasets[0].data = errPoints;
     errRateChart.data.datasets[1].data = ratePoints;
     errRateChart.update();
 
-    // Commanded rate chart (from events).
+    // Commanded rate (from events).
     const cmdPoints = [];
     if (data.events){
       for (const ev of data.events){
@@ -184,15 +258,21 @@
     cmdChart.data.datasets[0].data = cmdPoints;
     cmdChart.update();
 
-    // Meta line.
+    // Live-status pill.
+    const latestEpoch = data.samples[data.samples.length - 1].t;
+    updateLiveness(latestEpoch);
+
+    // Meta.
     const lastT = samples[samples.length-1].t;
     const currentPhase = samples[samples.length-1].phase || '(no phase)';
     const currentStep = samples[samples.length-1].step ?? '-';
     const pollDt = data.poll_interval_s || '?';
     metaEl.textContent = `${data.name}  |  ${samples.length} samples, ${data.events ? data.events.length : 0} events, elapsed ${lastT.toFixed(1)}s, phase=${currentPhase}, step=${currentStep}, poll=${pollDt}s`;
 
-    // KPI chips.
+    // KPIs.
     const kpis = [];
+    kpis.push({ k: 'phase', v: currentPhase });
+    kpis.push({ k: 'step', v: `${currentStep}` });
     kpis.push({ k: 'latest az', v: `${samples[samples.length-1].az.toFixed(3)}°` });
     const lastCmd = [...samples].reverse().find(s => s.cmd_az != null);
     if (lastCmd) kpis.push({ k: 'commanded az', v: `${lastCmd.cmd_az.toFixed(3)}°` });
@@ -210,7 +290,10 @@
 
   async function refresh(){
     const name = selectEl.value;
-    if (!name) return;
+    if (!name){
+      setStatus('idle', 'IDLE (no logs)');
+      return;
+    }
     refreshStatusEl.textContent = 'refreshing…';
     try {
       const data = await fetchLog(name);
@@ -218,6 +301,7 @@
       refreshStatusEl.textContent = `updated ${new Date().toLocaleTimeString()}`;
     } catch (err){
       refreshStatusEl.textContent = `error: ${err.message}`;
+      setStatus('idle', 'IDLE (fetch error)');
     }
   }
 
@@ -226,7 +310,7 @@
     const selected = selectEl.value;
     selectEl.innerHTML = logs.map(l => `<option value="${l}">${l}</option>`).join('');
     if (logs.includes(selected)) selectEl.value = selected;
-    else if (logs.length) selectEl.value = logs[0]; // newest
+    else if (logs.length) selectEl.value = logs[0];
     await refresh();
   }
 
@@ -234,10 +318,8 @@
   autoRefreshEl.addEventListener('change', () => { /* timer checks the box */ });
 
   reloadFileList();
-  setInterval(() => {
-    if (autoRefreshEl.checked) refresh();
-  }, 2000);
-  setInterval(reloadFileList, 15000);  // discover new files
+  setInterval(() => { if (autoRefreshEl.checked) refresh(); }, 2000);
+  setInterval(reloadFileList, 15000);
 })();
 </script>
 

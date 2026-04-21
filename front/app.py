@@ -4063,12 +4063,13 @@ class StatsResource:
 
 
 # ---------------------------------------------------------------------------
-# Auto-level controller tuning page
+# Velocity-controller live-status page
 #
 # Reads JSONL position logs written by scripts/auto_level.py's PositionLogger
-# and exposes them as chart-friendly JSON. Lets the user watch the control
-# loop's az/error/rate/commanded-speed traces live while iterating on tuning
-# knobs.
+# and exposes them as chart-friendly JSON. Lets the user watch the velocity
+# controller's az/error/rate/commanded-speed traces live while iterating on
+# tuning knobs. Per-telescope-id route so the URL matches the rest of the
+# app's /<id>/<resource> convention.
 # ---------------------------------------------------------------------------
 
 _AUTO_LEVEL_LOG_DIR = os.path.abspath(
@@ -4079,29 +4080,35 @@ _AUTO_LEVEL_LOG_DIR = os.path.abspath(
 def _parse_jsonl_log_timestamp(ts_str):
     """Parse an ISO-8601 UTC timestamp from the JSONL logs into epoch seconds."""
     try:
-        # Accept both "...Z" and "...+00:00".
         s = ts_str.rstrip("Z")
-        # fromisoformat supports fractional seconds on 3.11+.
         dt = datetime.fromisoformat(s).replace(tzinfo=pytz.UTC)
         return dt.timestamp()
     except Exception:
         return None
 
 
-class AutoLevelTuningResource:
-    """Serve the tuning graphs page."""
+class VelocityControllerResource:
+    """Serve the velocity-controller live-status page."""
 
     @staticmethod
-    def on_get(req, resp):
-        context = get_context(0, req)
-        render_template(req, resp, "auto_level_tuning.html", **context)
+    def on_get(req, resp, telescope_id=1):
+        context = get_context(telescope_id, req)
+        render_template(
+            req, resp, "velocity_controller.html",
+            telescope_id=telescope_id, **context,
+        )
 
 
-class AutoLevelTuningLogsResource:
-    """List recent position-log JSONL files, newest first."""
+class VelocityControllerLogsResource:
+    """List recent position-log JSONL files, newest first.
+
+    The logs aren't currently tagged by telescope_id (they come from
+    scripts/auto_level.py which runs against one scope at a time). We
+    still accept a telescope_id in the URL for route-shape consistency.
+    """
 
     @staticmethod
-    def on_get(req, resp):
+    def on_get(req, resp, telescope_id=1):
         logs = []
         try:
             for name in sorted(os.listdir(_AUTO_LEVEL_LOG_DIR)):
@@ -4115,7 +4122,7 @@ class AutoLevelTuningLogsResource:
         resp.text = json.dumps({"logs": logs[:25]})
 
 
-class AutoLevelTuningLogResource:
+class VelocityControllerLogResource:
     """Return parsed samples + events for one JSONL log file.
 
     Query params:
@@ -4124,7 +4131,7 @@ class AutoLevelTuningLogResource:
     """
 
     @staticmethod
-    def on_get(req, resp):
+    def on_get(req, resp, telescope_id=1):
         name = req.get_param("name") or ""
         limit = int(req.get_param("limit") or 1500)
         # Guard against path escape.
@@ -4154,7 +4161,7 @@ class AutoLevelTuningLogResource:
                     except Exception:
                         continue
                     ts = _parse_jsonl_log_timestamp(rec.get("t", ""))
-                    rec["t"] = ts  # replace ISO with float epoch for chart math
+                    rec["t"] = ts
                     kind = rec.get("kind")
                     if kind == "header":
                         header = rec
@@ -4168,7 +4175,6 @@ class AutoLevelTuningLogResource:
             resp.text = json.dumps({"error": f"read failed: {e}"})
             return
 
-        # Tail limit on samples.
         if len(samples) > limit:
             samples = samples[-limit:]
 
@@ -5338,9 +5344,22 @@ class FrontMain:
         app.add_route("/localsearch", GetLocalSearch())
         app.add_route("/getminorplanetcoordinates", GetMinorPlanetCoordinates())
         app.add_route("/getaavsocoordinates", GetAAVSOSearch())
-        app.add_route("/auto_level_tuning", AutoLevelTuningResource())
-        app.add_route("/api/tuning/logs", AutoLevelTuningLogsResource())
-        app.add_route("/api/tuning/log", AutoLevelTuningLogResource())
+        app.add_route(
+            "/{telescope_id:int}/velocity_controller",
+            VelocityControllerResource(),
+        )
+        app.add_route(
+            "/{telescope_id:int}/velocity_controller/",
+            VelocityControllerResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/velocity_controller/logs",
+            VelocityControllerLogsResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/velocity_controller/log",
+            VelocityControllerLogResource(),
+        )
         app.add_route("/config", ConfigResource())
         app.add_route("/pa_refine", BlindPolarAlignResource())
 

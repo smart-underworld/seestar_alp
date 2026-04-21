@@ -38,7 +38,7 @@ Suggested probe: extend `tune_vc.py` with a `--mode handoff` that does
   iscope → burst1(angle=0) → burst2(angle=0) → burst3(angle=180) →
   burst4(angle=180) and reports each burst's |v|_ratio.
 
-### 3. Nav link to `/auto_level_tuning`
+### 3. Nav link to `/{telescope_id}/velocity_controller`
 The route is live after `root_app.py` reload but not in the menu. One
 line in `front/templates/base.html` (or its nav partial). Nice to have
 so we don't have to remember the URL.
