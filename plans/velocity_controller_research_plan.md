@@ -17,49 +17,69 @@ moves all converge to ≤ 0.25° residual. Everything is committed.
 
 | Component | Status | Commits |
 |---|---|---|
-| Closed-loop FF+FB (az) | **done** — Run 11 met Phase-2 exit (0.14° mean) | `eb64a1d` |
-| Raw encoder readout (`scope_get_horiz_coord`) | **done** — replaces stale `scope_get_equ_coord` | `eb64a1d` |
-| Cable-wrap limits (±435° usable) | **done** — probed, saved, planner-integrated | `eb64a1d` |
-| Closed-loop FF+FB (el) | **done** — limits ±70.8° usable, 3 moves ≤ 0.13° | `ba8a679` |
-| 2D combined `move_to_ff(az, el)` | **done** — 4 diagonals ≤ 0.22° | `68f21f1` |
-| Diagonal speed fix (per-axis clamp) | **done** — firmware clamps per-axis at 1440, not total | `868490d` |
-| Velocity controller page fixes | **done** — PositionLogger→horiz_coord, event field fix, el overlay | `2040be6` |
-| Velocity controller page: live mode | **done** — polls raw encoder without PositionLogger | `9fc17f1` |
+| Closed-loop FF+FB (az) | **done** | `eb64a1d` |
+| Raw encoder readout (`scope_get_horiz_coord`) | **done** | `eb64a1d` |
+| Cable-wrap limits (±435° usable) | **done** | `eb64a1d` |
+| Closed-loop FF+FB (el) | **done** — limits ±70.8° usable | `ba8a679` |
+| 2D combined `move_to_ff(az, el)` | **done** | `68f21f1` |
+| Diagonal speed fix (per-axis clamp) | **done** | `868490d` |
+| Velocity controller page (trajectory overlay, live mode) | **done** | `2040be6`, `9fc17f1`, `b631b35`, `e7b31bd` |
+| Dynamics tuning (a_max=4, j_max=12, cmd clamp at 6) | **done** | `c08eacc` |
+
+**Controller defaults (all in `velocity_controller.py`):**
+- `profile = "scurve"`, `v_max = PLAN_MAX_RATE_DEGS = 5.0 °/s` (plan cruise)
+- `a_max = 4.0 °/s²`, `j_max = 12.0 °/s³` (S-curve jerk ramp t_j ≈ tau)
+- `kp_pos = 0.5 /s`, `v_corr_max = 2.0 °/s`
+- Cmd velocity clamped at `MAIN_RATE_DEGS = 6.0 °/s` (plant max, not
+  planner cruise) — gives 1°/s feedback headroom during cruise.
+- `cold_start_lag_s = 0.0` (feedback absorbs cold-start)
+- `arrive_tolerance_deg = 0.3°`, `settle_max_s = 5.0 s`
 
 **Firmware speed model (verified 2026-04-21):**
 - Per-axis max: speed=1440 → 6.054°/s. Ratio = 237.8 speed/°/s.
 - Speed > 1440 is per-axis clamped (not rejected). Diagonal at
   speed=2036 (1440×√2) angle=45° gives each axis full 6°/s.
-- `PLAN_MAX_RATE_DEGS = 6.0` is the per-axis cap; the 2D controller
-  clamps per-axis (not magnitude), so diagonals don't sacrifice rate.
+- Planner uses 5.0°/s cruise, cmd clamps at 6.0°/s plant max.
+  Firmware's per-axis clamp handles any overshoot.
 - `SPEED_PER_DEG_PER_SEC = 237` confirmed correct with mid-50%
-  cruise-rate measurement at multiple speed settings.
+  cruise-rate measurement.
+
+**Encoder / compass findings (2026-04-21):**
+- `scope_get_horiz_coord` → raw motor encoder `[alt, az]`. Always live.
+- `scope_get_equ_coord` → RA/Dec, STALE without plate-solve alignment.
+  All controller feedback uses horiz_coord now.
+- Encoder az is NOT compass-influenced (verified: tripod rotated 120°,
+  encoder unchanged, compass changed). Encoder zeroes at power-on to
+  the cable midpoint.
+- `compass_sensor.direction` is a separate MEMS magnetometer (uncalib).
 
 **What to do next (priority order):**
 
-1. **Velocity controller page: show live data without setpoints.**
-   Currently the page only shows data when `PositionLogger` is running
-   (launched by `tune_vc.py`). Need a standalone "live position" mode
-   that reads `scope_get_horiz_coord` directly (even during manual
-   jogs or idle state) and feeds the chart.
+1. **Evaluate the dynamics tuning** — the demo running at session end
+   uses `a_max=4, j_max=12, cmd_clamp=6`. Check the tracking error
+   on the velocity_controller page: it should be much smaller than
+   the previous 6-7° peak. If still too large, consider:
+   - Lowering `a_max` further (e.g. 2.0 — slower accel, less lag).
+   - Increasing `v_corr_max` (e.g. 3.0 — faster error closure).
+   - Increasing `kp_pos` (e.g. 1.0 — more aggressive feedback, check
+     stability at ~0.5s tick interval).
 
 2. **Streaming trajectory consumer** for dynamic targets (plane chase,
    sidereal tracking). Builds on `move_to_ff`. Needs:
    - External source feeding `(t, az, el)` reference stream.
-   - `unwind_azimuth` called before each tracking session if cable is
+   - `unwind_azimuth` called before each tracking session if cable
      wound past threshold.
    - Time-varying reference injection into the 2D controller loop
-     (currently the loop runs a pre-computed fixed trajectory).
+     (currently runs a pre-computed fixed trajectory).
 
-3. **Run a clean 6-setpoint az sweep with cumulative limits** to
-   confirm the full pipeline end-to-end. Run 15 step 1 was clean
-   (+0.12°); step 2 hit a network disconnect (not controller-related).
+3. **Cable-wrap cumulative state across restarts.** Currently
+   `CumulativeAzTracker` resets each `tune_vc.py` run. For multi-
+   session tracking, persist to a file or rely on the firmware's
+   startup-home assumption (cum=0 after every power cycle).
 
-4. **Cable-wrap cumulative state across restarts.** Currently the
-   `CumulativeAzTracker` resets each time `tune_vc.py` runs. For
-   multi-session tracking, persist the cumulative state to a file or
-   track it via the firmware's startup-home assumption (cum=0 after
-   every power cycle).
+4. **Run a clean 6-setpoint az sweep with cumulative limits** to
+   confirm full pipeline. Run 15 step 1 clean (+0.12°); step 2 hit
+   network disconnect.
 
 **Session-restart cheat-sheet:**
 ```bash
@@ -1089,7 +1109,16 @@ cumulative az has drifted > 180° from cable center.
       PositionLogger is running — new `/api/{id}/velocity_controller/live`
       endpoint polls `scope_get_horiz_coord` directly. Frontend "Live
       (encoder)" dropdown option accumulates a rolling buffer and charts
-      it. Works during manual jogs or idle (commit `9fc17f1`).
+      it. Works during manual jogs or idle (commits `9fc17f1`, `e7b31bd`).
+- [x] Dynamics tuning: a_max 10→4, j_max 40→12, cmd clamp at
+      MAIN_RATE_DEGS (6.0) not v_max (5.0). S-curve jerk-ramp t_j now
+      matches plant tau. Feedback has 1°/s headroom during cruise
+      (commit `c08eacc`).
+- [ ] Evaluate tracking error with new tuning (demo running at session
+      end — check page_demo.positions.jsonl).
+- [ ] Live endpoint: also return trajectory ref from JSONL tail — done
+      in `b631b35` but needs verification that the page renders it in
+      Live mode during an active controller run.
 - [ ] Investigate `scope_get_equ_coord` stale-data behavior — we
       bypass via `scope_get_horiz_coord`, but `issue_slew` / iscope
       gotos still use RA/Dec which may explain why gotos miss by
