@@ -399,7 +399,10 @@ _NUDGE_RATE_DEGS = 0.21
 _DUR_SEC_CAP = 10             # firmware ignores dur_sec > 10
 _MIN_DUR_S = 5                # never issue any scope_speed_move shorter than this
 _SPEED_PER_DEG_PER_SEC = 237  # linear fit from probe: rate°/s ≈ speed / 237
-_MAIN_MIN_SPEED = 100         # below this the mount barely overcomes stiction
+                              # (verified at ±1% across speeds 80..1440)
+_MAIN_MIN_SPEED = 100         # below this the mount barely overcomes stiction.
+                              # Empirical: speed=80 moves ~106% of predicted;
+                              # speed=50 moves only ~2% (stiction floor).
 _MAIN_CLOSE_ENOUGH_DEG = 2.0  # stop chaining main bursts when residual < this
 _MAX_MAIN_BURSTS = 12         # hard cap on main-burst iterations; fall back
                               # to iscope_start_view if not converged by then
@@ -617,7 +620,13 @@ _VC_KP = 0.3                # proportional gain (rate °/s per ° of error);
 _VC_KD = 0.4                # derivative gain (rate °/s per (°/s measured rate));
                             # predicts arrival at target using current velocity
 _VC_MAX_RATE_DEGS = 6.0     # clamp velocity magnitude
-_VC_MIN_SPEED = 50          # firmware floor; below this the mount barely moves
+_VC_MIN_SPEED = 100         # approach-floor speed. Step-response probe
+                            # shows speeds <80 are stiction-dominated:
+                            # speed=50 moved 0.03° in 8 s (expected 1.58°).
+                            # Using 100 guarantees the mount actually moves.
+_VC_FINE_MIN_SPEED = 80     # fine-finish floor (still in the reliable-motion
+                            # band; speed=80 hit 106% of predicted motion).
+_VC_FINE_THRESHOLD_FACTOR = 4.0  # use fine floor when |error| <= this × tol
 _VC_REISSUE_EVERY = 1       # always reissue each tick (prevents runaway
                             # between infrequent updates)
 _VC_STUCK_MIN_S = 2.0       # seconds of commanded-but-not-moving to declare stuck
@@ -641,6 +650,19 @@ def move_azimuth_to_velocity(
     arrive_tolerance_deg: float = 0.5,
     position_logger: PositionLogger | None = None,
     timeout_s: float = _VC_DEFAULT_TIMEOUT_S,
+    # Tuning knobs — default to module constants; override from the tuning
+    # harness (scripts/tune_vc.py) to sweep parameters without editing
+    # source.
+    kp: float = _VC_KP,
+    kd: float = _VC_KD,
+    max_rate_degs: float = _VC_MAX_RATE_DEGS,
+    loop_dt_s: float = _VC_LOOP_DT_S,
+    min_speed: int = _VC_MIN_SPEED,
+    fine_min_speed: int = _VC_FINE_MIN_SPEED,
+    fine_threshold_factor: float = _VC_FINE_THRESHOLD_FACTOR,
+    max_halvings: int = _VC_MAX_HALVINGS,
+    stuck_min_s: float = _VC_STUCK_MIN_S,
+    stuck_move_frac: float = _VC_STUCK_MOVE_FRAC,
 ) -> tuple[float, float, dict]:
     """Closed-loop velocity controller for the azimuth axis.
 
@@ -675,7 +697,7 @@ def move_azimuth_to_velocity(
         "final_residual_deg": None,
     }
 
-    rate_ceiling = _VC_MAX_RATE_DEGS
+    rate_ceiling = max_rate_degs
     last_speed = 0
     last_angle = 0
     last_az = cur_az_deg
@@ -747,14 +769,16 @@ def move_azimuth_to_velocity(
                     stats["loop_dt_mean_s"] = sum(loop_dts) / len(loop_dts)
                     stats["loop_dt_max_s"] = max(loop_dts)
                 return measured_alt, measured_az, stats
-            time.sleep(_VC_LOOP_DT_S)
+            time.sleep(loop_dt_s)
             continue
         else:
             consecutive_within_tol = 0
 
         # Stuck detection: if we've been commanding motion but the position
         # has barely moved over the stuck window, reduce the rate ceiling.
-        if last_speed >= _VC_MIN_SPEED:
+        # Use the smaller FINE floor as the threshold so fine-tune moves
+        # don't wrongly trigger a stuck halve.
+        if last_speed >= fine_min_speed:
             if stuck_since_t is None:
                 stuck_since_t = time.monotonic()
                 stuck_since_az = measured_az
@@ -762,12 +786,12 @@ def move_azimuth_to_velocity(
                 window = time.monotonic() - stuck_since_t
                 window_moved = abs(_wrap_pm180(measured_az - stuck_since_az))
                 expected = (last_speed / _SPEED_PER_DEG_PER_SEC) * window
-                if window >= _VC_STUCK_MIN_S and window_moved < max(
-                    0.3, _VC_STUCK_MOVE_FRAC * expected,
+                if window >= stuck_min_s and window_moved < max(
+                    0.3, stuck_move_frac * expected,
                 ):
-                    if stats["rate_ceiling_halvings"] < _VC_MAX_HALVINGS:
+                    if stats["rate_ceiling_halvings"] < max_halvings:
                         new_ceiling = max(
-                            _VC_MIN_SPEED / _SPEED_PER_DEG_PER_SEC,
+                            min_speed / _SPEED_PER_DEG_PER_SEC,
                             rate_ceiling / 2,
                         )
                         print(
@@ -805,22 +829,25 @@ def move_azimuth_to_velocity(
         # PD control: command = kP·error − kD·measured_rate.
         # The D term subtracts current velocity, so if we're already moving
         # fast toward target the commanded rate shrinks — dampens overshoot.
-        desired_rate = _VC_KP * error - _VC_KD * measured_rate
+        desired_rate = kp * error - kd * measured_rate
         desired_rate = max(-rate_ceiling, min(rate_ceiling, desired_rate))
         new_angle = 0 if desired_rate >= 0 else 180
 
         # Ensure we always command ≥ MIN_SPEED in the chosen direction so
-        # the motor actually moves when we want it to.
+        # the motor actually moves when we want it to. Near the target we
+        # switch to a lower FINE_MIN_SPEED so we don't overshoot with a
+        # speed that's too coarse for the remaining error.
+        floor_speed = (
+            fine_min_speed
+            if abs(error) <= fine_threshold_factor * arrive_tolerance_deg
+            else min_speed
+        )
         raw_speed = _rate_to_speed(desired_rate)
-        new_speed = max(_VC_MIN_SPEED, raw_speed) if raw_speed > 0 else 0
+        new_speed = max(floor_speed, raw_speed) if raw_speed > 0 else 0
 
         # Re-issue every tick by default (_VC_REISSUE_EVERY=1). Bounds the
         # "runaway" window to one loop dt when HTTP latency is high.
-        need_reissue = (
-            new_angle != last_angle
-            or abs(new_speed - last_speed) > max(20, 0.1 * last_speed)
-            or stats["iterations"] % _VC_REISSUE_EVERY == 0
-        )
+        need_reissue = True  # always reissue to bound runaway at old rate
         if need_reissue:
             print(
                 f"{tag} vc iter={stats['iterations']} dt={dt:.2f}s: "
@@ -833,7 +860,7 @@ def move_azimuth_to_velocity(
             )
             _issue(new_speed if new_speed > 0 else 0, new_angle, "vc_issue")
 
-        time.sleep(_VC_LOOP_DT_S)
+        time.sleep(loop_dt_s)
 
     # Populate loop-dt stats for the caller's move summary.
     if loop_dts:

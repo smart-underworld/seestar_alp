@@ -1,0 +1,579 @@
+#!/usr/bin/env python3
+"""Fast tuning harness for auto_level's velocity-mode controller.
+
+Two modes:
+
+  --mode setpoints   (default)
+        Drive a short list of az setpoints via move_azimuth_to_velocity.
+        Useful for measuring convergence behavior and oscillation
+        against different PD tunings.
+
+  --mode step_response
+        Issue scope_speed_move(speed, angle, dur_sec) bursts from rest and
+        sample position at a fixed interval. Fits a first-order response
+        rate(t) = r_ss · (1 − exp(−t/τ)) for each commanded speed.
+        Use this to characterize the mount's acceleration curve and
+        feed τ into the controller as a feedforward predictor.
+
+HTTP command latency (scope_get_equ_coord, scope_speed_move,
+get_device_state) is recorded on every call and summarized at the end
+of every run.
+
+Usage examples:
+    # Setpoint tuning run:
+    uv run python scripts/tune_vc.py \\
+        --setpoints=-170,+30,-60,+90,-30,+170 \\
+        --kp 0.3 --kd 0.4 --tol 0.3 --alt 10.0
+
+    # Step-response characterization at 4 speeds:
+    uv run python scripts/tune_vc.py --mode step_response \\
+        --step-speeds=100,300,700,1440 --step-dur 8.0 --step-sample-dt 0.5
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import os
+import statistics
+import sys
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+_here = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.realpath(os.path.join(_here, "..")))
+
+from astropy import units as u  # noqa: E402
+from astropy.coordinates import EarthLocation  # noqa: E402
+from astropy.time import Time  # noqa: E402
+
+from device.config import Config  # noqa: E402
+
+from scripts.auto_level import (  # noqa: E402
+    AlpacaClient,
+    _measure_altaz,
+    _speed_move,
+    _wait_for_mount_idle,
+    _wrap_pm180,
+    _MIN_DUR_S,
+    _SPEED_PER_DEG_PER_SEC,
+    ensure_scenery_mode,
+    issue_slew,
+    move_azimuth_to_velocity,
+    set_tracking,
+    wait_until_near_target,
+)
+
+
+class InstrumentedAlpacaClient(AlpacaClient):
+    """AlpacaClient subclass that records every method_sync round-trip
+    latency, keyed by firmware method name."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.latencies: dict[str, list[float]] = {}
+
+    def method_sync(self, method: str, params=None):
+        t0 = time.monotonic()
+        result = super().method_sync(method, params)
+        dt = time.monotonic() - t0
+        self.latencies.setdefault(method, []).append(dt)
+        return result
+
+    def summary(self) -> dict[str, dict[str, float]]:
+        out: dict[str, dict[str, float]] = {}
+        for method, samples in self.latencies.items():
+            if not samples:
+                continue
+            srt = sorted(samples)
+            n = len(srt)
+            out[method] = {
+                "count": n,
+                "mean_ms": 1000 * statistics.mean(srt),
+                "p50_ms": 1000 * srt[n // 2],
+                "p90_ms": 1000 * srt[max(0, int(0.9 * n) - 1)],
+                "p99_ms": 1000 * srt[max(0, int(0.99 * n) - 1)],
+                "max_ms": 1000 * srt[-1],
+            }
+        return out
+
+
+def _print_latency_summary(cli: InstrumentedAlpacaClient) -> None:
+    s = cli.summary()
+    if not s:
+        return
+    print()
+    print("HTTP command latency (ms, RPC round-trip through the Alpaca action endpoint)")
+    print(f"  {'method':<24}  {'n':>5}  {'mean':>6}  {'p50':>6}  {'p90':>6}  {'p99':>6}  {'max':>6}")
+    for method in sorted(s.keys()):
+        st = s[method]
+        print(
+            f"  {method:<24}  {st['count']:>5}  "
+            f"{st['mean_ms']:>5.0f}  {st['p50_ms']:>5.0f}  "
+            f"{st['p90_ms']:>5.0f}  {st['p99_ms']:>5.0f}  "
+            f"{st['max_ms']:>5.0f}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Setpoint mode
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class StepResult:
+    target: float
+    start_az: float
+    end_az: float
+    residual: float
+    iterations: int
+    commands_issued: int
+    sign_flips: int
+    rate_ceiling_halvings: int
+    loop_dt_mean: float
+    loop_dt_max: float
+    wall_time_s: float
+    stuck_bail: bool
+    fallback_goto_used: bool
+
+
+def _parse_floats(s: str) -> list[float]:
+    return [float(x.strip()) for x in s.split(",") if x.strip()]
+
+
+def _parse_ints(s: str) -> list[int]:
+    return [int(x.strip()) for x in s.split(",") if x.strip()]
+
+
+def run_setpoints(cli: InstrumentedAlpacaClient, args) -> int:
+    loc = EarthLocation(
+        lat=Config.init_lat * u.deg, lon=Config.init_long * u.deg, height=0 * u.m
+    )
+    setpoints = _parse_floats(args.setpoints)
+    if not setpoints:
+        print("ERROR: need at least one setpoint", file=sys.stderr)
+        return 2
+
+    print("=" * 78)
+    print("Velocity-controller tuning — setpoint mode")
+    print(f"  kp={args.kp}  kd={args.kd}  max_rate={args.max_rate}°/s  loop_dt={args.loop_dt}s")
+    print(f"  min_speed={args.min_speed}  fine_min_speed={args.fine_min_speed}  "
+          f"fine_thresh_factor={args.fine_thresh_factor}")
+    print(f"  tol={args.tol}°  alt={args.alt}°  timeout={args.timeout}s")
+    print(f"  setpoints ({len(setpoints)}): {setpoints}")
+    print("=" * 78)
+
+    print("Entering scenery mode...")
+    ensure_scenery_mode(cli)
+    print("Disabling tracking...")
+    set_tracking(cli, False)
+
+    first = setpoints[0]
+    print(f"Initial goto: az={first:+.1f}° alt={args.alt:.1f}° (coarse tol 3°)")
+    init_ra, init_dec = issue_slew(cli, first, args.alt, loc)
+    ok, init_dist, _ = wait_until_near_target(
+        cli,
+        target_ra_h=init_ra,
+        target_dec_d=init_dec,
+        tolerance_deg=3.0,
+        timeout=60.0,
+        stall_threshold_s=5.0,
+    )
+    if not ok:
+        print(f"  (warning: initial goto did not reach 3° — dist={init_dist})")
+    time.sleep(1.0)
+    _, cur_az = _measure_altaz(cli, loc)
+    print(f"Initial arrived: measured_az={cur_az:+.3f}°")
+    print()
+
+    results: list[StepResult] = []
+    t_run_start = time.monotonic()
+    for i, target in enumerate(setpoints, start=1):
+        tag = f"[{i}/{len(setpoints)}] az={target:+7.2f}°"
+        delta = _wrap_pm180(target - cur_az)
+        t_step = time.monotonic()
+        print(f"{tag} START  (cur={cur_az:+.3f}°, delta={delta:+.3f}°)", flush=True)
+        try:
+            _, meas_az, stats = move_azimuth_to_velocity(
+                cli,
+                target_az_deg=target,
+                cur_az_deg=cur_az,
+                loc=loc,
+                target_alt_deg=args.alt,
+                tag=tag,
+                arrive_tolerance_deg=args.tol,
+                timeout_s=args.timeout,
+                kp=args.kp,
+                kd=args.kd,
+                max_rate_degs=args.max_rate,
+                loop_dt_s=args.loop_dt,
+                min_speed=args.min_speed,
+                fine_min_speed=args.fine_min_speed,
+                fine_threshold_factor=args.fine_thresh_factor,
+                max_halvings=args.max_halvings,
+            )
+        except Exception as e:
+            print(f"{tag} ERROR: {e}", file=sys.stderr)
+            return 1
+        wall = time.monotonic() - t_step
+        results.append(StepResult(
+            target=target, start_az=cur_az, end_az=meas_az,
+            residual=stats["final_residual_deg"],
+            iterations=stats["iterations"],
+            commands_issued=stats["commands_issued"],
+            sign_flips=stats["sign_flips"],
+            rate_ceiling_halvings=stats["rate_ceiling_halvings"],
+            loop_dt_mean=stats["loop_dt_mean_s"],
+            loop_dt_max=stats["loop_dt_max_s"],
+            wall_time_s=wall,
+            stuck_bail=stats["stuck_bail"],
+            fallback_goto_used=stats["fallback_goto_used"],
+        ))
+        cur_az = meas_az
+        print(
+            f"{tag} DONE  wall={wall:.1f}s  iter={stats['iterations']}  "
+            f"cmds={stats['commands_issued']}  flips={stats['sign_flips']}  "
+            f"halvings={stats['rate_ceiling_halvings']}  "
+            f"dt_mean={stats['loop_dt_mean_s']:.2f}s  "
+            f"residual={stats['final_residual_deg']:+.3f}°"
+            + ("  [FALLBACK]" if stats["fallback_goto_used"] else "")
+            + ("  [STUCK_BAIL]" if stats["stuck_bail"] else ""),
+            flush=True,
+        )
+        if args.settle > 0:
+            time.sleep(args.settle)
+        print()
+
+    total_wall = time.monotonic() - t_run_start
+
+    print("=" * 78)
+    print("SUMMARY")
+    print("=" * 78)
+    header = (f"  {'step':>4}  {'target':>8}  {'residual':>9}  {'iter':>4}  "
+              f"{'cmds':>4}  {'flips':>5}  {'halv':>4}  "
+              f"{'dt_mean':>7}  {'wall':>6}")
+    print(header)
+    for i, r in enumerate(results, start=1):
+        flags = ""
+        if r.fallback_goto_used: flags += " FB"
+        if r.stuck_bail: flags += " SB"
+        print(
+            f"  {i:>4}  {r.target:>+8.2f}  {r.residual:>+9.3f}  "
+            f"{r.iterations:>4}  {r.commands_issued:>4}  "
+            f"{r.sign_flips:>5}  {r.rate_ceiling_halvings:>4}  "
+            f"{r.loop_dt_mean:>6.2f}s  {r.wall_time_s:>5.1f}s{flags}"
+        )
+    print()
+    abs_res = [abs(r.residual) for r in results]
+    iters = [r.iterations for r in results]
+    flips = [r.sign_flips for r in results]
+    print(
+        f"  total_wall={total_wall:.1f}s  steps={len(results)}  "
+        f"|residual| mean={statistics.mean(abs_res):.3f}° max={max(abs_res):.3f}°  "
+        f"iter mean={statistics.mean(iters):.1f} max={max(iters)}  "
+        f"flips mean={statistics.mean(flips):.1f} max={max(flips)}"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Step-response mode
+# ---------------------------------------------------------------------------
+
+
+def _collect_step_response(
+    cli: InstrumentedAlpacaClient,
+    loc: EarthLocation,
+    speed: int,
+    angle: int,
+    dur_sec: int,
+    sample_dt: float,
+) -> tuple[list[tuple[float, float]], dict]:
+    """Command scope_speed_move(speed, angle, dur_sec) from rest and sample
+    position at `sample_dt` intervals for dur_sec + 2 s (to capture decel).
+
+    Returns:
+        samples: list of (t_relative_s, delta_az_deg) starting at (0, 0)
+        meta: dict with start_az, end_az, etc.
+    """
+    _, az0 = _measure_altaz(cli, loc)
+    t_start = time.monotonic()
+    _speed_move(cli, speed, angle, dur_sec)
+    samples: list[tuple[float, float]] = [(0.0, 0.0)]
+
+    total_window = dur_sec + 2.0
+    next_sample_t = t_start + sample_dt
+    while time.monotonic() - t_start < total_window:
+        now = time.monotonic()
+        if now < next_sample_t:
+            time.sleep(max(0.0, next_sample_t - now))
+        _, az = _measure_altaz(cli, loc)
+        t_rel = time.monotonic() - t_start
+        d_az = _wrap_pm180(az - az0)
+        samples.append((t_rel, d_az))
+        next_sample_t += sample_dt
+
+    # Ensure motor is idle before returning.
+    _wait_for_mount_idle(cli, timeout_s=3.0)
+    _, az_end = _measure_altaz(cli, loc)
+    return samples, {
+        "start_az": az0,
+        "end_az": az_end,
+        "total_motion_deg": abs(_wrap_pm180(az_end - az0)),
+        "dur_sec": dur_sec,
+        "speed": speed,
+        "angle": angle,
+    }
+
+
+def _fit_first_order(samples: list[tuple[float, float]], dur_sec: float):
+    """Fit rate(t) = r_ss · (1 − exp(−t / τ)) via position integral model:
+
+        pos(t) = r_ss · [t − τ · (1 − exp(−t / τ))]
+
+    Fit on the samples *during* the commanded burst (0 ≤ t ≤ dur_sec) only,
+    which is where the first-order assumption holds (no decel yet). Signed
+    direction is encoded in r_ss.
+
+    Returns (r_ss, tau, rmse_deg) or (None, None, None) if fit fails.
+    """
+    import numpy as np
+    from scipy.optimize import curve_fit
+
+    ts = np.array([s[0] for s in samples])
+    azs = np.array([s[1] for s in samples])
+    mask = ts <= dur_sec + 0.2  # small margin
+    ts_fit = ts[mask]
+    azs_fit = azs[mask]
+    if len(ts_fit) < 4:
+        return None, None, None
+
+    def pos_model(t, r_ss, tau):
+        tau = max(tau, 1e-3)
+        return r_ss * (t - tau * (1.0 - np.exp(-t / tau)))
+
+    # Good initial guess: r_ss from end-of-burst slope; tau ~ 0.3 s.
+    r0 = (azs_fit[-1] - azs_fit[-2]) / max(ts_fit[-1] - ts_fit[-2], 1e-3)
+    if not math.isfinite(r0) or abs(r0) < 1e-3:
+        r0 = azs_fit[-1] / max(ts_fit[-1], 1e-3)
+    try:
+        popt, _ = curve_fit(
+            pos_model, ts_fit, azs_fit, p0=[r0, 0.3],
+            maxfev=5000,
+        )
+    except Exception:
+        return None, None, None
+    r_ss, tau = float(popt[0]), float(popt[1])
+    pred = pos_model(ts_fit, r_ss, tau)
+    rmse = float(np.sqrt(np.mean((pred - azs_fit) ** 2)))
+    return r_ss, tau, rmse
+
+
+def run_step_response(cli: InstrumentedAlpacaClient, args) -> int:
+    loc = EarthLocation(
+        lat=Config.init_lat * u.deg, lon=Config.init_long * u.deg, height=0 * u.m
+    )
+
+    speeds = _parse_ints(args.step_speeds)
+    if not speeds:
+        print("ERROR: need at least one step speed", file=sys.stderr)
+        return 2
+    dur = int(args.step_dur)
+    if dur < _MIN_DUR_S:
+        print(f"ERROR: step-dur must be >= {_MIN_DUR_S} (firmware floor)", file=sys.stderr)
+        return 2
+
+    print("=" * 78)
+    print("Velocity-controller tuning — step-response characterization")
+    print(f"  speeds: {speeds}")
+    print(f"  burst_dur={dur}s  sample_dt={args.step_sample_dt}s")
+    print(f"  alt={args.alt}°  alternate direction per burst: {args.step_alternate}")
+    print("=" * 78)
+
+    print("Entering scenery mode; disabling tracking...")
+    ensure_scenery_mode(cli)
+    set_tracking(cli, False)
+
+    # Initial goto somewhere safe (away from ±180°). Use args.step_start_az.
+    start_az = args.step_start_az
+    print(f"Initial goto: az={start_az:+.1f}° alt={args.alt:.1f}°")
+    init_ra, init_dec = issue_slew(cli, start_az, args.alt, loc)
+    ok, init_dist, _ = wait_until_near_target(
+        cli, target_ra_h=init_ra, target_dec_d=init_dec,
+        tolerance_deg=3.0, timeout=60.0, stall_threshold_s=5.0,
+    )
+    if not ok:
+        print(f"  (warning: initial goto did not reach 3° — dist={init_dist})")
+    # Wait for the firmware to report move_type == "none" AND re-disable
+    # tracking (firmware re-engages it on goto completion).
+    idle_ok, idle_elapsed = _wait_for_mount_idle(cli, timeout_s=15.0)
+    print(f"Post-goto: mount idle reached after {idle_elapsed:.2f}s "
+          f"(ok={idle_ok}); re-disabling tracking.")
+    set_tracking(cli, False)
+    time.sleep(1.0)
+
+    # Collect.
+    results = []
+    jsonl_path = None
+    if args.step_log:
+        jsonl_path = Path(args.step_log)
+        jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+        jsonl_path.write_text("")  # truncate
+
+    for i, speed in enumerate(speeds, start=1):
+        angle = 0 if (not args.step_alternate or i % 2 == 1) else 180
+        # Re-center after each burst if we've wandered too far from start_az.
+        _, cur_az = _measure_altaz(cli, loc)
+        if abs(_wrap_pm180(cur_az - start_az)) > 40.0:
+            print(f"[{i}/{len(speeds)}] re-centering to {start_az:+.1f}° before next burst...")
+            init_ra, init_dec = issue_slew(cli, start_az, args.alt, loc)
+            wait_until_near_target(
+                cli, target_ra_h=init_ra, target_dec_d=init_dec,
+                tolerance_deg=3.0, timeout=60.0, stall_threshold_s=5.0,
+            )
+            _wait_for_mount_idle(cli, timeout_s=15.0)
+            set_tracking(cli, False)
+            time.sleep(1.0)
+
+        # Ensure the mount is truly idle and tracking is off right before
+        # the characterization burst, else firmware quirks corrupt the
+        # measurement.
+        _wait_for_mount_idle(cli, timeout_s=5.0)
+        set_tracking(cli, False)
+
+        print(f"[{i}/{len(speeds)}] step-response: speed={speed} angle={angle} dur={dur}s")
+        samples, meta = _collect_step_response(
+            cli, loc, speed=speed, angle=angle, dur_sec=dur,
+            sample_dt=args.step_sample_dt,
+        )
+        r_ss, tau, rmse = _fit_first_order(samples, dur)
+
+        # Expected steady-state rate per the linear calibration speed/237.
+        r_ss_expected = speed / _SPEED_PER_DEG_PER_SEC * (1 if angle == 0 else -1)
+        total_motion = meta["total_motion_deg"]
+
+        row = {
+            "speed": speed,
+            "angle": angle,
+            "dur_sec": dur,
+            "total_motion_deg": total_motion,
+            "r_ss_expected_degs": r_ss_expected,
+            "r_ss_fitted_degs": r_ss,
+            "tau_s": tau,
+            "fit_rmse_deg": rmse,
+            "sample_count": len(samples),
+            "samples": samples,
+        }
+        results.append(row)
+
+        if tau is not None:
+            print(
+                f"   → total_motion={total_motion:.2f}°  "
+                f"fitted r_ss={r_ss:+.3f}°/s (expected {r_ss_expected:+.3f}°/s)  "
+                f"τ={tau:.3f}s  fit_rmse={rmse:.3f}°"
+            )
+        else:
+            print(f"   → total_motion={total_motion:.2f}°  (fit failed)")
+        if jsonl_path is not None:
+            with jsonl_path.open("a") as f:
+                f.write(json.dumps({k: v for k, v in row.items() if k != "samples"}) + "\n")
+                for (t, d) in samples:
+                    f.write(json.dumps({
+                        "speed": speed, "angle": angle, "t": t, "delta_az_deg": d,
+                    }) + "\n")
+        time.sleep(1.0)
+        print()
+
+    # Summary.
+    print("=" * 78)
+    print("STEP-RESPONSE SUMMARY")
+    print("=" * 78)
+    print(f"  {'speed':>6}  {'angle':>5}  {'r_ss_exp':>10}  {'r_ss_fit':>10}  {'τ (s)':>7}  {'rmse':>6}")
+    for r in results:
+        tau_s = f"{r['tau_s']:>7.3f}" if r['tau_s'] is not None else "    -  "
+        rss_f = f"{r['r_ss_fitted_degs']:>+9.3f}" if r['r_ss_fitted_degs'] is not None else "     -   "
+        rmse = f"{r['fit_rmse_deg']:>5.3f}" if r['fit_rmse_deg'] is not None else "   -  "
+        print(
+            f"  {r['speed']:>6}  {r['angle']:>5}  "
+            f"{r['r_ss_expected_degs']:>+9.3f}  {rss_f}  "
+            f"{tau_s}  {rmse}"
+        )
+    taus = [r['tau_s'] for r in results if r['tau_s'] is not None]
+    if taus:
+        print()
+        print(
+            f"  τ stats across {len(taus)} fits:  "
+            f"mean={statistics.mean(taus):.3f}s  "
+            f"median={statistics.median(taus):.3f}s  "
+            f"min={min(taus):.3f}s  max={max(taus):.3f}s"
+        )
+    if jsonl_path is not None:
+        print(f"  raw samples saved to: {jsonl_path}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--mode", choices=["setpoints", "step_response"],
+                   default="setpoints")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=5555)
+    p.add_argument("--device", type=int, default=1)
+    p.add_argument("--alt", type=float, default=10.0)
+
+    # Setpoint mode args.
+    p.add_argument("--tol", type=float, default=0.3)
+    p.add_argument("--timeout", type=float, default=60.0)
+    p.add_argument("--settle", type=float, default=0.5)
+    p.add_argument("--setpoints", default="-170,+30,-60,+90,-30,+170")
+    p.add_argument("--kp", type=float, default=0.3)
+    p.add_argument("--kd", type=float, default=0.4)
+    p.add_argument("--max-rate", type=float, default=6.0)
+    p.add_argument("--loop-dt", type=float, default=0.5)
+    p.add_argument("--min-speed", type=int, default=50)
+    p.add_argument("--fine-min-speed", type=int, default=20)
+    p.add_argument("--fine-thresh-factor", type=float, default=4.0)
+    p.add_argument("--max-halvings", type=int, default=4)
+
+    # Step-response mode args.
+    p.add_argument("--step-speeds", default="100,300,700,1440",
+                   help="Comma-separated speeds for step-response bursts.")
+    p.add_argument("--step-dur", type=float, default=8,
+                   help="Duration in seconds of each burst (≥ _MIN_DUR_S=5).")
+    p.add_argument("--step-sample-dt", type=float, default=0.5,
+                   help="Position-sample interval during each burst.")
+    p.add_argument("--step-start-az", type=float, default=0.0,
+                   help="Starting azimuth for the characterization (kept "
+                        "away from ±180° boundary).")
+    p.add_argument("--step-alternate", action="store_true", default=True,
+                   help="Alternate +az / −az direction between bursts to "
+                        "keep the mount near start_az.")
+    p.add_argument("--step-log", default=None,
+                   help="Path to a JSONL file to write raw samples to.")
+    args = p.parse_args()
+
+    Config.load_toml()
+    if not Config.init_lat or not Config.init_long:
+        print("ERROR: lat/long not set in device/config.toml", file=sys.stderr)
+        return 2
+
+    cli = InstrumentedAlpacaClient(args.host, args.port, args.device)
+
+    if args.mode == "setpoints":
+        rc = run_setpoints(cli, args)
+    else:
+        rc = run_step_response(cli, args)
+
+    _print_latency_summary(cli)
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main())
