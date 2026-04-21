@@ -11,9 +11,35 @@ RPC latency.
 
 ## Executive summary — what to do next (for a fresh Claude Code session)
 
-**Where we are (2026-04-21 end-of-session):** The 2-axis closed-loop
-velocity controller is working end-to-end. Az, el, and 2D diagonal
-moves all converge to ≤ 0.25° residual. Everything is committed.
+### End goal: dynamic target tracking (planes, satellites)
+
+**Use case:** point the telescope at a moving target specified in
+ECEF coordinates. The telescope's own ECEF position is known. An
+external prediction source provides future trajectory (position,
+velocity, acceleration) a few seconds ahead — reasonably smooth.
+Telescope follows the target in real time.
+
+**Calibration note:** initial orientation of the mount frame relative
+to world (ENU / compass) will be rough. A later calibration step
+(sighting known landmarks or plate-solving on stars) will refine
+mount-to-world rotation.
+
+**Reach:** plane at 1 km moving 100 m/s ≈ 5.7°/s angular rate (near
+our 6°/s per-axis max). Satellite passes ≈ 0.5-3°/s (comfortable).
+Sub-degree tracking during cruise is the target.
+
+### Where we are (2026-04-21 end-of-session)
+
+The 2-axis closed-loop velocity controller is working for fixed
+setpoints. Az, el, and 2D diagonal moves converge to ≤ 0.25° residual.
+Peak accel-phase error 3-4°, down from 6-7° with tuning. Everything
+committed.
+
+**Gap to end goal:** the controller currently runs a pre-computed
+trajectory from `cur` to a single `target`. For tracking we need a
+streaming reference that updates continuously, coordinate frame
+transforms (ECEF → mount-az/el), and cable-wrap planning over the
+tracking horizon.
 
 | Component | Status | Commits |
 |---|---|---|
@@ -25,6 +51,9 @@ moves all converge to ≤ 0.25° residual. Everything is committed.
 | Diagonal speed fix (per-axis clamp) | **done** | `868490d` |
 | Velocity controller page (trajectory overlay, live mode) | **done** | `2040be6`, `9fc17f1`, `b631b35`, `e7b31bd` |
 | Dynamics tuning (a_max=4, j_max=12, cmd clamp at 6) | **done** | `c08eacc` |
+| Streaming reference consumer (dynamic tracking) | **pending** | Phase 5 |
+| ECEF → mount-frame coordinate transforms | **pending** | Phase 5 |
+| Mount-to-world orientation calibration | **pending** | Phase 5 |
 
 **Controller defaults (all in `velocity_controller.py`):**
 - `profile = "scurve"`, `v_max = PLAN_MAX_RATE_DEGS = 5.0 °/s` (plan cruise)
@@ -53,56 +82,52 @@ moves all converge to ≤ 0.25° residual. Everything is committed.
   the cable midpoint.
 - `compass_sensor.direction` is a separate MEMS magnetometer (uncalib).
 
-**What to do next (priority order):**
+**What to do next (priority order, aligned with end-goal tracking):**
 
-1. **Reduce accel-phase tracking lag** — the dynamics tuning helped
-   (peak error 6-7° → 3-4°) but ~4° peak remains during accel phases.
-   Diagnosis from demo data: ~0.5° cold-start, ~1.75° first-order lag,
-   ~0.3 s RPC latency, ~2° S-curve jerk overshoot + feedback
-   saturation. Ranked by leverage:
+### 1. Feedforward velocity compensation (fast win, prerequisite for tracking)
 
-   **a. Feedforward velocity compensation (RECOMMENDED FIRST).**
-      Add `v_cmd = v_ref + tau * a_ref` at each tick. For a known
-      first-order plant this analytically cancels the velocity lag.
-      `ref_acc` is already exposed in `TrajectoryPoint.acc`.
-      Single-line change in the tick loops. Expected peak error
-      reduction: 4° → ~1-2°.
+Add `v_cmd = v_ref + tau * a_ref` at each tick. For a known
+first-order plant this analytically cancels the velocity lag.
+`ref_acc` is already exposed in `TrajectoryPoint.acc`. Single-line
+change in the tick loops of `move_azimuth_to_ff`,
+`move_elevation_to_ff`, `move_to_ff`. Expected peak error reduction:
+4° → 1-2°. **Same math is needed for tracking** — moving targets
+have continuous v_ref and a_ref that must be commanded forward.
 
-   **b. Pre-trajectory lead-in (cold_start_lag_s, redone).** Shift
-      the trajectory start by 0.5 s in cumulative time — NOT a held
-      position. Let the feedback loop run throughout, with ref
-      sampled at `(t - 0.5 s)` during the first 0.5 s. Covers the
-      cold-start dead time without breaking the feedback path.
+### 2. Streaming reference consumer (core tracking capability)
 
-   **c. Lower a_max further** — 2.0 °/s² gives 2.5 s accel phase.
-      Smaller peak deficit at the cost of longer wall time.
+Replace the fixed `p_target` trajectory with a time-varying reference
+`provider(t) → (az, el, v_az, v_el, a_az, a_el)`. See Phase 5 below
+for the full architecture. This is the bulk of the work for the
+tracking end-goal.
 
-   **d. Increase `v_corr_max`** — from 2.0 to 3.0-4.0 °/s. Faster
-      error closure during cruise. Stability margin ample at
-      kp_pos=0.5/s + tick=0.5 s.
+### 3. ECEF → mount-frame coordinate transform
 
-   **e. Increase `kp_pos`** — from 0.5 to 1.0/s. Aggressive; test for
-      oscillation at 0.5 s tick period.
+Given telescope ECEF position + mount-to-world rotation, convert
+target ECEF (x,y,z or lat/lon/alt + velocity) to mount-frame az/el
+at time t. Initial version can use compass+gravity for rough
+orientation; later calibrate via landmark sighting.
 
-   **f. Velocity controller page: separate y-axis / log scale for
-      error.** Current ±10° shared axis hides sub-degree tracking.
+### 4. Cable-wrap planning for tracking horizon
 
-2. **Streaming trajectory consumer** for dynamic targets (plane chase,
-   sidereal tracking). Builds on `move_to_ff`. Needs:
-   - External source feeding `(t, az, el)` reference stream.
-   - `unwind_azimuth` called before each tracking session if cable
-     wound past threshold.
-   - Time-varying reference injection into the 2D controller loop
-     (currently runs a pre-computed fixed trajectory).
+Before starting a track, look at the predicted trajectory over the
+next N seconds. Check whether cumulative az motion would exceed the
+cable budget. If so, call `unwind_azimuth` first. During tracking,
+monitor cum_az and pause/unwind if approaching the limit.
 
-3. **Cable-wrap cumulative state across restarts.** Currently
-   `CumulativeAzTracker` resets each `tune_vc.py` run. For multi-
-   session tracking, persist to a file or rely on the firmware's
-   startup-home assumption (cum=0 after every power cycle).
+### 5. Additional controller tuning (if #1 isn't enough)
 
-4. **Run a clean 6-setpoint az sweep with cumulative limits** to
-   confirm full pipeline. Run 15 step 1 clean (+0.12°); step 2 hit
-   network disconnect.
+- Lower `a_max` (4.0 → 2.0 °/s²) for smoother accel.
+- Increase `v_corr_max` (2.0 → 3.0 °/s) for faster error closure.
+- Increase `kp_pos` (0.5 → 1.0 /s) for more aggressive feedback.
+- Add `kd_vel` term (velocity damping via measured rate).
+
+### 6. Housekeeping
+
+- Velocity controller page: separate y-axis / log scale for error
+  (currently ±10° shared axis hides sub-degree tracking).
+- `CumulativeAzTracker` persistence across `tune_vc.py` restarts.
+- Clean 6-setpoint az sweep retry (Run 15 step 2 hit network error).
 
 **Session-restart cheat-sheet:**
 ```bash
@@ -1018,6 +1043,218 @@ front/templates/velocity_controller.html — trajectory-ref overlay from ff_tick
 | 4.5 **Diagonal speed fix** | **DONE** | Per-axis clamp, not magnitude. 4 diagonals ≤ 0.22° (commit `868490d`). |
 | 4.6 **Velocity controller page** | **DONE** | PositionLogger→horiz_coord, event field fix, el+2d overlay (commit `2040be6`). |
 | 4.7 **Streaming trajectory consumer** | **pending** | Next priority. |
+
+---
+
+## Phase 5: dynamic target tracking (NEXT — matches end-goal)
+
+Goal: track a target specified in ECEF (plane, satellite, drone) in
+real time. Telescope's own ECEF position known; external source
+provides smooth trajectory predictions 2-3 s ahead
+`(t, pos, vel, acc)`. Sub-degree tracking during cruise.
+
+### 5.1 Architecture sketch
+
+```
+                     ┌────────────────────────┐
+  ECEF target  ─────▶│  ReferenceProvider     │
+  predictions        │  (t → az, el, v, a)    │
+                     │   - ECEF → ENU         │
+                     │   - ENU → mount frame  │
+                     │   - time-series buf    │
+                     │   - interpolation      │
+                     │   - small extrapolation│
+                     │   - spiral-search      │◀── optional: spiral offset
+                     │     overlay (optional) │    for target acquisition
+                     └───────────┬────────────┘
+                                 │ at each tick:
+                                 │ ref(t_now + latency)
+                                 ▼
+                     ┌────────────────────────┐
+  encoder  ◀─────────│  StreamingFFController │─────▶ scope_speed_move
+  horiz_coord        │  v_cmd = v_ff_ref      │       (speed, angle, dur)
+                     │        + tau*a_ref     │
+                     │        + kp_pos*err    │
+                     │   cum-az cable check   │
+                     │   unwind if limit near │
+                     └────────────────────────┘
+```
+
+### 5.2 Pieces (proposed order)
+
+**5.2.1 Feedforward velocity compensation** (shared with Phase 4 fix):
+`v_cmd = v_ref + tau * a_ref + kp_pos * pos_err`. Single-line
+change to the existing tick loops. Required for both setpoint moves
+and tracking. Eliminates the first-order plant lag.
+
+**5.2.2 `ReferenceProvider` abstraction**: callable (or class with
+`__call__`) that returns `(az_cum, el, v_az, v_el, a_az, a_el)` for
+any query time `t`. Behind the scenes it:
+- Holds a buffer of recent + predicted trajectory samples.
+- Interpolates (cubic or quintic spline) between samples.
+- Extrapolates up to ~1 s past the buffer tail using the last
+  velocity/acceleration (fails closed — returns last valid point
+  if the buffer is stale).
+- Converts ECEF → mount frame using the calibration from 5.2.3.
+
+**5.2.3 Coordinate transform pipeline**:
+- Telescope's ECEF position → origin of local ENU frame.
+- Target ECEF → ENU relative to telescope (subtract origin, rotate
+  by geodetic latitude/longitude).
+- ENU → topocentric az/el (standard astronomy math: azimuth from
+  east=0 or north=0 by convention).
+- Topocentric az/el → mount-frame az/el via a 2-3 DOF rotation
+  (mount roll + yaw + pitch vs ENU). This is the calibration step
+  that starts rough and gets refined later (sighting landmarks,
+  plate solving).
+- Velocity/accel in ECEF → differentiate transform chain analytically
+  for correct v_az, v_el, a_az, a_el at the mount. (OR approximate:
+  numerical derivative of position samples, less accurate for fast
+  motion.)
+
+Proposed module: `device/target_frame.py` with a `MountFrame` class
+holding the calibration (rotation matrix) and providing
+`ecef_to_mount_azel(ecef_pos, ecef_vel, ecef_acc, t) → (az, el, v, a)`.
+
+**5.2.4 Mount-to-world calibration**:
+- Initial rough: use the firmware's `compass_sensor.direction`
+  (currently uncalibrated, `cali=0`) as yaw offset + assume
+  mount-vertical via `balance_sensor` tilt reading (~1.6° off
+  vertical at rest — small).
+- Better: manual landmark sighting — user aligns scope to known
+  ECEF-position landmarks (building corners, distant towers) and
+  records mount az/el at each. 3+ landmarks → solve for rotation
+  matrix (mount frame → ENU).
+- Best: plate-solve on stars at night. Not relevant for daytime
+  plane tracking but worth having for satellites.
+
+**5.2.5 `StreamingFFController`** (replaces `move_to_ff` for dynamic
+targets): runs the FF+FB loop indefinitely. At each tick, samples
+the provider at `(t_now + latency_compensation)` and commands the
+plant. Exits on:
+- External `stop()` signal.
+- Cable-wrap alarm (cum_az outside usable range).
+- Provider buffer stale for > N seconds (no fresh predictions).
+
+API: `track(provider, stop_signal, ...)` returns (wall_time, stats).
+
+**5.2.6 Cable-wrap planning for tracking**:
+- Before starting a track: sample the provider over the next N
+  seconds, compute cumulative az motion, check whether it fits in
+  the remaining cable budget. If not, choose unwrap direction and
+  call `unwind_azimuth` first.
+- During tracking: monitor cum_az. If within 30° of a hard stop,
+  either abort with a warning or initiate an opportunistic
+  unwrap (only if the target allows crossing the cable midpoint).
+
+**5.2.7 Latency compensation**:
+- RPC round-trip is ~0.3-0.5 s. The plant executes cmd(t) at
+  ~t+0.5 s. So at each tick we should command
+  `v_cmd = v_ref(t_now + latency)` — look-ahead into the reference
+  buffer. The smooth-trajectory assumption makes this safe.
+- `latency` starts as a fixed estimate (0.4 s); could later be
+  measured per-session from observed cmd-to-motion delay.
+
+### 5.3 Spiral search overlay (for target acquisition)
+
+When the target position estimate has uncertainty larger than the
+camera FOV, we spiral around the estimated position while the
+target's position estimate itself continues to move.
+
+**Mechanics:**
+- FOV: Seestar S50 imaging is ~1.3° × 0.75° (77 mm × 43 mm sensor at
+  250 mm focal length). For acquisition we can use the smaller
+  dimension (0.75°) as the effective FOV width.
+- Overlap 50% → spiral pitch = FOV / 2 ≈ 0.4°.
+- Archimedean spiral: `r(θ) = (pitch / 2π) · θ`, `(az, el)` offset =
+  `r · (cos θ, sin θ)`. Pattern:
+  ```
+  r=0    (center)
+  r=pitch   (after 1 turn, 2π radians)
+  r=2·pitch (after 2 turns)
+  ...
+  ```
+- Angular rate `dθ/dt` chosen so pattern moves at ~0.5-1°/s tangential
+  in screen space (fast enough to complete a 4° search in <30 s, slow
+  enough for the imaging / detection pipeline).
+
+**Integration with the streaming pipeline:**
+
+Spiral is an *offset overlay* applied ON TOP of the target prediction:
+```
+def provider_with_spiral(t):
+    target = target_provider(t)
+    if spiral_active:
+        r = (pitch / (2*pi)) * (t - spiral_start_t) * d_theta_dt
+        theta = d_theta_dt * (t - spiral_start_t)
+        offset_az = r * cos(theta)
+        offset_el = r * sin(theta)
+        target.az += offset_az
+        target.el += offset_el
+        # differentiate to get correct v, a — chain rule on r(t), θ(t)
+        ...
+    return target
+```
+
+So the spiral is just another transformation in the provider chain.
+Exits when: target detected (external signal from the imaging
+pipeline), or timeout, or max spiral radius (search area exhausted).
+
+### 5.4 MPC consideration
+
+**Question:** should we use Model Predictive Control instead of the
+current FF+FB structure for tracking?
+
+**Pros of MPC for tracking:**
+- Naturally incorporates future trajectory predictions (our use-case
+  provides 2-3 s ahead).
+- Constraint handling built-in: rate limits, cable wrap, smoothness
+  of commanded speed.
+- RPC latency expressible as part of the prediction model.
+- One optimization combines FF and FB — cleaner than hand-tuned
+  kp_pos / v_corr_max / tau * a_ref.
+
+**Cons:**
+- Requires a QP solver dependency (OSQP, scipy.optimize.minimize, or
+  cvxpy). Small and fast at our horizon (N=10 steps, 1 input, 0.5 s
+  tick → microseconds), but non-trivial to add.
+- More tuning knobs (Q, R, N, terminal cost).
+- Higher implementation cost than the one-line FF velocity fix.
+
+**Recommendation:**
+
+*Start with FF velocity compensation + streaming provider + simple
+closed-loop* (the current architecture extended). MPC's main
+advantage is constraint handling — we already have the cable-wrap
+check external to the controller, and the rate limit is enforced
+post-hoc by firmware + our cmd clamp. The plant is deterministic
+(stepper + anti-skip) so FF is very strong here.
+
+*Re-evaluate MPC if:*
+- Peak tracking error during dynamic maneuvers stays > 1° after
+  FF velocity compensation.
+- Cable-wrap planning needs to be coupled with command computation
+  (e.g. optimize direction of approach to avoid hitting a limit).
+- We want to enforce command smoothness explicitly (e.g. limit
+  rate-of-change of commanded speed).
+
+MPC is a natural *later* addition — the same streaming provider
+abstraction feeds either controller.
+
+### 5.5 Implementation order (estimates)
+
+| Step | Est | What |
+|---|---|---|
+| 5.2.1 FF velocity compensation | 1 hr | one-line v_cmd += tau*a_ref in three tick loops, test |
+| 5.2.2 ReferenceProvider abstraction | 3-4 hr | class + buffer + interp + extrapolation + tests |
+| 5.2.5 StreamingFFController | 2-3 hr | new function, reuses FF+FB math, runs indefinitely |
+| 5.2.3 Coordinate transform | 3-4 hr | device/target_frame.py, astropy or hand-rolled |
+| 5.2.4 Rough calibration (compass + tilt) | 1-2 hr | read sensors, build rotation matrix |
+| 5.2.6 Cable-wrap tracking planning | 2 hr | pre-check + runtime monitor |
+| 5.2.7 Latency compensation | 0.5 hr | look-ahead in provider sampling |
+| 5.3 Spiral search overlay | 2 hr | spiral provider wrapper, param config |
+| Integration + test on target | 4-8 hr | end-to-end hardware validation |
+| **Total** | ~20-30 hr | one week of focused work |
 
 ### Firmware speed model (verified empirically 2026-04-21)
 
