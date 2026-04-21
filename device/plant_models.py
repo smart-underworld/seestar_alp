@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 from scipy.optimize import minimize
@@ -36,27 +37,59 @@ def cmd_speed_to_degs(cmd_speed: int, angle: int) -> float:
 
 @dataclass
 class Segment:
-    ts: np.ndarray            # shape (N,), relative seconds
+    ts: np.ndarray            # shape (N,), host-monotonic relative seconds
+                              # (matches cmd_times axis)
     azs_unwrapped: np.ndarray # shape (N,), cumulative position (deg)
     cmd_degs: np.ndarray      # shape (N,), commanded signed velocity deg/s
     motor_active: np.ndarray  # shape (N,), 1.0 while any commanded burst active
     speed: int                # firmware speed (informational)
     angle: int                # firmware angle (informational)
+    fw_ts: Optional[np.ndarray] = None  # shape (N,), firmware uptime (s).
+                                        # When present, use for dt between
+                                        # consecutive samples (jitter-free).
 
 
 def samples_to_segment(
-    samples: list[tuple[float, float, float]],
+    samples: list,
     speed: int, angle: int, cmd_times: list[tuple[float, int, int, int]],
 ) -> Segment:
-    """Convert raw (t, wrapped_az, motor_active) samples into a Segment.
+    """Convert raw position samples into a Segment.
 
-    cmd_times is list of (t_rel, speed, angle, dur) — used to set the
-    commanded-velocity trace at each sample t.
+    Accepts both sample layouts:
+      3-tuple (host_t, wrapped_az, motor_active)                  — legacy
+      4-tuple (host_t, fw_t, wrapped_az, motor_active)            — with fw time
+
+    `ts` is always host-monotonic seconds-from-burst-start (so it aligns
+    with `cmd_times`, which is also in host time). When all samples have
+    an `fw_t`, the Segment also carries `fw_ts` — an equal-length array
+    of firmware uptime seconds used by downstream code (e.g.
+    `segment_rates`) for jitter-free dt computation.
+
+    cmd_times is list of (t_rel, speed, angle, dur).
     """
-    ts_list = [s[0] for s in samples]
-    azs_wrapped = [s[1] for s in samples]
-    mact = [s[2] for s in samples]
+    if not samples:
+        ts_list: list[float] = []
+        azs_wrapped: list[float] = []
+        mact: list[float] = []
+        fw_ts_raw: list = []
+    elif len(samples[0]) == 4:
+        ts_list = [s[0] for s in samples]
+        fw_ts_raw = [s[1] for s in samples]
+        azs_wrapped = [s[2] for s in samples]
+        mact = [s[3] for s in samples]
+    else:
+        ts_list = [s[0] for s in samples]
+        fw_ts_raw = [None] * len(samples)
+        azs_wrapped = [s[1] for s in samples]
+        mact = [s[2] for s in samples]
+
     azs_unwrapped = unwrap_az_series(azs_wrapped)
+
+    use_fw = bool(fw_ts_raw) and all(ft is not None for ft in fw_ts_raw)
+    fw_ts_arr = (
+        np.asarray([float(ft) for ft in fw_ts_raw], dtype=float)
+        if use_fw else None
+    )
 
     cmd_degs = np.zeros(len(samples))
     for i, t in enumerate(ts_list):
@@ -77,17 +110,23 @@ def samples_to_segment(
         motor_active=np.asarray(mact, dtype=float),
         speed=speed,
         angle=angle,
+        fw_ts=fw_ts_arr,
     )
 
 
 def segment_rates(seg: Segment) -> tuple[np.ndarray, np.ndarray]:
     """Per-sample instantaneous rate via backward difference.
 
-    Returns (midpoint_ts, rates) with length N-1.
+    Returns (midpoint_ts, rates) with length N-1. When `seg.fw_ts` is
+    present, uses firmware timestamps for dt (eliminates HTTP-latency
+    jitter from the rate derivative); otherwise falls back to host ts.
+    `mid_ts` stays on the host clock so it aligns with cmd_times for
+    downstream use.
     """
     ts = seg.ts
     az = seg.azs_unwrapped
-    rates = np.diff(az) / np.diff(ts)
+    dt_axis = seg.fw_ts if seg.fw_ts is not None else ts
+    rates = np.diff(az) / np.diff(dt_axis)
     mid_ts = (ts[1:] + ts[:-1]) / 2.0
     return mid_ts, rates
 

@@ -163,6 +163,25 @@ def measure_altaz(cli: MountClient, loc: EarthLocation) -> tuple[float, float]:
     scope_speed_move — otherwise the read cancels it. Safe immediately
     before/after a burst when the motor is idle.
     """
+    alt, az, _ = measure_altaz_timed(cli, loc)
+    return alt, az
+
+
+def measure_altaz_timed(
+    cli: MountClient, loc: EarthLocation,
+) -> tuple[float, float, Optional[float]]:
+    """Like `measure_altaz` but also returns the firmware timestamp at
+    which the position was captured (seconds, monotonic firmware uptime).
+
+    Returns `(alt, az, firmware_t)`; `firmware_t` is None if the response
+    lacks a `Timestamp` field (e.g. a non-firmware mock). The firmware
+    timestamp eliminates HTTP-latency jitter from dt computations and is
+    the correct clock for motion-onset / plant-fitting dt.
+
+    Format reference: device/seestar_device.py:500 — responses look like
+        {"jsonrpc":"2.0","Timestamp":"9507.244805160","method":...,
+         "result":{"ra":...,"dec":...},"code":0,"id":...}
+    """
     resp = cli.method_sync("scope_get_equ_coord")
     result = resp["result"]
     ra_h = float(result["ra"])
@@ -170,7 +189,14 @@ def measure_altaz(cli: MountClient, loc: EarthLocation) -> tuple[float, float]:
     aa = SkyCoord(ra=ra_h * u.hourangle, dec=dec_deg * u.deg).transform_to(
         AltAz(obstime=Time.now(), location=loc)
     )
-    return float(aa.alt.deg), wrap_pm180(float(aa.az.deg))
+    ts_raw = resp.get("Timestamp") if isinstance(resp, dict) else None
+    fw_t: Optional[float] = None
+    if ts_raw is not None:
+        try:
+            fw_t = float(ts_raw)
+        except (TypeError, ValueError):
+            fw_t = None
+    return float(aa.alt.deg), wrap_pm180(float(aa.az.deg)), fw_t
 
 
 def set_tracking(cli: MountClient, enabled: bool) -> None:
@@ -738,6 +764,13 @@ class PositionLogger:
         )
         alt = float(aa.alt.deg)
         az = wrap_pm180(float(aa.az.deg))
+        ts_raw = resp.get("Timestamp") if isinstance(resp, dict) else None
+        fw_t: Optional[float] = None
+        if ts_raw is not None:
+            try:
+                fw_t = float(ts_raw)
+            except (TypeError, ValueError):
+                fw_t = None
         with self._lock:
             phase = self._phase
             step = self._step
@@ -745,6 +778,7 @@ class PositionLogger:
             cmd_alt = self._commanded_alt
         return {
             "t": _now_iso(),
+            "fw_t": fw_t,
             "kind": "sample",
             "phase": phase,
             "step": step,

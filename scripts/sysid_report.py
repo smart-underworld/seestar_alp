@@ -53,8 +53,7 @@ def load_step_response_segments(path: Path) -> list[Segment]:
     recs = _load_jsonl(path)
     segments: list[Segment] = []
     current_burst = None
-    current_samples: list[tuple[float, float, float]] = []
-    cmd_times_by_burst: list = []
+    current_samples: list = []
 
     for r in recs:
         if r.get("kind") == "burst":
@@ -69,7 +68,17 @@ def load_step_response_segments(path: Path) -> list[Segment]:
             current_burst = r
             current_samples = []
         elif r.get("kind") == "sample":
-            current_samples.append((r["t"], r["az"], r.get("motor_active", 1.0)))
+            # 4-tuple (host_t, fw_t, az, motor_active) when fw_t in record;
+            # 3-tuple (host_t, az, motor_active) otherwise — samples_to_segment
+            # handles both layouts.
+            if "fw_t" in r:
+                current_samples.append(
+                    (r["t"], r.get("fw_t"), r["az"], r.get("motor_active", 1.0))
+                )
+            else:
+                current_samples.append(
+                    (r["t"], r["az"], r.get("motor_active", 1.0))
+                )
     if current_burst is not None and current_samples:
         segments.append(samples_to_segment(
             current_samples,
@@ -83,7 +92,7 @@ def load_step_response_segments(path: Path) -> list[Segment]:
 def load_chirp_segment(path: Path) -> Segment:
     """Parse chirp JSONL into a single Segment covering the full duration."""
     recs = _load_jsonl(path)
-    ts, azs, cmds, ma = [], [], [], []
+    ts, azs, cmds, ma, fw_ts = [], [], [], [], []
     for r in recs:
         if r.get("kind") == "tick":
             ts.append(r["t"])
@@ -91,11 +100,16 @@ def load_chirp_segment(path: Path) -> Segment:
             # Use the recorded cmd signed velocity; not its integer speed.
             cmds.append(r.get("v_cmd_degs", cmd_speed_to_degs(r["speed"], r["angle"])))
             ma.append(1.0 if r["speed"] > 0 else 0.0)
+            fw_ts.append(r.get("fw_t"))
     unwr = unwrap_az_series(azs)
+    use_fw = fw_ts and all(ft is not None for ft in fw_ts)
+    fw_ts_arr = (
+        np.asarray([float(ft) for ft in fw_ts], dtype=float) if use_fw else None
+    )
     return Segment(
         ts=np.asarray(ts), azs_unwrapped=np.asarray(unwr),
         cmd_degs=np.asarray(cmds), motor_active=np.asarray(ma),
-        speed=-1, angle=-1,
+        speed=-1, angle=-1, fw_ts=fw_ts_arr,
     )
 
 
@@ -109,7 +123,14 @@ def load_latency_summary(path: Path) -> dict:
     rpc = [r["rpc_latency_s"] for r in recs if r.get("kind") == "trial"]
     mot = [r["motion_latency_s"] for r in recs
            if r.get("kind") == "trial" and r.get("motion_latency_s") is not None]
-    return {"rpc_latencies": rpc, "motion_latencies": mot}
+    fw_mot = [r["fw_motion_latency_s"] for r in recs
+              if r.get("kind") == "trial"
+              and r.get("fw_motion_latency_s") is not None]
+    return {
+        "rpc_latencies": rpc,
+        "motion_latencies": mot,
+        "fw_motion_latencies": fw_mot,
+    }
 
 
 def _pct(xs, q):
@@ -241,20 +262,31 @@ def main() -> int:
         lat_files = find_latest("latency_*.jsonl")
         if lat_files:
             lat = load_latency_summary(lat_files[-1])
-            rpc, mot = lat["rpc_latencies"], lat["motion_latencies"]
+            rpc = lat["rpc_latencies"]
+            mot = lat["motion_latencies"]
+            fw_mot = lat.get("fw_motion_latencies", [])
             print("Latency (last run):")
             if rpc:
-                print(f"  RPC ACK:  n={len(rpc)}  "
+                print(f"  RPC ACK (host):  n={len(rpc)}  "
                       f"mean={1000*statistics.mean(rpc):.0f}ms  "
                       f"p50={1000*_pct(rpc, 0.5):.0f}ms  "
                       f"p90={1000*_pct(rpc, 0.9):.0f}ms  "
                       f"max={1000*max(rpc):.0f}ms")
             if mot:
-                print(f"  motion-onset (post-ACK):  n={len(mot)}  "
+                print(f"  motion-onset (host):  n={len(mot)}  "
                       f"mean={1000*statistics.mean(mot):.0f}ms  "
                       f"p50={1000*_pct(mot, 0.5):.0f}ms  "
                       f"p90={1000*_pct(mot, 0.9):.0f}ms  "
                       f"max={1000*max(mot):.0f}ms")
+            if fw_mot:
+                print(f"  motion-onset (firmware): n={len(fw_mot)}  "
+                      f"mean={1000*statistics.mean(fw_mot):.0f}ms  "
+                      f"p50={1000*_pct(fw_mot, 0.5):.0f}ms  "
+                      f"p90={1000*_pct(fw_mot, 0.9):.0f}ms  "
+                      f"max={1000*max(fw_mot):.0f}ms")
+            else:
+                print("  motion-onset (firmware): — (no fw_motion_latency "
+                      "in trial records; re-run to capture)")
 
     print()
     print("(done)")

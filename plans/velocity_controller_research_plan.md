@@ -43,6 +43,56 @@ See `scripts/auto_level_tuning.md` for the per-run tuning log and
 
 ---
 
+## Plant properties (stepper + anti-skip)
+
+The Seestar uses stepper motors with onboard anti-skip protection.
+The firmware ramps the commanded step rate to avoid losing sync.
+That makes the plant deterministic in a way generic control-design
+frameworks assume it isn't. Five observable consequences and their
+controller-design implications:
+
+| Plant property | Why it's true | Implication for controller |
+|---|---|---|
+| Commanded rate = actual rate (after firmware ramp) | Anti-skip means steps never drop. Motion-per-step is fixed by gearing. | **No velocity observer needed** (Kalman, complementary filter) — we know `v` from the commands. |
+| Position = integrated command | Onboard encoder counts pulses and increments position deterministically. | **No position filter needed.** RPC-reported position is noise-free at the encoder resolution. |
+| The measured `tau = 0.335 s` is the firmware ramp, not mechanical dynamics | Tau tracks almost perfectly with step-rate ramp-up time; mechanical masses would introduce higher-order modes we don't see. | **FF is extremely powerful** — invert the known ramp and position error is quantization. |
+| Stiction floor is a firmware minimum step rate, not physics | Deadband probes show motion at speed=20 matching speed/237 to 1%; below some threshold the firmware sends zero pulses. | **No high-gain feedback needed** to break through stiction — just command above the floor. |
+| Rate cap at 1440 is a firmware ceiling, not torque saturation | Speed > 1440 silently produces the same 6 °/s rate. | **Rate limit is a hard constraint** for the trajectory planner, not a soft one. |
+
+Takeaway: the dominant uncertainty in this system is **pure dead
+time** (~0.7 s cold, expected 0.3-0.4 s warm). That makes Smith
+predictor (2.3) the archetypal architecture for this plant and FF
+(2.1) an extremely strong baseline. Generic-plant techniques that
+invest in noise rejection / velocity observation / high-gain
+feedback are mostly wasted here; they solve problems we don't
+have.
+
+### Firmware timestamps
+
+Every firmware RPC response includes a monotonic `Timestamp` field
+formatted as a decimal-seconds string with sub-microsecond
+precision, e.g. `"9507.244805160"`. Format reference:
+`device/seestar_device.py:500`. It represents firmware uptime in
+seconds and is the right clock for:
+
+- dt between consecutive position samples (HTTP-latency-free)
+- motion-onset latency measured as
+  `fw_t_first_motion - fw_t_ack`
+- aligning commanded vs. measured trajectories in controllers that
+  need sub-tick timing accuracy (Smith's delay queue, MPC's
+  horizon)
+
+The device proxy (`device/seestar_device.py`) preserves `Timestamp`
+on RPC responses and strips it only in the SSE event stream
+(`get_events`, line 2680). `AlpacaClient.method_sync` returns the
+entire response dict untouched, so host code has access today —
+sysid + controller code switched over in this plan.
+
+Host `time.monotonic()` stays useful for scheduling (sleep to the
+next tick, rate limits), just not for measuring plant dynamics.
+
+---
+
 ## Phase 1: System identification
 
 Goal: produce a validated per-axis plant model good enough that an
@@ -188,6 +238,14 @@ next_rate`) so the controller code stays agnostic.
 
 Hold controller bake-off until Phase 1 produces a trusted plant model.
 Then evaluate these in order.
+
+The "Plant properties" section above reshapes priorities. Because
+the plant is deterministic with pure dead time as the only real
+uncertainty: **FF (2.1) and Smith (2.3) are the two primary
+candidates**, EKF (2.2) is repurposed as a slow bias estimator only
+(never a velocity observer), and MPC (2.4)'s robustness value is
+reduced (but its constraint-handling value remains). PID (2.6)
+stays dismissed.
 
 ### 2.0 Feasible trajectory planner (prerequisite)
 

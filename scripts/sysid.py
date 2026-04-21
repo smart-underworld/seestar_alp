@@ -63,9 +63,9 @@ from device.velocity_controller import (  # noqa: E402
     ensure_scenery_mode,
     issue_slew,
     measure_altaz,
+    measure_altaz_timed,
     set_tracking,
     speed_move,
-    unwrap_az_series,
     wait_for_mount_idle,
     wait_until_near_target,
     wrap_pm180,
@@ -80,8 +80,9 @@ from device.velocity_controller import (  # noqa: E402
 @dataclass
 class _CallRecord:
     method: str
-    t_send: float        # monotonic seconds
-    t_ack: float         # monotonic seconds (post-HTTP response)
+    t_send: float                # host monotonic seconds at HTTP send
+    t_ack: float                 # host monotonic seconds at HTTP response
+    fw_t_ack: Optional[float]    # firmware timestamp on response, None if missing
     params: Optional[dict] = None
 
 
@@ -94,8 +95,18 @@ class TimedAlpacaClient(AlpacaClient):
         t0 = time.monotonic()
         result = super().method_sync(method, params)
         t1 = time.monotonic()
-        self.calls.append(_CallRecord(method=method, t_send=t0, t_ack=t1,
-                                      params=params if isinstance(params, dict) else None))
+        fw_t: Optional[float] = None
+        if isinstance(result, dict):
+            ts_raw = result.get("Timestamp")
+            if ts_raw is not None:
+                try:
+                    fw_t = float(ts_raw)
+                except (TypeError, ValueError):
+                    fw_t = None
+        self.calls.append(_CallRecord(
+            method=method, t_send=t0, t_ack=t1, fw_t_ack=fw_t,
+            params=params if isinstance(params, dict) else None,
+        ))
         return result
 
     def last_call(self, method: str) -> Optional[_CallRecord]:
@@ -181,16 +192,18 @@ def _recenter_if_far(
 def _collect_bursts(
     cli: TimedAlpacaClient, loc: EarthLocation,
     speed: int, angle: int, dur_sec: int, n_chain: int, sample_dt: float,
-) -> tuple[list[tuple[float, float, float]], dict]:
+) -> tuple[list[tuple[float, Optional[float], float, float]], dict]:
     """Issue n_chain back-to-back scope_speed_moves at the same (speed, angle)
     with no stop between. Sample position throughout.
 
     Returns:
-        samples: list of (t_s, wrapped_az_deg, motor_active_flag)
-                 wrapped_az is in [-180, +180).
+        samples: list of (host_t_s, fw_t_s, wrapped_az_deg, motor_active_flag)
+                 host_t is monotonic seconds from burst start (host clock).
+                 fw_t is firmware uptime seconds (sub-microsecond); None if
+                 the response lacked a Timestamp.
         meta: dict with start_az, end_az, cmd_times, etc.
     """
-    _, az0 = measure_altaz(cli, loc)
+    _, az0, _ = measure_altaz_timed(cli, loc)
     t_zero = time.monotonic()
     cmd_times: list[tuple[float, int, int, int]] = []  # (t_rel, speed, angle, dur)
 
@@ -205,13 +218,13 @@ def _collect_bursts(
             time.sleep(max(0.5, dur_sec - 1.5))
 
     total_window = dur_sec * n_chain - 1.5 * (n_chain - 1) + 3.0
-    samples: list[tuple[float, float, float]] = []
+    samples: list[tuple[float, Optional[float], float, float]] = []
     next_sample_t = t_zero
     while time.monotonic() - t_zero < total_window:
         now = time.monotonic()
         if now < next_sample_t:
             time.sleep(max(0.0, next_sample_t - now))
-        _, az = measure_altaz(cli, loc)
+        _, az, fw_t = measure_altaz_timed(cli, loc)
         t_rel = time.monotonic() - t_zero
         # motor_active flag: 1 while any cmd is still active
         motor_active = 0.0
@@ -219,13 +232,13 @@ def _collect_bursts(
             if t_c <= t_rel <= t_c + d:
                 motor_active = 1.0
                 break
-        samples.append((t_rel, az, motor_active))
+        samples.append((t_rel, fw_t, az, motor_active))
         next_sample_t += sample_dt
 
     wait_for_mount_idle(cli, timeout_s=3.0)
     _, az_end = measure_altaz(cli, loc)
     total_motion = sum(
-        wrap_pm180(samples[i + 1][1] - samples[i][1])
+        wrap_pm180(samples[i + 1][2] - samples[i][2])
         for i in range(len(samples) - 1)
     )
     return samples, {
@@ -278,10 +291,11 @@ def run_step_response(cli: TimedAlpacaClient, args) -> int:
         )
         _write_jsonl(log_path, {"kind": "burst", **meta,
                                 "sample_count": len(samples)})
-        for (t, az, ma) in samples:
+        for (t, fw_t, az, ma) in samples:
             _write_jsonl(log_path, {
                 "kind": "sample", "speed": speed, "angle": angle,
-                "chain_index": i, "t": t, "az": az, "motor_active": ma,
+                "chain_index": i, "t": t, "fw_t": fw_t,
+                "az": az, "motor_active": ma,
             })
         print(f"   → total_motion={meta['total_motion_deg']:+.2f}°")
         time.sleep(1.0)
@@ -326,18 +340,15 @@ def run_deadband(cli: TimedAlpacaClient, args) -> int:
             t0 = time.monotonic()
             speed_move(cli, speed, direction_angle, dur)
             # Sample at 0.5s throughout the dwell.
-            dwell_samples: list[tuple[float, float]] = []
+            dwell_samples: list[tuple[float, Optional[float], float]] = []
             next_t = t0 + 0.5
             while time.monotonic() - t0 < dwell:
                 time.sleep(max(0.0, next_t - time.monotonic()))
-                _, az = measure_altaz(cli, loc)
-                dwell_samples.append((time.monotonic() - t0, az))
+                _, az, fw_t = measure_altaz_timed(cli, loc)
+                dwell_samples.append((time.monotonic() - t0, fw_t, az))
                 next_t += 0.5
             wait_for_mount_idle(cli, timeout_s=5.0)
             _, az_end = measure_altaz(cli, loc)
-            # total signed motion
-            unwrapped = unwrap_az_series([s[1] for s in dwell_samples])
-            total = unwrapped[-1] - dwell_samples[0][1] if dwell_samples else 0.0
             total_with_end = wrap_pm180(az_end - az0)
             mean_rate = total_with_end / dwell if dwell > 0 else 0.0
             print(f"  angle={direction_angle} speed={speed}: "
@@ -348,10 +359,10 @@ def run_deadband(cli: TimedAlpacaClient, args) -> int:
                 "mean_rate_degs": mean_rate,
                 "sample_count": len(dwell_samples),
             })
-            for (t, az) in dwell_samples:
+            for (t, fw_t, az) in dwell_samples:
                 _write_jsonl(log_path, {
                     "kind": "sample", "angle": direction_angle, "speed": speed,
-                    "t": t, "az": az,
+                    "t": t, "fw_t": fw_t, "az": az,
                 })
             time.sleep(rest)
 
@@ -393,35 +404,56 @@ def run_latency(cli: TimedAlpacaClient, args) -> int:
         set_tracking(cli, False)
         angle = 0 if i % 2 == 0 else 180
 
-        _, az0 = measure_altaz(cli, loc)
+        _, az0, fw_t0 = measure_altaz_timed(cli, loc)
         t_send = time.monotonic()
         speed_move(cli, speed, angle, dur)
         t_ack = time.monotonic()
         rpc_latency = t_ack - t_send
+        # Firmware-side ACK time, captured by TimedAlpacaClient.
+        fw_t_ack = cli.calls[-1].fw_t_ack if cli.calls else None
 
-        # Poll until we see motion or timeout.
-        t_first_motion: Optional[float] = None
-        az_samples: list[tuple[float, float]] = []
+        # Poll until we see motion or timeout. Record both host and
+        # firmware timestamps; the firmware-time motion-onset latency is
+        # the primary number (eliminates HTTP-latency jitter).
+        t_first_motion_host: Optional[float] = None
+        fw_t_first_motion: Optional[float] = None
+        # samples: (host_t_post_ack, fw_t, d_az_deg)
+        az_samples: list[tuple[float, Optional[float], float]] = []
         timeout_deadline = t_ack + 5.0
         while time.monotonic() < timeout_deadline:
             time.sleep(poll_dt)
-            _, az = measure_altaz(cli, loc)
+            _, az, fw_t = measure_altaz_timed(cli, loc)
             t_sample = time.monotonic()
             d = wrap_pm180(az - az0)
-            az_samples.append((t_sample - t_ack, d))
-            if t_first_motion is None and abs(d) > motion_thresh_degs:
-                t_first_motion = t_sample
+            az_samples.append((t_sample - t_ack, fw_t, d))
+            if t_first_motion_host is None and abs(d) > motion_thresh_degs:
+                t_first_motion_host = t_sample
+                fw_t_first_motion = fw_t
                 break
 
-        motion_latency = (t_first_motion - t_ack) if t_first_motion else None
+        motion_latency_host = (
+            t_first_motion_host - t_ack if t_first_motion_host else None
+        )
+        fw_motion_latency = (
+            fw_t_first_motion - fw_t_ack
+            if (fw_t_first_motion is not None and fw_t_ack is not None)
+            else None
+        )
 
-        print(f"  [{i+1}/{n}] rpc={1000*rpc_latency:.0f}ms  "
-              f"motion={'%.0fms' % (1000*motion_latency) if motion_latency else 'timeout'}")
+        def _ms(x):
+            return "timeout" if x is None else f"{1000*x:.0f}ms"
+
+        print(f"  [{i+1}/{n}] rpc={_ms(rpc_latency)}  "
+              f"host_motion={_ms(motion_latency_host)}  "
+              f"fw_motion={_ms(fw_motion_latency)}")
 
         _write_jsonl(log_path, {
             "kind": "trial", "i": i, "angle": angle,
             "rpc_latency_s": rpc_latency,
-            "motion_latency_s": motion_latency,
+            "motion_latency_s": motion_latency_host,
+            "fw_motion_latency_s": fw_motion_latency,
+            "fw_t_ack": fw_t_ack,
+            "fw_t_first_motion": fw_t_first_motion,
             "motion_threshold_deg": motion_thresh_degs,
             "sample_count": len(az_samples),
         })
@@ -479,7 +511,6 @@ def run_chirp(cli: TimedAlpacaClient, args) -> int:
 
     _, az_start = measure_altaz(cli, loc)
     t0 = time.monotonic()
-    last_cmd = (0, 0)
     while True:
         t_rel = time.monotonic() - t0
         if t_rel > duration:
@@ -496,11 +527,10 @@ def run_chirp(cli: TimedAlpacaClient, args) -> int:
             speed_move(cli, 0, 0, 1)
         else:
             speed_move(cli, speed_cmd, angle_cmd, 10)
-        last_cmd = (speed_cmd, angle_cmd)
         # Sample position for the log (same scope_get_equ_coord poll).
-        _, az = measure_altaz(cli, loc)
+        _, az, fw_t = measure_altaz_timed(cli, loc)
         _write_jsonl(log_path, {
-            "kind": "tick", "t": t_rel,
+            "kind": "tick", "t": t_rel, "fw_t": fw_t,
             "v_cmd_degs": v_cmd_degs, "speed": speed_cmd, "angle": angle_cmd,
             "az": az,
         })
