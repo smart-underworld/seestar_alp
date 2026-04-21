@@ -51,8 +51,9 @@ MIN_DUR_S = 5                 # firmware floor; dur_sec < 5 not used by conventi
 DUR_SEC_CAP = 10              # firmware ignores dur_sec > 10
 MAIN_SPEED = 1440             # firmware-clamped max speed
 MAIN_RATE_DEGS = 6.0          # ~6.09 °/s at speed=1440 (10 s burst avg)
-PLAN_MAX_RATE_DEGS = 5.0      # FF planner cap — 1°/s headroom below plant cap
-                              # so the firmware can actually hit the commanded rate.
+PLAN_MAX_RATE_DEGS = 6.0      # Per-axis max rate (°/s). Matches firmware clamp at
+                              # speed=1440. Firmware clamps per-axis independently,
+                              # so diagonal moves can exceed this in total magnitude.
 
 
 # ---------------------------------------------------------------------------
@@ -1330,13 +1331,14 @@ def move_to_ff(
         v_corr_el = max(-v_corr_max, min(v_corr_max, kp_pos * err_el))
         v_cmd_el = ref_el.vel + v_corr_el
 
-        # Compose into firmware (speed, angle), clamping magnitude to v_max.
+        # Clamp each axis independently at v_max. The firmware clamps
+        # per-axis at speed=1440 internally, so the total speed CAN exceed
+        # 1440 for diagonal moves (e.g. speed=2036 at angle=45° gives each
+        # axis its full 6°/s). We mirror that here by clamping per-axis
+        # rather than the magnitude.
+        v_cmd_az = max(-v_max, min(v_max, v_cmd_az))
+        v_cmd_el = max(-v_max, min(v_max, v_cmd_el))
         v_mag = math.sqrt(v_cmd_az * v_cmd_az + v_cmd_el * v_cmd_el)
-        if v_mag > v_max:
-            scale = v_max / v_mag
-            v_cmd_az *= scale
-            v_cmd_el *= scale
-            v_mag = v_max
 
         if v_mag < 1e-6:
             speed_cmd = 0
