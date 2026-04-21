@@ -51,6 +51,16 @@
     <label>Log file:
       <select id="log-select" class="log-select"></select>
     </label>
+    <label>Window:
+      <select id="window-select" class="log-select">
+        <option value="60">1 min</option>
+        <option value="300" selected>5 min</option>
+        <option value="900">15 min</option>
+        <option value="1800">30 min</option>
+        <option value="3600">1 hour</option>
+        <option value="0">All</option>
+      </select>
+    </label>
     <label><input type="checkbox" id="auto-refresh" checked> Auto-refresh (2 s)</label>
     <span id="refresh-status"></span>
   </div>
@@ -74,6 +84,7 @@
   const telescopeId = wrap.dataset.telescopeId || '1';
 
   const selectEl = document.getElementById('log-select');
+  const windowEl = document.getElementById('window-select');
   const autoRefreshEl = document.getElementById('auto-refresh');
   const refreshStatusEl = document.getElementById('refresh-status');
   const metaEl = document.getElementById('run-meta');
@@ -164,8 +175,19 @@
     return (await r.json()).logs || [];
   }
 
-  async function fetchLog(name) {
-    const r = await fetch(apiUrl('log', { name }));
+  // Pick an API `limit` generous enough for the selected window, given the
+  // position logger polls at ~0.5 s (up to ~120 samples/min). Double it for
+  // margin + event records.
+  function sampleLimitForWindow(windowSeconds){
+    if (!windowSeconds || windowSeconds <= 0) return 20000;  // "All"
+    return Math.max(600, Math.ceil((windowSeconds / 60) * 120 * 2));
+  }
+
+  async function fetchLog(name, windowSeconds) {
+    const r = await fetch(apiUrl('log', {
+      name,
+      limit: sampleLimitForWindow(windowSeconds),
+    }));
     if (!r.ok) return null;
     return r.json();
   }
@@ -191,13 +213,31 @@
     }
   }
 
-  function update(data){
+  function update(data, windowSeconds){
     if (!data || !data.samples || data.samples.length === 0){
       metaEl.textContent = `No samples yet in ${data && data.name ? data.name : '?'}`;
       setStatus('idle', 'IDLE (no samples)');
       return;
     }
-    const t0 = data.samples[0].t;
+    // Apply a rolling window relative to the newest sample's timestamp.
+    // windowSeconds == 0 means "All" — show the entire payload.
+    const totalSamples = data.samples.length;
+    const latestSampleEpoch = data.samples[totalSamples - 1].t;
+    let samples = data.samples;
+    let events = data.events || [];
+    let windowStartEpoch = null;
+    if (windowSeconds && windowSeconds > 0){
+      windowStartEpoch = latestSampleEpoch - windowSeconds;
+      samples = samples.filter(s => s.t >= windowStartEpoch);
+      events = events.filter(e => e.t >= windowStartEpoch);
+    }
+    if (samples.length === 0){
+      // Nothing recent enough — fall back to showing everything so the user
+      // isn't staring at an empty chart.
+      samples = data.samples;
+      events = data.events || [];
+    }
+    const t0 = samples[0].t;
 
     // Build per-axis datasets in one pass.
     const azErr = [], azSet = [], azCmd = [];
@@ -205,7 +245,7 @@
     let latestAz = null, latestAzSet = null, latestAzErr = null;
     let latestEl = null, latestElSet = null, latestElErr = null;
 
-    for (const s of data.samples){
+    for (const s of samples){
       const t = s.t - t0;
       // Command = measured position (what we've actually driven the mount to).
       if (s.az_deg !== null && s.az_deg !== undefined){
@@ -247,17 +287,21 @@
     elChart.data.datasets[2].data = elCmd;
     elChart.update();
 
-    // Liveness status.
-    const latestEpoch = data.samples[data.samples.length - 1].t;
-    updateLiveness(latestEpoch);
+    // Liveness status — always use the newest sample in the full payload,
+    // not the windowed subset, so the pill reflects whether PositionLogger
+    // is still streaming even if the window hides older data.
+    updateLiveness(latestSampleEpoch);
 
-    // Meta line.
-    const tail = data.samples[data.samples.length-1];
+    // Meta line — report both the window size and the full log count.
+    const tail = samples[samples.length-1];
     const lastT = tail.t - t0;
     const currentPhase = tail.phase || '(no phase)';
     const currentStep = tail.step ?? '-';
     const pollDt = data.poll_interval_s || '?';
-    metaEl.textContent = `${data.name}  |  ${data.samples.length} samples, ${data.events ? data.events.length : 0} events, elapsed ${lastT.toFixed(1)}s, phase=${currentPhase}, step=${currentStep}, poll=${pollDt}s`;
+    const windowText = (windowSeconds && windowSeconds > 0)
+      ? `showing last ${windowSeconds >= 3600 ? (windowSeconds/3600).toFixed(1)+'h' : Math.round(windowSeconds/60)+'min'}: ${samples.length}/${totalSamples} samples`
+      : `${samples.length} samples`;
+    metaEl.textContent = `${data.name}  |  ${windowText}, ${events.length} events, elapsed ${lastT.toFixed(1)}s, phase=${currentPhase}, step=${currentStep}, poll=${pollDt}s`;
 
     // KPIs.
     const fmt = (v, d=3) => v === null || v === undefined ? '—' : `${v.toFixed(d)}°`;
@@ -280,10 +324,11 @@
       setStatus('idle', 'IDLE (no logs)');
       return;
     }
+    const windowSeconds = parseInt(windowEl.value || '300', 10);
     refreshStatusEl.textContent = 'refreshing…';
     try {
-      const data = await fetchLog(name);
-      if (data) update(data);
+      const data = await fetchLog(name, windowSeconds);
+      if (data) update(data, windowSeconds);
       refreshStatusEl.textContent = `updated ${new Date().toLocaleTimeString()}`;
     } catch (err){
       refreshStatusEl.textContent = `error: ${err.message}`;
@@ -301,6 +346,7 @@
   }
 
   selectEl.addEventListener('change', refresh);
+  windowEl.addEventListener('change', refresh);
   autoRefreshEl.addEventListener('change', () => { /* timer checks the box */ });
 
   reloadFileList();
