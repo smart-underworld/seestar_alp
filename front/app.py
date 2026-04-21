@@ -4111,20 +4111,40 @@ class VelocityControllerLiveResource:
     def on_get(req, resp, telescope_id=1):
         try:
             result = method_sync("scope_get_horiz_coord", telescope_id)
-            if isinstance(result, dict) and "result" in result:
-                coords = result["result"]
-                alt = float(coords[0])
-                az = float(coords[1])
+            # method_sync may return:
+            #   - a list [alt, az] (direct result extraction)
+            #   - a dict {"result": [alt, az], "Timestamp": ...}
+            #   - a dict with "Value" wrapping
+            if isinstance(result, list) and len(result) >= 2:
+                coords = result
                 fw_t = None
-                ts_raw = result.get("Timestamp")
-                if ts_raw is not None:
-                    try:
-                        fw_t = float(ts_raw)
-                    except (TypeError, ValueError):
-                        pass
-                payload = {"alt_deg": alt, "az_deg": az, "fw_t": fw_t}
+            elif isinstance(result, dict):
+                coords = result.get("result", result.get("Value"))
+                if isinstance(coords, list) and len(coords) >= 2:
+                    ts_raw = result.get("Timestamp")
+                    fw_t = None
+                    if ts_raw:
+                        try:
+                            fw_t = float(ts_raw)
+                        except (TypeError, ValueError):
+                            pass
+                else:
+                    payload = {"error": "unexpected dict", "raw": str(result)[:200]}
+                    resp.status = falcon.HTTP_200
+                    resp.content_type = "application/json"
+                    resp.text = json.dumps(payload)
+                    return
             else:
-                payload = {"error": "unexpected response", "raw": str(result)[:200]}
+                payload = {"error": "unexpected type", "raw": str(result)[:200]}
+                resp.status = falcon.HTTP_200
+                resp.content_type = "application/json"
+                resp.text = json.dumps(payload)
+                return
+            alt = float(coords[0])
+            az = float(coords[1])
+            payload = {"alt_deg": alt, "az_deg": az}
+            if fw_t is not None:
+                payload["fw_t"] = fw_t
         except Exception as e:
             payload = {"error": str(e)}
         resp.status = falcon.HTTP_200
