@@ -58,19 +58,36 @@ MAIN_RATE_DEGS = 6.0          # ~6.09 °/s at speed=1440 (10 s burst avg)
 # ---------------------------------------------------------------------------
 
 VC_LOOP_DT_S = 0.5              # target control-loop period; real dt is HTTP-bound
-VC_CMD_DUR_S = 10               # dur_sec on every scope_speed_move (firmware cap)
+VC_CMD_DUR_S = 5                # dur_sec TTL on every scope_speed_move.
+                                # Sized from observed update-to-update p99
+                                # (~2.0s across step_response, controller,
+                                # chirp data) with ~2.5x headroom. Shorter
+                                # than the 10s firmware cap so a controller
+                                # crash commits to at most v_max*5 = 30° of
+                                # uncommanded motion instead of 60°. Still
+                                # above the 5s MIN_DUR_S floor.
 VC_KP = 0.3                     # proportional gain (°/s of rate per ° of error)
 VC_KD = 0.4                     # derivative gain (°/s per (°/s measured rate))
 VC_MAX_RATE_DEGS = 6.0
-VC_MIN_SPEED = 100              # approach floor; < 80 is stiction-dominated
-VC_FINE_MIN_SPEED = 80          # fine-finish floor (still in reliable-motion band)
+VC_MIN_SPEED = 40               # approach floor. Phase 1 deadband probe shows
+                                # motion at 100% of linear model (speed/237)
+                                # for every tested speed 20..200; the true
+                                # stiction floor is below 20. 40 keeps a safety
+                                # margin without being excessively conservative.
+VC_FINE_MIN_SPEED = 20          # fine-finish floor. Phase 1: speed=20 produces
+                                # +0.085 °/s (matches expected +0.084 within 1%).
 VC_FINE_THRESHOLD_FACTOR = 4.0  # use fine floor when |error| <= this × tol
 VC_MAIN_CLOSE_ENOUGH_DEG = 2.0
 VC_STUCK_MIN_S = 2.0
 VC_STUCK_MOVE_FRAC = 0.2
 VC_MAX_HALVINGS = 4
 VC_DEFAULT_TIMEOUT_S = 120
-VC_TAU_S = 0.8                  # first-order τ for the feedforward predictor
+VC_TAU_S = 0.348                # first-order τ for the feedforward predictor.
+                                # Phase 1 fit (fw-timestamped step_response data,
+                                # 20 bursts, trimmed to motor_active window):
+                                # tau=0.348s, k_dc=0.996, train pos-RMSE 0.70°.
+                                # Previous default was 0.8s; the high-τ value
+                                # came from un-trimmed per-burst fits.
 VC_USE_PREDICTOR = True
 
 
@@ -301,7 +318,8 @@ def move_azimuth_to_velocity(
         position_logger.set_phase("vc_move")
 
     while True:
-        elapsed = time.monotonic() - t0
+        tick_start = time.monotonic()
+        elapsed = tick_start - t0
         stats["elapsed_s"] = elapsed
         stats["iterations"] += 1
         if elapsed > timeout_s:
@@ -423,7 +441,13 @@ def move_azimuth_to_velocity(
             flush=True,
         )
         _issue(new_speed if new_speed > 0 else 0, new_angle, "vc_issue")
-        time.sleep(loop_dt_s)
+        # Deadline-based pacing: loop_dt_s is a MINIMUM tick period, not a
+        # fixed delay. When RPCs already take longer than loop_dt_s (the
+        # common case: two ~500 ms Alpaca round-trips = ~1 s per tick), this
+        # sleep is zero and we iterate as fast as the HTTP proxy allows.
+        remaining = loop_dt_s - (time.monotonic() - tick_start)
+        if remaining > 0:
+            time.sleep(remaining)
 
     if loop_dts:
         stats["loop_dt_mean_s"] = sum(loop_dts) / len(loop_dts)

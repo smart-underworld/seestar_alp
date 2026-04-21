@@ -663,7 +663,13 @@ class Seestar:
                         f"SLOW message response.  {elapsed} seconds. {cur_cmdid=} {data=}"
                     )
                     # todo : dump out stats.  last run time on threads, connection status, etc.
-            time.sleep(0.5)
+            # Poll for response dict insertion. 0.01s (was 0.5s) is a 50x
+            # improvement on minimum RPC latency — the response is populated
+            # by the separate TCP reader thread the moment the firmware
+            # replies, so the sleep here is only caller-side poll cadence.
+            # Firmware round-trip is ~10-30 ms; at 10 ms poll we hit the
+            # firmware floor with negligible CPU overhead (~100 polls/s).
+            time.sleep(0.01)
         self.logger.debug(f"response is {self.response_dict[cur_cmdid]}")
         return self.response_dict[cur_cmdid]
 
