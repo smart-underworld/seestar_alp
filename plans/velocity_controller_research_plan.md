@@ -525,18 +525,62 @@ attacks the observed error source.
    fallbacks across Run 6 setpoints.
 2. **Investigate the FF large-move error.** Instrument
    `move_azimuth_to_ff` to log commanded vs measured rate at each
-   tick; find where the ~6° deficit accumulates. Could be a
-   v_max-clamp edge case or command-schedule drift.
+   tick; find where the ~6° deficit accumulates on 150°+ moves.
+   Could be a v_max-clamp edge case or command-schedule drift.
 3. **Skip Smith (D2)** unless #1 proves inadequate.
-4. **Commit the D1 work** (FF + correction + Run 8 data) before
-   session end.
-5. **Tier-2 2-axis extension** (elevation sysid, 2D trajectory
+4. **Tier-2 2-axis extension** (elevation sysid, 2D trajectory
    planner, `move_to_ff(target_az, target_el)`) — queued for after
    D1 wraps.
 
-All commit history: `git log --oneline main` on this repo. Key
-handles: A1 `3a297a1`, A2 `61540fa`, A3 `ddbf66e`, B `36a0e53` +
-correction `411a20d`, C `28d3737`, D1 pending commit.
+### Session restart cheat-sheet
+
+Quick resume from a fresh Claude session:
+
+- **Current controller under test:** `move_azimuth_to_ff` +
+  `move_azimuth_to_with_correction` in
+  `device/velocity_controller.py`.
+- **Trajectory planner:** `device/trajectory.py` with
+  `trapezoidal_profile` and `scurve_profile`.
+- **Test harness:** `scripts/tune_vc.py --control feedforward`
+  (FF + nudge correction), `--control ff_pure` (open-loop only),
+  `--control velocity` (legacy PD+predictor).
+- **Hardware verification command:**
+  ```
+  uv run python scripts/tune_vc.py --control feedforward \
+    --setpoints=-170,+30,-60,+90,-30,+170 --tol 0.3 --alt 10 \
+    --loop-dt 0.5 --max-rate 6.0 --a-max 10.0
+  ```
+- **Unit tests:** `uv run python -m pytest tests/test_auto_level.py
+  tests/test_trajectory.py -q` — 30 tests should pass.
+- **Run-log dir** (gitignored): `auto_level_logs/` (JSON summaries,
+  JSONL position traces, sysid traces under `sysid/`).
+- **Plant constants after Phase 1:** `VC_TAU_S=0.348`,
+  `VC_MIN_SPEED=40`, `VC_FINE_MIN_SPEED=20`, `VC_CMD_DUR_S=5`
+  (`device/velocity_controller.py`).
+- **Proxy latency floor:** ~230 ms RPC (post `device/seestar_device.py:666`
+  sleep=0.01 fix). Two RPCs per tick = ~500 ms real tick.
+- **Key findings carried over:**
+  - Plant is first-order with τ=0.348 s, k_dc=0.996.
+  - Stiction floor is below speed=20, not 80 as previously set.
+  - Warm motion-onset dead time ≈ 0 s; cold-start is ~0.5 s pure
+    delay (Smith predictor has nothing to compensate during
+    running).
+  - FF + correction is stable (0 oscillations) but slower and
+    residual-noisier than PD (0.317° vs 0.075°). Step 4's 6.7°
+    post-FF residual is the main failure mode to fix next.
+
+### Commit handles
+
+| Checkpoint | Commit | One-liner |
+|---|---|---|
+| A1 timestamps + doc | `3a297a1` | firmware Timestamp plumbing |
+| A2 re-run sysid | `61540fa` | tau refit to 0.348 |
+| A3 constants + proxy | `ddbf66e` | proxy poll 500ms→10ms; VC constants |
+| B speed_transition | `36a0e53` | + correction `411a20d` |
+| C trajectory planner | `28d3737` | trapezoid + S-curve + 9 tests |
+| D1 FF + correction | `15199b3` | Run 8 captured |
+
+`git log --oneline | head -10` for the full tail.
 
 Phase 2 exits when:
 
