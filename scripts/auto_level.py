@@ -19,7 +19,9 @@ import math
 import os
 import statistics
 import sys
+import threading
 import time
+from pathlib import Path
 
 import requests
 
@@ -371,6 +373,432 @@ def issue_slew(
     return ra_h, dec_deg
 
 
+# Empirical constants (measured on a Seestar S50 via scope_speed_move probes).
+# Both axes scale linearly in rate vs speed up to the firmware clamp at ~1440.
+_MAIN_SPEED = 1440            # firmware-clamped max
+_MAIN_RATE_DEGS = 6.0         # ~6.09 °/s measured at speed=1440 over 10s bursts
+_NUDGE_SPEED = 50             # ~0.21 °/s (extrapolated from speed/237 linear fit)
+_NUDGE_RATE_DEGS = 0.21
+_DUR_SEC_CAP = 10             # firmware ignores dur_sec > 10
+_MIN_DUR_S = 5                # never issue any scope_speed_move shorter than this
+_SPEED_PER_DEG_PER_SEC = 237  # linear fit from probe: rate°/s ≈ speed / 237
+_MAIN_MIN_SPEED = 100         # below this the mount barely overcomes stiction
+_MAIN_CLOSE_ENOUGH_DEG = 2.0  # stop chaining main bursts when residual < this
+_MAX_MAIN_BURSTS = 12         # hard cap on main-burst iterations; fall back
+                              # to iscope_start_view if not converged by then
+_MAIN_STUCK_PROGRESS_DEG = 1.0  # if a main burst moves less than this, the
+                              # mount is probably stuck against a limit (e.g.,
+                              # ±180° azimuth wrap); fall back to iscope goto
+_FALLBACK_GOTO_TOL_DEG = 3.0  # iscope_start_view arrival tolerance for fallback
+_FALLBACK_GOTO_TIMEOUT_S = 60
+_NUDGE_MIN_DUR_S = _MIN_DUR_S
+_NUDGE_MAX_DUR_S = 10         # firmware cap
+_MAX_NUDGES = 3               # bail out after this many nudge attempts
+
+
+def _wrap_pm180(deg: float) -> float:
+    return ((deg + 180.0) % 360.0) - 180.0
+
+
+def _speed_move(cli: AlpacaClient, speed: int, angle: int, dur_sec: int) -> None:
+    cli.method_sync(
+        "scope_speed_move",
+        {"speed": int(speed), "angle": int(angle), "dur_sec": int(dur_sec)},
+    )
+
+
+def _wait_for_mount_idle(
+    cli: AlpacaClient, timeout_s: float, poll_s: float = 0.3,
+) -> tuple[bool, float]:
+    """Poll get_device_state(keys=["mount"]) until move_type == "none".
+
+    Returns (idle, elapsed_s). `idle` is True if the mount reported idle
+    before `timeout_s`, False on timeout. Polling mount state does NOT
+    cancel an active scope_speed_move (probed on firmware; scope_get_equ_coord
+    at <0.3 s cadence does, hence this helper queries only `mount`).
+    """
+    t0 = time.monotonic()
+    deadline = t0 + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            resp = cli.method_sync("get_device_state", {"keys": ["mount"]})
+            mt = resp["result"]["mount"].get("move_type", "none")
+            if mt == "none":
+                return True, time.monotonic() - t0
+        except Exception:
+            pass
+        time.sleep(poll_s)
+    return False, time.monotonic() - t0
+
+
+def _measure_altaz(cli: AlpacaClient, loc: EarthLocation) -> tuple[float, float]:
+    """Single position read → (alt_deg, az_deg) with az wrapped to [-180, 180).
+
+    Caller must guarantee the mount is not currently running a
+    scope_speed_move — otherwise the read cancels it.
+    """
+    ra_h, dec_deg = current_radec(cli)
+    alt_deg, az_raw = radec_to_altaz(ra_h, dec_deg, loc, Time.now())
+    return alt_deg, _wrap_pm180(az_raw)
+
+
+class PositionLogger:
+    """Background thread that samples mount position every `poll_interval_s`
+    and appends each sample as a JSONL record.
+
+    The main thread annotates state via `set_target(az, alt)` and
+    `set_phase(name, step=...)`; those values are copied into each poll
+    record. Also exposes `mark_event(name, **extra)` to write one-off
+    event records interleaved with the polled samples.
+
+    Alpaca exposes no subscription API for position, so this polls
+    `scope_get_equ_coord` and converts to alt/az via astropy. Polling at
+    0.5 s is safe — probed at 0.3 s without cancelling scope_speed_move.
+    """
+
+    def __init__(
+        self,
+        cli: AlpacaClient,
+        loc: EarthLocation,
+        path: str | os.PathLike,
+        poll_interval_s: float = 0.5,
+    ):
+        self.cli = cli
+        self.loc = loc
+        self.path = Path(path)
+        self.poll_interval = poll_interval_s
+        self._commanded_az: float | None = None
+        self._commanded_alt: float | None = None
+        self._phase: str = "init"
+        self._step: int | None = None
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._file = None
+        self._write_lock = threading.Lock()
+
+    def start(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._file = self.path.open("a", buffering=1)  # line-buffered
+        self._write({
+            "t": _now_iso(),
+            "kind": "header",
+            "poll_interval_s": self.poll_interval,
+        })
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._run, name="PositionLogger", daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=3.0)
+            self._thread = None
+        if self._file is not None:
+            self._write({"t": _now_iso(), "kind": "footer"})
+            self._file.close()
+            self._file = None
+
+    def set_target(self, az_deg: float | None, alt_deg: float | None) -> None:
+        with self._lock:
+            self._commanded_az = az_deg
+            self._commanded_alt = alt_deg
+
+    def set_phase(self, phase: str, step: int | None = None) -> None:
+        with self._lock:
+            self._phase = phase
+            if step is not None:
+                self._step = step
+
+    def mark_event(self, event: str, **extra) -> None:
+        if self._file is None:
+            return
+        with self._lock:
+            snapshot = {
+                "phase": self._phase,
+                "step": self._step,
+                "commanded_az_deg": self._commanded_az,
+                "commanded_alt_deg": self._commanded_alt,
+            }
+        rec = {"t": _now_iso(), "kind": "event", "event": event, **snapshot, **extra}
+        self._write(rec)
+
+    def _write(self, rec: dict) -> None:
+        if self._file is None:
+            return
+        with self._write_lock:
+            try:
+                self._file.write(json.dumps(rec) + "\n")
+            except Exception:
+                pass
+
+    def _run(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                rec = self._sample()
+                self._write(rec)
+            except Exception as e:
+                self._write({
+                    "t": _now_iso(),
+                    "kind": "error",
+                    "error": repr(e),
+                })
+            # Event.wait returns True if set; use it as interruptible sleep.
+            if self._stop_event.wait(self.poll_interval):
+                break
+
+    def _sample(self) -> dict:
+        resp = self.cli.method_sync("scope_get_equ_coord")
+        ra = float(resp["result"]["ra"])
+        dec = float(resp["result"]["dec"])
+        aa = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg).transform_to(
+            AltAz(obstime=Time.now(), location=self.loc)
+        )
+        alt = float(aa.alt.deg)
+        az = _wrap_pm180(float(aa.az.deg))
+        with self._lock:
+            phase = self._phase
+            step = self._step
+            cmd_az = self._commanded_az
+            cmd_alt = self._commanded_alt
+        return {
+            "t": _now_iso(),
+            "kind": "sample",
+            "phase": phase,
+            "step": step,
+            "ra_h": ra,
+            "dec_deg": dec,
+            "alt_deg": alt,
+            "az_deg": az,
+            "commanded_az_deg": cmd_az,
+            "commanded_alt_deg": cmd_alt,
+        }
+
+
+def move_azimuth_to(
+    cli: AlpacaClient,
+    target_az_deg: float,
+    cur_az_deg: float,
+    loc: EarthLocation,
+    target_alt_deg: float,
+    tag: str = "",
+    arrive_tolerance_deg: float = 0.5,
+    position_logger: PositionLogger | None = None,
+) -> tuple[float, float, dict]:
+    """Drive the azimuth axis to `target_az_deg` via scope_speed_move.
+
+    Strategy: chain main bursts at max speed until |delta| < close-enough,
+    then issue up to _MAX_NUDGES slow nudges, re-measuring between each,
+    stopping once |delta| <= arrive_tolerance_deg. Raises RuntimeError if
+    all nudges are exhausted without arriving. Never polls position during
+    an active move (that cancels the move on this firmware).
+
+    If a main burst makes less than _MAIN_STUCK_PROGRESS_DEG of progress,
+    or we hit _MAX_MAIN_BURSTS without converging, fall back to iscope
+    goto (which the firmware routes around the ±180° azimuth wrap) and
+    then continue with the nudge loop.
+    """
+    stats = {
+        "main_move_commands": 0,
+        "main_move_total_dur_s": 0,
+        "fallback_goto_used": False,
+        "nudge_attempts": 0,
+        "nudge_total_dur_s": 0,
+        "final_residual_deg": None,
+    }
+
+    delta = _wrap_pm180(target_az_deg - cur_az_deg)
+
+    # Main-move loop: chain bursts until we're within close_enough, or
+    # bail to fallback if we detect no-progress / run out of tries.
+    # `speed_cap` is a per-step rolling ceiling that gets halved whenever
+    # the firmware silently refuses a burst (observed near the ±180° azimuth
+    # boundary: high-speed bursts produce ~0.4° motion while nudge-speed
+    # bursts cross the boundary fine). This adaptive retry is the main
+    # robustness mechanism.
+    fallback_reason: str | None = None
+    speed_cap = _MAIN_SPEED
+    while abs(delta) > _MAIN_CLOSE_ENOUGH_DEG:
+        if stats["main_move_commands"] >= _MAX_MAIN_BURSTS:
+            fallback_reason = (
+                f"main loop reached {_MAX_MAIN_BURSTS} bursts without converging "
+                f"(residual={delta:+.2f}°)"
+            )
+            break
+
+        # Choose (speed, dur) so one burst covers |delta| without
+        # overshooting. Strategy: always use min-dur 5s; scale speed
+        # proportional to |delta| and clamp to [_MAIN_MIN_SPEED, speed_cap];
+        # for deltas larger than a 5s burst at speed_cap can cover,
+        # scale dur up instead, capped at _DUR_SEC_CAP.
+        cap_rate = speed_cap / _SPEED_PER_DEG_PER_SEC
+        max_dist_per_min_burst = cap_rate * _MIN_DUR_S
+        if abs(delta) <= max_dist_per_min_burst:
+            dur = _MIN_DUR_S
+            needed_rate = abs(delta) / _MIN_DUR_S
+            speed = max(
+                _MAIN_MIN_SPEED,
+                min(speed_cap, int(round(needed_rate * _SPEED_PER_DEG_PER_SEC))),
+            )
+        else:
+            speed = speed_cap
+            dur = min(
+                _DUR_SEC_CAP,
+                max(_MIN_DUR_S, math.ceil(abs(delta) / cap_rate)),
+            )
+        angle = 0 if delta > 0 else 180
+        print(f"{tag} main: issuing speed={speed} angle={angle} dur={dur}s "
+              f"(delta={delta:+.2f}°)", flush=True)
+        if position_logger is not None:
+            position_logger.set_phase("main_move")
+            position_logger.mark_event(
+                "main_issue",
+                speed=speed, angle=angle, dur_sec=dur, delta_deg=delta,
+            )
+        pre_az = cur_az_deg
+        _speed_move(cli, speed, angle, dur)
+        # Wait for the firmware to report move_type == "none". The motor
+        # stops itself when dur_sec elapses — no explicit stop needed.
+        idle, elapsed = _wait_for_mount_idle(cli, timeout_s=dur + 3.0)
+        if idle:
+            print(f"{tag} main: mount idle after {elapsed:.2f}s", flush=True)
+        else:
+            print(f"{tag} WARNING: main burst did not report idle within "
+                  f"{dur + 3.0}s", flush=True)
+        stats["main_move_commands"] += 1
+        stats["main_move_total_dur_s"] += dur
+        if position_logger is not None:
+            position_logger.set_phase("main_idle")
+            position_logger.mark_event(
+                "main_idle", idle=idle, wait_s=round(elapsed, 3),
+            )
+
+        # Re-measure to drive the next iteration (or fall through to nudge).
+        _, cur_az_deg = _measure_altaz(cli, loc)
+        moved = abs(_wrap_pm180(cur_az_deg - pre_az))
+        delta = _wrap_pm180(target_az_deg - cur_az_deg)
+        expected = dur * (speed / _SPEED_PER_DEG_PER_SEC)
+        print(f"{tag} main: measured_az={cur_az_deg:+.3f}° "
+              f"(moved {moved:.2f}°, expected ~{expected:.1f}°, "
+              f"new delta={delta:+.3f}°)", flush=True)
+
+        # Stuck detection: mount barely moved relative to what we asked for.
+        # Use 20% of expected with an absolute floor of 1° so tiny commanded
+        # bursts don't trigger spurious fallbacks.
+        stuck_threshold = max(_MAIN_STUCK_PROGRESS_DEG, 0.2 * expected)
+        if moved < stuck_threshold:
+            # First try halving the speed ceiling (firmware soft-throttles
+            # high-speed bursts near the ±180° boundary; slower bursts pass
+            # through). Only fall back if we've already tried at the floor.
+            if speed_cap > _MAIN_MIN_SPEED:
+                new_cap = max(_MAIN_MIN_SPEED, speed_cap // 2)
+                print(f"{tag} main: stuck ({moved:.2f}° < {stuck_threshold:.2f}°); "
+                      f"halving speed cap {speed_cap} → {new_cap} and retrying",
+                      flush=True)
+                if position_logger is not None:
+                    position_logger.mark_event(
+                        "main_speed_cap_reduced",
+                        old_cap=speed_cap, new_cap=new_cap,
+                        moved_deg=moved, expected_deg=expected,
+                    )
+                speed_cap = new_cap
+                continue
+            fallback_reason = (
+                f"main burst moved only {moved:.2f}° "
+                f"(expected ~{expected:.1f}°, threshold {stuck_threshold:.2f}°) "
+                f"even at floor speed {_MAIN_MIN_SPEED} — mount refusing motion"
+            )
+            break
+
+    if fallback_reason is not None:
+        print(f"{tag} FALLBACK: {fallback_reason}. Using iscope_start_view to "
+              f"route around the limit (target az={target_az_deg:+.2f}°, "
+              f"alt={target_alt_deg:.2f}°).", flush=True)
+        stats["fallback_goto_used"] = True
+        if position_logger is not None:
+            position_logger.set_phase("fallback_goto")
+            position_logger.mark_event("fallback_issue", reason=fallback_reason)
+        tgt_ra, tgt_dec = issue_slew(cli, target_az_deg, target_alt_deg, loc)
+        ok, dist, _ = wait_until_near_target(
+            cli,
+            target_ra_h=tgt_ra,
+            target_dec_d=tgt_dec,
+            tolerance_deg=_FALLBACK_GOTO_TOL_DEG,
+            timeout=_FALLBACK_GOTO_TIMEOUT_S,
+            stall_threshold_s=5.0,
+        )
+        if ok:
+            print(f"{tag} fallback: iscope arrived (dist={dist:.3f}°)",
+                  flush=True)
+        else:
+            print(f"{tag} WARNING: fallback iscope goto did not arrive within "
+                  f"{_FALLBACK_GOTO_TOL_DEG}°; continuing to nudge anyway "
+                  f"(last dist={dist})", flush=True)
+        _, cur_az_deg = _measure_altaz(cli, loc)
+        delta = _wrap_pm180(target_az_deg - cur_az_deg)
+        print(f"{tag} fallback: measured_az={cur_az_deg:+.3f}° "
+              f"(new delta={delta:+.3f}°)", flush=True)
+
+    # Nudge loop: at least one nudge always fires (consistent arrival
+    # profile); subsequent nudges only fire while we're still outside the
+    # arrive tolerance. Each nudge is min 5 s so the slow-approach ramp is
+    # fully engaged before deceleration.
+    for attempt in range(1, _MAX_NUDGES + 1):
+        # ×3 on the raw time estimate: at speed=50 the acceleration ramp
+        # dominates a short burst, so give the steady-state phase room.
+        raw_dur = math.ceil(abs(delta) / _NUDGE_RATE_DEGS) * 3
+        nudge_dur = max(_NUDGE_MIN_DUR_S, min(_NUDGE_MAX_DUR_S, raw_dur))
+        nudge_angle = 0 if delta >= 0 else 180
+        print(f"{tag} nudge {attempt}/{_MAX_NUDGES}: issuing speed={_NUDGE_SPEED} "
+              f"angle={nudge_angle} dur={nudge_dur}s (delta={delta:+.3f}°)",
+              flush=True)
+        if position_logger is not None:
+            position_logger.set_phase(f"nudge_{attempt}")
+            position_logger.mark_event(
+                "nudge_issue",
+                attempt=attempt, speed=_NUDGE_SPEED, angle=nudge_angle,
+                dur_sec=nudge_dur, delta_deg=delta,
+            )
+        _speed_move(cli, _NUDGE_SPEED, nudge_angle, nudge_dur)
+        idle, elapsed = _wait_for_mount_idle(cli, timeout_s=nudge_dur + 3.0)
+        if idle:
+            print(f"{tag} nudge {attempt}: mount idle after {elapsed:.2f}s",
+                  flush=True)
+        else:
+            print(f"{tag} WARNING: nudge {attempt} did not report idle within "
+                  f"{nudge_dur + 3.0}s", flush=True)
+        stats["nudge_attempts"] += 1
+        stats["nudge_total_dur_s"] += nudge_dur
+        if position_logger is not None:
+            position_logger.set_phase(f"nudge_{attempt}_idle")
+            position_logger.mark_event(
+                "nudge_idle",
+                attempt=attempt, idle=idle, wait_s=round(elapsed, 3),
+            )
+
+        measured_alt, cur_az_deg = _measure_altaz(cli, loc)
+        delta = _wrap_pm180(target_az_deg - cur_az_deg)
+        within = abs(delta) <= arrive_tolerance_deg
+        print(f"{tag} nudge {attempt}: measured_az={cur_az_deg:+.3f}° "
+              f"residual={delta:+.3f}° "
+              f"({'WITHIN' if within else 'OUTSIDE'} "
+              f"tol ±{arrive_tolerance_deg}°)", flush=True)
+        if within:
+            break
+    else:
+        # Exhausted all nudges without arriving.
+        stats["final_residual_deg"] = delta
+        raise RuntimeError(
+            f"{tag} could not arrive within {arrive_tolerance_deg}° after "
+            f"{_MAX_NUDGES} nudges (residual={delta:+.2f}°)"
+        )
+
+    stats["final_residual_deg"] = delta
+    return measured_alt, cur_az_deg, stats
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Auto-level a Seestar by multi-azimuth tilt fit.")
     p.add_argument("--samples", type=int, default=12,
@@ -408,6 +836,13 @@ def main() -> int:
                    help="Path to write the run log (JSON). Default: auto_level_logs/{run_id}.json")
     p.add_argument("--no-log", action="store_true",
                    help="Disable writing the run log.")
+    p.add_argument("--position-log-file", default=None,
+                   help="Path to write the position JSONL trace. Default: "
+                        "auto_level_logs/{run_id}.positions.jsonl")
+    p.add_argument("--no-position-log", action="store_true",
+                   help="Disable the background position logger.")
+    p.add_argument("--position-log-interval", type=float, default=0.5,
+                   help="Poll interval (seconds) for the background position logger.")
     p.add_argument("--replay", default=None,
                    help="Path to a previously-saved run log. Skips hardware; reruns math only.")
     p.add_argument("--reanchor", action="store_true",
@@ -438,9 +873,34 @@ def main() -> int:
         log_path = os.path.abspath(log_path)
         print(f"Logging run to: {log_path}")
 
+    # Start the background position logger (JSONL trace) unless disabled.
+    position_logger: PositionLogger | None = None
+    if not args.no_position_log:
+        position_log_path = args.position_log_file or os.path.join(
+            _here, "..", "auto_level_logs", f"{_run_id()}.positions.jsonl"
+        )
+        position_log_path = os.path.abspath(position_log_path)
+        print(f"Logging positions (JSONL) to: {position_log_path}")
+        position_logger = PositionLogger(
+            cli, loc, position_log_path,
+            poll_interval_s=args.position_log_interval,
+        )
+        position_logger.start()
+
+    try:
+        return _main_body(args, cli, loc, log_path, position_logger)
+    finally:
+        if position_logger is not None:
+            position_logger.set_phase("shutdown")
+            position_logger.stop()
+
+
+def _main_body(args, cli, loc, log_path, position_logger):
     # Put the scope into scenery (terrestrial) view mode so scope_goto moves
     # the mount without triggering the AutoGoto plate-solve routine.
     print("Entering scenery view mode...")
+    if position_logger is not None:
+        position_logger.set_phase("scenery_mode")
     ensure_scenery_mode(cli)
 
     # Decide the altitude we'll hold during rotation.
@@ -454,9 +914,9 @@ def main() -> int:
         print(f"Holding altitude {target_alt:.1f}° during rotation.")
 
     reads = args.reads_per_position
-    azimuths = planned_azimuths(args.samples)
+    azimuths = planned_azimuths(args.samples, start_deg=-180.0)
     print(f"Collecting {args.samples} positions × {reads} reads each "
-          f"(arrive within {args.arrive_tolerance}°, settle {args.settle}s)")
+          f"(settle {args.settle}s after each scope_speed_move arrival)")
 
     # Log metadata
     run_meta = {
@@ -468,82 +928,89 @@ def main() -> int:
             "reads_per_position": reads,
             "read_interval_s": args.read_interval,
             "settle_s": args.settle,
-            "arrive_tolerance_deg": args.arrive_tolerance,
-            "nudge_multiplier": args.nudge_multiplier,
-            "stall_threshold_s": args.stall_threshold,
-            "slew_timeout_s": args.slew_timeout,
+            "main_speed": _MAIN_SPEED,
+            "main_rate_degs": _MAIN_RATE_DEGS,
+            "nudge_speed": _NUDGE_SPEED,
+            "nudge_rate_degs": _NUDGE_RATE_DEGS,
             "lat": Config.init_lat,
             "long": Config.init_long,
         },
     }
     log_positions: list[dict] = []
 
+    # Initial positioning: use iscope_start_view once to land at the starting
+    # altitude, then drive pure-azimuth scope_speed_move from there. The
+    # firmware goto typically settles ~0.5° shy, so use a coarse tolerance
+    # here — step 1's move_azimuth_to will refine az to --arrive-tolerance.
+    _INITIAL_GOTO_TOL_DEG = 3.0
+    print(f"Initial goto: az={azimuths[0]:+.1f}° alt={target_alt:.1f}° "
+          f"(coarse tol {_INITIAL_GOTO_TOL_DEG}°; step 1 will refine)")
+    if position_logger is not None:
+        position_logger.set_target(azimuths[0], target_alt)
+        position_logger.set_phase("initial_goto", step=0)
+        position_logger.mark_event("initial_goto_issue",
+                                   target_az=azimuths[0], target_alt=target_alt)
+    init_ra_h, init_dec_d = issue_slew(cli, azimuths[0], target_alt, loc)
+    ok, init_dist, _ = wait_until_near_target(
+        cli,
+        target_ra_h=init_ra_h,
+        target_dec_d=init_dec_d,
+        tolerance_deg=_INITIAL_GOTO_TOL_DEG,
+        timeout=args.slew_timeout,
+        stall_threshold_s=args.stall_threshold,
+    )
+    if not ok:
+        raise RuntimeError(
+            f"Initial goto did not arrive within {_INITIAL_GOTO_TOL_DEG}° "
+            f"(last dist={init_dist})"
+        )
+    print(f"Initial goto arrived (dist={init_dist:.3f}°); settling "
+          f"{args.settle}s...", flush=True)
+    if position_logger is not None:
+        position_logger.set_phase("initial_settling", step=0)
+        position_logger.mark_event("initial_goto_arrived",
+                                   arrived_dist_deg=init_dist)
+    time.sleep(args.settle)
+    # Seed cur_az from a measurement so the first step's delta is tiny (main
+    # loop likely skipped; only the mandatory nudge fires).
+    _, cur_az_deg = _measure_altaz(cli, loc)
+    print(f"Initial arrived: measured_az={cur_az_deg:+.3f}°  "
+          f"(first target={azimuths[0]:+.2f}°)", flush=True)
+
     samples: list[AutoLevelSample] = []
+    t_run_start = time.monotonic()
     for i, az in enumerate(azimuths, start=1):
-        tag = f"[{i}/{args.samples}] az={az:6.1f}°"
-        ok = False
-        dist: float | None = None
-        attempt = 0
-        nudged = False
-        target_ra_h: float | None = None
-        target_dec_d: float | None = None
-        for attempt in range(1, args.max_slew_attempts + 1):
-            suffix = "" if attempt == 1 else f" (attempt {attempt}/{args.max_slew_attempts})"
-            print(f"{tag} slewing{suffix}...", flush=True)
-            target_ra_h, target_dec_d = issue_slew(cli, az, target_alt, loc)
-
-            def nudge(cur_dist: float) -> tuple[float, float]:
-                nonlocal nudged
-                nudged = True
-                print(f"{tag} within {args.nudge_multiplier}× tolerance "
-                      f"(dist={cur_dist:.3f}°); nudging to same target...", flush=True)
-                return issue_slew(cli, az, target_alt, loc)
-
-            ok, dist, stalled = wait_until_near_target(
-                cli,
-                target_ra_h=target_ra_h,
-                target_dec_d=target_dec_d,
-                tolerance_deg=args.arrive_tolerance,
-                timeout=args.slew_timeout,
-                stall_threshold_s=args.stall_threshold,
-                nudge_fn=nudge,
-                nudge_multiplier=args.nudge_multiplier,
-            )
-            if ok:
-                break
-            if stalled and attempt < args.max_slew_attempts:
-                dist_s = f"{dist:.3f}°" if dist is not None else "n/a"
-                print(f"{tag} stalled at dist={dist_s}; re-issuing command...", flush=True)
-                continue
-            break  # timeout without stall, or final attempt
-        if not ok:
-            dist_s = f"{dist:.3f}°" if dist is not None else "n/a"
-            raise RuntimeError(
-                f"{tag} did not reach within {args.arrive_tolerance}° "
-                f"after {attempt} attempts (last dist={dist_s})"
-            )
-        dist_s = f"{dist:.3f}°" if dist is not None else "n/a"
-        print(f"{tag} arrived (dist={dist_s}); settling {args.settle}s...", flush=True)
+        tag = f"[{i}/{args.samples}] az={az:+7.2f}°"
+        t_step_start = time.monotonic()
+        print(f"{tag} START  (cur={cur_az_deg:+.3f}°, "
+              f"delta={_wrap_pm180(az - cur_az_deg):+.3f}°, "
+              f"elapsed={t_step_start - t_run_start:.1f}s)",
+              flush=True)
+        if position_logger is not None:
+            position_logger.set_target(az, target_alt)
+            position_logger.set_phase("step_start", step=i)
+            position_logger.mark_event("step_start",
+                                       target_az=az, target_alt=target_alt,
+                                       cur_az=cur_az_deg)
+        measured_alt_deg, measured_az, move_stats = move_azimuth_to(
+            cli, target_az_deg=az, cur_az_deg=cur_az_deg, loc=loc,
+            target_alt_deg=target_alt, tag=tag,
+            arrive_tolerance_deg=args.arrive_tolerance,
+            position_logger=position_logger,
+        )
+        cur_az_deg = measured_az
+        print(f"{tag} MOVE DONE  step_time={time.monotonic() - t_step_start:.1f}s  "
+              f"main_bursts={move_stats['main_move_commands']}  "
+              f"nudges={move_stats['nudge_attempts']}  "
+              f"residual={move_stats['final_residual_deg']:+.3f}°",
+              flush=True)
+        if position_logger is not None:
+            position_logger.set_phase("settling", step=i)
+            position_logger.mark_event("move_done", **{
+                k: v for k, v in move_stats.items() if k != "final_residual_deg"
+            }, residual_deg=move_stats["final_residual_deg"])
+        print(f"{tag} SETTLING  {args.settle}s before sampling...", flush=True)
         time.sleep(args.settle)
-
-        # Read the scope's actual pointing so the fit uses measured az, not
-        # commanded. In scenery mode the mount is stopped, so a single read
-        # captures the world-frame az for the whole sampling window.
-        measured_ra_h: float | None = None
-        measured_dec_deg: float | None = None
-        measured_alt_deg: float | None = None
-        measured_az = az
-        try:
-            measured_ra_h, measured_dec_deg = current_radec(cli)
-            measured_alt_deg, meas_az_raw = radec_to_altaz(
-                measured_ra_h, measured_dec_deg, loc, Time.now(),
-            )
-            measured_az = ((meas_az_raw + 180.0) % 360.0) - 180.0
-            print(f"{tag} measured_az={measured_az:+.2f}° "
-                  f"(commanded {az:+.2f}°)", flush=True)
-        except Exception as e:
-            print(f"{tag} failed to read measured azimuth ({e}); "
-                  f"using commanded {az:.2f}°", flush=True)
 
         xs: list[float] = []
         ys: list[float] = []
@@ -552,7 +1019,10 @@ def main() -> int:
         headings: list[float] = []
         raw_reads: list[dict] = []
         sample_start_t = time.monotonic()
-        print(f"{tag} sampling", end="", flush=True)
+        if position_logger is not None:
+            position_logger.set_phase("sampling", step=i)
+        print(f"{tag} SAMPLING  {reads} reads @ {args.read_interval}s interval:",
+              end="", flush=True)
         for r in range(reads):
             if r > 0:
                 time.sleep(args.read_interval)
@@ -609,14 +1079,14 @@ def main() -> int:
             "azimuth_deg": measured_az,
             "commanded_azimuth_deg": az,
             "target_alt_deg": target_alt,
-            "target_ra_h": target_ra_h,
-            "target_dec_deg": target_dec_d,
-            "arrived_dist_deg": dist,
-            "measured_ra_h": measured_ra_h,
-            "measured_dec_deg": measured_dec_deg,
             "measured_alt_deg": measured_alt_deg,
-            "slew_attempts": attempt,
-            "nudged": nudged,
+            "residual_deg": _wrap_pm180(measured_az - az),
+            "main_move_commands": move_stats["main_move_commands"],
+            "main_move_total_dur_s": move_stats["main_move_total_dur_s"],
+            "fallback_goto_used": move_stats["fallback_goto_used"],
+            "nudge_attempts": move_stats["nudge_attempts"],
+            "nudge_total_dur_s": move_stats["nudge_total_dur_s"],
+            "final_residual_deg": move_stats["final_residual_deg"],
             "reads": raw_reads,
         })
         if log_path:
