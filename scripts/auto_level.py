@@ -14,22 +14,18 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import os
 import statistics
 import sys
-import threading
 import time
-from pathlib import Path
 
-import requests
 
 _here = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.realpath(os.path.join(_here, "..")))
 
 from astropy import units as u  # noqa: E402
-from astropy.coordinates import AltAz, EarthLocation, SkyCoord  # noqa: E402
+from astropy.coordinates import EarthLocation  # noqa: E402
 from astropy.time import Time  # noqa: E402
 
 from datetime import datetime, timezone  # noqa: E402
@@ -45,33 +41,17 @@ from device.auto_level import (  # noqa: E402
     save_run,
 )
 from device.config import Config  # noqa: E402
+from device.alpaca_client import AlpacaClient, current_radec  # noqa: E402
 from device import velocity_controller as vc  # noqa: E402
-
-# Back-compat aliases so existing code (and imports from tune_vc.py) keep
-# working after the controller moved to device.velocity_controller.
-_wrap_pm180 = vc.wrap_pm180
-_speed_move = vc.speed_move
-_wait_for_mount_idle = vc.wait_for_mount_idle
-_measure_altaz = vc.measure_altaz
-set_tracking = vc.set_tracking
-_SPEED_PER_DEG_PER_SEC = vc.SPEED_PER_DEG_PER_SEC
-_MIN_DUR_S = vc.MIN_DUR_S
-_DUR_SEC_CAP = vc.DUR_SEC_CAP
-_MAIN_SPEED = vc.MAIN_SPEED
-_MAIN_RATE_DEGS = vc.MAIN_RATE_DEGS
-_VC_KP = vc.VC_KP
-_VC_KD = vc.VC_KD
-_VC_MAX_RATE_DEGS = vc.VC_MAX_RATE_DEGS
-_VC_LOOP_DT_S = vc.VC_LOOP_DT_S
-_VC_MIN_SPEED = vc.VC_MIN_SPEED
-_VC_FINE_MIN_SPEED = vc.VC_FINE_MIN_SPEED
-_VC_FINE_THRESHOLD_FACTOR = vc.VC_FINE_THRESHOLD_FACTOR
-_VC_MAX_HALVINGS = vc.VC_MAX_HALVINGS
-_VC_STUCK_MIN_S = vc.VC_STUCK_MIN_S
-_VC_STUCK_MOVE_FRAC = vc.VC_STUCK_MOVE_FRAC
-_VC_TAU_S = vc.VC_TAU_S
-_VC_USE_PREDICTOR = vc.VC_USE_PREDICTOR
-_NUDGE_SPEED = 50  # used by legacy feedforward mover only
+from device.velocity_controller import (  # noqa: E402
+    PositionLogger,
+    ensure_scenery_mode,
+    iscope_fallback_goto,
+    issue_slew,
+    radec_to_altaz,
+    set_tracking,
+    wait_until_near_target,
+)
 
 
 def _now_iso() -> str:
@@ -80,39 +60,6 @@ def _now_iso() -> str:
 
 def _run_id() -> str:
     return datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-
-
-class AlpacaClient:
-    def __init__(self, host: str, port: int, device: int):
-        self.base = f"http://{host}:{port}/api/v1/telescope/{device}"
-        self._txn = 1000
-
-    def _txn_next(self) -> int:
-        self._txn += 1
-        return self._txn
-
-    def action(self, action_name: str, parameters: dict, timeout: float = 30.0):
-        data = {
-            "Action": action_name,
-            "Parameters": json.dumps(parameters),
-            "ClientID": 1,
-            "ClientTransactionID": self._txn_next(),
-        }
-        r = requests.put(f"{self.base}/action", data=data, timeout=timeout)
-        r.raise_for_status()
-        return r.json()
-
-    def method_sync(self, method: str, params=None):
-        payload = {"method": method}
-        if params is not None:
-            payload["params"] = params
-        resp = self.action("method_sync", payload)
-        # Alpaca wraps the RPC payload under "Value"
-        return resp.get("Value")
-
-    def get_event_state(self, event_name: str | None = None):
-        params = {"event_name": event_name} if event_name else {}
-        return self.action("get_event_state", params).get("Value")
 
 
 def read_sensors(
@@ -144,136 +91,6 @@ def read_sensors(
         float(angle) if angle is not None else None,
         heading,
     )
-
-
-def current_radec(cli: AlpacaClient) -> tuple[float, float]:
-    resp = cli.method_sync("scope_get_equ_coord")
-    result = resp["result"]
-    return float(result["ra"]), float(result["dec"])
-
-
-def radec_to_altaz(ra_h: float, dec_deg: float, loc: EarthLocation, t: Time) -> tuple[float, float]:
-    c = SkyCoord(ra=ra_h * u.hourangle, dec=dec_deg * u.deg)
-    altaz = c.transform_to(AltAz(obstime=t, location=loc))
-    return float(altaz.alt.deg), float(altaz.az.deg)
-
-
-def altaz_to_radec(alt_deg: float, az_deg: float, loc: EarthLocation, t: Time) -> tuple[float, float]:
-    altaz = SkyCoord(
-        alt=alt_deg * u.deg,
-        az=az_deg * u.deg,
-        frame=AltAz(obstime=t, location=loc),
-    )
-    icrs = altaz.icrs
-    return float(icrs.ra.hour), float(icrs.dec.deg)
-
-
-def angular_distance_deg(
-    ra1_h: float, dec1_d: float, ra2_h: float, dec2_d: float,
-) -> float:
-    """Great-circle angular distance (degrees) between two RA/Dec points.
-
-    RA in hours, Dec in degrees. Uses the spherical law of cosines, clamped
-    to guard against floating-point drift pushing |cos| slightly past 1.
-    """
-    ra1 = math.radians(ra1_h * 15.0)
-    ra2 = math.radians(ra2_h * 15.0)
-    d1 = math.radians(dec1_d)
-    d2 = math.radians(dec2_d)
-    cos_d = math.sin(d1) * math.sin(d2) + math.cos(d1) * math.cos(d2) * math.cos(ra1 - ra2)
-    cos_d = max(-1.0, min(1.0, cos_d))
-    return math.degrees(math.acos(cos_d))
-
-
-def wait_until_near_target(
-    cli: AlpacaClient,
-    target_ra_h: float,
-    target_dec_d: float,
-    tolerance_deg: float = 0.5,
-    timeout: float = 90.0,
-    poll: float = 0.3,
-    stall_threshold_s: float = 5.0,
-    stall_delta_deg: float = 0.05,
-    nudge_fn=None,
-    nudge_multiplier: float = 10.0,
-) -> tuple[bool, float | None, bool]:
-    """Poll actual RA/Dec via scope_get_equ_coord; compute distance in Python.
-
-    Returns (ok, last_dist_deg, stalled).
-
-    - `ok` is True if within `tolerance_deg` of target.
-    - `stalled` is True if the scope's reported position hasn't changed by
-      more than `stall_delta_deg` over the last `stall_threshold_s` seconds
-      (but we also aren't close to target yet) — caller should re-issue slew.
-
-    When `nudge_fn` is provided, it's called exactly once — the first time
-    the reported distance falls below `nudge_multiplier * tolerance_deg` but
-    is still above `tolerance_deg`. Firmware sometimes decelerates and stops
-    just outside tolerance; a second slew command at short range nudges it
-    the rest of the way. The callback may return a new (ra_h, dec_d) tuple
-    (because the fresh altaz→radec conversion uses a later timestamp), in
-    which case we switch our distance comparison to that new target.
-    """
-    deadline = time.time() + timeout
-    last_dist: float | None = None
-    last_move_t = time.time()
-    last_pos: tuple[float, float] | None = None
-    nudge_threshold = tolerance_deg * nudge_multiplier
-    nudged = False
-    tgt_ra, tgt_dec = target_ra_h, target_dec_d
-    while time.time() < deadline:
-        try:
-            ra, dec = current_radec(cli)
-        except Exception:
-            time.sleep(poll)
-            continue
-        dist = angular_distance_deg(ra, dec, tgt_ra, tgt_dec)
-        last_dist = dist
-        if dist <= tolerance_deg:
-            return True, dist, False
-
-        if not nudged and dist <= nudge_threshold and nudge_fn is not None:
-            nudged = True
-            new_target = nudge_fn(dist)
-            if new_target is not None:
-                tgt_ra, tgt_dec = new_target
-            # reset stall clock after the nudge — scope about to accelerate again
-            last_move_t = time.time()
-            last_pos = None
-
-        if last_pos is not None:
-            moved = angular_distance_deg(ra, dec, last_pos[0], last_pos[1])
-            if moved >= stall_delta_deg:
-                last_move_t = time.time()
-        last_pos = (ra, dec)
-        if time.time() - last_move_t > stall_threshold_s:
-            return False, dist, True
-
-        time.sleep(poll)
-    return False, last_dist, False
-
-
-def ensure_scenery_mode(cli: AlpacaClient) -> None:
-    """Enter scenery (terrestrial) view mode (no target)."""
-    cli.method_sync("iscope_start_view", {"mode": "scenery"})
-    time.sleep(1.5)
-
-
-def set_tracking(cli: AlpacaClient, enabled: bool) -> None:
-    """Enable or disable mount tracking.
-
-    When tracking is enabled the firmware re-engages after a motion
-    command completes and can drive the mount at unexpectedly high rates
-    toward a stale tracking target — observed as ~5 °/s backward drift
-    after the velocity controller issued its final stop. We disable
-    tracking for the duration of an auto-level sweep to get a clean,
-    stationary mount between samples.
-    """
-    try:
-        cli.method_sync("scope_set_track_state", enabled)
-    except Exception as e:
-        print(f"(warning: scope_set_track_state({enabled}) failed: {e})",
-              file=sys.stderr)
 
 
 class _EMA:
@@ -395,28 +212,6 @@ def live_monitor(
         print("Exited live monitor. Now open the Seestar app to calibrate the zero reference.")
 
 
-def issue_slew(
-    cli: AlpacaClient, az_deg: float, alt_deg: float, loc: EarthLocation,
-) -> tuple[float, float]:
-    """Send iscope_start_view (scenery + target). Returns the commanded RA/Dec
-    so the caller can compute distance-to-target in Python.
-
-    Uses dict-params so the app's verify-injection transform doesn't mangle
-    the payload (list-params would be wrapped as [[list], 'verify']).
-    """
-    ra_h, dec_deg = altaz_to_radec(alt_deg, az_deg, loc, Time.now())
-    cli.method_sync(
-        "iscope_start_view",
-        {
-            "mode": "scenery",
-            "target_ra_dec": [ra_h, dec_deg],
-            "target_name": f"autolevel_az{az_deg:.0f}",
-            "lp_filter": False,
-        },
-    )
-    return ra_h, dec_deg
-
-
 # Empirical constants (measured on a Seestar S50 via scope_speed_move probes).
 # Both axes scale linearly in rate vs speed up to the firmware clamp at ~1440.
 _MAIN_SPEED = 1440            # firmware-clamped max
@@ -487,478 +282,6 @@ def _measure_altaz(cli: AlpacaClient, loc: EarthLocation) -> tuple[float, float]
     ra_h, dec_deg = current_radec(cli)
     alt_deg, az_raw = radec_to_altaz(ra_h, dec_deg, loc, Time.now())
     return alt_deg, _wrap_pm180(az_raw)
-
-
-class PositionLogger:
-    """Background thread that samples mount position every `poll_interval_s`
-    and appends each sample as a JSONL record.
-
-    The main thread annotates state via `set_target(az, alt)` and
-    `set_phase(name, step=...)`; those values are copied into each poll
-    record. Also exposes `mark_event(name, **extra)` to write one-off
-    event records interleaved with the polled samples.
-
-    Alpaca exposes no subscription API for position, so this polls
-    `scope_get_equ_coord` and converts to alt/az via astropy. Polling at
-    0.5 s is safe — probed at 0.3 s without cancelling scope_speed_move.
-    """
-
-    def __init__(
-        self,
-        cli: AlpacaClient,
-        loc: EarthLocation,
-        path: str | os.PathLike,
-        poll_interval_s: float = 0.5,
-    ):
-        self.cli = cli
-        self.loc = loc
-        self.path = Path(path)
-        self.poll_interval = poll_interval_s
-        self._commanded_az: float | None = None
-        self._commanded_alt: float | None = None
-        self._phase: str = "init"
-        self._step: int | None = None
-        self._lock = threading.Lock()
-        self._stop_event = threading.Event()
-        self._thread: threading.Thread | None = None
-        self._file = None
-        self._write_lock = threading.Lock()
-
-    def start(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._file = self.path.open("a", buffering=1)  # line-buffered
-        self._write({
-            "t": _now_iso(),
-            "kind": "header",
-            "poll_interval_s": self.poll_interval,
-        })
-        self._stop_event.clear()
-        self._thread = threading.Thread(
-            target=self._run, name="PositionLogger", daemon=True,
-        )
-        self._thread.start()
-
-    def stop(self) -> None:
-        self._stop_event.set()
-        if self._thread is not None:
-            self._thread.join(timeout=3.0)
-            self._thread = None
-        if self._file is not None:
-            self._write({"t": _now_iso(), "kind": "footer"})
-            self._file.close()
-            self._file = None
-
-    def set_target(self, az_deg: float | None, alt_deg: float | None) -> None:
-        with self._lock:
-            self._commanded_az = az_deg
-            self._commanded_alt = alt_deg
-
-    def set_phase(self, phase: str, step: int | None = None) -> None:
-        with self._lock:
-            self._phase = phase
-            if step is not None:
-                self._step = step
-
-    def mark_event(self, event: str, **extra) -> None:
-        if self._file is None:
-            return
-        with self._lock:
-            snapshot = {
-                "phase": self._phase,
-                "step": self._step,
-                "commanded_az_deg": self._commanded_az,
-                "commanded_alt_deg": self._commanded_alt,
-            }
-        rec = {"t": _now_iso(), "kind": "event", "event": event, **snapshot, **extra}
-        self._write(rec)
-
-    def _write(self, rec: dict) -> None:
-        if self._file is None:
-            return
-        with self._write_lock:
-            try:
-                self._file.write(json.dumps(rec) + "\n")
-            except Exception:
-                pass
-
-    def _run(self) -> None:
-        while not self._stop_event.is_set():
-            try:
-                rec = self._sample()
-                self._write(rec)
-            except Exception as e:
-                self._write({
-                    "t": _now_iso(),
-                    "kind": "error",
-                    "error": repr(e),
-                })
-            # Event.wait returns True if set; use it as interruptible sleep.
-            if self._stop_event.wait(self.poll_interval):
-                break
-
-    def _sample(self) -> dict:
-        resp = self.cli.method_sync("scope_get_equ_coord")
-        ra = float(resp["result"]["ra"])
-        dec = float(resp["result"]["dec"])
-        aa = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg).transform_to(
-            AltAz(obstime=Time.now(), location=self.loc)
-        )
-        alt = float(aa.alt.deg)
-        az = _wrap_pm180(float(aa.az.deg))
-        with self._lock:
-            phase = self._phase
-            step = self._step
-            cmd_az = self._commanded_az
-            cmd_alt = self._commanded_alt
-        return {
-            "t": _now_iso(),
-            "kind": "sample",
-            "phase": phase,
-            "step": step,
-            "ra_h": ra,
-            "dec_deg": dec,
-            "alt_deg": alt,
-            "az_deg": az,
-            "commanded_az_deg": cmd_az,
-            "commanded_alt_deg": cmd_alt,
-        }
-
-
-# ---------------------------------------------------------------------------
-# Velocity-mode closed-loop controller
-# ---------------------------------------------------------------------------
-#
-# The firmware does not expose a true open-ended velocity command. The
-# closest thing is scope_speed_move(speed, angle, dur_sec) with dur_sec ≤ 10.
-# A new scope_speed_move supersedes the in-flight one, so we can simulate a
-# rate-controlled axis by re-issuing the command every control-loop period
-# with an updated (speed, angle). Each command carries dur_sec = 10 so if the
-# loop stalls for any reason, the motor stops on its own within 10 s.
-#
-# Empirically safe at poll_dt = 0.5 s (probed earlier, at cadences ≥ 0.3 s
-# scope_get_equ_coord does not cancel an active move).
-
-_VC_LOOP_DT_S = 0.5         # target control-loop period (real dt depends on
-                            # HTTP latency; measured ~1.0–1.5 s in practice)
-_VC_CMD_DUR_S = 10          # dur_sec on every scope_speed_move (firmware cap)
-_VC_KP = 0.3                # proportional gain (rate °/s per ° of error);
-                            # tuned down from 0.6 to damp overshoot given the
-                            # ~1.2 s measured dead time
-_VC_KD = 0.4                # derivative gain (rate °/s per (°/s measured rate));
-                            # predicts arrival at target using current velocity
-_VC_MAX_RATE_DEGS = 6.0     # clamp velocity magnitude
-_VC_MIN_SPEED = 100         # approach-floor speed. Step-response probe
-                            # shows speeds <80 are stiction-dominated:
-                            # speed=50 moved 0.03° in 8 s (expected 1.58°).
-                            # Using 100 guarantees the mount actually moves.
-_VC_FINE_MIN_SPEED = 80     # fine-finish floor (still in the reliable-motion
-                            # band; speed=80 hit 106% of predicted motion).
-_VC_FINE_THRESHOLD_FACTOR = 4.0  # use fine floor when |error| <= this × tol
-_VC_REISSUE_EVERY = 1       # always reissue each tick (prevents runaway
-                            # between infrequent updates)
-_VC_STUCK_MIN_S = 2.0       # seconds of commanded-but-not-moving to declare stuck
-_VC_STUCK_MOVE_FRAC = 0.2   # moved < this fraction of expected during interval
-_VC_MAX_HALVINGS = 4        # number of times we halve rate ceiling on stuck
-_VC_DEFAULT_TIMEOUT_S = 120 # per-move overall budget
-_VC_TAU_S = 0.8             # first-order acceleration time constant used by
-                            # the feedforward predictor. Fit from step-response
-                            # data: 0.6–1.2 s for speeds 80–700, unreliable
-                            # for ≥1000 (8 s burst insufficient). 0.8 s is a
-                            # reasonable middle-of-range default.
-_VC_USE_PREDICTOR = True    # If True, use one-step feedforward based on τ
-                            # instead of the pure PD law.
-
-
-def _rate_to_speed(rate_degs: float) -> int:
-    """Convert a desired signed rate °/s to an unsigned firmware speed unit."""
-    return int(round(abs(rate_degs) * _SPEED_PER_DEG_PER_SEC))
-
-
-def move_azimuth_to_velocity(
-    cli: AlpacaClient,
-    target_az_deg: float,
-    cur_az_deg: float,
-    loc: EarthLocation,
-    target_alt_deg: float,
-    tag: str = "",
-    arrive_tolerance_deg: float = 0.5,
-    position_logger: PositionLogger | None = None,
-    timeout_s: float = _VC_DEFAULT_TIMEOUT_S,
-    # Tuning knobs — default to module constants; override from the tuning
-    # harness (scripts/tune_vc.py) to sweep parameters without editing
-    # source.
-    kp: float = _VC_KP,
-    kd: float = _VC_KD,
-    max_rate_degs: float = _VC_MAX_RATE_DEGS,
-    loop_dt_s: float = _VC_LOOP_DT_S,
-    min_speed: int = _VC_MIN_SPEED,
-    fine_min_speed: int = _VC_FINE_MIN_SPEED,
-    fine_threshold_factor: float = _VC_FINE_THRESHOLD_FACTOR,
-    max_halvings: int = _VC_MAX_HALVINGS,
-    stuck_min_s: float = _VC_STUCK_MIN_S,
-    stuck_move_frac: float = _VC_STUCK_MOVE_FRAC,
-    use_predictor: bool = _VC_USE_PREDICTOR,
-    tau_s: float = _VC_TAU_S,
-) -> tuple[float, float, dict]:
-    """Closed-loop velocity controller for the azimuth axis.
-
-    At each 0.5 s tick:
-      1. Measure position (RA/Dec → alt/az, wrap az to [-180, +180)).
-      2. error = wrap_pm180(target - measured).
-      3. If |error| ≤ tolerance, command stop and exit (after one settling
-         tick to confirm residual).
-      4. Compute desired rate = clamp(kP * error, ±rate_ceiling).
-      5. Convert to (speed, angle) and issue scope_speed_move(…, dur_sec=10).
-
-    Each scope_speed_move supersedes the previous one, so the motor tracks
-    whatever the latest (speed, angle) says. If the loop stalls/crashes the
-    motor stops on its own after ≤ 10 s.
-
-    Stuck handling: if the mount barely moved over the last
-    _VC_STUCK_MIN_S while we were commanding motion, halve the rate
-    ceiling. Up to _VC_MAX_HALVINGS halvings, then fall back to iscope goto.
-
-    Returns (measured_alt, measured_az, stats).
-    """
-    stats = {
-        "commands_issued": 0,
-        "rate_ceiling_halvings": 0,
-        "stuck_bail": False,
-        "fallback_goto_used": False,
-        "elapsed_s": 0.0,
-        "iterations": 0,
-        "sign_flips": 0,
-        "loop_dt_mean_s": 0.0,
-        "loop_dt_max_s": 0.0,
-        "final_residual_deg": None,
-    }
-
-    rate_ceiling = max_rate_degs
-    last_speed = 0
-    last_angle = 0
-    last_az = cur_az_deg
-    last_t: float | None = None
-    last_commanded_rate = 0.0  # signed °/s we commanded last tick (for predictor)
-    last_error_sign = 0
-    loop_dts: list[float] = []
-    stuck_since_t: float | None = None
-    stuck_since_az = cur_az_deg
-
-    def _issue(speed: int, angle: int, event: str) -> None:
-        nonlocal last_speed, last_angle
-        _speed_move(cli, speed, angle, _VC_CMD_DUR_S)
-        last_speed = speed
-        last_angle = angle
-        stats["commands_issued"] += 1
-        if position_logger is not None:
-            position_logger.mark_event(
-                event, speed=speed, angle=angle, dur_sec=_VC_CMD_DUR_S,
-            )
-
-    t0 = time.monotonic()
-    fallback_reason: str | None = None
-    consecutive_within_tol = 0
-
-    if position_logger is not None:
-        position_logger.set_phase("vc_move")
-
-    while True:
-        elapsed = time.monotonic() - t0
-        stats["elapsed_s"] = elapsed
-        stats["iterations"] += 1
-        if elapsed > timeout_s:
-            fallback_reason = f"velocity loop timed out after {elapsed:.1f}s"
-            break
-
-        measured_alt, measured_az = _measure_altaz(cli, loc)
-        now = time.monotonic()
-        error = _wrap_pm180(target_az_deg - measured_az)
-
-        # Track real loop dt and signed mount velocity (°/s) for the D term.
-        if last_t is not None:
-            dt = now - last_t
-            loop_dts.append(dt)
-            signed_move = _wrap_pm180(measured_az - last_az)
-            measured_rate = signed_move / dt if dt > 0 else 0.0
-        else:
-            dt = 0.0
-            measured_rate = 0.0
-        moved_since_last = abs(_wrap_pm180(measured_az - last_az))
-        last_az = measured_az
-        last_t = now
-
-        # Count sign flips (one-way approaches don't flip; oscillation does).
-        cur_sign = 1 if error > 0 else (-1 if error < 0 else 0)
-        if cur_sign != 0 and last_error_sign != 0 and cur_sign != last_error_sign:
-            stats["sign_flips"] += 1
-        if cur_sign != 0:
-            last_error_sign = cur_sign
-
-        # Arrival test — require two consecutive in-tol ticks so we confirm
-        # the motor has actually stopped, not just crossed target.
-        if abs(error) <= arrive_tolerance_deg:
-            consecutive_within_tol += 1
-            if last_speed != 0:
-                _issue(0, 0, "vc_stop")
-            if consecutive_within_tol >= 2:
-                stats["final_residual_deg"] = error
-                if loop_dts:
-                    stats["loop_dt_mean_s"] = sum(loop_dts) / len(loop_dts)
-                    stats["loop_dt_max_s"] = max(loop_dts)
-                return measured_alt, measured_az, stats
-            time.sleep(loop_dt_s)
-            continue
-        else:
-            consecutive_within_tol = 0
-
-        # Stuck detection: if we've been commanding motion but the position
-        # has barely moved over the stuck window, reduce the rate ceiling.
-        # Use the smaller FINE floor as the threshold so fine-tune moves
-        # don't wrongly trigger a stuck halve.
-        if last_speed >= fine_min_speed:
-            if stuck_since_t is None:
-                stuck_since_t = time.monotonic()
-                stuck_since_az = measured_az
-            else:
-                window = time.monotonic() - stuck_since_t
-                window_moved = abs(_wrap_pm180(measured_az - stuck_since_az))
-                expected = (last_speed / _SPEED_PER_DEG_PER_SEC) * window
-                if window >= stuck_min_s and window_moved < max(
-                    0.3, stuck_move_frac * expected,
-                ):
-                    if stats["rate_ceiling_halvings"] < max_halvings:
-                        new_ceiling = max(
-                            min_speed / _SPEED_PER_DEG_PER_SEC,
-                            rate_ceiling / 2,
-                        )
-                        print(
-                            f"{tag} vc: stuck (moved {window_moved:.2f}° vs "
-                            f"expected ~{expected:.1f}° over {window:.1f}s); "
-                            f"halving rate ceiling {rate_ceiling:.2f} → "
-                            f"{new_ceiling:.2f}°/s",
-                            flush=True,
-                        )
-                        if position_logger is not None:
-                            position_logger.mark_event(
-                                "vc_stuck_halve",
-                                old_ceiling=rate_ceiling,
-                                new_ceiling=new_ceiling,
-                                window_moved=window_moved,
-                                window_s=round(window, 3),
-                            )
-                        rate_ceiling = new_ceiling
-                        stats["rate_ceiling_halvings"] += 1
-                        stuck_since_t = time.monotonic()
-                        stuck_since_az = measured_az
-                    else:
-                        fallback_reason = (
-                            f"velocity loop stuck at floor rate "
-                            f"{rate_ceiling:.2f}°/s "
-                            f"(moved {window_moved:.2f}° in {window:.1f}s)"
-                        )
-                        stats["stuck_bail"] = True
-                        break
-        else:
-            # Not commanding motion; reset the stuck window.
-            stuck_since_t = None
-            stuck_since_az = measured_az
-
-        if use_predictor and dt > 0 and last_t is not None:
-            # One-step feedforward: pick v_cmd so that, under the first-order
-            # plant model, position reaches `target_az_deg` at t + dt.
-            # pos(dt) = pos(0) + v_cmd·dt + (v_now − v_cmd)·τ·(1 − exp(−dt/τ))
-            # → v_cmd = (error − v_now·G) / (dt − G),  G = τ·(1 − exp(−dt/τ)).
-            #
-            # Fall back to the PD law if dt ≤ G (degenerate; happens only if
-            # τ dominates dt), since the denominator vanishes.
-            G = tau_s * (1.0 - math.exp(-dt / tau_s))
-            denom = dt - G
-            if denom > 1e-3:
-                desired_rate = (error - measured_rate * G) / denom
-            else:
-                desired_rate = kp * error - kd * measured_rate
-        else:
-            # Pure PD on the measured state — no model of motor dynamics.
-            desired_rate = kp * error - kd * measured_rate
-        desired_rate = max(-rate_ceiling, min(rate_ceiling, desired_rate))
-        new_angle = 0 if desired_rate >= 0 else 180
-
-        # Ensure we always command ≥ MIN_SPEED in the chosen direction so
-        # the motor actually moves when we want it to. Near the target we
-        # switch to a lower FINE_MIN_SPEED so we don't overshoot with a
-        # speed that's too coarse for the remaining error.
-        floor_speed = (
-            fine_min_speed
-            if abs(error) <= fine_threshold_factor * arrive_tolerance_deg
-            else min_speed
-        )
-        raw_speed = _rate_to_speed(desired_rate)
-        new_speed = max(floor_speed, raw_speed) if raw_speed > 0 else 0
-
-        # Re-issue every tick by default (_VC_REISSUE_EVERY=1). Bounds the
-        # "runaway" window to one loop dt when HTTP latency is high.
-        need_reissue = True  # always reissue to bound runaway at old rate
-        if need_reissue:
-            print(
-                f"{tag} vc iter={stats['iterations']} dt={dt:.2f}s: "
-                f"error={error:+.3f}° measured_az={measured_az:+.3f}° "
-                f"measured_rate={measured_rate:+.2f}°/s "
-                f"cmd speed={new_speed} angle={new_angle} "
-                f"(desired_rate={desired_rate:+.2f}°/s, "
-                f"ceiling={rate_ceiling:.2f})",
-                flush=True,
-            )
-            _issue(new_speed if new_speed > 0 else 0, new_angle, "vc_issue")
-            # Track signed commanded rate for the predictor next tick.
-            signed = new_speed / _SPEED_PER_DEG_PER_SEC
-            if new_speed > 0:
-                last_commanded_rate = signed if new_angle == 0 else -signed
-            else:
-                last_commanded_rate = 0.0
-
-        time.sleep(loop_dt_s)
-
-    # Populate loop-dt stats for the caller's move summary.
-    if loop_dts:
-        stats["loop_dt_mean_s"] = sum(loop_dts) / len(loop_dts)
-        stats["loop_dt_max_s"] = max(loop_dts)
-
-    # Send a final stop before fallback.
-    if last_speed != 0:
-        _issue(0, 0, "vc_stop")
-        _wait_for_mount_idle(cli, timeout_s=3.0)
-
-    # Fallback path: use firmware goto.
-    if fallback_reason is not None:
-        print(f"{tag} FALLBACK: {fallback_reason}. Using iscope_start_view.",
-              flush=True)
-        stats["fallback_goto_used"] = True
-        if position_logger is not None:
-            position_logger.set_phase("vc_fallback_goto")
-            position_logger.mark_event("vc_fallback_issue", reason=fallback_reason)
-        tgt_ra, tgt_dec = issue_slew(cli, target_az_deg, target_alt_deg, loc)
-        ok, dist, _ = wait_until_near_target(
-            cli,
-            target_ra_h=tgt_ra,
-            target_dec_d=tgt_dec,
-            tolerance_deg=_FALLBACK_GOTO_TOL_DEG,
-            timeout=_FALLBACK_GOTO_TIMEOUT_S,
-            stall_threshold_s=5.0,
-        )
-        if ok:
-            print(f"{tag} fallback: iscope arrived (dist={dist:.3f}°)",
-                  flush=True)
-        else:
-            print(f"{tag} WARNING: fallback iscope goto did not arrive "
-                  f"(last dist={dist})", flush=True)
-        measured_alt, measured_az = _measure_altaz(cli, loc)
-        stats["final_residual_deg"] = _wrap_pm180(target_az_deg - measured_az)
-        return measured_alt, measured_az, stats
-
-    # Unreachable normally (either arrived or fell back), but safety net:
-    measured_alt, measured_az = _measure_altaz(cli, loc)
-    stats["final_residual_deg"] = _wrap_pm180(target_az_deg - measured_az)
-    return measured_alt, measured_az, stats
 
 
 def move_azimuth_to(
@@ -1384,16 +707,21 @@ def _main_body(args, cli, loc, log_path, position_logger):
             position_logger.mark_event("step_start",
                                        target_az=az, target_alt=target_alt,
                                        cur_az=cur_az_deg)
-        mover = (
-            move_azimuth_to if args.control_mode == "feedforward"
-            else move_azimuth_to_velocity
-        )
-        measured_alt_deg, measured_az, move_stats = mover(
-            cli, target_az_deg=az, cur_az_deg=cur_az_deg, loc=loc,
-            target_alt_deg=target_alt, tag=tag,
-            arrive_tolerance_deg=args.arrive_tolerance,
-            position_logger=position_logger,
-        )
+        if args.control_mode == "feedforward":
+            measured_alt_deg, measured_az, move_stats = move_azimuth_to(
+                cli, target_az_deg=az, cur_az_deg=cur_az_deg, loc=loc,
+                target_alt_deg=target_alt, tag=tag,
+                arrive_tolerance_deg=args.arrive_tolerance,
+                position_logger=position_logger,
+            )
+        else:
+            measured_alt_deg, measured_az, move_stats = vc.move_azimuth_to_velocity(
+                cli, target_az_deg=az, cur_az_deg=cur_az_deg, loc=loc,
+                target_alt_deg=target_alt, tag=tag,
+                arrive_tolerance_deg=args.arrive_tolerance,
+                position_logger=position_logger,
+                fallback_goto_fn=iscope_fallback_goto,
+            )
         cur_az_deg = measured_az
         # Stats fields differ between feedforward and velocity modes; print
         # what's present.

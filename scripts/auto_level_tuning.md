@@ -179,3 +179,105 @@ could target loop-dt reduction (still 2 s) or further damping of the
 2–3° oscillation near target before final convergence.
 
 ---
+
+## Phase 1 system identification (2026-04-20, scripts/sysid.py)
+
+Dedicated sysid harness `scripts/sysid.py` with modes `step_response`,
+`deadband`, `latency`, `chirp`. Data under `auto_level_logs/sysid/`.
+Fitted via `device/plant_models.py`, reported by
+`scripts/sysid_report.py`.
+
+### Step response — fitted plant model (az axis)
+
+Training: 10 bursts across speeds 80/200/400/700/900/1000/1200/1440
+(single-burst + chain=2 at 900/1200/1440), all az-only.
+
+Best fit: **first-order lag, tau = 0.335 s, k_dc = 0.996**.
+
+| model                  | train_pos_rmse | train_rate_rmse | chirp_pos_rmse |
+|---|---:|---:|---:|
+| zero_order             |  0.902°        |  0.725 °/s      |  0.732°        |
+| first_order            |  0.650°        |  0.689 °/s      |  0.717°        |
+| first_order_ratelim    |  0.650°        |  0.689 °/s      |  0.717°        |
+| asym_first_order       |  0.650°        |  0.689 °/s      |  0.894°        |
+
+Notes:
+- Rate-limited model converged with `a_max = 10 deg/s²` (bound
+  unreached at any commanded speed in the training set) — the plant
+  is effectively first-order in the explored region.
+- Asymmetric accel/decel overfits: better train fit, worse chirp
+  holdout.
+- `tau = 0.335 s` is significantly shorter than the current
+  `VC_TAU_S = 0.8 s` in `device/velocity_controller.py`. The 0.8 s
+  default came from per-burst fits that hadn't trimmed the
+  tracking-reengagement tail. The new fit trims samples to
+  `motor_active == 1` plus one sample after, and fits on the
+  aggregate position trajectory across all bursts.
+
+### Deadband / stiction floor
+
+Ramped commanded speed from 20 to 200 at 6 s dwells per step, both
+directions. Result: the mount moves at ~100% of the linear model
+(`rate ≈ speed / 237`) at every speed tested, including speed=20:
+
+| speed | expected °/s | measured °/s (+az) | measured °/s (-az) |
+|---|---:|---:|---:|
+| 20  | 0.084 | +0.085 | -0.085 |
+| 40  | 0.169 | +0.169 | -0.169 |
+| 70  | 0.295 | +0.293 | -0.296 |
+| 80  | 0.338 | +0.339 | -0.339 |
+| 100 | 0.422 | +0.421 | -0.423 |
+| 150 | 0.633 | +0.633 | -0.632 |
+| 200 | 0.844 | +0.853 | -0.847 |
+
+(one outlier at speed=60 angle=0: measured 0.004 °/s — likely a
+post-burst readout glitch; the reverse direction moved correctly at
+speed=60 -0.252 °/s matching expected -0.253 °/s.)
+
+**Implication:** `VC_MIN_SPEED=100` / `VC_FINE_MIN_SPEED=80` are much
+too conservative. The controller can use speed=20 or lower and still
+get predictable motion. The true stiction floor is below 20 and was
+not found in this probe.
+
+### Latency (scope_speed_move RPC)
+
+12 trials, speed=500, motion threshold 0.05°, polling 0.1 s:
+
+- RPC ACK: mean 508 ms, p50 509, p90 510, max 510. **Extremely tight.**
+- Motion-onset post-ACK: mean 700 ms, p50 618, p90 1117, max 1117.
+  The 1117 ms samples are likely one extra 100 ms poll cycle — the
+  mount actually started moving earlier but the rate accumulated to
+  0.05° one sample later.
+- Total motion-onset from t_send: ~1.1-1.6 s.
+
+This is the dead time any controller must compensate for. A Smith
+predictor with a `L = 0.6 s` delay estimate and first-order plant
+(tau=0.335) is the natural baseline.
+
+### Chirp holdout
+
+60 s linear chirp `v_cmd(t) = 2.0 * sin(2π f(t) t)`, f0 = 0.05 Hz,
+f1 = 0.3 Hz, tick 0.5 s. Held out from the fit; scored with each
+fitted model. Results above. First-order model generalizes cleanly
+(train 0.65°, chirp 0.72°).
+
+### Summary for controller redesign
+
+1. Drop `VC_TAU_S` to 0.335 s. Per-speed tau table (TODO #5) was
+   probably not actually needed — the single-tau model is within
+   0.7° RMSE on the chirp.
+2. Drop the min-speed floors toward 20. Safety margin: use 40-60
+   until this is re-verified with elevation.
+3. Motion-onset dead time 0.6-0.7 s dominates. A Smith predictor
+   or MPC with explicit delay is the right next controller.
+
+### Skipped this pass
+
+- Turnaround response (reversal dynamics / backlash)
+- Speed-to-speed transitions
+- Elevation axis (hard limits need extra guards)
+
+These are follow-ups; the fitted plant model is already good enough
+to start Phase 2 controller design.
+
+---

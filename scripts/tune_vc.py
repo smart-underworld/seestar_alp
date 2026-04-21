@@ -51,24 +51,34 @@ sys.path.append(os.path.realpath(os.path.join(_here, "..")))
 
 from astropy import units as u  # noqa: E402
 from astropy.coordinates import EarthLocation  # noqa: E402
-from astropy.time import Time  # noqa: E402
 
+from datetime import datetime  # noqa: E402
+
+from device.alpaca_client import AlpacaClient  # noqa: E402
 from device.config import Config  # noqa: E402
-
-from scripts.auto_level import (  # noqa: E402
-    AlpacaClient,
-    _measure_altaz,
-    _speed_move,
-    _wait_for_mount_idle,
-    _wrap_pm180,
-    _MIN_DUR_S,
-    _SPEED_PER_DEG_PER_SEC,
+from device import velocity_controller as vc  # noqa: E402
+from device.velocity_controller import (  # noqa: E402
+    PositionLogger,
     ensure_scenery_mode,
+    iscope_fallback_goto,
     issue_slew,
-    move_azimuth_to_velocity,
-    set_tracking,
     wait_until_near_target,
 )
+
+
+def _run_id() -> str:
+    return datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+
+
+# Aliases so the rest of this file can keep its short local names.
+_wrap_pm180 = vc.wrap_pm180
+_measure_altaz = vc.measure_altaz
+_speed_move = vc.speed_move
+_wait_for_mount_idle = vc.wait_for_mount_idle
+set_tracking = vc.set_tracking
+_MIN_DUR_S = vc.MIN_DUR_S
+_SPEED_PER_DEG_PER_SEC = vc.SPEED_PER_DEG_PER_SEC
+move_azimuth_to_velocity = vc.move_azimuth_to_velocity
 
 
 class InstrumentedAlpacaClient(AlpacaClient):
@@ -170,90 +180,123 @@ def run_setpoints(cli: InstrumentedAlpacaClient, args) -> int:
     print(f"  setpoints ({len(setpoints)}): {setpoints}")
     print("=" * 78)
 
-    print("Entering scenery mode...")
-    ensure_scenery_mode(cli)
-    print("Disabling tracking...")
-    set_tracking(cli, False)
-
-    first = setpoints[0]
-    print(f"Initial goto: az={first:+.1f}° alt={args.alt:.1f}° (coarse tol 3°)")
-    init_ra, init_dec = issue_slew(cli, first, args.alt, loc)
-    ok, init_dist, _ = wait_until_near_target(
-        cli,
-        target_ra_h=init_ra,
-        target_dec_d=init_dec,
-        tolerance_deg=3.0,
-        timeout=60.0,
-        stall_threshold_s=5.0,
+    # Start background position logger so the /velocity_controller page
+    # picks up this tuning run. Writes auto_level_logs/<run_id>.positions.jsonl.
+    log_path = Path(_here).parent / "auto_level_logs" / f"{_run_id()}.positions.jsonl"
+    logger = PositionLogger(cli, loc, log_path, poll_interval_s=0.5)
+    logger.start()
+    logger.set_phase("tune_vc_setpoints_init")
+    logger.mark_event(
+        "run_start",
+        predictor="on" if args.use_predictor else "off",
+        kp=args.kp, kd=args.kd, tau=args.tau, tol=args.tol, alt=args.alt,
+        setpoints=setpoints,
     )
-    if not ok:
-        print(f"  (warning: initial goto did not reach 3° — dist={init_dist})")
-    time.sleep(1.0)
-    _, cur_az = _measure_altaz(cli, loc)
-    print(f"Initial arrived: measured_az={cur_az:+.3f}°")
-    print()
+    print(f"PositionLogger → {log_path}")
 
-    results: list[StepResult] = []
-    t_run_start = time.monotonic()
-    for i, target in enumerate(setpoints, start=1):
-        tag = f"[{i}/{len(setpoints)}] az={target:+7.2f}°"
-        delta = _wrap_pm180(target - cur_az)
-        t_step = time.monotonic()
-        print(f"{tag} START  (cur={cur_az:+.3f}°, delta={delta:+.3f}°)", flush=True)
-        try:
-            _, meas_az, stats = move_azimuth_to_velocity(
-                cli,
-                target_az_deg=target,
-                cur_az_deg=cur_az,
-                loc=loc,
-                target_alt_deg=args.alt,
-                tag=tag,
-                arrive_tolerance_deg=args.tol,
-                timeout_s=args.timeout,
-                kp=args.kp,
-                kd=args.kd,
-                max_rate_degs=args.max_rate,
-                loop_dt_s=args.loop_dt,
-                min_speed=args.min_speed,
-                fine_min_speed=args.fine_min_speed,
-                fine_threshold_factor=args.fine_thresh_factor,
-                max_halvings=args.max_halvings,
-                use_predictor=args.use_predictor,
-                tau_s=args.tau,
-            )
-        except Exception as e:
-            print(f"{tag} ERROR: {e}", file=sys.stderr)
-            return 1
-        wall = time.monotonic() - t_step
-        results.append(StepResult(
-            target=target, start_az=cur_az, end_az=meas_az,
-            residual=stats["final_residual_deg"],
-            iterations=stats["iterations"],
-            commands_issued=stats["commands_issued"],
-            sign_flips=stats["sign_flips"],
-            rate_ceiling_halvings=stats["rate_ceiling_halvings"],
-            loop_dt_mean=stats["loop_dt_mean_s"],
-            loop_dt_max=stats["loop_dt_max_s"],
-            wall_time_s=wall,
-            stuck_bail=stats["stuck_bail"],
-            fallback_goto_used=stats["fallback_goto_used"],
-        ))
-        cur_az = meas_az
-        print(
-            f"{tag} DONE  wall={wall:.1f}s  iter={stats['iterations']}  "
-            f"cmds={stats['commands_issued']}  flips={stats['sign_flips']}  "
-            f"halvings={stats['rate_ceiling_halvings']}  "
-            f"dt_mean={stats['loop_dt_mean_s']:.2f}s  "
-            f"residual={stats['final_residual_deg']:+.3f}°"
-            + ("  [FALLBACK]" if stats["fallback_goto_used"] else "")
-            + ("  [STUCK_BAIL]" if stats["stuck_bail"] else ""),
-            flush=True,
+    try:
+        print("Entering scenery mode...")
+        ensure_scenery_mode(cli)
+        print("Disabling tracking...")
+        set_tracking(cli, False)
+
+        first = setpoints[0]
+        print(f"Initial goto: az={first:+.1f}° alt={args.alt:.1f}° (coarse tol 3°)")
+        logger.set_target(first, args.alt)
+        init_ra, init_dec = issue_slew(cli, first, args.alt, loc)
+        ok, init_dist, _ = wait_until_near_target(
+            cli,
+            target_ra_h=init_ra,
+            target_dec_d=init_dec,
+            tolerance_deg=3.0,
+            timeout=60.0,
+            stall_threshold_s=5.0,
         )
-        if args.settle > 0:
-            time.sleep(args.settle)
+        if not ok:
+            print(f"  (warning: initial goto did not reach 3° — dist={init_dist})")
+        time.sleep(1.0)
+        _, cur_az = _measure_altaz(cli, loc)
+        print(f"Initial arrived: measured_az={cur_az:+.3f}°")
         print()
 
-    total_wall = time.monotonic() - t_run_start
+        results: list[StepResult] = []
+        t_run_start = time.monotonic()
+        for i, target in enumerate(setpoints, start=1):
+            tag = f"[{i}/{len(setpoints)}] az={target:+7.2f}°"
+            logger.set_phase("tune_vc_setpoint", step=i)
+            logger.set_target(target, args.alt)
+            logger.mark_event("setpoint_start", step=i, target_az=target, cur_az=cur_az)
+            delta = _wrap_pm180(target - cur_az)
+            t_step = time.monotonic()
+            print(f"{tag} START  (cur={cur_az:+.3f}°, delta={delta:+.3f}°)", flush=True)
+            try:
+                _, meas_az, stats = move_azimuth_to_velocity(
+                    cli,
+                    target_az_deg=target,
+                    cur_az_deg=cur_az,
+                    loc=loc,
+                    target_alt_deg=args.alt,
+                    tag=tag,
+                    arrive_tolerance_deg=args.tol,
+                    position_logger=logger,
+                    timeout_s=args.timeout,
+                    kp=args.kp,
+                    kd=args.kd,
+                    max_rate_degs=args.max_rate,
+                    loop_dt_s=args.loop_dt,
+                    min_speed=args.min_speed,
+                    fine_min_speed=args.fine_min_speed,
+                    fine_threshold_factor=args.fine_thresh_factor,
+                    max_halvings=args.max_halvings,
+                    use_predictor=args.use_predictor,
+                    tau_s=args.tau,
+                    fallback_goto_fn=iscope_fallback_goto,
+                )
+            except Exception as e:
+                print(f"{tag} ERROR: {e}", file=sys.stderr)
+                logger.mark_event("setpoint_error", step=i, error=repr(e))
+                return 1
+            wall = time.monotonic() - t_step
+            results.append(StepResult(
+                target=target, start_az=cur_az, end_az=meas_az,
+                residual=stats["final_residual_deg"],
+                iterations=stats["iterations"],
+                commands_issued=stats["commands_issued"],
+                sign_flips=stats["sign_flips"],
+                rate_ceiling_halvings=stats["rate_ceiling_halvings"],
+                loop_dt_mean=stats["loop_dt_mean_s"],
+                loop_dt_max=stats["loop_dt_max_s"],
+                wall_time_s=wall,
+                stuck_bail=stats["stuck_bail"],
+                fallback_goto_used=stats["fallback_goto_used"],
+            ))
+            cur_az = meas_az
+            logger.mark_event(
+                "setpoint_done", step=i, target_az=target, meas_az=meas_az,
+                residual=stats["final_residual_deg"],
+                iterations=stats["iterations"],
+                wall_s=wall,
+                fallback_goto_used=stats["fallback_goto_used"],
+            )
+            print(
+                f"{tag} DONE  wall={wall:.1f}s  iter={stats['iterations']}  "
+                f"cmds={stats['commands_issued']}  flips={stats['sign_flips']}  "
+                f"halvings={stats['rate_ceiling_halvings']}  "
+                f"dt_mean={stats['loop_dt_mean_s']:.2f}s  "
+                f"residual={stats['final_residual_deg']:+.3f}°"
+                + ("  [FALLBACK]" if stats["fallback_goto_used"] else "")
+                + ("  [STUCK_BAIL]" if stats["stuck_bail"] else ""),
+                flush=True,
+            )
+            if args.settle > 0:
+                time.sleep(args.settle)
+            print()
+
+        total_wall = time.monotonic() - t_run_start
+        logger.set_phase("tune_vc_setpoints_done")
+        logger.mark_event("run_end", total_wall_s=total_wall, steps=len(results))
+    finally:
+        logger.stop()
 
     print("=" * 78)
     print("SUMMARY")

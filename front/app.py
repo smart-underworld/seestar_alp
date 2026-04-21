@@ -4065,7 +4065,7 @@ class StatsResource:
 # ---------------------------------------------------------------------------
 # Velocity-controller live-status page
 #
-# Reads JSONL position logs written by scripts/auto_level.py's PositionLogger
+# Reads JSONL position logs written by device.velocity_controller.PositionLogger
 # and exposes them as chart-friendly JSON. Lets the user watch the velocity
 # controller's az/error/rate/commanded-speed traces live while iterating on
 # tuning knobs. Per-telescope-id route so the URL matches the rest of the

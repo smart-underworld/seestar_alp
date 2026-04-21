@@ -28,8 +28,13 @@ that produced the calibration constants in this module.
 
 from __future__ import annotations
 
+import json
 import math
+import os
+import threading
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 from astropy import units as u
@@ -91,6 +96,29 @@ def wrap_pm180(deg: float) -> float:
     modulo on [0, 360).
     """
     return ((deg + 180.0) % 360.0) - 180.0
+
+
+def unwrap_az_series(wrapped_samples: list[float]) -> list[float]:
+    """Given an azimuth sample series wrapped to [-180, +180), return an
+    unwrapped cumulative series suitable for fitting.
+
+    Each per-step delta is interpreted modulo 360 via wrap_pm180: if two
+    adjacent wrapped samples differ by more than 180, the true motion is
+    assumed to be the shorter path (< 180). This is safe as long as the
+    true per-sample delta is bounded below ±180 — at the S50's 6°/s
+    firmware cap and sample intervals up to 30 s the implicit bound is
+    ~180° per 30 s, which the caller must respect.
+
+    The first element is returned as-is; subsequent elements accumulate
+    wrap_pm180(sample[i] - sample[i-1]).
+    """
+    if not wrapped_samples:
+        return []
+    out = [wrapped_samples[0]]
+    for i in range(1, len(wrapped_samples)):
+        d = wrap_pm180(wrapped_samples[i] - wrapped_samples[i - 1])
+        out.append(out[-1] + d)
+    return out
 
 
 def _rate_to_speed(rate_degs: float) -> int:
@@ -402,3 +430,328 @@ def move_azimuth_to_velocity(
     measured_alt, measured_az = measure_altaz(cli, loc)
     stats["final_residual_deg"] = wrap_pm180(target_az_deg - measured_az)
     return measured_alt, measured_az, stats
+
+
+# ---------------------------------------------------------------------------
+# Astropy coordinate helpers (shared by iscope-goto fallback, the
+# position logger, and any CLI that wants to convert between frames).
+# ---------------------------------------------------------------------------
+
+def radec_to_altaz(
+    ra_h: float, dec_deg: float, loc: EarthLocation, t: Time,
+) -> tuple[float, float]:
+    c = SkyCoord(ra=ra_h * u.hourangle, dec=dec_deg * u.deg)
+    altaz = c.transform_to(AltAz(obstime=t, location=loc))
+    return float(altaz.alt.deg), float(altaz.az.deg)
+
+
+def altaz_to_radec(
+    alt_deg: float, az_deg: float, loc: EarthLocation, t: Time,
+) -> tuple[float, float]:
+    altaz = SkyCoord(
+        alt=alt_deg * u.deg,
+        az=az_deg * u.deg,
+        frame=AltAz(obstime=t, location=loc),
+    )
+    icrs = altaz.icrs
+    return float(icrs.ra.hour), float(icrs.dec.deg)
+
+
+def angular_distance_deg(
+    ra1_h: float, dec1_d: float, ra2_h: float, dec2_d: float,
+) -> float:
+    """Great-circle angular distance (degrees) between two RA/Dec points.
+
+    RA in hours, Dec in degrees. Uses the spherical law of cosines, clamped
+    to guard against floating-point drift pushing |cos| slightly past 1.
+    """
+    ra1 = math.radians(ra1_h * 15.0)
+    ra2 = math.radians(ra2_h * 15.0)
+    d1 = math.radians(dec1_d)
+    d2 = math.radians(dec2_d)
+    cos_d = (
+        math.sin(d1) * math.sin(d2)
+        + math.cos(d1) * math.cos(d2) * math.cos(ra1 - ra2)
+    )
+    cos_d = max(-1.0, min(1.0, cos_d))
+    return math.degrees(math.acos(cos_d))
+
+
+# ---------------------------------------------------------------------------
+# Iscope (firmware goto) helpers — used for initial positioning and as the
+# fallback path when the velocity loop times out or gets stuck.
+# ---------------------------------------------------------------------------
+
+def ensure_scenery_mode(cli: MountClient) -> None:
+    """Enter scenery (terrestrial) view mode (no target)."""
+    cli.method_sync("iscope_start_view", {"mode": "scenery"})
+    time.sleep(1.5)
+
+
+def issue_slew(
+    cli: MountClient, az_deg: float, alt_deg: float, loc: EarthLocation,
+) -> tuple[float, float]:
+    """Send iscope_start_view (scenery + target). Returns the commanded RA/Dec
+    so the caller can compute distance-to-target in Python.
+
+    Uses dict-params so the app's verify-injection transform doesn't mangle
+    the payload (list-params would be wrapped as [[list], 'verify']).
+    """
+    ra_h, dec_deg = altaz_to_radec(alt_deg, az_deg, loc, Time.now())
+    cli.method_sync(
+        "iscope_start_view",
+        {
+            "mode": "scenery",
+            "target_ra_dec": [ra_h, dec_deg],
+            "target_name": f"autolevel_az{az_deg:.0f}",
+            "lp_filter": False,
+        },
+    )
+    return ra_h, dec_deg
+
+
+def wait_until_near_target(
+    cli: MountClient,
+    target_ra_h: float,
+    target_dec_d: float,
+    tolerance_deg: float = 0.5,
+    timeout: float = 90.0,
+    poll: float = 0.3,
+    stall_threshold_s: float = 5.0,
+    stall_delta_deg: float = 0.05,
+    nudge_fn: Optional[Callable[[float], Optional[tuple[float, float]]]] = None,
+    nudge_multiplier: float = 10.0,
+) -> tuple[bool, Optional[float], bool]:
+    """Poll actual RA/Dec via scope_get_equ_coord; compute distance in Python.
+
+    Returns (ok, last_dist_deg, stalled).
+
+    - `ok` is True if within `tolerance_deg` of target.
+    - `stalled` is True if the scope's reported position hasn't changed by
+      more than `stall_delta_deg` over the last `stall_threshold_s` seconds
+      (but we also aren't close to target yet) — caller should re-issue slew.
+
+    When `nudge_fn` is provided, it's called exactly once — the first time
+    the reported distance falls below `nudge_multiplier * tolerance_deg` but
+    is still above `tolerance_deg`. Firmware sometimes decelerates and stops
+    just outside tolerance; a second slew command at short range nudges it
+    the rest of the way. The callback may return a new (ra_h, dec_d) tuple
+    (because the fresh altaz→radec conversion uses a later timestamp), in
+    which case we switch our distance comparison to that new target.
+    """
+    deadline = time.time() + timeout
+    last_dist: Optional[float] = None
+    last_move_t = time.time()
+    last_pos: Optional[tuple[float, float]] = None
+    nudge_threshold = tolerance_deg * nudge_multiplier
+    nudged = False
+    tgt_ra, tgt_dec = target_ra_h, target_dec_d
+    while time.time() < deadline:
+        try:
+            resp = cli.method_sync("scope_get_equ_coord")
+            ra = float(resp["result"]["ra"])
+            dec = float(resp["result"]["dec"])
+        except Exception:
+            time.sleep(poll)
+            continue
+        dist = angular_distance_deg(ra, dec, tgt_ra, tgt_dec)
+        last_dist = dist
+        if dist <= tolerance_deg:
+            return True, dist, False
+
+        if not nudged and dist <= nudge_threshold and nudge_fn is not None:
+            nudged = True
+            new_target = nudge_fn(dist)
+            if new_target is not None:
+                tgt_ra, tgt_dec = new_target
+            # reset stall clock after the nudge — scope about to accelerate again
+            last_move_t = time.time()
+            last_pos = None
+
+        if last_pos is not None:
+            moved = angular_distance_deg(ra, dec, last_pos[0], last_pos[1])
+            if moved >= stall_delta_deg:
+                last_move_t = time.time()
+        last_pos = (ra, dec)
+        if time.time() - last_move_t > stall_threshold_s:
+            return False, dist, True
+
+        time.sleep(poll)
+    return False, last_dist, False
+
+
+_FALLBACK_GOTO_TOL_DEG = 3.0
+_FALLBACK_GOTO_TIMEOUT_S = 60
+
+
+def iscope_fallback_goto(
+    cli: MountClient,
+    target_az_deg: float,
+    target_alt_deg: float,
+    loc: EarthLocation,
+) -> bool:
+    """Standard iscope-goto fallback for the velocity loop.
+
+    Matches `FallbackGotoFn` — pass it directly as `fallback_goto_fn=` to
+    `move_azimuth_to_velocity`. Uses the default 3°/60 s tolerance.
+    """
+    tgt_ra, tgt_dec = issue_slew(cli, target_az_deg, target_alt_deg, loc)
+    ok, _dist, _ = wait_until_near_target(
+        cli,
+        target_ra_h=tgt_ra,
+        target_dec_d=tgt_dec,
+        tolerance_deg=_FALLBACK_GOTO_TOL_DEG,
+        timeout=_FALLBACK_GOTO_TIMEOUT_S,
+        stall_threshold_s=5.0,
+    )
+    return bool(ok)
+
+
+# ---------------------------------------------------------------------------
+# Position logger — background thread that samples mount position to a
+# JSONL file so tuning runs can be visualized on the /velocity_controller
+# page. Annotated via set_target / set_phase / mark_event from the main
+# thread.
+# ---------------------------------------------------------------------------
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+class PositionLogger:
+    """Background thread that samples mount position every `poll_interval_s`
+    and appends each sample as a JSONL record.
+
+    The main thread annotates state via `set_target(az, alt)` and
+    `set_phase(name, step=...)`; those values are copied into each poll
+    record. Also exposes `mark_event(name, **extra)` to write one-off
+    event records interleaved with the polled samples.
+
+    Alpaca exposes no subscription API for position, so this polls
+    `scope_get_equ_coord` and converts to alt/az via astropy. Polling at
+    0.5 s is safe — probed at 0.3 s without cancelling scope_speed_move.
+    """
+
+    def __init__(
+        self,
+        cli: MountClient,
+        loc: EarthLocation,
+        path: str | os.PathLike,
+        poll_interval_s: float = 0.5,
+    ):
+        self.cli = cli
+        self.loc = loc
+        self.path = Path(path)
+        self.poll_interval = poll_interval_s
+        self._commanded_az: Optional[float] = None
+        self._commanded_alt: Optional[float] = None
+        self._phase: str = "init"
+        self._step: Optional[int] = None
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._file = None
+        self._write_lock = threading.Lock()
+
+    def start(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._file = self.path.open("a", buffering=1)  # line-buffered
+        self._write({
+            "t": _now_iso(),
+            "kind": "header",
+            "poll_interval_s": self.poll_interval,
+        })
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._run, name="PositionLogger", daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=3.0)
+            self._thread = None
+        if self._file is not None:
+            self._write({"t": _now_iso(), "kind": "footer"})
+            self._file.close()
+            self._file = None
+
+    def set_target(
+        self, az_deg: Optional[float], alt_deg: Optional[float],
+    ) -> None:
+        with self._lock:
+            self._commanded_az = az_deg
+            self._commanded_alt = alt_deg
+
+    def set_phase(self, phase: str, step: Optional[int] = None) -> None:
+        with self._lock:
+            self._phase = phase
+            if step is not None:
+                self._step = step
+
+    def mark_event(self, event: str, **extra) -> None:
+        if self._file is None:
+            return
+        with self._lock:
+            snapshot = {
+                "phase": self._phase,
+                "step": self._step,
+                "commanded_az_deg": self._commanded_az,
+                "commanded_alt_deg": self._commanded_alt,
+            }
+        rec = {
+            "t": _now_iso(), "kind": "event", "event": event,
+            **snapshot, **extra,
+        }
+        self._write(rec)
+
+    def _write(self, rec: dict) -> None:
+        if self._file is None:
+            return
+        with self._write_lock:
+            try:
+                self._file.write(json.dumps(rec) + "\n")
+            except Exception:
+                pass
+
+    def _run(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                rec = self._sample()
+                self._write(rec)
+            except Exception as e:
+                self._write({
+                    "t": _now_iso(),
+                    "kind": "error",
+                    "error": repr(e),
+                })
+            if self._stop_event.wait(self.poll_interval):
+                break
+
+    def _sample(self) -> dict:
+        resp = self.cli.method_sync("scope_get_equ_coord")
+        ra = float(resp["result"]["ra"])
+        dec = float(resp["result"]["dec"])
+        aa = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg).transform_to(
+            AltAz(obstime=Time.now(), location=self.loc)
+        )
+        alt = float(aa.alt.deg)
+        az = wrap_pm180(float(aa.az.deg))
+        with self._lock:
+            phase = self._phase
+            step = self._step
+            cmd_az = self._commanded_az
+            cmd_alt = self._commanded_alt
+        return {
+            "t": _now_iso(),
+            "kind": "sample",
+            "phase": phase,
+            "step": step,
+            "ra_h": ra,
+            "dec_deg": dec,
+            "alt_deg": alt,
+            "az_deg": az,
+            "commanded_az_deg": cmd_az,
+            "commanded_alt_deg": cmd_alt,
+        }
