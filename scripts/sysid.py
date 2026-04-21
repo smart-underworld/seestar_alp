@@ -648,11 +648,12 @@ def run_speed_transition(cli: TimedAlpacaClient, args) -> int:
             _, az_i, fw_t_i = measure_altaz_timed(cli, loc)
             t_i = time.monotonic()
             all_samples.append((t_i - t_ack_B, fw_t_i, az_i))
-            # For rate computation: find the oldest sample whose fw_t is
-            # at least min_window_s before the latest.
+            # For rate-change detection: find the oldest sample at least
+            # min_window_s before the latest. DON'T break on first
+            # detection -- we want the full trajectory to see whether the
+            # plant decelerates through zero or transitions smoothly.
             if len(all_samples) >= 2 and t_change_host is None:
                 latest = all_samples[-1]
-                # Walk backward to find first sample old enough
                 for j in range(len(all_samples) - 2, -1, -1):
                     older = all_samples[j]
                     if older[1] is not None and latest[1] is not None:
@@ -666,8 +667,6 @@ def run_speed_transition(cli: TimedAlpacaClient, args) -> int:
                             t_change_host = t_i
                             fw_t_change = fw_t_i
                         break
-                if t_change_host is not None:
-                    break
         samples = all_samples
 
         # Let B continue to steady state for remaining hold time, then stop.

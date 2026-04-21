@@ -369,30 +369,58 @@ the mount was stationary at A, so those are effectively cold-start
 (A=0 → B) transitions. Excluding them, the 5 genuinely-warm
 transitions (3, 5, 6, 7, 8) average **1343 ms, median 1358 ms**.
 
-**Surprising finding: warm transitions are ~2× slower than cold
-(1.35 s vs 0.62 s), not faster.** Most likely explanation: the
-firmware decelerates from A to zero and then re-ramps to B, rather
-than smoothly transitioning. That's a full decel + ramp cycle for
-every command update, regardless of magnitude.
+**Initial interpretation WAS WRONG, corrected after raw-trace
+analysis.** The 1.3 s "latency" is detection lag of the sampling
+scheme (poll_dt 0.3 s + rate-window 0.3 s + waiting for rate to
+cross threshold, all at once = first observable rate is ~4τ into
+the response where the response is already 98% complete).
 
-**Implication for Phase 2 Smith predictor:** use `dead_time_s =
-1.3 s` for the running controller (almost every command is a warm
-transition from a nonzero rate). The 0.62 s cold figure applies
-only to the first command after rest. Subtract the ~0.15 s
-threshold-detection overhead from the 1.35 s number gives an
-effective ramp delay of ~1.2 s.
+Follow-up run with full-trace logging (speed_transition_2026-04-20
+T23-59-07.jsonl) showed each warm transition is essentially
+complete by the first observable sample (~1.5 s from ACK). The
+rate trace matches pure first-order τ=0.348 s with no extra dead
+time. No sign of decel-through-zero:
 
-**Implication for planner (Phase 2.0):** with a 1.3 s dead time, the
-trajectory can't really be updated faster than ~0.8 Hz and still
-have commands take effect before the next update. This is a much
-heavier argument for commanding a feasible trajectory open-loop
-(FF / MPC) than chasing feedback. Confirms the Phase 2 priority
-ordering.
+| pair | 1st observed rate @ t | τ-model prediction |
+|---|---|---|
+| 1000→500 (t=1.25)  | -2.12 (100%) | -2.11 |
+| 1440→500 (t=1.62)  | +2.09 (100%) | +2.12 |
+| 500→1000 (t=1.49)  | -4.15 ( 99%) | -4.19 |
+| 500→1440 (t=1.51)  | +5.52 ( 91%) | +6.03 |
+| 500→1440 (t=2.19)  | +6.09 (100%) | +6.08 |
 
-**Also confirms the Run 7 regression root cause.** The PD loop
-issues commands every ~0.85 s post-proxy-fix. With 1.3 s effective
-dead time, the controller issues ~1.5 commands per actual plant
-response cycle — textbook over-commanding, exactly the oscillation
-we saw.
+**Corrected finding: warm transitions have ≈ 0 pure dead time
+(just the τ=0.348 s first-order ramp).** Cold start
+(0 → anything) retains ~0.5 s pure delay before the ramp (firmware
+initializes motion from rest; not needed for between-nonzero
+transitions).
+
+Decomposing cold-start motion-onset 0.62 s:
+- Position threshold 0.05° reached under pure first-order from
+  rest (L=0) at t ≈ sqrt(0.05 × 2τ / r_ss). For r_ss = 2.11,
+  τ = 0.348: t ≈ 0.13 s.
+- Observed motion-onset: 0.62 s.
+- Pure dead time L_cold ≈ 0.62 − 0.13 = **0.49 s**.
+
+**Implications for Phase 2:**
+
+- **Smith predictor is largely unnecessary for the running
+  controller.** Warm transitions already match our first-order
+  model with zero delay; there's nothing to Smith-compensate for.
+  Pure feedforward (2.1) using the trajectory planner and τ model
+  is the cleanest design.
+- **Cold-start delay (0.5 s) matters only for the first command
+  after rest.** Handle via a one-shot pre-command (issue a small
+  step before the real trajectory start).
+- **Run 7 regression root cause is NOT dead-time aliasing** (my
+  earlier claim was wrong). Most likely the existing PD gains
+  `kP=0.3, kD=0.4` are effectively doubled in bandwidth when tick
+  drops from 1.5 s to 0.85 s; a PD tuned at the original tick is
+  over-aggressive at the new one. Unrelated to the plant.
+- The 0.3 s / 0.3 s poll/window combo is **too slow to resolve
+  sub-second dynamics**. Any future sysid mode that wants to see
+  the ramp shape itself needs smaller polling AND a faster
+  rate-window — which means reducing the 0.3 s safety poll floor
+  or using a different measurement mechanism.
 
 ---
