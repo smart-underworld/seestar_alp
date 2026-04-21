@@ -483,6 +483,321 @@ def move_azimuth_to_velocity(
 
 
 # ---------------------------------------------------------------------------
+# Pure feedforward controller (Phase 2.1)
+# ---------------------------------------------------------------------------
+
+
+def move_azimuth_to_ff(
+    cli: MountClient,
+    target_az_deg: float,
+    cur_az_deg: float,
+    loc: EarthLocation,
+    target_alt_deg: float,
+    tag: str = "",
+    position_logger: Any = None,
+    v_max: float = MAIN_RATE_DEGS,
+    a_max: float = 10.0,
+    tick_dt: float = 0.5,
+    settle_s: float = 1.5,
+    fallback_residual_deg: float = 2.0,
+    fallback_goto_fn: Optional[FallbackGotoFn] = None,
+) -> tuple[float, float, dict]:
+    """Pure-feedforward azimuth mover: commands v_cmd(t) from a trapezoidal
+    velocity profile, no closed-loop position feedback.
+
+    Plant model: first-order lag with tau = VC_TAU_S (~0.348 s), k_dc ≈ 1.
+    Phase 1 + Checkpoint B showed warm transitions have ~0 pure dead time;
+    cold-start has ~0.5 s dead time before the tau ramp. This mover
+    accepts the cold-start lag (the trajectory's accel phase spans many
+    tau) and relies on the trajectory's symmetric end-decel + `settle_s`
+    to let the plant catch up before the final position read.
+
+    Args:
+        v_max, a_max: trajectory planner limits (defaults from Phase 1).
+        tick_dt: command-issue interval (s).
+        settle_s: delay after the last commanded zero before reading
+            final position. Default 1.5 s covers ~4 tau of first-order
+            settling plus HTTP poll wiggle.
+        fallback_residual_deg: if final |residual| exceeds this and
+            fallback_goto_fn is provided, invoke iscope fallback.
+
+    Returns (measured_alt, measured_az, stats).
+    """
+    # Import here to avoid circular imports (trajectory depends on vc).
+    from device.trajectory import trapezoidal_profile
+
+    stats = {
+        "controller": "ff",
+        "trajectory_duration_s": 0.0,
+        "commands_issued": 0,
+        "ticks": 0,
+        "tick_dt_mean_s": 0.0,
+        "tick_dt_max_s": 0.0,
+        "final_residual_deg": None,
+        "max_tracking_err_deg": 0.0,
+        "mean_tracking_err_deg": 0.0,
+        "fallback_goto_used": False,
+        "wall_time_s": 0.0,
+        # Compat keys for StepResult harness (shared with PD/velocity mode)
+        "iterations": 0,
+        "sign_flips": 0,
+        "rate_ceiling_halvings": 0,
+        "loop_dt_mean_s": 0.0,
+        "loop_dt_max_s": 0.0,
+        "stuck_bail": False,
+    }
+
+    traj = trapezoidal_profile(
+        p0=cur_az_deg, v0=0.0, p_target=target_az_deg,
+        v_max=v_max, a_max=a_max, tick_dt=tick_dt,
+    )
+    stats["trajectory_duration_s"] = traj.total_duration
+
+    if traj.total_duration == 0.0:
+        # Already at target; just measure and return.
+        measured_alt, measured_az = measure_altaz(cli, loc)
+        stats["final_residual_deg"] = wrap_pm180(target_az_deg - measured_az)
+        return measured_alt, measured_az, stats
+
+    if position_logger is not None:
+        position_logger.set_phase("ff_move")
+        position_logger.mark_event(
+            "ff_start",
+            target_az=target_az_deg, cur_az=cur_az_deg,
+            traj_duration_s=traj.total_duration,
+            v_max=v_max, a_max=a_max, tick_dt=tick_dt,
+        )
+
+    t_wall_start = time.monotonic()
+    tick_dts: list[float] = []
+    tracking_errs: list[float] = []
+    prev_tick_t = t_wall_start
+    tick_idx = 0
+
+    # Execute the trajectory by issuing speed_move at each tick.
+    while True:
+        now = time.monotonic()
+        t_rel = now - t_wall_start
+
+        # Reference from trajectory at wall time t_rel.
+        ref = traj.sample(t_rel)
+        ref_vel = ref.vel
+
+        # Convert to firmware (speed, angle).
+        if abs(ref_vel) < 1e-6:
+            speed_cmd = 0
+            angle_cmd = 0
+        else:
+            speed_cmd = _rate_to_speed(ref_vel)
+            # Clamp to stiction floor (below this the firmware ignores;
+            # from Phase 1 the floor is < 20 but we use the controller's
+            # VC_FINE_MIN_SPEED as a safety margin).
+            if speed_cmd < VC_FINE_MIN_SPEED:
+                speed_cmd = 0
+            angle_cmd = 0 if ref_vel > 0 else 180
+
+        # Issue.
+        speed_move(cli, speed_cmd, angle_cmd, VC_CMD_DUR_S)
+        stats["commands_issued"] += 1
+
+        # Passive position sample for the log + tracking stats.
+        _, measured_az, fw_t = measure_altaz_timed(cli, loc)
+        tracking_err = abs(wrap_pm180(ref.pos - measured_az))
+        tracking_errs.append(tracking_err)
+
+        if position_logger is not None:
+            position_logger.mark_event(
+                "ff_tick",
+                t_rel=t_rel, fw_t=fw_t,
+                ref_pos=ref.pos, ref_vel=ref_vel, ref_acc=ref.acc,
+                meas_az=measured_az, tracking_err_deg=tracking_err,
+                cmd_speed=speed_cmd, cmd_angle=angle_cmd,
+            )
+
+        tick_dts.append(now - prev_tick_t)
+        prev_tick_t = now
+        tick_idx += 1
+
+        # Terminate when trajectory complete + settle.
+        if t_rel >= traj.total_duration:
+            break
+
+        # Deadline-based sleep to next tick.
+        next_tick_t = t_wall_start + tick_idx * tick_dt
+        sleep_dt = next_tick_t - time.monotonic()
+        if sleep_dt > 0:
+            time.sleep(sleep_dt)
+
+    # Trajectory is complete — issue stop, wait for idle, settle, measure.
+    speed_move(cli, 0, 0, 1)
+    stats["commands_issued"] += 1
+    wait_for_mount_idle(cli, timeout_s=3.0)
+    if settle_s > 0:
+        time.sleep(settle_s)
+
+    measured_alt, measured_az = measure_altaz(cli, loc)
+    stats["final_residual_deg"] = wrap_pm180(target_az_deg - measured_az)
+    stats["ticks"] = tick_idx
+    stats["iterations"] = tick_idx  # compat
+    if tick_dts:
+        # Drop the first (zero-referenced) entry if present.
+        reals = tick_dts[1:] if len(tick_dts) > 1 else tick_dts
+        stats["tick_dt_mean_s"] = sum(reals) / len(reals)
+        stats["tick_dt_max_s"] = max(reals)
+        stats["loop_dt_mean_s"] = stats["tick_dt_mean_s"]  # compat
+        stats["loop_dt_max_s"] = stats["tick_dt_max_s"]    # compat
+    if tracking_errs:
+        stats["max_tracking_err_deg"] = max(tracking_errs)
+        stats["mean_tracking_err_deg"] = sum(tracking_errs) / len(tracking_errs)
+    stats["wall_time_s"] = time.monotonic() - t_wall_start
+
+    if position_logger is not None:
+        position_logger.mark_event(
+            "ff_done",
+            final_residual_deg=stats["final_residual_deg"],
+            max_tracking_err_deg=stats["max_tracking_err_deg"],
+            ticks=tick_idx,
+        )
+
+    # Fallback on large residual.
+    if (
+        fallback_goto_fn is not None
+        and stats["final_residual_deg"] is not None
+        and abs(stats["final_residual_deg"]) > fallback_residual_deg
+    ):
+        print(f"{tag} FF: final residual "
+              f"{stats['final_residual_deg']:+.3f}° exceeds "
+              f"{fallback_residual_deg}° — falling back to iscope", flush=True)
+        stats["fallback_goto_used"] = True
+        if position_logger is not None:
+            position_logger.set_phase("ff_fallback_goto")
+            position_logger.mark_event("ff_fallback_issue")
+        ok = bool(fallback_goto_fn(cli, target_az_deg, target_alt_deg, loc))
+        if ok:
+            print(f"{tag} FF: fallback iscope arrived", flush=True)
+        measured_alt, measured_az = measure_altaz(cli, loc)
+        stats["final_residual_deg"] = wrap_pm180(target_az_deg - measured_az)
+
+    return measured_alt, measured_az, stats
+
+
+def move_azimuth_to_with_correction(
+    cli: MountClient,
+    target_az_deg: float,
+    cur_az_deg: float,
+    loc: EarthLocation,
+    target_alt_deg: float,
+    tag: str = "",
+    position_logger: Any = None,
+    arrive_tolerance_deg: float = 0.3,
+    max_corrections: int = 3,
+    nudge_speed: int = VC_FINE_MIN_SPEED,
+    v_max: float = MAIN_RATE_DEGS,
+    a_max: float = 10.0,
+    tick_dt: float = 0.5,
+    settle_s: float = 1.5,
+    fallback_residual_deg: float = 2.0,
+    fallback_goto_fn: Optional[FallbackGotoFn] = None,
+) -> tuple[float, float, dict]:
+    """FF main move + post-move slow-speed nudge loop to close residual.
+
+    Architecture:
+      1. `move_azimuth_to_ff` executes the main trajectory (pure open-loop).
+      2. Measure residual.
+      3. Up to `max_corrections` nudges at `nudge_speed` (default
+         VC_FINE_MIN_SPEED) close any remaining drift / gain / stiction
+         error.
+      4. If residual still > fallback_residual_deg, invoke fallback.
+
+    Each nudge is a single scope_speed_move at `nudge_speed` for duration
+    `|residual| / nudge_rate`, clamped to [MIN_DUR_S, 10]. At the
+    Phase-1-calibrated nudge rate (speed=20 → 0.085 °/s), a 5 s nudge
+    covers 0.42°; three nudges reliably close residuals < ~1.5° even
+    with some quantization.
+
+    Does NOT do high-frequency in-motion feedback. For that future work
+    (streaming continuous trajectories for dynamic-target tracking),
+    the pattern will be a low-bandwidth bias estimator that trims the
+    trajectory reference — different architecture, handled elsewhere.
+    """
+    # 1. Run the pure FF trajectory.
+    measured_alt, measured_az, ff_stats = move_azimuth_to_ff(
+        cli, target_az_deg=target_az_deg, cur_az_deg=cur_az_deg, loc=loc,
+        target_alt_deg=target_alt_deg, tag=tag, position_logger=position_logger,
+        v_max=v_max, a_max=a_max, tick_dt=tick_dt, settle_s=settle_s,
+        # Don't let the inner FF invoke its own fallback yet — the correction
+        # loop below is the first-line fallback.
+        fallback_residual_deg=1e9,
+        fallback_goto_fn=None,
+    )
+
+    nudge_rate_degs = nudge_speed / SPEED_PER_DEG_PER_SEC
+    stats = dict(ff_stats)
+    stats["controller"] = "ff_with_correction"
+    stats["nudges_issued"] = 0
+    stats["pre_correction_residual_deg"] = ff_stats["final_residual_deg"]
+
+    # 2. Correction loop.
+    for attempt in range(max_corrections):
+        residual = wrap_pm180(target_az_deg - measured_az)
+        if abs(residual) <= arrive_tolerance_deg:
+            break
+
+        # Choose nudge duration to cover the residual at nudge_rate.
+        raw_dur_s = abs(residual) / max(nudge_rate_degs, 1e-6)
+        dur_s = max(MIN_DUR_S, min(DUR_SEC_CAP, raw_dur_s))
+        # Actual expected motion at this duration
+        expected_motion = nudge_rate_degs * dur_s
+        angle = 0 if residual > 0 else 180
+
+        print(f"{tag} FF correction {attempt+1}/{max_corrections}: "
+              f"residual={residual:+.3f}°  nudge speed={nudge_speed} "
+              f"dur={dur_s:.1f}s (expected ~{expected_motion:.2f}°)",
+              flush=True)
+        if position_logger is not None:
+            position_logger.mark_event(
+                "ff_nudge",
+                attempt=attempt + 1,
+                residual=residual,
+                speed=nudge_speed, angle=angle, dur_sec=dur_s,
+            )
+
+        speed_move(cli, nudge_speed, angle, int(round(dur_s)))
+        stats["nudges_issued"] += 1
+        # Wait for nudge to complete.
+        time.sleep(dur_s + 0.3)
+        # Stop just in case the dur_sec was clamped up.
+        speed_move(cli, 0, 0, 1)
+        wait_for_mount_idle(cli, timeout_s=3.0)
+        time.sleep(0.3)
+
+        measured_alt, measured_az = measure_altaz(cli, loc)
+
+    final_residual = wrap_pm180(target_az_deg - measured_az)
+    stats["final_residual_deg"] = final_residual
+
+    # 3. Final fallback if still out of bounds.
+    if (
+        fallback_goto_fn is not None
+        and abs(final_residual) > fallback_residual_deg
+    ):
+        print(f"{tag} FF+correction: final residual "
+              f"{final_residual:+.3f}° still exceeds "
+              f"{fallback_residual_deg}° after {stats['nudges_issued']} "
+              f"nudges — iscope fallback", flush=True)
+        stats["fallback_goto_used"] = True
+        if position_logger is not None:
+            position_logger.set_phase("ff_fallback_goto")
+        ok = bool(fallback_goto_fn(cli, target_az_deg, target_alt_deg, loc))
+        if ok:
+            print(f"{tag} FF+correction: iscope arrived", flush=True)
+        measured_alt, measured_az = measure_altaz(cli, loc)
+        stats["final_residual_deg"] = wrap_pm180(target_az_deg - measured_az)
+
+    return measured_alt, measured_az, stats
+
+
+# ---------------------------------------------------------------------------
 # Astropy coordinate helpers (shared by iscope-goto fallback, the
 # position logger, and any CLI that wants to convert between frames).
 # ---------------------------------------------------------------------------

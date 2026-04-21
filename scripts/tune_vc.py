@@ -79,6 +79,8 @@ set_tracking = vc.set_tracking
 _MIN_DUR_S = vc.MIN_DUR_S
 _SPEED_PER_DEG_PER_SEC = vc.SPEED_PER_DEG_PER_SEC
 move_azimuth_to_velocity = vc.move_azimuth_to_velocity
+move_azimuth_to_ff = vc.move_azimuth_to_ff
+move_azimuth_to_with_correction = vc.move_azimuth_to_with_correction
 
 
 class InstrumentedAlpacaClient(AlpacaClient):
@@ -230,28 +232,64 @@ def run_setpoints(cli: InstrumentedAlpacaClient, args) -> int:
             t_step = time.monotonic()
             print(f"{tag} START  (cur={cur_az:+.3f}°, delta={delta:+.3f}°)", flush=True)
             try:
-                _, meas_az, stats = move_azimuth_to_velocity(
-                    cli,
-                    target_az_deg=target,
-                    cur_az_deg=cur_az,
-                    loc=loc,
-                    target_alt_deg=args.alt,
-                    tag=tag,
-                    arrive_tolerance_deg=args.tol,
-                    position_logger=logger,
-                    timeout_s=args.timeout,
-                    kp=args.kp,
-                    kd=args.kd,
-                    max_rate_degs=args.max_rate,
-                    loop_dt_s=args.loop_dt,
-                    min_speed=args.min_speed,
-                    fine_min_speed=args.fine_min_speed,
-                    fine_threshold_factor=args.fine_thresh_factor,
-                    max_halvings=args.max_halvings,
-                    use_predictor=args.use_predictor,
-                    tau_s=args.tau,
-                    fallback_goto_fn=iscope_fallback_goto,
-                )
+                if args.control in ("feedforward", "ff_pure"):
+                    if args.control == "ff_pure":
+                        _, meas_az, stats = move_azimuth_to_ff(
+                            cli,
+                            target_az_deg=target,
+                            cur_az_deg=cur_az,
+                            loc=loc,
+                            target_alt_deg=args.alt,
+                            tag=tag,
+                            position_logger=logger,
+                            v_max=args.max_rate,
+                            a_max=args.a_max,
+                            tick_dt=args.loop_dt,
+                            settle_s=args.settle if args.settle > 0 else 1.5,
+                            fallback_residual_deg=args.ff_fallback_residual,
+                            fallback_goto_fn=iscope_fallback_goto,
+                        )
+                    else:
+                        _, meas_az, stats = move_azimuth_to_with_correction(
+                            cli,
+                            target_az_deg=target,
+                            cur_az_deg=cur_az,
+                            loc=loc,
+                            target_alt_deg=args.alt,
+                            tag=tag,
+                            position_logger=logger,
+                            arrive_tolerance_deg=args.tol,
+                            max_corrections=args.ff_max_corrections,
+                            v_max=args.max_rate,
+                            a_max=args.a_max,
+                            tick_dt=args.loop_dt,
+                            settle_s=args.settle if args.settle > 0 else 1.5,
+                            fallback_residual_deg=args.ff_fallback_residual,
+                            fallback_goto_fn=iscope_fallback_goto,
+                        )
+                else:
+                    _, meas_az, stats = move_azimuth_to_velocity(
+                        cli,
+                        target_az_deg=target,
+                        cur_az_deg=cur_az,
+                        loc=loc,
+                        target_alt_deg=args.alt,
+                        tag=tag,
+                        arrive_tolerance_deg=args.tol,
+                        position_logger=logger,
+                        timeout_s=args.timeout,
+                        kp=args.kp,
+                        kd=args.kd,
+                        max_rate_degs=args.max_rate,
+                        loop_dt_s=args.loop_dt,
+                        min_speed=args.min_speed,
+                        fine_min_speed=args.fine_min_speed,
+                        fine_threshold_factor=args.fine_thresh_factor,
+                        max_halvings=args.max_halvings,
+                        use_predictor=args.use_predictor,
+                        tau_s=args.tau,
+                        fallback_goto_fn=iscope_fallback_goto,
+                    )
             except Exception as e:
                 print(f"{tag} ERROR: {e}", file=sys.stderr)
                 logger.mark_event("setpoint_error", step=i, error=repr(e))
@@ -712,6 +750,20 @@ def main() -> int:
                    help="Disable predictor; fall back to pure PD control.")
     p.add_argument("--tau", type=float, default=0.8,
                    help="Acceleration time constant τ (s) for the predictor.")
+    p.add_argument("--control",
+                   choices=["velocity", "feedforward", "ff_pure"],
+                   default="velocity",
+                   help="Controller: 'velocity' (PD+predictor, default); "
+                        "'feedforward' (open-loop trajectory + post-move "
+                        "slow-nudge correction loop); 'ff_pure' (trajectory "
+                        "only, no correction — for evaluating raw FF).")
+    p.add_argument("--a-max", type=float, default=10.0,
+                   help="FF: max accel (°/s²) for trajectory planner.")
+    p.add_argument("--ff-max-corrections", type=int, default=3,
+                   help="FF: max post-move slow-nudge corrections "
+                        "(only with --control feedforward).")
+    p.add_argument("--ff-fallback-residual", type=float, default=2.0,
+                   help="FF: invoke iscope fallback if final |residual| > this.")
 
     # Step-response mode args.
     p.add_argument("--step-speeds", default="100,300,700,1440",

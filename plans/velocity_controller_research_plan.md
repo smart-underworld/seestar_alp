@@ -405,9 +405,191 @@ dead time any Phase 2 controller must compensate.
 Full write-up in `scripts/auto_level_tuning.md` under the Phase 1
 heading.
 
+---
+
+## Phase 2 progress (2026-04-20 / 2026-04-21)
+
+### Checkpoint A (timestamps + constants) — DONE
+
+- **Commit 3a297a1** plumbed firmware timestamps through
+  `measure_altaz_timed`, `PositionLogger`, `sysid.py`, `plant_models.py`,
+  `tune_vc.py`. All `scope_get_equ_coord` responses now carry a
+  monotonic firmware `Timestamp` (sub-µs precision). Old JSONL
+  still loads via fallback to host-t.
+- **Commit 61540fa** captured re-run latency / step_response / chirp
+  with firmware timestamps. Refit: `tau = 0.348 s` (from 0.335),
+  `k_dc = 0.996`. Training pos-RMSE 0.696°, chirp holdout 0.72° on
+  the earlier cleaner session (the new chirp had firmware-state
+  anomaly; single-run chirp is not a reliable holdout).
+- **Commit ddbf66e** three related changes: VC_TAU_S 0.8→0.348,
+  VC_MIN_SPEED 100→40, VC_FINE_MIN_SPEED 80→20, VC_CMD_DUR_S 10→5,
+  loop-tick sleep made deadline-based. Plus the proxy polling fix:
+  `device/seestar_device.py:666` `sleep(0.5)` → `sleep(0.01)`.
+  Back-to-back RPC RTT dropped from ~500 ms to ~230 ms (remaining
+  floor is Falcon / network / TCP processing, not the proxy poll).
+- **Run 7 regression** at fast proxy + new constants: total wall
+  380 s, mean residual 11°, step 3 residual 61°, 4 fallbacks. The
+  faster tick rate doubled controller command rate, but PD gains
+  (kp=0.3, kd=0.4) tuned at ~1.5 s tick became unstable at ~0.85 s
+  tick. Not a plant issue; just gain mismatch.
+
+### Checkpoint B (speed_transition / warm dead time) — DONE
+
+- **Commit 36a0e53 + 411a20d.** New `--mode speed_transition` in
+  `scripts/sysid.py`; full-trace raw-data analysis corrected an
+  earlier premature conclusion.
+- **Finding: warm transitions have ≈ 0 pure dead time.** All 5
+  tested warm transitions match pure first-order τ=0.348 s by the
+  first observable sample (~1.5 s). No sign of decel-through-zero.
+- **Cold-start is 0.5 s pure delay + 0.13 s to position threshold**
+  (firmware ramp from rest takes longer than ramp between
+  non-zero rates).
+- **Implication: Smith predictor (D2) provides minimal value** over
+  pure FF for this plant. Smith compensates dynamic delay; we have
+  none during running.
+
+### Checkpoint C (trajectory planner) — DONE
+
+- **Commit 28d3737.** New `device/trajectory.py` with
+  `trapezoidal_profile` and `scurve_profile`. 9 unit tests
+  (`tests/test_trajectory.py`) pass — endpoint correctness,
+  v_max/a_max constraints, triangular fallback, zero-delta,
+  v0 handoff, ±180 wrap path selection, sample interpolation,
+  S-curve jerk-cap. Defaults: `v_max=6.0 °/s, a_max=10.0 °/s²,
+  j_max=40.0 °/s³`.
+
+### Checkpoint D1 (FF controller + correction wrapper) — IN PROGRESS
+
+**Architecture decision** (user-directed): keep `move_azimuth_to_ff`
+as pure open-loop, add a separate `move_azimuth_to_with_correction`
+wrapper that calls FF then runs a bounded slow-nudge correction
+loop. Rationale: the inner FF stays ready for future streaming
+trajectory control (dynamic-target tracking), while the outer
+correction layer handles slow-drift / plant-gain / cold-start
+residuals. Both in `device/velocity_controller.py`.
+
+`scripts/tune_vc.py` `--control` options:
+- `velocity` (default) — existing PD+predictor
+- `feedforward` — FF + correction wrapper (the realistic controller)
+- `ff_pure` — pure FF, no correction (for evaluating raw FF)
+
+**Run 8** (FF + correction, 6 setpoints):
+
+| step | target | residual | iter | wall | flags |
+|---|---|---|---|---|---|
+| 1 | -170 | -0.022° |  2 |  7.7s | |
+| 2 |  +30 | -0.935° | 35 | 65.9s | |
+| 3 |  -60 | +0.025° | 22 | 41.9s | |
+| 4 |  +90 | +0.326° | 33 | 70.8s | FB (iscope) |
+| 5 |  -30 | +0.025° | 25 | 46.4s | |
+| 6 | +170 | +0.569° | 33 | 66.3s | |
+
+Total wall 302 s (vs Run A 229 s); |residual| mean 0.317° (vs Run A
+0.075°); mean iterations 25.0 (vs 24.7); **0 oscillations** (flips
+= 0 across every step, vs Run A avg 0.7). One fallback — step 4's
+post-FF residual was 6.7°, and the three-nudge correction at
+speed=20 (0.085 °/s × 10 s = 0.84° per nudge) only closed 2.5° of
+that before running out of attempts.
+
+**Observations for next session:**
+
+1. **FF + correction is stable (zero oscillation) but slower than
+   Run A's PD.** The added ~73 s wall time is post-FF settling
+   (1.5 s × 6 steps = 9 s) and the slow-speed nudges (up to 30 s
+   per step when 3 corrections fire).
+2. **FF open-loop error on large moves (>100°) is 3-7°** — larger
+   than predicted from k_dc + cold-start. Worth investigating
+   whether the extra error is accumulated latency (proxy polling
+   introduces a small command-issue drift during motion), speed
+   saturation (1440 hitting slightly below 6 °/s), or a plant
+   quirk we haven't modeled.
+3. **Correction loop at speed=20 is undersized for residuals > ~2.5°.**
+   Options: faster nudge (speed=100 covers ~4.2° per 10 s), or
+   retry-FF for residuals above a threshold, or increase
+   max_corrections.
+
+### Pending — Checkpoint D2 reassessment
+
+Smith predictor was preemptively planned as D2. **Checkpoint B's
+finding that warm dead time ≈ 0 argues Smith has nothing to
+compensate for.** Run 8's residuals are static/gain/cold-start,
+not dynamic delay. Recommendation: **skip D2**; instead refine the
+correction layer (faster nudge speed, retry-FF) which directly
+attacks the observed error source.
+
+### Open items (resume here tomorrow)
+
+1. **Tune the correction layer** (still in D1): faster nudge
+   (speed=100), or retry-FF for residuals > 1°. Single hardware
+   rerun should validate. Target: mean residual < 0.2°, zero
+   fallbacks across Run 6 setpoints.
+2. **Investigate the FF large-move error.** Instrument
+   `move_azimuth_to_ff` to log commanded vs measured rate at each
+   tick; find where the ~6° deficit accumulates. Could be a
+   v_max-clamp edge case or command-schedule drift.
+3. **Skip Smith (D2)** unless #1 proves inadequate.
+4. **Commit the D1 work** (FF + correction + Run 8 data) before
+   session end.
+5. **Tier-2 2-axis extension** (elevation sysid, 2D trajectory
+   planner, `move_to_ff(target_az, target_el)`) — queued for after
+   D1 wraps.
+
+All commit history: `git log --oneline main` on this repo. Key
+handles: A1 `3a297a1`, A2 `61540fa`, A3 `ddbf66e`, B `36a0e53` +
+correction `411a20d`, C `28d3737`, D1 pending commit.
+
 Phase 2 exits when:
 
 - At least one controller (2.1-2.5) meets both: mean |residual| < 0.2
   deg across the Run 6 setpoint sweep, and total wall time < 180 s
   (20% faster than Run A's 229 s).
 - No step in the sweep requires the iscope fallback.
+
+---
+
+## Tier-2 follow-up: 2-axis control (post-Phase 2)
+
+Current FF (`move_azimuth_to_ff`) and the trajectory planner operate
+on a single scalar axis (azimuth). Elevation is not controlled by
+these functions — auto-level fixes elevation during its sweep, and
+Phase 1 sysid was az-only.
+
+Firmware capability: `scope_speed_move(speed, angle, dur_sec)` takes
+a single 2D vector. Phase 1 diagonal probe confirmed the firmware
+correctly vector-decomposes `angle=45°` into sqrt(2)/2 velocity on
+each axis — native 2-axis diagonal motion via ONE command per tick.
+
+Extension path, in order:
+
+1. **Elevation sysid.** Replicate `scripts/sysid.py --mode step_response`
+   and `--mode deadband` on elevation (angle=90 / 270) across several
+   safe altitudes. Confirm τ, k_dc, stiction floor match az values —
+   expected because same stepper / gearing, but gravity load may
+   shift el's τ slightly. Fold into `plant_models.py` as per-axis
+   params.
+
+2. **2D trajectory planner** (`device/trajectory_2d.py`). Plans in
+   (az, el) space with scalar `v_max`, `a_max` on motion magnitude
+   `|v_vec|`, NOT per-axis. Naturally produces diagonal trajectories
+   when both axes change.
+
+3. **`move_to_ff(target_az, target_el)` generalization** of
+   `move_azimuth_to_ff`. Uses 2D planner; per-tick converts
+   `(v_az, v_el)` to firmware `(speed, angle)` via
+   `speed = |v_vec| · 237`, `angle = atan2(v_el, v_az)`. Single
+   firmware command per tick commands both axes simultaneously.
+
+4. **Streaming trajectory consumer** for dynamic-target tracking.
+   `move_to_ff` becomes a loop that continuously consumes new 2D
+   trajectory references (sidereal tracking, moving-object chase).
+   A low-bandwidth bias estimator (per-axis, or joint pointing EKF)
+   trims the reference as slow drift accumulates. This is the
+   natural extension of the FF + correction wrapper pattern in
+   `move_azimuth_to_with_correction`: same separation of concerns,
+   different time scale for the correction loop.
+
+Benefit of Tier 2 over Tier-1 sequential single-axis moves: for a
+(30°, 30°) point-to-point, Tier 1 takes ~14 s (7 s az + 7 s el).
+Tier 2 takes ~7 s (single sqrt(2) diagonal at the magnitude limit).
+Bigger benefit for tracking: Tier 2 is natural; Tier 1 doesn't apply
+because both axes move continuously.
