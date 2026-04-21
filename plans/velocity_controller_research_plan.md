@@ -519,16 +519,51 @@ attacks the observed error source.
 
 ### Open items (resume here tomorrow)
 
-1. **Tune the correction layer** (still in D1): faster nudge
-   (speed=100), or retry-FF for residuals > 1°. Single hardware
-   rerun should validate. Target: mean residual < 0.2°, zero
-   fallbacks across Run 6 setpoints.
-2. **Investigate the FF large-move error.** Instrument
-   `move_azimuth_to_ff` to log commanded vs measured rate at each
-   tick; find where the ~6° deficit accumulates on 150°+ moves.
-   Could be a v_max-clamp edge case or command-schedule drift.
-3. **Skip Smith (D2)** unless #1 proves inadequate.
-4. **Tier-2 2-axis extension** (elevation sysid, 2D trajectory
+Post-Run-8 analysis: the plant cruises at 5.93-6.00 °/s (roughly
+matching commanded 6.0 °/s) but the trajectory accumulates ~6.7° of
+position deficit on a 150° move. Decomposition:
+- **~3°** from cold-start 0.5 s delay (mount doesn't start moving
+  until ~0.5 s after trajectory t=0).
+- **~1.2°** from slight cruise rate deficit over 17 s of cruise.
+- **~2.5°** unexplained — likely decel-phase imperfection or a
+  second-order effect.
+
+Correction loop with 3 × 0.84° nudges at speed=20 only closes 2.5°,
+so a 6.7° post-FF residual triggers fallback.
+
+1. **Add cold-start compensation to the trajectory planner or FF
+   controller.** Cleanest: `trapezoidal_profile(..., t_offset=L)`
+   where trajectory samples are shifted by L seconds, so the FF
+   controller commands the trajectory's t=0 point at wall time -L.
+   Default L=0.5 (cold-start); pass via `move_azimuth_to_ff` as a
+   new arg. Alternative: FF pre-rolls v_peak for L seconds before
+   the real trajectory. Option A is cleaner.
+2. **Add planner-isolation validation test** (new
+   `scripts/sysid.py --mode trajectory_track` or hardware-probe
+   script). Issue a known trapezoidal trajectory, poll position at
+   sample_dt, compute RMSE of `meas_az(t)` vs `ref_pos(t - L)`.
+   This cleanly separates planner correctness from FF execution
+   behavior.
+3. **Tune the correction layer to close larger residuals**: either
+   faster nudge (speed=100 → 0.42 °/s, 4° per 10 s) for residuals
+   > 2°, or retry-FF for residuals > 1°. With cold-start compensation
+   (item 1), post-FF residual should drop to ~2° so the correction
+   layer's existing 2.5° capacity is adequate.
+4. **Investigate the unexplained ~2.5° deficit**. Options: (a)
+   cruise rate saturation is actually < 6.0 °/s at high speed;
+   replicate step_response at speed 1440 and fit. (b) decel-phase
+   runs faster than model predicts.
+5. **Overlay trajectory reference on the /velocity_controller page.**
+   `ff_tick` events contain `ref_pos`, `ref_vel`, `cmd_speed`,
+   `cmd_angle` at every tick. The page currently only plots samples
+   + coarse commanded setpoint from `set_target()`. Adding a
+   trajectory-reference line makes FF tracking errors visually
+   obvious (today we have to post-process JSONL manually for
+   analysis). Changes: `front/app.py` log parser emits the `ff_tick`
+   event stream; `front/templates/velocity_controller.html` adds
+   a reference overlay on the azimuth axis plot.
+6. **Skip Smith (D2)** unless above fails.
+7. **Tier-2 2-axis extension** (elevation sysid, 2D trajectory
    planner, `move_to_ff(target_az, target_el)`) — queued for after
    D1 wraps.
 
