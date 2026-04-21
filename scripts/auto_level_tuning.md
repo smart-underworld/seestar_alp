@@ -281,3 +281,62 @@ These are follow-ups; the fitted plant model is already good enough
 to start Phase 2 controller design.
 
 ---
+
+## Phase 1 re-run with firmware timestamps (2026-04-20 evening)
+
+Re-ran latency + step_response (single + chain=2) + chirp with
+`scripts/sysid.py` now recording firmware Timestamp on every sample.
+
+**Refreshed plant fit (training now 20 segments, old + new):**
+
+- `first_order`: **tau = 0.348 s** (from 0.335), k_dc = 0.996. Train
+  pos RMSE 0.696° (from 0.650°, slight widening from including the
+  two independent runs). Rate-limited and asymmetric variants still
+  offer no improvement.
+
+**Motion-onset (firmware-timestamped, p50 over 11 successful trials):**
+
+- RPC ACK (host): mean 759 ms, p50 509 ms, p90 1514 ms, max 1515 ms.
+  Session was more RPC-noisy than the first run — 3/12 trials had
+  ~1.5 s RPC latency (probably ARP cache / network congestion).
+- motion-onset (host): mean 952 ms, p50 619 ms, max 2085 ms.
+- **motion-onset (firmware): mean 896 ms, p50 620 ms, p90 1361 ms.**
+  The firmware-time number tracks the host-time number within
+  ±100 ms on clean trials, diverges under RPC congestion — as
+  expected (host time counts network jitter; fw time doesn't).
+
+Conclusion on latency: the ~620 ms floor is firmware ramp-up from
+rest and cannot be compressed. Network congestion adds 0-1.5 s on
+top of that. **Use `dead_time_s = 0.62` as the Smith-predictor
+baseline**; expect Step 2's speed_transition experiment to give us
+a much smaller number for warm (non-zero-to-nonzero) transitions.
+
+**Chirp holdout noise (verified NOT an analysis bug):** the new
+chirp run had `commanded integral = +5.37°` vs actual motion
+`= -1.41°`. Confirmed via raw-data inspection — the measured az
+stayed in `[-61, -50]` the whole run (no azimuth wrap near ±180),
+and `unwrap_az_series` was a no-op. The discrepancy is genuine
+plant misbehavior: several 2-3 s RPC gaps mid-run, during which
+the mount moved ~50% of the commanded rate despite the active
+speed_move TTL. Likely cause: firmware tracking re-engagement
+mid-chirp, or a racing 10 s TTL expiring before the next command
+arrived during an HTTP latency spike. The OLD chirp (earlier the
+same day, different firmware state) still scores 0.72° RMSE with
+the refreshed model — matching the training fit.
+
+Takeaway: chirp RMSE has **high run-to-run variance due to firmware
+state quirks** — a single chirp run is not a reliable holdout.
+Repeatable bound: 0.7-1.0° when the firmware doesn't interfere;
+3-4° when it does. The plant model itself is fine; we just need
+multiple chirp runs to average out the firmware noise.
+
+**Key insights for Phase 2:**
+
+- Plant parameters tau and k_dc are stable across sessions
+  (0.335 → 0.348 with more data; k_dc=0.996 unchanged).
+- The firmware ramp dead time is ~0.62 s (cold). Warm expected
+  much less.
+- Chirp-holdout variance suggests we'll need multiple validation
+  runs to distinguish controller improvements from session noise.
+
+---
