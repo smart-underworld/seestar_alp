@@ -340,3 +340,59 @@ multiple chirp runs to average out the firmware noise.
   runs to distinguish controller improvements from session noise.
 
 ---
+
+## Speed-transition dead-time (Checkpoint B)
+
+Tested 8 pairs via `scripts/sysid.py --mode speed_transition`:
+hold A for 8 s to reach steady state, command B, poll position at
+0.3 s (≥ safe polling interval) and detect when measured rate
+diverges from A by > 0.3 °/s. Ran on fast proxy (polling 0.01 s).
+
+Results:
+
+| A → B | angle | ss_rate_A (°/s) | fw rate-change latency |
+|---|---|---:|---:|
+| 0 → 300    |   0 | +0.002 | 1222 ms |
+| 300 → 500  | 180 | +0.002 | 1052 ms |
+| 500 → 300  |   0 | +2.100 | 1358 ms |
+| 500 → 1000 | 180 | +0.002 | 1540 ms |
+| 1000 → 500 |   0 | +4.219 | 1439 ms |
+| 1000 → 0   | 180 | -4.197 | 1284 ms |
+| 500 → 1440 |   0 | +2.100 | 1132 ms |
+| 1440 → 500 | 180 | -6.096 | 1501 ms |
+
+Over all 8: mean 1316 ms, p50 1358 ms, p90 1540 ms.
+
+Three trials (`ss_rate_A ≈ 0.002`) where the first speed_move
+after a direction-change or a sequence end didn't produce motion —
+the mount was stationary at A, so those are effectively cold-start
+(A=0 → B) transitions. Excluding them, the 5 genuinely-warm
+transitions (3, 5, 6, 7, 8) average **1343 ms, median 1358 ms**.
+
+**Surprising finding: warm transitions are ~2× slower than cold
+(1.35 s vs 0.62 s), not faster.** Most likely explanation: the
+firmware decelerates from A to zero and then re-ramps to B, rather
+than smoothly transitioning. That's a full decel + ramp cycle for
+every command update, regardless of magnitude.
+
+**Implication for Phase 2 Smith predictor:** use `dead_time_s =
+1.3 s` for the running controller (almost every command is a warm
+transition from a nonzero rate). The 0.62 s cold figure applies
+only to the first command after rest. Subtract the ~0.15 s
+threshold-detection overhead from the 1.35 s number gives an
+effective ramp delay of ~1.2 s.
+
+**Implication for planner (Phase 2.0):** with a 1.3 s dead time, the
+trajectory can't really be updated faster than ~0.8 Hz and still
+have commands take effect before the next update. This is a much
+heavier argument for commanding a feasible trajectory open-loop
+(FF / MPC) than chasing feedback. Confirms the Phase 2 priority
+ordering.
+
+**Also confirms the Run 7 regression root cause.** The PD loop
+issues commands every ~0.85 s post-proxy-fix. With 1.3 s effective
+dead time, the controller issues ~1.5 commands per actual plant
+response cycle — textbook over-commanding, exactly the oscillation
+we saw.
+
+---

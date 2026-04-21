@@ -548,6 +548,170 @@ def run_chirp(cli: TimedAlpacaClient, args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# mode: speed_transition  (warm motion-onset latency)
+# ---------------------------------------------------------------------------
+
+
+def _parse_transition_pairs(s: str) -> list[tuple[int, int]]:
+    out = []
+    for chunk in s.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        a, b = chunk.split(":")
+        out.append((int(a), int(b)))
+    return out
+
+
+def run_speed_transition(cli: TimedAlpacaClient, args) -> int:
+    """For each (A, B) pair: ramp to A, hold to steady state, then command B
+    and measure how long until the observed rate diverges from A.
+
+    Rate threshold: we detect "rate has changed" when the windowed mean
+    rate over the most-recent 0.3 s differs from A by > max(0.15 * |A-B|,
+    0.3°/s). Less conservative than waiting for rate = B (which takes
+    ~tau), but robust to sampling noise.
+    """
+    loc = _make_loc()
+    pairs = _parse_transition_pairs(args.transition_pairs)
+    if not pairs:
+        print("ERROR: need at least one transition pair", file=sys.stderr)
+        return 2
+
+    print("=" * 78)
+    print(f"sysid speed_transition — pairs={pairs}")
+    print("=" * 78)
+
+    _setup_mount(cli, loc, args.start_az, args.alt)
+    log_path = _open_jsonl("speed_transition")
+    _write_jsonl(log_path, {
+        "kind": "header", "mode": "speed_transition", "pairs": pairs,
+        "n_speed_per_deg_per_sec": SPEED_PER_DEG_PER_SEC,
+    })
+
+    poll_dt = float(args.poll_dt)      # e.g. 0.05 s with fast proxy
+    hold_a_s = float(args.hold_a)      # default 8.0
+    hold_b_s = float(args.hold_b)      # default 4.0
+
+    for idx, (A, B) in enumerate(pairs):
+        _recenter_if_far(cli, loc, args.start_az, args.alt)
+        wait_for_mount_idle(cli, timeout_s=5.0)
+        set_tracking(cli, False)
+        angle = 0 if idx % 2 == 0 else 180
+        rate_A_expected = A / SPEED_PER_DEG_PER_SEC
+
+        print(f"\n[{idx+1}/{len(pairs)}] transition {A}→{B} angle={angle}")
+        # Command A and sample until steady state.
+        speed_move(cli, A, angle, 10)
+        time.sleep(hold_a_s)  # wait ~8s, past tau ramp
+
+        # Measure steady-state rate: two samples 0.3s apart
+        _, az0, fw_t0 = measure_altaz_timed(cli, loc)
+        time.sleep(0.3)
+        _, az1, fw_t1 = measure_altaz_timed(cli, loc)
+        if fw_t0 is None or fw_t1 is None:
+            ss_dt = time.monotonic() - (time.monotonic() - 0.3)  # fallback
+        else:
+            ss_dt = fw_t1 - fw_t0
+        ss_rate_A = wrap_pm180(az1 - az0) / max(ss_dt, 1e-3)
+        print(f"  steady-state A rate: {ss_rate_A:+.3f}°/s (expected "
+              f"{rate_A_expected if angle == 0 else -rate_A_expected:+.3f}°/s)")
+
+        # Transition to B.
+        _, az_pre, fw_t_pre = measure_altaz_timed(cli, loc)
+        t_cmd_B = time.monotonic()
+        speed_move(cli, B, angle, 10)
+        t_ack_B = time.monotonic()
+        fw_t_ack_B = cli.calls[-1].fw_t_ack
+        rpc_latency_B = t_ack_B - t_cmd_B
+
+        # Poll tightly for rate to diverge from A.
+        # Threshold: midway between A-rate and B-rate, scaled.
+        target_rate_expected = B / SPEED_PER_DEG_PER_SEC  # |rate|
+        if angle == 180:
+            target_rate_expected = -target_rate_expected
+            ss_rate_A = ss_rate_A  # already signed
+        # Divergence threshold: |observed - A| > max(0.3, 0.15 * |A-B|)
+        thresh = max(0.3, 0.15 * abs(ss_rate_A - target_rate_expected))
+
+        # Log ALL samples collected in the hold_b window; separately compute
+        # rate-change using a sliding window of the last min_window_s of
+        # samples.
+        all_samples: list[tuple[float, Optional[float], float]] = []  # (host_t_rel, fw_t, az)
+        min_window_s = 0.3   # min time spread for a rate estimate to be meaningful
+        t_change_host: Optional[float] = None
+        fw_t_change: Optional[float] = None
+
+        timeout_deadline = t_ack_B + hold_b_s
+        while time.monotonic() < timeout_deadline:
+            time.sleep(poll_dt)
+            _, az_i, fw_t_i = measure_altaz_timed(cli, loc)
+            t_i = time.monotonic()
+            all_samples.append((t_i - t_ack_B, fw_t_i, az_i))
+            # For rate computation: find the oldest sample whose fw_t is
+            # at least min_window_s before the latest.
+            if len(all_samples) >= 2 and t_change_host is None:
+                latest = all_samples[-1]
+                # Walk backward to find first sample old enough
+                for j in range(len(all_samples) - 2, -1, -1):
+                    older = all_samples[j]
+                    if older[1] is not None and latest[1] is not None:
+                        dt_win = latest[1] - older[1]
+                    else:
+                        dt_win = latest[0] - older[0]
+                    if dt_win >= min_window_s:
+                        signed = wrap_pm180(latest[2] - older[2])
+                        win_rate = signed / dt_win
+                        if abs(win_rate - ss_rate_A) > thresh:
+                            t_change_host = t_i
+                            fw_t_change = fw_t_i
+                        break
+                if t_change_host is not None:
+                    break
+        samples = all_samples
+
+        # Let B continue to steady state for remaining hold time, then stop.
+        speed_move(cli, 0, 0, 1)
+        wait_for_mount_idle(cli, timeout_s=4.0)
+
+        host_latency = (t_change_host - t_ack_B) if t_change_host else None
+        fw_latency = (
+            fw_t_change - fw_t_ack_B
+            if (fw_t_change is not None and fw_t_ack_B is not None)
+            else None
+        )
+
+        def _ms(x):
+            return "timeout" if x is None else f"{1000*x:.0f}ms"
+
+        print(f"  rate-change: host={_ms(host_latency)}  fw={_ms(fw_latency)}  "
+              f"thresh={thresh:.2f}°/s")
+
+        _write_jsonl(log_path, {
+            "kind": "trial", "idx": idx, "A": A, "B": B, "angle": angle,
+            "rate_A_measured_degs": ss_rate_A,
+            "rate_B_expected_degs": target_rate_expected,
+            "rpc_latency_s": rpc_latency_B,
+            "host_rate_change_latency_s": host_latency,
+            "fw_rate_change_latency_s": fw_latency,
+            "fw_t_ack_B": fw_t_ack_B,
+            "fw_t_rate_change": fw_t_change,
+            "threshold_degs": thresh,
+            "sample_count": len(samples),
+        })
+        for (t, fw_t, az) in samples:
+            _write_jsonl(log_path, {
+                "kind": "sample", "idx": idx, "A": A, "B": B,
+                "t": t, "fw_t": fw_t, "az": az,
+            })
+
+        time.sleep(0.5)
+
+    print(f"\nwrote: {log_path}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -556,7 +720,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--mode", required=True,
-                   choices=["step_response", "deadband", "latency", "chirp"])
+                   choices=["step_response", "deadband", "latency", "chirp",
+                            "speed_transition"])
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=5555)
     p.add_argument("--device", type=int, default=1)
@@ -598,6 +763,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--duration", type=float, default=60.0)
     p.add_argument("--tick-dt", type=float, default=0.5)
 
+    # speed_transition
+    p.add_argument("--transition-pairs",
+                   default="0:300,300:500,500:300,500:1000,1000:500,1000:0",
+                   help="Comma-separated from:to firmware-speed pairs.")
+    p.add_argument("--hold-a", type=float, default=8.0,
+                   help="speed_transition: seconds to hold A before B.")
+    p.add_argument("--hold-b", type=float, default=4.0,
+                   help="speed_transition: seconds to watch for rate change "
+                        "after commanding B.")
+
     return p
 
 
@@ -612,6 +787,8 @@ def main() -> int:
         return run_latency(cli, args)
     elif args.mode == "chirp":
         return run_chirp(cli, args)
+    elif args.mode == "speed_transition":
+        return run_speed_transition(cli, args)
     return 1
 
 

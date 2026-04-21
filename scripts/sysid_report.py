@@ -118,6 +118,10 @@ def load_deadband_summary(path: Path) -> list[dict]:
     return [r for r in recs if r.get("kind") == "step"]
 
 
+def load_speed_transition_summary(path: Path) -> list[dict]:
+    return [r for r in _load_jsonl(path) if r.get("kind") == "trial"]
+
+
 def load_latency_summary(path: Path) -> dict:
     recs = _load_jsonl(path)
     rpc = [r["rpc_latency_s"] for r in recs if r.get("kind") == "trial"]
@@ -287,6 +291,33 @@ def main() -> int:
             else:
                 print("  motion-onset (firmware): — (no fw_motion_latency "
                       "in trial records; re-run to capture)")
+
+        # --- Speed-transition table ---
+        print()
+        st_files = find_latest("speed_transition_*.jsonl")
+        if st_files:
+            trials = load_speed_transition_summary(st_files[-1])
+            print("Speed-transition rate-change latency (last run):")
+            print(f"  {'A':>5}→{'B':>5}  {'angle':>5}  {'ss_rate_A':>12}  "
+                  f"{'host_s':>7}  {'fw_s':>7}  {'thresh':>8}")
+            fw_lats = []
+            for t in trials:
+                h = t.get("host_rate_change_latency_s")
+                f = t.get("fw_rate_change_latency_s")
+                if f is not None:
+                    fw_lats.append(f)
+                h_txt = f"{h:6.3f}" if h is not None else "   —  "
+                f_txt = f"{f:6.3f}" if f is not None else "   —  "
+                print(
+                    f"  {t['A']:>5}→{t['B']:<5}  {t['angle']:>5}  "
+                    f"{t['rate_A_measured_degs']:>+10.3f}  "
+                    f"{h_txt:>7}  {f_txt:>7}  {t['threshold_degs']:>6.2f}°/s"
+                )
+            if fw_lats:
+                print(f"\n  fw rate-change latency n={len(fw_lats)}  "
+                      f"mean={1000*statistics.mean(fw_lats):.0f}ms  "
+                      f"p50={1000*_pct(fw_lats, 0.5):.0f}ms  "
+                      f"p90={1000*_pct(fw_lats, 0.9):.0f}ms")
 
     print()
     print("(done)")
