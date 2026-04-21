@@ -232,6 +232,23 @@ def ensure_scenery_mode(cli: AlpacaClient) -> None:
     time.sleep(1.5)
 
 
+def set_tracking(cli: AlpacaClient, enabled: bool) -> None:
+    """Enable or disable mount tracking.
+
+    When tracking is enabled the firmware re-engages after a motion
+    command completes and can drive the mount at unexpectedly high rates
+    toward a stale tracking target — observed as ~5 °/s backward drift
+    after the velocity controller issued its final stop. We disable
+    tracking for the duration of an auto-level sweep to get a clean,
+    stationary mount between samples.
+    """
+    try:
+        cli.method_sync("scope_set_track_state", enabled)
+    except Exception as e:
+        print(f"(warning: scope_set_track_state({enabled}) failed: {e})",
+              file=sys.stderr)
+
+
 class _EMA:
     """Single-channel exponential moving average with a time-constant.
 
@@ -591,13 +608,18 @@ class PositionLogger:
 # Empirically safe at poll_dt = 0.5 s (probed earlier, at cadences ≥ 0.3 s
 # scope_get_equ_coord does not cancel an active move).
 
-_VC_LOOP_DT_S = 0.5         # control-loop period
+_VC_LOOP_DT_S = 0.5         # target control-loop period (real dt depends on
+                            # HTTP latency; measured ~1.0–1.5 s in practice)
 _VC_CMD_DUR_S = 10          # dur_sec on every scope_speed_move (firmware cap)
-_VC_KP = 0.6                # proportional gain (rate °/s per ° of error)
+_VC_KP = 0.3                # proportional gain (rate °/s per ° of error);
+                            # tuned down from 0.6 to damp overshoot given the
+                            # ~1.2 s measured dead time
+_VC_KD = 0.4                # derivative gain (rate °/s per (°/s measured rate));
+                            # predicts arrival at target using current velocity
 _VC_MAX_RATE_DEGS = 6.0     # clamp velocity magnitude
 _VC_MIN_SPEED = 50          # firmware floor; below this the mount barely moves
-_VC_STOP_REL_ERROR = 0.5    # switch to "coasting" stop if |error| dropped to
-                            # within this fraction of tolerance
+_VC_REISSUE_EVERY = 1       # always reissue each tick (prevents runaway
+                            # between infrequent updates)
 _VC_STUCK_MIN_S = 2.0       # seconds of commanded-but-not-moving to declare stuck
 _VC_STUCK_MOVE_FRAC = 0.2   # moved < this fraction of expected during interval
 _VC_MAX_HALVINGS = 4        # number of times we halve rate ceiling on stuck
@@ -647,6 +669,9 @@ def move_azimuth_to_velocity(
         "fallback_goto_used": False,
         "elapsed_s": 0.0,
         "iterations": 0,
+        "sign_flips": 0,
+        "loop_dt_mean_s": 0.0,
+        "loop_dt_max_s": 0.0,
         "final_residual_deg": None,
     }
 
@@ -654,6 +679,9 @@ def move_azimuth_to_velocity(
     last_speed = 0
     last_angle = 0
     last_az = cur_az_deg
+    last_t: float | None = None
+    last_error_sign = 0
+    loop_dts: list[float] = []
     stuck_since_t: float | None = None
     stuck_since_az = cur_az_deg
 
@@ -684,9 +712,28 @@ def move_azimuth_to_velocity(
             break
 
         measured_alt, measured_az = _measure_altaz(cli, loc)
+        now = time.monotonic()
         error = _wrap_pm180(target_az_deg - measured_az)
+
+        # Track real loop dt and signed mount velocity (°/s) for the D term.
+        if last_t is not None:
+            dt = now - last_t
+            loop_dts.append(dt)
+            signed_move = _wrap_pm180(measured_az - last_az)
+            measured_rate = signed_move / dt if dt > 0 else 0.0
+        else:
+            dt = 0.0
+            measured_rate = 0.0
         moved_since_last = abs(_wrap_pm180(measured_az - last_az))
         last_az = measured_az
+        last_t = now
+
+        # Count sign flips (one-way approaches don't flip; oscillation does).
+        cur_sign = 1 if error > 0 else (-1 if error < 0 else 0)
+        if cur_sign != 0 and last_error_sign != 0 and cur_sign != last_error_sign:
+            stats["sign_flips"] += 1
+        if cur_sign != 0:
+            last_error_sign = cur_sign
 
         # Arrival test — require two consecutive in-tol ticks so we confirm
         # the motor has actually stopped, not just crossed target.
@@ -696,6 +743,9 @@ def move_azimuth_to_velocity(
                 _issue(0, 0, "vc_stop")
             if consecutive_within_tol >= 2:
                 stats["final_residual_deg"] = error
+                if loop_dts:
+                    stats["loop_dt_mean_s"] = sum(loop_dts) / len(loop_dts)
+                    stats["loop_dt_max_s"] = max(loop_dts)
                 return measured_alt, measured_az, stats
             time.sleep(_VC_LOOP_DT_S)
             continue
@@ -752,34 +802,43 @@ def move_azimuth_to_velocity(
             stuck_since_t = None
             stuck_since_az = measured_az
 
-        # Compute desired rate via proportional control, clamped to ceiling.
-        desired_rate = max(-rate_ceiling, min(rate_ceiling, _VC_KP * error))
-        new_angle = 0 if desired_rate > 0 else 180
+        # PD control: command = kP·error − kD·measured_rate.
+        # The D term subtracts current velocity, so if we're already moving
+        # fast toward target the commanded rate shrinks — dampens overshoot.
+        desired_rate = _VC_KP * error - _VC_KD * measured_rate
+        desired_rate = max(-rate_ceiling, min(rate_ceiling, desired_rate))
+        new_angle = 0 if desired_rate >= 0 else 180
 
-        # Ensure we always command ≥ MIN_SPEED so the motor actually moves.
+        # Ensure we always command ≥ MIN_SPEED in the chosen direction so
+        # the motor actually moves when we want it to.
         raw_speed = _rate_to_speed(desired_rate)
-        new_speed = max(_VC_MIN_SPEED, raw_speed)
+        new_speed = max(_VC_MIN_SPEED, raw_speed) if raw_speed > 0 else 0
 
-        # Only re-issue if (speed, angle) changed meaningfully or we haven't
-        # touched the firmware recently enough to keep the TTL alive. The
-        # TTL is 10 s but we refresh every iteration anyway if direction
-        # changes; otherwise every ~2 s (4 iterations at 0.5s dt).
+        # Re-issue every tick by default (_VC_REISSUE_EVERY=1). Bounds the
+        # "runaway" window to one loop dt when HTTP latency is high.
         need_reissue = (
             new_angle != last_angle
             or abs(new_speed - last_speed) > max(20, 0.1 * last_speed)
-            or stats["iterations"] % 4 == 1  # periodic TTL refresh
+            or stats["iterations"] % _VC_REISSUE_EVERY == 0
         )
         if need_reissue:
             print(
-                f"{tag} vc iter={stats['iterations']}: error={error:+.3f}° "
-                f"measured_az={measured_az:+.3f}° cmd speed={new_speed} "
-                f"angle={new_angle} (desired_rate={desired_rate:+.2f}°/s, "
+                f"{tag} vc iter={stats['iterations']} dt={dt:.2f}s: "
+                f"error={error:+.3f}° measured_az={measured_az:+.3f}° "
+                f"measured_rate={measured_rate:+.2f}°/s "
+                f"cmd speed={new_speed} angle={new_angle} "
+                f"(desired_rate={desired_rate:+.2f}°/s, "
                 f"ceiling={rate_ceiling:.2f})",
                 flush=True,
             )
-            _issue(new_speed, new_angle, "vc_issue")
+            _issue(new_speed if new_speed > 0 else 0, new_angle, "vc_issue")
 
         time.sleep(_VC_LOOP_DT_S)
+
+    # Populate loop-dt stats for the caller's move summary.
+    if loop_dts:
+        stats["loop_dt_mean_s"] = sum(loop_dts) / len(loop_dts)
+        stats["loop_dt_max_s"] = max(loop_dts)
 
     # Send a final stop before fallback.
     if last_speed != 0:
@@ -1149,6 +1208,9 @@ def _main_body(args, cli, loc, log_path, position_logger):
     if position_logger is not None:
         position_logger.set_phase("scenery_mode")
     ensure_scenery_mode(cli)
+    # Disable tracking for the sweep — see set_tracking() docstring.
+    print("Disabling tracking for the sweep duration.")
+    set_tracking(cli, False)
 
     # Decide the altitude we'll hold during rotation.
     if args.alt is None:
