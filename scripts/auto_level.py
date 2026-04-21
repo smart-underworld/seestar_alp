@@ -45,6 +45,33 @@ from device.auto_level import (  # noqa: E402
     save_run,
 )
 from device.config import Config  # noqa: E402
+from device import velocity_controller as vc  # noqa: E402
+
+# Back-compat aliases so existing code (and imports from tune_vc.py) keep
+# working after the controller moved to device.velocity_controller.
+_wrap_pm180 = vc.wrap_pm180
+_speed_move = vc.speed_move
+_wait_for_mount_idle = vc.wait_for_mount_idle
+_measure_altaz = vc.measure_altaz
+set_tracking = vc.set_tracking
+_SPEED_PER_DEG_PER_SEC = vc.SPEED_PER_DEG_PER_SEC
+_MIN_DUR_S = vc.MIN_DUR_S
+_DUR_SEC_CAP = vc.DUR_SEC_CAP
+_MAIN_SPEED = vc.MAIN_SPEED
+_MAIN_RATE_DEGS = vc.MAIN_RATE_DEGS
+_VC_KP = vc.VC_KP
+_VC_KD = vc.VC_KD
+_VC_MAX_RATE_DEGS = vc.VC_MAX_RATE_DEGS
+_VC_LOOP_DT_S = vc.VC_LOOP_DT_S
+_VC_MIN_SPEED = vc.VC_MIN_SPEED
+_VC_FINE_MIN_SPEED = vc.VC_FINE_MIN_SPEED
+_VC_FINE_THRESHOLD_FACTOR = vc.VC_FINE_THRESHOLD_FACTOR
+_VC_MAX_HALVINGS = vc.VC_MAX_HALVINGS
+_VC_STUCK_MIN_S = vc.VC_STUCK_MIN_S
+_VC_STUCK_MOVE_FRAC = vc.VC_STUCK_MOVE_FRAC
+_VC_TAU_S = vc.VC_TAU_S
+_VC_USE_PREDICTOR = vc.VC_USE_PREDICTOR
+_NUDGE_SPEED = 50  # used by legacy feedforward mover only
 
 
 def _now_iso() -> str:
@@ -633,6 +660,13 @@ _VC_STUCK_MIN_S = 2.0       # seconds of commanded-but-not-moving to declare stu
 _VC_STUCK_MOVE_FRAC = 0.2   # moved < this fraction of expected during interval
 _VC_MAX_HALVINGS = 4        # number of times we halve rate ceiling on stuck
 _VC_DEFAULT_TIMEOUT_S = 120 # per-move overall budget
+_VC_TAU_S = 0.8             # first-order acceleration time constant used by
+                            # the feedforward predictor. Fit from step-response
+                            # data: 0.6–1.2 s for speeds 80–700, unreliable
+                            # for ≥1000 (8 s burst insufficient). 0.8 s is a
+                            # reasonable middle-of-range default.
+_VC_USE_PREDICTOR = True    # If True, use one-step feedforward based on τ
+                            # instead of the pure PD law.
 
 
 def _rate_to_speed(rate_degs: float) -> int:
@@ -663,6 +697,8 @@ def move_azimuth_to_velocity(
     max_halvings: int = _VC_MAX_HALVINGS,
     stuck_min_s: float = _VC_STUCK_MIN_S,
     stuck_move_frac: float = _VC_STUCK_MOVE_FRAC,
+    use_predictor: bool = _VC_USE_PREDICTOR,
+    tau_s: float = _VC_TAU_S,
 ) -> tuple[float, float, dict]:
     """Closed-loop velocity controller for the azimuth axis.
 
@@ -702,6 +738,7 @@ def move_azimuth_to_velocity(
     last_angle = 0
     last_az = cur_az_deg
     last_t: float | None = None
+    last_commanded_rate = 0.0  # signed °/s we commanded last tick (for predictor)
     last_error_sign = 0
     loop_dts: list[float] = []
     stuck_since_t: float | None = None
@@ -826,10 +863,23 @@ def move_azimuth_to_velocity(
             stuck_since_t = None
             stuck_since_az = measured_az
 
-        # PD control: command = kP·error − kD·measured_rate.
-        # The D term subtracts current velocity, so if we're already moving
-        # fast toward target the commanded rate shrinks — dampens overshoot.
-        desired_rate = kp * error - kd * measured_rate
+        if use_predictor and dt > 0 and last_t is not None:
+            # One-step feedforward: pick v_cmd so that, under the first-order
+            # plant model, position reaches `target_az_deg` at t + dt.
+            # pos(dt) = pos(0) + v_cmd·dt + (v_now − v_cmd)·τ·(1 − exp(−dt/τ))
+            # → v_cmd = (error − v_now·G) / (dt − G),  G = τ·(1 − exp(−dt/τ)).
+            #
+            # Fall back to the PD law if dt ≤ G (degenerate; happens only if
+            # τ dominates dt), since the denominator vanishes.
+            G = tau_s * (1.0 - math.exp(-dt / tau_s))
+            denom = dt - G
+            if denom > 1e-3:
+                desired_rate = (error - measured_rate * G) / denom
+            else:
+                desired_rate = kp * error - kd * measured_rate
+        else:
+            # Pure PD on the measured state — no model of motor dynamics.
+            desired_rate = kp * error - kd * measured_rate
         desired_rate = max(-rate_ceiling, min(rate_ceiling, desired_rate))
         new_angle = 0 if desired_rate >= 0 else 180
 
@@ -859,6 +909,12 @@ def move_azimuth_to_velocity(
                 flush=True,
             )
             _issue(new_speed if new_speed > 0 else 0, new_angle, "vc_issue")
+            # Track signed commanded rate for the predictor next tick.
+            signed = new_speed / _SPEED_PER_DEG_PER_SEC
+            if new_speed > 0:
+                last_commanded_rate = signed if new_angle == 0 else -signed
+            else:
+                last_commanded_rate = 0.0
 
         time.sleep(loop_dt_s)
 

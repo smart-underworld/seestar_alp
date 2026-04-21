@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fast tuning harness for auto_level's velocity-mode controller.
 
-Two modes:
+Three modes:
 
   --mode setpoints   (default)
         Drive a short list of az setpoints via move_azimuth_to_velocity.
@@ -12,8 +12,12 @@ Two modes:
         Issue scope_speed_move(speed, angle, dur_sec) bursts from rest and
         sample position at a fixed interval. Fits a first-order response
         rate(t) = r_ss · (1 − exp(−t/τ)) for each commanded speed.
-        Use this to characterize the mount's acceleration curve and
-        feed τ into the controller as a feedforward predictor.
+
+  --mode diagonal
+        Issue short bursts at a list of angles (e.g. 0, 45, 90, …, 315)
+        and measure the resulting (Δaz, Δalt) vector. Verifies whether
+        firmware does proper vector decomposition of the commanded angle.
+        Re-centers to a safe "home" position between bursts.
 
 HTTP command latency (scope_get_equ_coord, scope_speed_move,
 get_device_state) is recorded on every call and summarized at the end
@@ -161,6 +165,7 @@ def run_setpoints(cli: InstrumentedAlpacaClient, args) -> int:
     print(f"  kp={args.kp}  kd={args.kd}  max_rate={args.max_rate}°/s  loop_dt={args.loop_dt}s")
     print(f"  min_speed={args.min_speed}  fine_min_speed={args.fine_min_speed}  "
           f"fine_thresh_factor={args.fine_thresh_factor}")
+    print(f"  predictor={'on' if args.use_predictor else 'off'}  τ={args.tau}s")
     print(f"  tol={args.tol}°  alt={args.alt}°  timeout={args.timeout}s")
     print(f"  setpoints ({len(setpoints)}): {setpoints}")
     print("=" * 78)
@@ -213,6 +218,8 @@ def run_setpoints(cli: InstrumentedAlpacaClient, args) -> int:
                 fine_min_speed=args.fine_min_speed,
                 fine_threshold_factor=args.fine_thresh_factor,
                 max_halvings=args.max_halvings,
+                use_predictor=args.use_predictor,
+                tau_s=args.tau,
             )
         except Exception as e:
             print(f"{tag} ERROR: {e}", file=sys.stderr)
@@ -515,13 +522,126 @@ def run_step_response(cli: InstrumentedAlpacaClient, args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Diagonal-angle calibration mode
+# ---------------------------------------------------------------------------
+
+
+def _recenter(cli, loc, home_alt: float, home_az: float) -> tuple[float, float]:
+    """Slew to (home_alt, home_az), wait idle, disable tracking, return
+    measured (alt, az)."""
+    ra, dec = issue_slew(cli, home_az, home_alt, loc)
+    wait_until_near_target(
+        cli, target_ra_h=ra, target_dec_d=dec,
+        tolerance_deg=3.0, timeout=60.0, stall_threshold_s=5.0,
+    )
+    _wait_for_mount_idle(cli, timeout_s=15.0)
+    set_tracking(cli, False)
+    time.sleep(1.0)
+    return _measure_altaz(cli, loc)
+
+
+def run_diagonal(cli: InstrumentedAlpacaClient, args) -> int:
+    loc = EarthLocation(
+        lat=Config.init_lat * u.deg, lon=Config.init_long * u.deg, height=0 * u.m
+    )
+    angles = _parse_floats(args.diag_angles)
+    if not angles:
+        print("ERROR: need at least one angle", file=sys.stderr)
+        return 2
+    speed = int(args.diag_speed)
+    dur = int(args.diag_dur)
+    home_alt = args.diag_home_alt
+    home_az = args.diag_home_az
+
+    print("=" * 78)
+    print("Velocity-controller tuning — diagonal-angle calibration")
+    print(f"  speed={speed}  dur_sec={dur}  home=(alt={home_alt:.1f}°, az={home_az:.1f}°)")
+    print(f"  angles ({len(angles)}): {angles}")
+    print("=" * 78)
+
+    print("Entering scenery mode; disabling tracking...")
+    ensure_scenery_mode(cli)
+    set_tracking(cli, False)
+
+    nominal_rate = speed / _SPEED_PER_DEG_PER_SEC  # °/s (unsigned magnitude)
+    nominal_motion = nominal_rate * dur             # degrees magnitude for full burst
+
+    results = []
+    for i, angle in enumerate(angles, start=1):
+        print(f"[{i}/{len(angles)}] recentering to (alt={home_alt:.1f}, az={home_az:.1f})...")
+        alt0, az0 = _recenter(cli, loc, home_alt, home_az)
+        print(f"  pre-burst: alt={alt0:+.3f}° az={az0:+.3f}°")
+
+        print(f"[{i}/{len(angles)}] burst: angle={angle:.1f} speed={speed} dur={dur}s")
+        _speed_move(cli, speed, int(angle), dur)
+        _wait_for_mount_idle(cli, timeout_s=dur + 5.0)
+        time.sleep(0.5)  # decel settle
+
+        alt1, az1 = _measure_altaz(cli, loc)
+        d_alt = alt1 - alt0
+        d_az = _wrap_pm180(az1 - az0)
+        mag_obs = math.hypot(d_az, d_alt)
+        # Observed "effective" direction in mount frame.
+        # Convention test: if angle=0 drives +az and angle=90 drives +alt,
+        # then expected Δaz = |v|·cos(angle), Δalt = |v|·sin(angle).
+        ang_rad = math.radians(angle)
+        exp_d_az = nominal_motion * math.cos(ang_rad)
+        exp_d_alt = nominal_motion * math.sin(ang_rad)
+        dir_obs = math.degrees(math.atan2(d_alt, d_az))
+        # Normalize for easy compare.
+        ratio_mag = mag_obs / nominal_motion if nominal_motion > 0 else 0.0
+
+        print(f"  Δaz={d_az:+.3f}°  Δalt={d_alt:+.3f}°  |v|={mag_obs:.3f}°")
+        print(f"  expected (vector): Δaz={exp_d_az:+.3f}°  Δalt={exp_d_alt:+.3f}°  "
+              f"|v|_nominal={nominal_motion:.3f}°")
+        print(f"  obs_dir={dir_obs:+.1f}° (cmd angle={angle:+.1f}°)  "
+              f"|v|_ratio={ratio_mag:.2f}")
+
+        results.append({
+            "cmd_angle": angle,
+            "d_az": d_az, "d_alt": d_alt,
+            "exp_d_az": exp_d_az, "exp_d_alt": exp_d_alt,
+            "mag_obs": mag_obs, "mag_exp": nominal_motion,
+            "dir_obs": dir_obs, "dir_err": _wrap_pm180(dir_obs - angle),
+            "ratio_mag": ratio_mag,
+        })
+        time.sleep(0.5)
+        print()
+
+    # Summary.
+    print("=" * 78)
+    print("DIAGONAL SUMMARY")
+    print("=" * 78)
+    print(f"  {'cmd_ang':>7}  {'Δaz':>8}  {'Δalt':>8}  "
+          f"{'exp_Δaz':>8}  {'exp_Δalt':>8}  "
+          f"{'obs_dir':>8}  {'dir_err':>8}  {'|v|_ratio':>9}")
+    for r in results:
+        print(
+            f"  {r['cmd_angle']:>+7.1f}  "
+            f"{r['d_az']:>+8.3f}  {r['d_alt']:>+8.3f}  "
+            f"{r['exp_d_az']:>+8.3f}  {r['exp_d_alt']:>+8.3f}  "
+            f"{r['dir_obs']:>+8.1f}  {r['dir_err']:>+8.1f}  {r['ratio_mag']:>9.3f}"
+        )
+    print()
+    dir_errs = [abs(r['dir_err']) for r in results]
+    ratios = [r['ratio_mag'] for r in results]
+    print(
+        f"  dir_err |mean|={statistics.mean(dir_errs):.2f}°  "
+        f"max={max(dir_errs):.2f}°  "
+        f"|v|_ratio mean={statistics.mean(ratios):.3f}  "
+        f"(1.0 = firmware does proper vector decomposition)"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--mode", choices=["setpoints", "step_response"],
+    p.add_argument("--mode", choices=["setpoints", "step_response", "diagonal"],
                    default="setpoints")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=5555)
@@ -537,10 +657,18 @@ def main() -> int:
     p.add_argument("--kd", type=float, default=0.4)
     p.add_argument("--max-rate", type=float, default=6.0)
     p.add_argument("--loop-dt", type=float, default=0.5)
-    p.add_argument("--min-speed", type=int, default=50)
-    p.add_argument("--fine-min-speed", type=int, default=20)
+    p.add_argument("--min-speed", type=int, default=100)
+    p.add_argument("--fine-min-speed", type=int, default=80)
     p.add_argument("--fine-thresh-factor", type=float, default=4.0)
     p.add_argument("--max-halvings", type=int, default=4)
+    p.add_argument("--use-predictor", dest="use_predictor",
+                   action="store_true", default=True,
+                   help="Use the one-step feedforward predictor (default on).")
+    p.add_argument("--no-predictor", dest="use_predictor",
+                   action="store_false",
+                   help="Disable predictor; fall back to pure PD control.")
+    p.add_argument("--tau", type=float, default=0.8,
+                   help="Acceleration time constant τ (s) for the predictor.")
 
     # Step-response mode args.
     p.add_argument("--step-speeds", default="100,300,700,1440",
@@ -557,6 +685,18 @@ def main() -> int:
                         "keep the mount near start_az.")
     p.add_argument("--step-log", default=None,
                    help="Path to a JSONL file to write raw samples to.")
+
+    # Diagonal mode args.
+    p.add_argument("--diag-angles", default="0,45,90,135,180,225,270,315",
+                   help="Comma-separated angles (°) to test for vector decomposition.")
+    p.add_argument("--diag-speed", type=int, default=500,
+                   help="Speed for each diagonal burst.")
+    p.add_argument("--diag-dur", type=int, default=5,
+                   help="Burst duration (≥ _MIN_DUR_S=5).")
+    p.add_argument("--diag-home-alt", type=float, default=5.0,
+                   help="Home altitude for recentering.")
+    p.add_argument("--diag-home-az", type=float, default=0.0,
+                   help="Home azimuth for recentering.")
     args = p.parse_args()
 
     Config.load_toml()
@@ -568,8 +708,13 @@ def main() -> int:
 
     if args.mode == "setpoints":
         rc = run_setpoints(cli, args)
-    else:
+    elif args.mode == "step_response":
         rc = run_step_response(cli, args)
+    elif args.mode == "diagonal":
+        rc = run_diagonal(cli, args)
+    else:
+        print(f"ERROR: unknown mode {args.mode}", file=sys.stderr)
+        rc = 2
 
     _print_latency_summary(cli)
     return rc

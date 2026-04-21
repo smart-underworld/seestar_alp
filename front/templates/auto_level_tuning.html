@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+{% block title %}Auto-Level Control-Loop Tuning{% endblock %}
+{% block content %}
+
+<style>
+  .tuning-wrap { padding: 12px; }
+  .tuning-wrap h2 { margin: 10px 0 4px; }
+  .tuning-wrap .meta { font-family: monospace; font-size: 12px; opacity: 0.7; margin-bottom: 8px; }
+  .tuning-wrap .controls { margin: 8px 0; font-family: monospace; font-size: 13px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .tuning-wrap .chart-box { height: 260px; margin-bottom: 20px; background: rgba(0,0,0,0.02); padding: 4px 8px 8px; border: 1px solid rgba(0,0,0,0.12); border-radius: 6px; }
+  .tuning-wrap .kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin-bottom: 16px; font-family: monospace; font-size: 13px; }
+  .tuning-wrap .kpi { padding: 8px 10px; background: rgba(0,0,0,0.03); border-radius: 4px; }
+  .tuning-wrap .kpi .k { opacity: 0.6; font-size: 11px; }
+  .tuning-wrap .kpi .v { font-size: 15px; font-weight: bold; }
+  .log-select { font-family: monospace; font-size: 12px; }
+</style>
+
+<div class="tuning-wrap">
+  <h2>Auto-Level Control-Loop Tuning</h2>
+  <div class="meta" id="run-meta">Loading…</div>
+
+  <div class="controls">
+    <label>Log file:
+      <select id="log-select" class="log-select"></select>
+    </label>
+    <label><input type="checkbox" id="auto-refresh" checked> Auto-refresh (2 s)</label>
+    <span id="refresh-status"></span>
+  </div>
+
+  <div class="kpi-row" id="kpi-row"></div>
+
+  <h3>Azimuth vs time</h3>
+  <div class="chart-box"><canvas id="azChart"></canvas></div>
+
+  <h3>Error (target − measured) and measured rate</h3>
+  <div class="chart-box"><canvas id="errRateChart"></canvas></div>
+
+  <h3>Commanded speed &amp; direction (angle)</h3>
+  <div class="chart-box"><canvas id="cmdChart"></canvas></div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<script>
+(function(){
+  const selectEl = document.getElementById('log-select');
+  const autoRefreshEl = document.getElementById('auto-refresh');
+  const refreshStatusEl = document.getElementById('refresh-status');
+  const metaEl = document.getElementById('run-meta');
+  const kpiRowEl = document.getElementById('kpi-row');
+
+  const azCtx = document.getElementById('azChart').getContext('2d');
+  const errRateCtx = document.getElementById('errRateChart').getContext('2d');
+  const cmdCtx = document.getElementById('cmdChart').getContext('2d');
+
+  const azChart = new Chart(azCtx, {
+    type: 'line',
+    data: { datasets: [
+      { label: 'measured az (°)', borderColor: '#2e7dd7', backgroundColor: '#2e7dd7', data: [], parsing: false, pointRadius: 0, borderWidth: 2 },
+      { label: 'commanded az (°)', borderColor: '#e07a2f', backgroundColor: '#e07a2f', data: [], parsing: false, pointRadius: 0, borderWidth: 2, borderDash: [4,4] },
+    ]},
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { type: 'linear', title: { display: true, text: 'elapsed (s)' } },
+        y: { title: { display: true, text: 'az (°)' } },
+      },
+      plugins: { legend: { position: 'top' } },
+    },
+  });
+
+  const errRateChart = new Chart(errRateCtx, {
+    type: 'line',
+    data: { datasets: [
+      { label: 'error (°)', yAxisID: 'y1', borderColor: '#c53030', backgroundColor: '#c53030', data: [], parsing: false, pointRadius: 0, borderWidth: 2 },
+      { label: 'measured rate (°/s)', yAxisID: 'y2', borderColor: '#319795', backgroundColor: '#319795', data: [], parsing: false, pointRadius: 0, borderWidth: 2 },
+    ]},
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { type: 'linear', title: { display: true, text: 'elapsed (s)' } },
+        y1: { position: 'left', title: { display: true, text: 'error (°)' } },
+        y2: { position: 'right', title: { display: true, text: 'rate (°/s)' }, grid: { drawOnChartArea: false } },
+      },
+      plugins: { legend: { position: 'top' } },
+    },
+  });
+
+  const cmdChart = new Chart(cmdCtx, {
+    type: 'line',
+    data: { datasets: [
+      { label: 'commanded signed rate (°/s)', borderColor: '#2e7dd7', backgroundColor: '#2e7dd7', stepped: true, data: [], parsing: false, pointRadius: 0, borderWidth: 2 },
+    ]},
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { type: 'linear', title: { display: true, text: 'elapsed (s)' } },
+        y: { title: { display: true, text: 'signed commanded rate (°/s)' } },
+      },
+      plugins: { legend: { position: 'top' } },
+    },
+  });
+
+  const SPEED_PER_DEG_PER_SEC = 237; // stays in sync with controller constant
+
+  async function fetchLogs() {
+    const r = await fetch('/api/tuning/logs');
+    if (!r.ok) return [];
+    return (await r.json()).logs || [];
+  }
+
+  async function fetchLog(name) {
+    const r = await fetch(`/api/tuning/log?name=${encodeURIComponent(name)}`);
+    if (!r.ok) return null;
+    return r.json();
+  }
+
+  function update(data){
+    if (!data || !data.samples || data.samples.length === 0){
+      metaEl.textContent = `No samples yet in ${data && data.name ? data.name : '?'}`;
+      return;
+    }
+    const t0 = data.samples[0].t;
+    const samples = data.samples.map(s => ({
+      t: (s.t - t0),
+      az: s.az_deg,
+      cmd_az: s.commanded_az_deg,
+      phase: s.phase,
+      step: s.step,
+    }));
+
+    // Primary az chart.
+    azChart.data.datasets[0].data = samples.map(s => ({ x: s.t, y: s.az }));
+    azChart.data.datasets[1].data = samples.map(s => ({ x: s.t, y: s.cmd_az })).filter(p => p.y !== null && p.y !== undefined);
+    azChart.update();
+
+    // Error & measured rate chart (derived).
+    const errPoints = [];
+    const ratePoints = [];
+    for (let i = 0; i < samples.length; i++){
+      const s = samples[i];
+      if (s.cmd_az !== null && s.cmd_az !== undefined){
+        let err = s.cmd_az - s.az;
+        // wrap to ±180°
+        err = ((err + 540) % 360) - 180;
+        errPoints.push({ x: s.t, y: err });
+      }
+      if (i > 0){
+        const prev = samples[i-1];
+        const dt = s.t - prev.t;
+        let daz = s.az - prev.az;
+        daz = ((daz + 540) % 360) - 180;
+        if (dt > 0){
+          ratePoints.push({ x: s.t, y: daz / dt });
+        }
+      }
+    }
+    errRateChart.data.datasets[0].data = errPoints;
+    errRateChart.data.datasets[1].data = ratePoints;
+    errRateChart.update();
+
+    // Commanded rate chart (from events).
+    const cmdPoints = [];
+    if (data.events){
+      for (const ev of data.events){
+        if (ev.event === 'vc_issue' || ev.event === 'vc_stop' || ev.event === 'main_issue'){
+          const rel = ev.t - t0;
+          const speed = ev.speed || 0;
+          const angle = ev.angle;
+          let signed = speed / SPEED_PER_DEG_PER_SEC;
+          if (speed === 0) signed = 0;
+          else if (angle === 180 || angle === 270) signed = -signed;
+          cmdPoints.push({ x: rel, y: signed });
+        }
+      }
+    }
+    cmdChart.data.datasets[0].data = cmdPoints;
+    cmdChart.update();
+
+    // Meta line.
+    const lastT = samples[samples.length-1].t;
+    const currentPhase = samples[samples.length-1].phase || '(no phase)';
+    const currentStep = samples[samples.length-1].step ?? '-';
+    const pollDt = data.poll_interval_s || '?';
+    metaEl.textContent = `${data.name}  |  ${samples.length} samples, ${data.events ? data.events.length : 0} events, elapsed ${lastT.toFixed(1)}s, phase=${currentPhase}, step=${currentStep}, poll=${pollDt}s`;
+
+    // KPI chips.
+    const kpis = [];
+    kpis.push({ k: 'latest az', v: `${samples[samples.length-1].az.toFixed(3)}°` });
+    const lastCmd = [...samples].reverse().find(s => s.cmd_az != null);
+    if (lastCmd) kpis.push({ k: 'commanded az', v: `${lastCmd.cmd_az.toFixed(3)}°` });
+    if (errPoints.length) kpis.push({ k: 'latest error', v: `${errPoints[errPoints.length-1].y.toFixed(3)}°` });
+    if (ratePoints.length){
+      const last = ratePoints[ratePoints.length-1].y;
+      kpis.push({ k: 'latest rate', v: `${last.toFixed(2)}°/s` });
+    }
+    if (cmdPoints.length){
+      const lastCmdRate = cmdPoints[cmdPoints.length-1].y;
+      kpis.push({ k: 'last cmd rate', v: `${lastCmdRate.toFixed(2)}°/s` });
+    }
+    kpiRowEl.innerHTML = kpis.map(k => `<div class="kpi"><div class="k">${k.k}</div><div class="v">${k.v}</div></div>`).join('');
+  }
+
+  async function refresh(){
+    const name = selectEl.value;
+    if (!name) return;
+    refreshStatusEl.textContent = 'refreshing…';
+    try {
+      const data = await fetchLog(name);
+      if (data) update(data);
+      refreshStatusEl.textContent = `updated ${new Date().toLocaleTimeString()}`;
+    } catch (err){
+      refreshStatusEl.textContent = `error: ${err.message}`;
+    }
+  }
+
+  async function reloadFileList(){
+    const logs = await fetchLogs();
+    const selected = selectEl.value;
+    selectEl.innerHTML = logs.map(l => `<option value="${l}">${l}</option>`).join('');
+    if (logs.includes(selected)) selectEl.value = selected;
+    else if (logs.length) selectEl.value = logs[0]; // newest
+    await refresh();
+  }
+
+  selectEl.addEventListener('change', refresh);
+  autoRefreshEl.addEventListener('change', () => { /* timer checks the box */ });
+
+  reloadFileList();
+  setInterval(() => {
+    if (autoRefreshEl.checked) refresh();
+  }, 2000);
+  setInterval(reloadFileList, 15000);  // discover new files
+})();
+</script>
+
+{% endblock %}
