@@ -11,81 +11,128 @@ RPC latency.
 
 ## Executive summary — what to do next (for a fresh Claude Code session)
 
-**Where we are (2026-04-21 end-of-session):** All three axes of work
-are functional: az closed-loop FF+FB, el closed-loop FF+FB, and 2D
-combined `move_to_ff(az, el)`. Everything committed to main.
+**Where we are (2026-04-21 end-of-session):** The 2-axis closed-loop
+velocity controller is working end-to-end. Az, el, and 2D diagonal
+moves all converge to ≤ 0.25° residual. Everything is committed.
 
 | Component | Status | Commits |
 |---|---|---|
-| Closed-loop FF+FB (az) | **done** — Run 11 met Phase-2 exit (0.14° mean, 0 FB) | `eb64a1d` |
+| Closed-loop FF+FB (az) | **done** — Run 11 met Phase-2 exit (0.14° mean) | `eb64a1d` |
 | Raw encoder readout (`scope_get_horiz_coord`) | **done** — replaces stale `scope_get_equ_coord` | `eb64a1d` |
 | Cable-wrap limits (±435° usable) | **done** — probed, saved, planner-integrated | `eb64a1d` |
 | Closed-loop FF+FB (el) | **done** — limits ±70.8° usable, 3 moves ≤ 0.13° | `ba8a679` |
-| 2D combined `move_to_ff(az, el)` | **done** — diagonal moves work, speed-sharing note below | `68f21f1` |
+| 2D combined `move_to_ff(az, el)` | **done** — 4 diagonals ≤ 0.22° | `68f21f1` |
+| Diagonal speed fix (per-axis clamp) | **done** — firmware clamps per-axis at 1440, not total | `868490d` |
+| Velocity controller page fixes | **done** — PositionLogger→horiz_coord, event field fix, el overlay | `2040be6` |
 
-**Known issue — diagonal speed sharing:** when both axes move
-simultaneously, the v_max budget is shared (`|v_vec| ≤ v_max`), so
-each axis moves slower than its individual trajectory planned at full
-v_max. The feedback closes the gap during the settle phase, but large
-diagonals may need `settle_max_s > 5 s` (the current default). Fix
-options: (a) increase settle_max_s, (b) plan each axis at
-`v_max / sqrt(2)` when both are active, (c) plan a true 2D trajectory
-with speed-budget-aware phasing.
+**Firmware speed model (verified 2026-04-21):**
+- Per-axis max: speed=1440 → 6.054°/s. Ratio = 237.8 speed/°/s.
+- Speed > 1440 is per-axis clamped (not rejected). Diagonal at
+  speed=2036 (1440×√2) angle=45° gives each axis full 6°/s.
+- `PLAN_MAX_RATE_DEGS = 6.0` is the per-axis cap; the 2D controller
+  clamps per-axis (not magnitude), so diagonals don't sacrifice rate.
+- `SPEED_PER_DEG_PER_SEC = 237` confirmed correct with mid-50%
+  cruise-rate measurement at multiple speed settings.
 
 **What to do next (priority order):**
 
-1. **Fix the diagonal speed-sharing issue** — simplest: increase
-   settle_max_s to 15 s for move_to_ff, or plan with per-axis v_max
-   scaled by cos(diagonal_angle).
+1. **Velocity controller page: show live data without setpoints.**
+   Currently the page only shows data when `PositionLogger` is running
+   (launched by `tune_vc.py`). Need a standalone "live position" mode
+   that reads `scope_get_horiz_coord` directly (even during manual
+   jogs or idle state) and feeds the chart.
 
-2. **Velocity controller page (`/velocity_controller`) improvements:**
-   - **Data source:** `PositionLogger` writes JSONL samples every
-     0.5 s → `auto_level_logs/<run>.positions.jsonl`. Backend parses
-     them in `front/app.py` `VelocityControllerLogResource`. FF tick
-     events (from the controller's `position_logger.mark_event(
-     "ff_tick", ...)`) are included in the same JSONL as `kind=event`.
-   - **Current state:** azimuth chart shows `ff_tick.ref_pos` as
-     trajectory reference when available (Phase 3 change). Elevation
-     chart and error computation still use the legacy `commanded_*`
-     (final setpoint step) from `PositionLogger.set_target()`.
-   - **To do:** (a) update the PositionLogger sample loop to read
-     `scope_get_horiz_coord` instead of `scope_get_equ_coord` (it
-     currently uses equ_coord which is stale without plate-solve).
-     (b) compute error as trajectory_ref − measured (from ff_tick
-     events), not final_setpoint − measured. (c) add elevation
-     trajectory reference from `el_ff_tick` / `2d_ff_tick` events.
+2. **Streaming trajectory consumer** for dynamic targets (plane chase,
+   sidereal tracking). Builds on `move_to_ff`. Needs:
+   - External source feeding `(t, az, el)` reference stream.
+   - `unwind_azimuth` called before each tracking session if cable is
+     wound past threshold.
+   - Time-varying reference injection into the 2D controller loop
+     (currently the loop runs a pre-computed fixed trajectory).
 
-3. **Streaming trajectory consumer** for dynamic targets (plane chase,
-   sidereal tracking). Builds on `move_to_ff`. Needs: external source
-   feeding `(t, az, el)` reference stream, `unwind_azimuth` called
-   before each session if cable is wound.
+3. **Run a clean 6-setpoint az sweep with cumulative limits** to
+   confirm the full pipeline end-to-end. Run 15 step 1 was clean
+   (+0.12°); step 2 hit a network disconnect (not controller-related).
 
-4. **Run a clean full sweep with cumulative limits** to confirm no
-   cable-wrap regressions (Run 15 step 1 clean at +0.12° residual;
-   step 2 hit a network disconnect, not a controller bug).
+4. **Cable-wrap cumulative state across restarts.** Currently the
+   `CumulativeAzTracker` resets each time `tune_vc.py` runs. For
+   multi-session tracking, persist the cumulative state to a file or
+   track it via the firmware's startup-home assumption (cum=0 after
+   every power cycle).
 
-**Session-restart cheat-sheet** is in Phase 3 below. Key commands:
+**Session-restart cheat-sheet:**
 ```bash
 # Unit tests (38 should pass):
 uv run python -m pytest tests/test_auto_level.py tests/test_trajectory.py -q
 
-# Hardware setpoint sweep (loads plant_limits.json automatically):
+# Hardware az setpoint sweep (loads plant_limits.json automatically):
 uv run python scripts/tune_vc.py --control feedforward \
   --setpoints=-170,+30,-60,+90,-30,+170 --tol 0.3 --alt 10
 
-# Quick 2D test (both axes):
+# Quick 2D diagonal test (both axes):
 uv run python -c "
-from device.velocity_controller import move_to_ff, measure_altaz_timed, ensure_scenery_mode
-# ... setup ...
+import os, sys; sys.path.insert(0, '.')
+from astropy import units as u
+from astropy.coordinates import EarthLocation
+from device.alpaca_client import AlpacaClient
+from device.config import Config
+from device.velocity_controller import (
+    move_to_ff, measure_altaz_timed, ensure_scenery_mode, set_tracking,
+    wait_for_mount_idle,
+)
+Config.load_toml()
+loc = EarthLocation(lat=Config.init_lat*u.deg, lon=Config.init_long*u.deg, height=0*u.m)
+cli = AlpacaClient('127.0.0.1', 5555, 1)
+ensure_scenery_mode(cli)
+set_tracking(cli, False)
+wait_for_mount_idle(cli, timeout_s=5.0)
+alt, az, _ = measure_altaz_timed(cli, loc)
 move_to_ff(cli, target_az_deg=30, target_el_deg=20,
-           cur_az_deg=cur_az, cur_el_deg=cur_el, loc=loc,
+           cur_az_deg=az, cur_el_deg=alt, loc=loc,
            el_min_deg=-70.9, el_max_deg=70.8)
+"
+
+# Read current encoder position:
+uv run python -c "
+import sys; sys.path.insert(0, '.')
+from device.alpaca_client import AlpacaClient
+from device.velocity_controller import measure_altaz_timed
+from device.config import Config
+from astropy import units as u; from astropy.coordinates import EarthLocation
+Config.load_toml()
+cli = AlpacaClient('127.0.0.1',5555,1)
+loc = EarthLocation(lat=Config.init_lat*u.deg,lon=Config.init_long*u.deg,height=0*u.m)
+alt,az,_=measure_altaz_timed(cli,loc)
+print(f'az={az:+.3f}°  el={alt:+.3f}°')
 "
 ```
 
+**Key file paths:**
+| File | What |
+|---|---|
+| `device/velocity_controller.py` | `move_azimuth_to_ff`, `move_elevation_to_ff`, `move_to_ff`, `unwind_azimuth`, `measure_altaz_timed`, `PositionLogger` |
+| `device/trajectory.py` | `trapezoidal_profile`, `scurve_profile` (both accept `wrap_target`, `az_forbidden_deg`) |
+| `device/plant_limits.py` | `AzimuthLimits`, `CumulativeAzTracker`, `pick_cum_target` |
+| `device/plant_limits.json` | Measured cable-wrap + el limits (gitignored — per-device) |
+| `scripts/tune_vc.py` | `--control feedforward` setpoint sweep harness |
+| `scripts/sysid.py` | `--mode limits` (dithered probe), `--mode trajectory_track` |
+| `front/templates/velocity_controller.html` | Chart page (trajectory ref from ff_tick/2d_ff_tick events) |
+| `front/app.py` | `VelocityControllerLogResource` (JSONL → JSON) |
+
+**Controller defaults (all in `velocity_controller.py`):**
+- `profile = "scurve"`, `kp_pos = 0.5 /s`, `v_corr_max = 2.0 °/s`
+- `v_max = PLAN_MAX_RATE_DEGS = 6.0 °/s` (per-axis; firmware clamps at speed=1440)
+- `SPEED_PER_DEG_PER_SEC = 237` (linear, verified)
+- `arrive_tolerance_deg = 0.3°`, `settle_max_s = 5.0 s`, `converged_ticks_required = 2`
+- `cold_start_lag_s = 0.0` (closed-loop feedback absorbs cold-start)
+
+**Plant limits (in `plant_limits.json`):**
+- Az cable wrap: ±450° hard stops, ±435° usable (15° padding). Symmetric around power-on home.
+- El: hard stops ±85.8°, usable ±70.8° (15° padding).
+
 > Jump to [Phase 3](#phase-3-closed-loop-ffFB--cable-wrap-calibration-2026-04-21)
-> for full session context, or [Phase 4](#phase-4-elevation-control--2-axis-motion-next)
-> for the elevation plan.
+> for full session context, or [Phase 4](#phase-4-elevation-control--2-axis-motion-done)
+> for the elevation/2D results.
 
 ---
 
@@ -104,7 +151,10 @@ motion. Measured limits and cumulative-az tracking live in
 `device/plant_limits.json`. `wrap_pm180` still applies per-sample (true
 delta stays < 180°); the planner can now operate in cumulative
 (unwrapped) coordinates for multi-turn safety via `wrap_target=False`.
-Elevation has physical limits — not yet characterised.
+
+**Elevation limits (2026-04-21):** hard stops at ±85.8° encoder-deg,
+usable ±70.8° with 15° padding. No wrap (el is a bounded joint < 180°
+range). Simple min/max clamp in `move_elevation_to_ff`.
 
 See `scripts/auto_level_tuning.md` for the per-run tuning log and
 `plans/auto_level_control_loop_todo.md` for near-term triaged tasks.
@@ -920,8 +970,33 @@ front/templates/velocity_controller.html — trajectory-ref overlay from ff_tick
 | 4.1 **El limits probe** | **DONE** | hard stops ±85.8°, usable ±70.8° (15° padding). Saved in plant_limits.json. |
 | 4.2 **El sysid** | **skipped** | El converges with az-derived tau — no separate sysid needed. |
 | 4.3 **Independent el controller** | **DONE** | `move_elevation_to_ff` — 3 moves ≤ 0.13° (commit `ba8a679`). |
-| 4.4 **Combined `move_to_ff(az, el)`** | **DONE** | 2D velocity composition works. Diagonal speed-sharing is a known issue (commit `68f21f1`). |
-| 4.5 **Streaming trajectory consumer** | **pending** | Next priority. |
+| 4.4 **Combined `move_to_ff(az, el)`** | **DONE** | 2D velocity composition works (commit `68f21f1`). |
+| 4.5 **Diagonal speed fix** | **DONE** | Per-axis clamp, not magnitude. 4 diagonals ≤ 0.22° (commit `868490d`). |
+| 4.6 **Velocity controller page** | **DONE** | PositionLogger→horiz_coord, event field fix, el+2d overlay (commit `2040be6`). |
+| 4.7 **Streaming trajectory consumer** | **pending** | Next priority. |
+
+### Firmware speed model (verified empirically 2026-04-21)
+
+Tested with mid-50% cruise-rate sampling (excluding accel/decel ramps)
+at multiple speeds, both axes, and diagonal.
+
+- **Per-axis linear range:** speed ∈ [0, 1440]. Rate = speed / 237 °/s.
+  Confirmed at speed=200, 500, 1000, 1440 — ratio is 237.8 ± 0.3.
+- **Per-axis saturation:** speed > 1440 gives the same rate as 1440
+  (~6.054 °/s). Firmware silently clamps, doesn't reject.
+- **Both axes identical:** az and el both saturate at 1440 → 6.058°/s.
+- **Diagonal decomposition:** `scope_speed_move(speed, angle, dur)`
+  decomposes into per-axis components `speed × cos(angle)` and
+  `speed × sin(angle)`, each clamped independently at 1440.
+- **Diagonal max:** at angle=45°, speed=2036 (1440×√2) gives each
+  axis full 6.05°/s. Total |v| = 8.56°/s.
+- **Max useful speed for angle θ:** `1440 / max(|cos θ|, |sin θ|)`.
+
+Implication for the planner: `PLAN_MAX_RATE_DEGS = 6.0` is the
+per-axis cap. The 2D controller clamps per-axis (not magnitude), then
+converts to firmware `(speed, angle)` via:
+`speed = |v_vec| × 237, angle = atan2(v_el, v_az)`.
+The firmware's internal per-axis clamp handles any overshoot.
 
 ### 4.1 Elevation limits probe
 
@@ -997,17 +1072,26 @@ cumulative az has drifted > 180° from cable center.
    velocity cap). Only add if empirical el runs show a persistent
    nonzero residual.
 
-### Open items from 2026-04-21 session (not yet done)
+### Open items from 2026-04-21 session
 
-- [ ] Commit all changes from this session (see file list above).
-- [ ] Full 6-setpoint sweep with closed-loop + cumulative limits
-      loaded (Run 15 was interrupted at step 3; steps 1-3 were clean).
-- [ ] Investigate / fix firmware `scope_get_equ_coord` stale-data
-      behavior. Currently we bypass it via `scope_get_horiz_coord`,
-      but `issue_slew`/iscope gotos still use RA/Dec which may explain
-      why all iscope gotos miss by 30-100°.
-- [ ] Add elevation limits + `move_elevation_to_ff` (Phase 4.1–4.3).
-- [ ] 2D combined controller (Phase 4.4).
+- [x] Commit all changes — `eb64a1d`, `ba8a679`, `68f21f1`, `868490d`, `2040be6`.
+- [x] Elevation limits + `move_elevation_to_ff` (Phase 4.1–4.3) — `ba8a679`.
+- [x] 2D combined controller (Phase 4.4) — `68f21f1`.
+- [x] Diagonal speed fix — per-axis clamp — `868490d`.
+- [x] Velocity controller page: PositionLogger→horiz_coord, event field
+      fix (`e.event` not `e.name`), el trajectory overlay — `2040be6`.
+- [x] Firmware speed calibration: per-axis clamp at 1440, ratio=237,
+      diagonal at 2036 gives full 6°/s per axis.
+- [ ] Full 6-setpoint sweep with cumulative limits (Run 15 step 2 hit
+      network disconnect; needs retry).
+- [ ] Velocity controller page: live position display when no
+      PositionLogger is running (standalone read of horiz_coord).
+- [ ] Investigate `scope_get_equ_coord` stale-data behavior — we
+      bypass via `scope_get_horiz_coord`, but `issue_slew` / iscope
+      gotos still use RA/Dec which may explain why gotos miss by
+      30-100°.
 - [ ] Cable-wrap cumulative-az state persisted across restarts of
-      tune_vc (currently resets to first reading each run; fine for
-      sweeps from home, risky for multi-session tracking).
+      tune_vc (currently resets each run; fine for sweeps from home,
+      risky for multi-session tracking).
+- [ ] Streaming trajectory consumer for dynamic-target tracking
+      (Phase 4.7).
