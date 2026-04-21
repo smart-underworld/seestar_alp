@@ -577,6 +577,248 @@ class PositionLogger:
         }
 
 
+# ---------------------------------------------------------------------------
+# Velocity-mode closed-loop controller
+# ---------------------------------------------------------------------------
+#
+# The firmware does not expose a true open-ended velocity command. The
+# closest thing is scope_speed_move(speed, angle, dur_sec) with dur_sec ≤ 10.
+# A new scope_speed_move supersedes the in-flight one, so we can simulate a
+# rate-controlled axis by re-issuing the command every control-loop period
+# with an updated (speed, angle). Each command carries dur_sec = 10 so if the
+# loop stalls for any reason, the motor stops on its own within 10 s.
+#
+# Empirically safe at poll_dt = 0.5 s (probed earlier, at cadences ≥ 0.3 s
+# scope_get_equ_coord does not cancel an active move).
+
+_VC_LOOP_DT_S = 0.5         # control-loop period
+_VC_CMD_DUR_S = 10          # dur_sec on every scope_speed_move (firmware cap)
+_VC_KP = 0.6                # proportional gain (rate °/s per ° of error)
+_VC_MAX_RATE_DEGS = 6.0     # clamp velocity magnitude
+_VC_MIN_SPEED = 50          # firmware floor; below this the mount barely moves
+_VC_STOP_REL_ERROR = 0.5    # switch to "coasting" stop if |error| dropped to
+                            # within this fraction of tolerance
+_VC_STUCK_MIN_S = 2.0       # seconds of commanded-but-not-moving to declare stuck
+_VC_STUCK_MOVE_FRAC = 0.2   # moved < this fraction of expected during interval
+_VC_MAX_HALVINGS = 4        # number of times we halve rate ceiling on stuck
+_VC_DEFAULT_TIMEOUT_S = 120 # per-move overall budget
+
+
+def _rate_to_speed(rate_degs: float) -> int:
+    """Convert a desired signed rate °/s to an unsigned firmware speed unit."""
+    return int(round(abs(rate_degs) * _SPEED_PER_DEG_PER_SEC))
+
+
+def move_azimuth_to_velocity(
+    cli: AlpacaClient,
+    target_az_deg: float,
+    cur_az_deg: float,
+    loc: EarthLocation,
+    target_alt_deg: float,
+    tag: str = "",
+    arrive_tolerance_deg: float = 0.5,
+    position_logger: PositionLogger | None = None,
+    timeout_s: float = _VC_DEFAULT_TIMEOUT_S,
+) -> tuple[float, float, dict]:
+    """Closed-loop velocity controller for the azimuth axis.
+
+    At each 0.5 s tick:
+      1. Measure position (RA/Dec → alt/az, wrap az to [-180, +180)).
+      2. error = wrap_pm180(target - measured).
+      3. If |error| ≤ tolerance, command stop and exit (after one settling
+         tick to confirm residual).
+      4. Compute desired rate = clamp(kP * error, ±rate_ceiling).
+      5. Convert to (speed, angle) and issue scope_speed_move(…, dur_sec=10).
+
+    Each scope_speed_move supersedes the previous one, so the motor tracks
+    whatever the latest (speed, angle) says. If the loop stalls/crashes the
+    motor stops on its own after ≤ 10 s.
+
+    Stuck handling: if the mount barely moved over the last
+    _VC_STUCK_MIN_S while we were commanding motion, halve the rate
+    ceiling. Up to _VC_MAX_HALVINGS halvings, then fall back to iscope goto.
+
+    Returns (measured_alt, measured_az, stats).
+    """
+    stats = {
+        "commands_issued": 0,
+        "rate_ceiling_halvings": 0,
+        "stuck_bail": False,
+        "fallback_goto_used": False,
+        "elapsed_s": 0.0,
+        "iterations": 0,
+        "final_residual_deg": None,
+    }
+
+    rate_ceiling = _VC_MAX_RATE_DEGS
+    last_speed = 0
+    last_angle = 0
+    last_az = cur_az_deg
+    stuck_since_t: float | None = None
+    stuck_since_az = cur_az_deg
+
+    def _issue(speed: int, angle: int, event: str) -> None:
+        nonlocal last_speed, last_angle
+        _speed_move(cli, speed, angle, _VC_CMD_DUR_S)
+        last_speed = speed
+        last_angle = angle
+        stats["commands_issued"] += 1
+        if position_logger is not None:
+            position_logger.mark_event(
+                event, speed=speed, angle=angle, dur_sec=_VC_CMD_DUR_S,
+            )
+
+    t0 = time.monotonic()
+    fallback_reason: str | None = None
+    consecutive_within_tol = 0
+
+    if position_logger is not None:
+        position_logger.set_phase("vc_move")
+
+    while True:
+        elapsed = time.monotonic() - t0
+        stats["elapsed_s"] = elapsed
+        stats["iterations"] += 1
+        if elapsed > timeout_s:
+            fallback_reason = f"velocity loop timed out after {elapsed:.1f}s"
+            break
+
+        measured_alt, measured_az = _measure_altaz(cli, loc)
+        error = _wrap_pm180(target_az_deg - measured_az)
+        moved_since_last = abs(_wrap_pm180(measured_az - last_az))
+        last_az = measured_az
+
+        # Arrival test — require two consecutive in-tol ticks so we confirm
+        # the motor has actually stopped, not just crossed target.
+        if abs(error) <= arrive_tolerance_deg:
+            consecutive_within_tol += 1
+            if last_speed != 0:
+                _issue(0, 0, "vc_stop")
+            if consecutive_within_tol >= 2:
+                stats["final_residual_deg"] = error
+                return measured_alt, measured_az, stats
+            time.sleep(_VC_LOOP_DT_S)
+            continue
+        else:
+            consecutive_within_tol = 0
+
+        # Stuck detection: if we've been commanding motion but the position
+        # has barely moved over the stuck window, reduce the rate ceiling.
+        if last_speed >= _VC_MIN_SPEED:
+            if stuck_since_t is None:
+                stuck_since_t = time.monotonic()
+                stuck_since_az = measured_az
+            else:
+                window = time.monotonic() - stuck_since_t
+                window_moved = abs(_wrap_pm180(measured_az - stuck_since_az))
+                expected = (last_speed / _SPEED_PER_DEG_PER_SEC) * window
+                if window >= _VC_STUCK_MIN_S and window_moved < max(
+                    0.3, _VC_STUCK_MOVE_FRAC * expected,
+                ):
+                    if stats["rate_ceiling_halvings"] < _VC_MAX_HALVINGS:
+                        new_ceiling = max(
+                            _VC_MIN_SPEED / _SPEED_PER_DEG_PER_SEC,
+                            rate_ceiling / 2,
+                        )
+                        print(
+                            f"{tag} vc: stuck (moved {window_moved:.2f}° vs "
+                            f"expected ~{expected:.1f}° over {window:.1f}s); "
+                            f"halving rate ceiling {rate_ceiling:.2f} → "
+                            f"{new_ceiling:.2f}°/s",
+                            flush=True,
+                        )
+                        if position_logger is not None:
+                            position_logger.mark_event(
+                                "vc_stuck_halve",
+                                old_ceiling=rate_ceiling,
+                                new_ceiling=new_ceiling,
+                                window_moved=window_moved,
+                                window_s=round(window, 3),
+                            )
+                        rate_ceiling = new_ceiling
+                        stats["rate_ceiling_halvings"] += 1
+                        stuck_since_t = time.monotonic()
+                        stuck_since_az = measured_az
+                    else:
+                        fallback_reason = (
+                            f"velocity loop stuck at floor rate "
+                            f"{rate_ceiling:.2f}°/s "
+                            f"(moved {window_moved:.2f}° in {window:.1f}s)"
+                        )
+                        stats["stuck_bail"] = True
+                        break
+        else:
+            # Not commanding motion; reset the stuck window.
+            stuck_since_t = None
+            stuck_since_az = measured_az
+
+        # Compute desired rate via proportional control, clamped to ceiling.
+        desired_rate = max(-rate_ceiling, min(rate_ceiling, _VC_KP * error))
+        new_angle = 0 if desired_rate > 0 else 180
+
+        # Ensure we always command ≥ MIN_SPEED so the motor actually moves.
+        raw_speed = _rate_to_speed(desired_rate)
+        new_speed = max(_VC_MIN_SPEED, raw_speed)
+
+        # Only re-issue if (speed, angle) changed meaningfully or we haven't
+        # touched the firmware recently enough to keep the TTL alive. The
+        # TTL is 10 s but we refresh every iteration anyway if direction
+        # changes; otherwise every ~2 s (4 iterations at 0.5s dt).
+        need_reissue = (
+            new_angle != last_angle
+            or abs(new_speed - last_speed) > max(20, 0.1 * last_speed)
+            or stats["iterations"] % 4 == 1  # periodic TTL refresh
+        )
+        if need_reissue:
+            print(
+                f"{tag} vc iter={stats['iterations']}: error={error:+.3f}° "
+                f"measured_az={measured_az:+.3f}° cmd speed={new_speed} "
+                f"angle={new_angle} (desired_rate={desired_rate:+.2f}°/s, "
+                f"ceiling={rate_ceiling:.2f})",
+                flush=True,
+            )
+            _issue(new_speed, new_angle, "vc_issue")
+
+        time.sleep(_VC_LOOP_DT_S)
+
+    # Send a final stop before fallback.
+    if last_speed != 0:
+        _issue(0, 0, "vc_stop")
+        _wait_for_mount_idle(cli, timeout_s=3.0)
+
+    # Fallback path: use firmware goto.
+    if fallback_reason is not None:
+        print(f"{tag} FALLBACK: {fallback_reason}. Using iscope_start_view.",
+              flush=True)
+        stats["fallback_goto_used"] = True
+        if position_logger is not None:
+            position_logger.set_phase("vc_fallback_goto")
+            position_logger.mark_event("vc_fallback_issue", reason=fallback_reason)
+        tgt_ra, tgt_dec = issue_slew(cli, target_az_deg, target_alt_deg, loc)
+        ok, dist, _ = wait_until_near_target(
+            cli,
+            target_ra_h=tgt_ra,
+            target_dec_d=tgt_dec,
+            tolerance_deg=_FALLBACK_GOTO_TOL_DEG,
+            timeout=_FALLBACK_GOTO_TIMEOUT_S,
+            stall_threshold_s=5.0,
+        )
+        if ok:
+            print(f"{tag} fallback: iscope arrived (dist={dist:.3f}°)",
+                  flush=True)
+        else:
+            print(f"{tag} WARNING: fallback iscope goto did not arrive "
+                  f"(last dist={dist})", flush=True)
+        measured_alt, measured_az = _measure_altaz(cli, loc)
+        stats["final_residual_deg"] = _wrap_pm180(target_az_deg - measured_az)
+        return measured_alt, measured_az, stats
+
+    # Unreachable normally (either arrived or fell back), but safety net:
+    measured_alt, measured_az = _measure_altaz(cli, loc)
+    stats["final_residual_deg"] = _wrap_pm180(target_az_deg - measured_az)
+    return measured_alt, measured_az, stats
+
+
 def move_azimuth_to(
     cli: AlpacaClient,
     target_az_deg: float,
@@ -843,6 +1085,11 @@ def main() -> int:
                    help="Disable the background position logger.")
     p.add_argument("--position-log-interval", type=float, default=0.5,
                    help="Poll interval (seconds) for the background position logger.")
+    p.add_argument("--control-mode", choices=["velocity", "feedforward"],
+                   default="velocity",
+                   help="Azimuth control strategy: 'velocity' uses a 0.5s PD loop "
+                        "on top of scope_speed_move (default); 'feedforward' uses "
+                        "the legacy scaled-speed burst + slow-nudge pattern.")
     p.add_argument("--replay", default=None,
                    help="Path to a previously-saved run log. Skips hardware; reruns math only.")
     p.add_argument("--reanchor", action="store_true",
@@ -992,16 +1239,26 @@ def _main_body(args, cli, loc, log_path, position_logger):
             position_logger.mark_event("step_start",
                                        target_az=az, target_alt=target_alt,
                                        cur_az=cur_az_deg)
-        measured_alt_deg, measured_az, move_stats = move_azimuth_to(
+        mover = (
+            move_azimuth_to if args.control_mode == "feedforward"
+            else move_azimuth_to_velocity
+        )
+        measured_alt_deg, measured_az, move_stats = mover(
             cli, target_az_deg=az, cur_az_deg=cur_az_deg, loc=loc,
             target_alt_deg=target_alt, tag=tag,
             arrive_tolerance_deg=args.arrive_tolerance,
             position_logger=position_logger,
         )
         cur_az_deg = measured_az
+        # Stats fields differ between feedforward and velocity modes; print
+        # what's present.
+        summary = "  ".join(
+            f"{k}={v}" for k, v in move_stats.items()
+            if k != "final_residual_deg" and v is not None and v != 0
+            and not isinstance(v, bool)
+        )
         print(f"{tag} MOVE DONE  step_time={time.monotonic() - t_step_start:.1f}s  "
-              f"main_bursts={move_stats['main_move_commands']}  "
-              f"nudges={move_stats['nudge_attempts']}  "
+              f"{summary}  "
               f"residual={move_stats['final_residual_deg']:+.3f}°",
               flush=True)
         if position_logger is not None:
@@ -1081,12 +1338,8 @@ def _main_body(args, cli, loc, log_path, position_logger):
             "target_alt_deg": target_alt,
             "measured_alt_deg": measured_alt_deg,
             "residual_deg": _wrap_pm180(measured_az - az),
-            "main_move_commands": move_stats["main_move_commands"],
-            "main_move_total_dur_s": move_stats["main_move_total_dur_s"],
-            "fallback_goto_used": move_stats["fallback_goto_used"],
-            "nudge_attempts": move_stats["nudge_attempts"],
-            "nudge_total_dur_s": move_stats["nudge_total_dur_s"],
-            "final_residual_deg": move_stats["final_residual_deg"],
+            # Move stats (field set varies by control mode).
+            **{f"move_{k}": v for k, v in move_stats.items()},
             "reads": raw_reads,
         })
         if log_path:
