@@ -4099,6 +4099,39 @@ class VelocityControllerResource:
         )
 
 
+class VelocityControllerLiveResource:
+    """Return a single live position snapshot from the raw encoder.
+
+    Polls ``scope_get_horiz_coord`` → ``[alt, az]`` on the target
+    telescope. No PositionLogger needed — works during manual jogs,
+    idle, or any state where the telescope proxy is reachable.
+    """
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        try:
+            result = method_sync("scope_get_horiz_coord", telescope_id)
+            if isinstance(result, dict) and "result" in result:
+                coords = result["result"]
+                alt = float(coords[0])
+                az = float(coords[1])
+                fw_t = None
+                ts_raw = result.get("Timestamp")
+                if ts_raw is not None:
+                    try:
+                        fw_t = float(ts_raw)
+                    except (TypeError, ValueError):
+                        pass
+                payload = {"alt_deg": alt, "az_deg": az, "fw_t": fw_t}
+            else:
+                payload = {"error": "unexpected response", "raw": str(result)[:200]}
+        except Exception as e:
+            payload = {"error": str(e)}
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(payload)
+
+
 class VelocityControllerLogsResource:
     """List recent position-log JSONL files, newest first.
 
@@ -5344,6 +5377,10 @@ class FrontMain:
         app.add_route("/localsearch", GetLocalSearch())
         app.add_route("/getminorplanetcoordinates", GetMinorPlanetCoordinates())
         app.add_route("/getaavsocoordinates", GetAAVSOSearch())
+        app.add_route(
+            "/api/{telescope_id:int}/velocity_controller/live",
+            VelocityControllerLiveResource(),
+        )
         app.add_route(
             "/{telescope_id:int}/velocity_controller",
             VelocityControllerResource(),

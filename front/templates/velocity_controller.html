@@ -405,8 +405,48 @@
     kpiRowEl.innerHTML = kpis.map(k => `<div class="kpi"><div class="k">${k.k}</div><div class="v">${k.v}</div></div>`).join('');
   }
 
+  // Rolling buffer for "Live" mode — accumulates snapshots from /live.
+  const liveBuffer = [];
+  const LIVE_BUFFER_MAX = 3600;  // ~30 min at 2 s polling
+
+  async function fetchLiveSnapshot(){
+    const r = await fetch(apiUrl('live'));
+    if (!r.ok) return null;
+    return r.json();
+  }
+
+  async function refreshLive(){
+    refreshStatusEl.textContent = 'polling live…';
+    try {
+      const snap = await fetchLiveSnapshot();
+      if (!snap || snap.error){
+        refreshStatusEl.textContent = `live error: ${snap ? snap.error : 'no response'}`;
+        setStatus('idle', 'IDLE (live error)');
+        return;
+      }
+      const now = Date.now() / 1000;
+      liveBuffer.push({
+        t: now, kind: 'sample',
+        alt_deg: snap.alt_deg, az_deg: snap.az_deg,
+        commanded_az_deg: null, commanded_alt_deg: null,
+        phase: 'live', step: null,
+      });
+      // Trim to max size.
+      while (liveBuffer.length > LIVE_BUFFER_MAX) liveBuffer.shift();
+      const windowSeconds = parseInt(windowEl.value || '300', 10);
+      update({ name: 'Live encoder', samples: liveBuffer, events: [], poll_interval_s: 2 }, windowSeconds);
+      refreshStatusEl.textContent = `live ${new Date().toLocaleTimeString()}`;
+    } catch (err) {
+      refreshStatusEl.textContent = `live error: ${err.message}`;
+      setStatus('idle', 'IDLE (live error)');
+    }
+  }
+
   async function refresh(){
     const name = selectEl.value;
+    if (name === '__live__'){
+      return refreshLive();
+    }
     if (!name){
       setStatus('idle', 'IDLE (no logs)');
       return;
@@ -426,9 +466,12 @@
   async function reloadFileList(){
     const logs = await fetchLogs();
     const selected = selectEl.value;
-    selectEl.innerHTML = logs.map(l => `<option value="${l}">${l}</option>`).join('');
-    if (logs.includes(selected)) selectEl.value = selected;
-    else if (logs.length) selectEl.value = logs[0];
+    // Prepend "Live" option that polls the raw encoder directly.
+    selectEl.innerHTML = '<option value="__live__">Live (encoder)</option>'
+      + logs.map(l => `<option value="${l}">${l}</option>`).join('');
+    if (selected === '__live__') selectEl.value = '__live__';
+    else if (logs.includes(selected)) selectEl.value = selected;
+    else selectEl.value = '__live__';
     await refresh();
   }
 
