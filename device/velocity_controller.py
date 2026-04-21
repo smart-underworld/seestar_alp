@@ -1169,6 +1169,265 @@ def move_elevation_to_ff(
 
 
 # ---------------------------------------------------------------------------
+# Combined 2-axis controller (Phase 4.4)
+# ---------------------------------------------------------------------------
+
+
+def move_to_ff(
+    cli: MountClient,
+    target_az_deg: float,
+    target_el_deg: float,
+    cur_az_deg: float,
+    cur_el_deg: float,
+    loc: EarthLocation,
+    tag: str = "",
+    position_logger: Any = None,
+    v_max: float = PLAN_MAX_RATE_DEGS,
+    a_max: float = 10.0,
+    j_max: float = 40.0,
+    tick_dt: float = 0.5,
+    settle_s: float = 1.5,
+    profile: str = "scurve",
+    az_limits: Optional[Any] = None,
+    az_tracker: Optional[Any] = None,
+    el_min_deg: Optional[float] = None,
+    el_max_deg: Optional[float] = None,
+    kp_pos: float = 0.5,
+    v_corr_max: float = 2.0,
+    arrive_tolerance_deg: float = 0.3,
+    settle_max_s: float = 5.0,
+    converged_ticks_required: int = 2,
+) -> tuple[float, float, dict]:
+    """Closed-loop FF+FB 2-axis mover — az and el simultaneously.
+
+    Plans independent S-curve (or trapezoid) trajectories for each axis,
+    runs a single tick loop, and at every tick composes the two commanded
+    velocities into one `scope_speed_move(speed, angle, dur)`:
+
+        speed = |v_vec| · SPEED_PER_DEG_PER_SEC
+        angle = atan2(v_el, v_az)   (firmware: 0=+az, 90=+el)
+
+    `v_max` caps the magnitude `|v_vec|` (not per-axis), so diagonal
+    moves use the full plant rate. If both axes demand full speed the
+    vector is scaled down proportionally.
+
+    Convergence: waits until BOTH axes are within `arrive_tolerance_deg`
+    for `converged_ticks_required` consecutive ticks, or
+    `settle_max_s` expires.
+    """
+    import math
+    from device.trajectory import scurve_profile, trapezoidal_profile
+
+    if profile not in ("trapezoid", "scurve"):
+        raise ValueError(f"unknown profile {profile!r}")
+
+    # Clamp el target to limits.
+    if el_min_deg is not None and target_el_deg < el_min_deg:
+        target_el_deg = el_min_deg
+    if el_max_deg is not None and target_el_deg > el_max_deg:
+        target_el_deg = el_max_deg
+
+    # Plan az trajectory (cumulative-aware if limits present).
+    use_cum = az_limits is not None and az_tracker is not None
+    if use_cum:
+        from device.plant_limits import pick_cum_target
+        p0_az = az_tracker.cum_az_deg
+        p_target_az = pick_cum_target(
+            p0_az, cur_az_deg, target_az_deg, az_limits,
+        )
+    else:
+        p0_az = cur_az_deg
+        p_target_az = target_az_deg
+
+    def _plan(p0, pt, wrap):
+        if profile == "scurve":
+            return scurve_profile(
+                p0=p0, v0=0.0, p_target=pt,
+                v_max=v_max, a_max=a_max, j_max=j_max, tick_dt=tick_dt,
+                wrap_target=wrap,
+            )
+        return trapezoidal_profile(
+            p0=p0, v0=0.0, p_target=pt,
+            v_max=v_max, a_max=a_max, tick_dt=tick_dt,
+            wrap_target=wrap,
+        )
+
+    traj_az = _plan(p0_az, p_target_az, wrap=not use_cum)
+    traj_el = _plan(cur_el_deg, target_el_deg, wrap=False)
+
+    stats: dict[str, Any] = {
+        "controller": "2d_ff_fb",
+        "profile": profile,
+        "traj_az_duration_s": traj_az.total_duration,
+        "traj_el_duration_s": traj_el.total_duration,
+        "commands_issued": 0,
+        "ticks": 0,
+        "final_residual_az_deg": None,
+        "final_residual_el_deg": None,
+        "max_pos_err_az_deg": 0.0,
+        "max_pos_err_el_deg": 0.0,
+        "converged": False,
+        "wall_time_s": 0.0,
+        # Compat keys.
+        "final_residual_deg": None,
+        "iterations": 0, "sign_flips": 0, "rate_ceiling_halvings": 0,
+        "loop_dt_mean_s": 0.0, "loop_dt_max_s": 0.0,
+        "stuck_bail": False, "fallback_goto_used": False,
+    }
+
+    max_traj_dur = max(traj_az.total_duration, traj_el.total_duration)
+    if max_traj_dur == 0.0:
+        measured_alt, measured_az = measure_altaz(cli, loc)
+        stats["final_residual_az_deg"] = wrap_pm180(target_az_deg - measured_az)
+        stats["final_residual_el_deg"] = target_el_deg - measured_alt
+        stats["final_residual_deg"] = stats["final_residual_az_deg"]
+        return measured_alt, measured_az, stats
+
+    if position_logger is not None:
+        position_logger.set_phase("2d_ff_move")
+        position_logger.mark_event(
+            "2d_ff_start",
+            target_az=target_az_deg, target_el=target_el_deg,
+            cur_az=cur_az_deg, cur_el=cur_el_deg,
+            traj_az_dur=traj_az.total_duration,
+            traj_el_dur=traj_el.total_duration,
+            profile=profile, kp_pos=kp_pos,
+        )
+
+    _, _, fw_t_start = measure_altaz_timed(cli, loc)
+    t_wall_start = time.monotonic()
+
+    tick_dts: list[float] = []
+    prev_tick_t = t_wall_start
+    tick_idx = 0
+    converged_count = 0
+    t_settle_enter = None
+
+    while True:
+        now = time.monotonic()
+        t_rel = now - t_wall_start
+
+        measured_alt, measured_az, fw_t_now = measure_altaz_timed(cli, loc)
+        if az_tracker is not None:
+            az_tracker.update(measured_az)
+
+        if fw_t_now is not None and fw_t_start is not None:
+            t_plant = fw_t_now - fw_t_start
+        else:
+            t_plant = t_rel
+
+        # Az reference + feedback.
+        t_az = max(0.0, min(t_plant, traj_az.total_duration))
+        ref_az = traj_az.sample(t_az)
+        err_az = wrap_pm180(ref_az.pos - measured_az)
+        v_corr_az = max(-v_corr_max, min(v_corr_max, kp_pos * err_az))
+        v_cmd_az = ref_az.vel + v_corr_az
+
+        # El reference + feedback.
+        t_el = max(0.0, min(t_plant, traj_el.total_duration))
+        ref_el = traj_el.sample(t_el)
+        err_el = ref_el.pos - measured_alt
+        v_corr_el = max(-v_corr_max, min(v_corr_max, kp_pos * err_el))
+        v_cmd_el = ref_el.vel + v_corr_el
+
+        # Compose into firmware (speed, angle), clamping magnitude to v_max.
+        v_mag = math.sqrt(v_cmd_az * v_cmd_az + v_cmd_el * v_cmd_el)
+        if v_mag > v_max:
+            scale = v_max / v_mag
+            v_cmd_az *= scale
+            v_cmd_el *= scale
+            v_mag = v_max
+
+        if v_mag < 1e-6:
+            speed_cmd = 0
+            angle_cmd = 0
+        else:
+            speed_cmd = _rate_to_speed(v_mag)
+            if speed_cmd < VC_FINE_MIN_SPEED:
+                speed_cmd = 0
+            angle_cmd = int(round(math.degrees(math.atan2(v_cmd_el, v_cmd_az)))) % 360
+
+        speed_move(cli, speed_cmd, angle_cmd, VC_CMD_DUR_S)
+        stats["commands_issued"] += 1
+
+        if abs(err_az) > stats["max_pos_err_az_deg"]:
+            stats["max_pos_err_az_deg"] = abs(err_az)
+        if abs(err_el) > stats["max_pos_err_el_deg"]:
+            stats["max_pos_err_el_deg"] = abs(err_el)
+
+        if position_logger is not None:
+            position_logger.mark_event(
+                "2d_ff_tick",
+                t_rel=t_rel, fw_t=fw_t_now, t_plant=t_plant,
+                ref_az=ref_az.pos, ref_el=ref_el.pos,
+                meas_az=measured_az, meas_el=measured_alt,
+                err_az=err_az, err_el=err_el,
+                v_cmd_az=v_cmd_az, v_cmd_el=v_cmd_el,
+                v_mag=v_mag, cmd_speed=speed_cmd, cmd_angle=angle_cmd,
+            )
+
+        tick_dts.append(now - prev_tick_t)
+        prev_tick_t = now
+        tick_idx += 1
+
+        # Convergence: both axes past trajectory AND within tolerance.
+        both_past = (t_plant >= traj_az.total_duration
+                     and t_plant >= traj_el.total_duration)
+        if both_past:
+            if t_settle_enter is None:
+                t_settle_enter = now
+            both_ok = (abs(err_az) <= arrive_tolerance_deg
+                       and abs(err_el) <= arrive_tolerance_deg)
+            if both_ok:
+                converged_count += 1
+            else:
+                converged_count = 0
+            if converged_count >= converged_ticks_required:
+                stats["converged"] = True
+                break
+            if (now - t_settle_enter) >= settle_max_s:
+                break
+
+        next_tick_t = t_wall_start + tick_idx * tick_dt
+        sleep_dt = next_tick_t - time.monotonic()
+        if sleep_dt > 0:
+            time.sleep(sleep_dt)
+
+    speed_move(cli, 0, 0, 1)
+    stats["commands_issued"] += 1
+    wait_for_mount_idle(cli, timeout_s=3.0)
+    if settle_s > 0:
+        time.sleep(settle_s)
+
+    measured_alt, measured_az = measure_altaz(cli, loc)
+    stats["final_residual_az_deg"] = wrap_pm180(target_az_deg - measured_az)
+    stats["final_residual_el_deg"] = target_el_deg - measured_alt
+    stats["final_residual_deg"] = stats["final_residual_az_deg"]
+    stats["ticks"] = tick_idx
+    stats["iterations"] = tick_idx
+    if tick_dts:
+        reals = tick_dts[1:] if len(tick_dts) > 1 else tick_dts
+        stats["tick_dt_mean_s"] = sum(reals) / len(reals)
+        stats["tick_dt_max_s"] = max(reals)
+        stats["loop_dt_mean_s"] = stats["tick_dt_mean_s"]
+        stats["loop_dt_max_s"] = stats["tick_dt_max_s"]
+    if t_settle_enter is not None:
+        stats["settle_time_s"] = prev_tick_t - t_settle_enter
+    stats["wall_time_s"] = time.monotonic() - t_wall_start
+
+    if position_logger is not None:
+        position_logger.mark_event(
+            "2d_ff_done",
+            final_residual_az=stats["final_residual_az_deg"],
+            final_residual_el=stats["final_residual_el_deg"],
+            converged=stats["converged"],
+            ticks=tick_idx,
+        )
+
+    return measured_alt, measured_az, stats
+
+
+# ---------------------------------------------------------------------------
 # Astropy coordinate helpers (shared by iscope-goto fallback, the
 # position logger, and any CLI that wants to convert between frames).
 # ---------------------------------------------------------------------------
