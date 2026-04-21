@@ -24,6 +24,7 @@ moves all converge to ≤ 0.25° residual. Everything is committed.
 | 2D combined `move_to_ff(az, el)` | **done** — 4 diagonals ≤ 0.22° | `68f21f1` |
 | Diagonal speed fix (per-axis clamp) | **done** — firmware clamps per-axis at 1440, not total | `868490d` |
 | Velocity controller page fixes | **done** — PositionLogger→horiz_coord, event field fix, el overlay | `2040be6` |
+| Velocity controller page: live mode | **done** — polls raw encoder without PositionLogger | `9fc17f1` |
 
 **Firmware speed model (verified 2026-04-21):**
 - Per-axis max: speed=1440 → 6.054°/s. Ratio = 237.8 speed/°/s.
@@ -1084,8 +1085,11 @@ cumulative az has drifted > 180° from cable center.
       diagonal at 2036 gives full 6°/s per axis.
 - [ ] Full 6-setpoint sweep with cumulative limits (Run 15 step 2 hit
       network disconnect; needs retry).
-- [ ] Velocity controller page: live position display when no
-      PositionLogger is running (standalone read of horiz_coord).
+- [x] Velocity controller page: live position display when no
+      PositionLogger is running — new `/api/{id}/velocity_controller/live`
+      endpoint polls `scope_get_horiz_coord` directly. Frontend "Live
+      (encoder)" dropdown option accumulates a rolling buffer and charts
+      it. Works during manual jogs or idle (commit `9fc17f1`).
 - [ ] Investigate `scope_get_equ_coord` stale-data behavior — we
       bypass via `scope_get_horiz_coord`, but `issue_slew` / iscope
       gotos still use RA/Dec which may explain why gotos miss by
