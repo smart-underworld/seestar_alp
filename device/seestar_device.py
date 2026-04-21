@@ -301,7 +301,8 @@ class Seestar:
                 time.sleep(3)
                 return False
             # todo : don't send if not connected or socket is null?
-            self.logger.debug(f"sending: {data}")
+            if '"id":420' not in data:
+                self.logger.info(f"[{self.device_name}] scope send: {data.rstrip()}")
             self.s.sendall(
                 data.encode()
             )  # TODO: would utf-8 or unicode_escaped help here
@@ -497,11 +498,10 @@ class Seestar:
 
                     if "jsonrpc" in parsed_data:
                         # {"jsonrpc":"2.0","Timestamp":"9507.244805160","method":"scope_get_equ_coord","result":{"ra":17.093056,"dec":34.349722},"code":0,"id":83}
+                        if parsed_data.get("method") != "scope_get_equ_coord":
+                            self.logger.info(f"[{self.device_name}] scope recv: {parsed_data}")
                         if parsed_data["method"] == "scope_get_equ_coord":
-                            self.logger.debug(f"{parsed_data}")
                             self.update_equ_coord(parsed_data)
-                        else:
-                            self.logger.debug(f"{parsed_data}")
                         if parsed_data["method"] == "get_view_state":
                             self.update_view_state(parsed_data)
                         # keep a running queue of last 100 responses for sync call results
