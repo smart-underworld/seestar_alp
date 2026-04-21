@@ -12,20 +12,11 @@ produced the current defaults.
 
 ## 🔥 Active / high-value (do next)
 
-### 1. Validate the feedforward predictor
-The predictor is default (`VC_USE_PREDICTOR = True`, `VC_TAU_S = 0.8`) but
-we never ran the A/B comparison on the new `tune_vc.py` harness. One
-3-min run each should confirm iterations/residual improve vs pure PD.
-
-```
-uv run python scripts/tune_vc.py \
-    --setpoints=-170,+30,-60,+90,-30,+170 --tol 0.3 --alt 10 --no-predictor
-uv run python scripts/tune_vc.py \
-    --setpoints=-170,+30,-60,+90,-30,+170 --tol 0.3 --alt 10 --use-predictor
-```
-
-Compare mean iterations, |residual|, sign flips, wall time. Record in
-`scripts/auto_level_tuning.md` as Run 6.
+### 1. ~~Validate the feedforward predictor~~ superseded by Phase 1
+Phase 1 sysid (`plans/velocity_controller_research_plan.md`) fit the
+plant directly and showed τ is **0.335 s, not 0.8 s**. The Run 6 A/B
+was partially completed (Run A captured) but the finding above
+supersedes it — update `VC_TAU_S` and re-measure once.
 
 ### 2. angle=0 first-burst anomaly
 In the diagonal-calibration run, the first burst (angle=0, from a fresh
@@ -39,51 +30,40 @@ Suggested probe: extend `tune_vc.py` with a `--mode handoff` that does
   burst4(angle=180) and reports each burst's |v|_ratio.
 
 ### 3. ~~Nav link to `/{telescope_id}/velocity_controller`~~ ✅ done (commit cf1c570)
-Added "Velocity Controller" entry to the Functions dropdown in
-`front/templates/nav.html`, between "Stats" and the raspberry_pi-only
-"Platform" item.
 
 ---
 
 ## ⚙️ Architecture cleanup
 
-### 4. Module cutover
-`device/velocity_controller.py` now holds the canonical
-`move_azimuth_to_velocity`, but `scripts/auto_level.py` still has the
-old inline copy (~285 lines) kept only to satisfy fallback-goto
-plumbing. Replace with a thin `_fallback_goto_iscope` wrapper and a
-direct `vc.move_azimuth_to_velocity(…, fallback_goto_fn=…)` call at the
-one call site.
+### 4. ~~Module cutover~~ ✅ done (commit 9ab4994)
+Inline duplicate of `move_azimuth_to_velocity` deleted from
+`scripts/auto_level.py`; shim aliases removed; both scripts import
+from `device/` only. `AlpacaClient` moved to
+`device/alpaca_client.py`; `PositionLogger`, `ensure_scenery_mode`,
+`issue_slew`, `wait_until_near_target`, `iscope_fallback_goto`,
+`altaz_to_radec`, `radec_to_altaz`, `angular_distance_deg` moved to
+`device/velocity_controller.py`. Unit tests unchanged.
 
-Related: the `_wrap_pm180` / `_speed_move` / etc. shim aliases at the
-top of `scripts/auto_level.py` can go away once callers (tune_vc.py,
-tests) are switched to import directly from `device.velocity_controller`.
+### 5. ~~Speed-dependent τ in predictor~~ not needed per Phase 1
+Phase 1 fit shows a single `tau = 0.335 s` with chirp-holdout RMSE
+0.72°. Asymmetric / rate-limited variants offered no improvement.
+The earlier per-speed τ spread (0.6–1.4 s) was an artifact of
+per-burst fits contaminated by post-burst deceleration /
+tracking-reengagement — the Phase 1 fitter trims to `motor_active=1`
+and fits on aggregate position.
 
-### 5. Speed-dependent τ in predictor
-Current controller uses a fixed `VC_TAU_S = 0.8`. Step-response data
-shows τ ≈ 0.6 s at low speeds, ~1.2 s at mid, higher (unreliably fit)
-at high speeds. A `_speed_to_tau(last_commanded_speed)` helper (piecewise
-linear or table lookup) lets the predictor adapt per command.
-
-Proposed initial table (from `auto_level_logs/step_response_wide.jsonl`):
-
-| speed band | τ (s) |
-|---|---|
-| < 100    | 0.60 |
-| 100–500  | 0.80 |
-| 500–900  | 1.10 |
-| ≥ 900    | 1.40 |  (cap — higher fits unreliable)
+Action: drop `VC_TAU_S` from 0.8 to 0.335 in
+`device/velocity_controller.py`, drop `VC_MIN_SPEED`/`VC_FINE_MIN_SPEED`
+from 100/80 to safer low values (40/20), and re-measure on hardware.
 
 ---
 
 ## 🧪 Controller quality (defer until cleanup above)
 
-### 6. High-speed τ characterization
-The 1000 / 1440 step-response fits were window artifacts (8 s <
-steady-state). Need a multi-burst chained experiment in `tune_vc.py
---mode step_response` that issues two 10 s bursts back-to-back without
-decel in between. Compute τ from the second burst's initial slope using
-the first burst's terminal velocity as the starting condition.
+### 6. ~~High-speed τ characterization~~ done via chain=2 in Phase 1
+`scripts/sysid.py --mode step_response --chain 2` issues back-to-back
+10 s bursts; data at speeds 900/1200/1440 fed into the fit. Result:
+single-τ model still best. No per-speed table needed.
 
 ### 7. Integral term
 Small steady residuals (~0.1–0.2°) might close with a capped `kI`.
