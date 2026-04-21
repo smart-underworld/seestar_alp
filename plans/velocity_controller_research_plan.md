@@ -55,14 +55,37 @@ moves all converge to ≤ 0.25° residual. Everything is committed.
 
 **What to do next (priority order):**
 
-1. **Evaluate the dynamics tuning** — the demo running at session end
-   uses `a_max=4, j_max=12, cmd_clamp=6`. Check the tracking error
-   on the velocity_controller page: it should be much smaller than
-   the previous 6-7° peak. If still too large, consider:
-   - Lowering `a_max` further (e.g. 2.0 — slower accel, less lag).
-   - Increasing `v_corr_max` (e.g. 3.0 — faster error closure).
-   - Increasing `kp_pos` (e.g. 1.0 — more aggressive feedback, check
-     stability at ~0.5s tick interval).
+1. **Reduce accel-phase tracking lag** — the dynamics tuning helped
+   (peak error 6-7° → 3-4°) but ~4° peak remains during accel phases.
+   Diagnosis from demo data: ~0.5° cold-start, ~1.75° first-order lag,
+   ~0.3 s RPC latency, ~2° S-curve jerk overshoot + feedback
+   saturation. Ranked by leverage:
+
+   **a. Feedforward velocity compensation (RECOMMENDED FIRST).**
+      Add `v_cmd = v_ref + tau * a_ref` at each tick. For a known
+      first-order plant this analytically cancels the velocity lag.
+      `ref_acc` is already exposed in `TrajectoryPoint.acc`.
+      Single-line change in the tick loops. Expected peak error
+      reduction: 4° → ~1-2°.
+
+   **b. Pre-trajectory lead-in (cold_start_lag_s, redone).** Shift
+      the trajectory start by 0.5 s in cumulative time — NOT a held
+      position. Let the feedback loop run throughout, with ref
+      sampled at `(t - 0.5 s)` during the first 0.5 s. Covers the
+      cold-start dead time without breaking the feedback path.
+
+   **c. Lower a_max further** — 2.0 °/s² gives 2.5 s accel phase.
+      Smaller peak deficit at the cost of longer wall time.
+
+   **d. Increase `v_corr_max`** — from 2.0 to 3.0-4.0 °/s. Faster
+      error closure during cruise. Stability margin ample at
+      kp_pos=0.5/s + tick=0.5 s.
+
+   **e. Increase `kp_pos`** — from 0.5 to 1.0/s. Aggressive; test for
+      oscillation at 0.5 s tick period.
+
+   **f. Velocity controller page: separate y-axis / log scale for
+      error.** Current ±10° shared axis hides sub-degree tracking.
 
 2. **Streaming trajectory consumer** for dynamic targets (plane chase,
    sidereal tracking). Builds on `move_to_ff`. Needs:
