@@ -541,3 +541,135 @@ def scurve_profile(
 
     base = PlannedTrajectory(points=tuple(dedup), total_duration=t_cur)
     return _apply_t_offset(base, t_offset, tick_dt)
+
+
+# ---------------------------------------------------------------------------
+# 2-axis coordinated planners
+# ---------------------------------------------------------------------------
+#
+# Plan a single straight-line path in (az, el) space so both axes arrive
+# simultaneously. Path-length v/a/j caps are derived from the per-axis caps
+# via 1 / max(|dir_az|, |dir_el|) scaling — pure-axis moves match 1-D
+# throughput exactly; diagonals project back to per-axis rates equal to the
+# per-axis cap along whichever axis is dominant.
+
+
+def _plan_2d(
+    p0_az: float, p0_el: float,
+    p_target_az: float, p_target_el: float,
+    v_max: float, a_max: float,
+    j_max: float | None,
+    tick_dt: float,
+    wrap_az: bool,
+    az_forbidden_deg: float | None,
+) -> tuple[PlannedTrajectory, PlannedTrajectory]:
+    """Shared implementation for the 2-D trapezoidal and S-curve planners.
+
+    Picks the az delta (wrap-aware or cumulative), builds a 1-D profile on
+    path length, then projects each sample back onto per-axis trajectories.
+    Passing `j_max=None` selects the trapezoidal planner; otherwise S-curve.
+    """
+    if wrap_az:
+        delta_az = _select_delta(p0_az, p_target_az, az_forbidden_deg)
+    else:
+        delta_az = p_target_az - p0_az
+    delta_el = p_target_el - p0_el
+
+    path_len = math.sqrt(delta_az * delta_az + delta_el * delta_el)
+
+    if path_len < _POS_EPS_DEG:
+        traj_az = PlannedTrajectory(
+            points=(TrajectoryPoint(t=0.0, pos=p0_az, vel=0.0, acc=0.0),),
+            total_duration=0.0,
+        )
+        traj_el = PlannedTrajectory(
+            points=(TrajectoryPoint(t=0.0, pos=p0_el, vel=0.0, acc=0.0),),
+            total_duration=0.0,
+        )
+        return traj_az, traj_el
+
+    dir_az = delta_az / path_len
+    dir_el = delta_el / path_len
+
+    # Scale per-axis caps into path-length caps so per-axis rates stay
+    # within their caps. For direction (dir_az, dir_el), the per-axis
+    # rate along the path is v_path * |dir_i|; max(|dir_i|) gives the
+    # tightest per-axis bound.
+    max_abs_dir = max(abs(dir_az), abs(dir_el))
+    scale = 1.0 / max_abs_dir
+    v_max_path = v_max * scale
+    a_max_path = a_max * scale
+
+    if j_max is None:
+        path_traj = trapezoidal_profile(
+            p0=0.0, v0=0.0, p_target=path_len,
+            v_max=v_max_path, a_max=a_max_path,
+            tick_dt=tick_dt, wrap_target=False,
+        )
+    else:
+        j_max_path = j_max * scale
+        path_traj = scurve_profile(
+            p0=0.0, v0=0.0, p_target=path_len,
+            v_max=v_max_path, a_max=a_max_path, j_max=j_max_path,
+            tick_dt=tick_dt, wrap_target=False,
+        )
+
+    az_points = tuple(
+        TrajectoryPoint(
+            t=p.t,
+            pos=p0_az + dir_az * p.pos,
+            vel=dir_az * p.vel,
+            acc=dir_az * p.acc,
+        )
+        for p in path_traj.points
+    )
+    el_points = tuple(
+        TrajectoryPoint(
+            t=p.t,
+            pos=p0_el + dir_el * p.pos,
+            vel=dir_el * p.vel,
+            acc=dir_el * p.acc,
+        )
+        for p in path_traj.points
+    )
+    return (
+        PlannedTrajectory(points=az_points, total_duration=path_traj.total_duration),
+        PlannedTrajectory(points=el_points, total_duration=path_traj.total_duration),
+    )
+
+
+def trapezoidal_profile_2d(
+    p0_az: float, p0_el: float,
+    p_target_az: float, p_target_el: float,
+    v_max: float, a_max: float,
+    tick_dt: float = 0.1,
+    wrap_az: bool = True,
+    az_forbidden_deg: float | None = None,
+) -> tuple[PlannedTrajectory, PlannedTrajectory]:
+    """Coordinated 2-D trapezoidal profile: straight line in (az, el) with
+    both axes arriving simultaneously. `v_max` and `a_max` are per-axis caps.
+    """
+    return _plan_2d(
+        p0_az, p0_el, p_target_az, p_target_el,
+        v_max=v_max, a_max=a_max, j_max=None,
+        tick_dt=tick_dt, wrap_az=wrap_az, az_forbidden_deg=az_forbidden_deg,
+    )
+
+
+def scurve_profile_2d(
+    p0_az: float, p0_el: float,
+    p_target_az: float, p_target_el: float,
+    v_max: float, a_max: float, j_max: float,
+    tick_dt: float = 0.1,
+    wrap_az: bool = True,
+    az_forbidden_deg: float | None = None,
+) -> tuple[PlannedTrajectory, PlannedTrajectory]:
+    """Coordinated 2-D S-curve: jerk-limited straight-line path in (az, el)
+    with both axes arriving simultaneously. `v_max`, `a_max`, `j_max` are
+    per-axis caps.
+    """
+    return _plan_2d(
+        p0_az, p0_el, p_target_az, p_target_el,
+        v_max=v_max, a_max=a_max, j_max=j_max,
+        tick_dt=tick_dt, wrap_az=wrap_az, az_forbidden_deg=az_forbidden_deg,
+    )

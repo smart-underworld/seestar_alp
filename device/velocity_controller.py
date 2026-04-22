@@ -1235,7 +1235,7 @@ def move_to_ff(
     `settle_max_s` expires.
     """
     import math
-    from device.trajectory import scurve_profile, trapezoidal_profile
+    from device.trajectory import scurve_profile_2d, trapezoidal_profile_2d
 
     if profile not in ("trapezoid", "scurve"):
         raise ValueError(f"unknown profile {profile!r}")
@@ -1246,7 +1246,7 @@ def move_to_ff(
     if el_max_deg is not None and target_el_deg > el_max_deg:
         target_el_deg = el_max_deg
 
-    # Plan az trajectory (cumulative-aware if limits present).
+    # Resolve az target (cumulative-aware if limits present).
     use_cum = az_limits is not None and az_tracker is not None
     if use_cum:
         from device.plant_limits import pick_cum_target
@@ -1258,27 +1258,40 @@ def move_to_ff(
         p0_az = cur_az_deg
         p_target_az = target_az_deg
 
-    def _plan(p0, pt, wrap):
-        if profile == "scurve":
-            return scurve_profile(
-                p0=p0, v0=0.0, p_target=pt,
-                v_max=v_max, a_max=a_max, j_max=j_max, tick_dt=tick_dt,
-                wrap_target=wrap,
-            )
-        return trapezoidal_profile(
-            p0=p0, v0=0.0, p_target=pt,
+    # 2-D coordinated plan: straight line in (az, el) with both axes
+    # arriving simultaneously. Returns a pair of PlannedTrajectory with
+    # matched total_duration, so the existing tick loop samples cleanly.
+    if profile == "scurve":
+        traj_az, traj_el = scurve_profile_2d(
+            p0_az=p0_az, p0_el=cur_el_deg,
+            p_target_az=p_target_az, p_target_el=target_el_deg,
+            v_max=v_max, a_max=a_max, j_max=j_max, tick_dt=tick_dt,
+            wrap_az=not use_cum,
+        )
+    else:
+        traj_az, traj_el = trapezoidal_profile_2d(
+            p0_az=p0_az, p0_el=cur_el_deg,
+            p_target_az=p_target_az, p_target_el=target_el_deg,
             v_max=v_max, a_max=a_max, tick_dt=tick_dt,
-            wrap_target=wrap,
+            wrap_az=not use_cum,
         )
 
-    traj_az = _plan(p0_az, p_target_az, wrap=not use_cum)
-    traj_el = _plan(cur_el_deg, target_el_deg, wrap=False)
+    # 2-D coordinated plan produces matched durations for both axes; the
+    # per-axis duration fields are kept for back-compat with existing log
+    # consumers. path_len_deg distinguishes pure-axis vs diagonal moves.
+    _delta_az_plan = (traj_az.points[-1].pos - traj_az.points[0].pos
+                      if traj_az.points else 0.0)
+    _delta_el_plan = (traj_el.points[-1].pos - traj_el.points[0].pos
+                      if traj_el.points else 0.0)
+    _path_len_deg = math.sqrt(_delta_az_plan * _delta_az_plan
+                              + _delta_el_plan * _delta_el_plan)
 
     stats: dict[str, Any] = {
         "controller": "2d_ff_fb",
         "profile": profile,
         "traj_az_duration_s": traj_az.total_duration,
         "traj_el_duration_s": traj_el.total_duration,
+        "traj_path_len_deg": _path_len_deg,
         "commands_issued": 0,
         "ticks": 0,
         "final_residual_az_deg": None,
@@ -1310,6 +1323,7 @@ def move_to_ff(
             cur_az=cur_az_deg, cur_el=cur_el_deg,
             traj_az_dur=traj_az.total_duration,
             traj_el_dur=traj_el.total_duration,
+            path_len_deg=_path_len_deg,
             profile=profile, kp_pos=kp_pos,
         )
 

@@ -8,7 +8,9 @@ Numerical tolerances:
 
 from device.trajectory import (
     scurve_profile,
+    scurve_profile_2d,
     trapezoidal_profile,
+    trapezoidal_profile_2d,
 )
 
 
@@ -280,3 +282,182 @@ def test_scurve_continuous_accel():
         f"observed jerk exceeds cap by {max_jerk_violation:.1f} > "
         f"{J_MAX * 0.1:.1f} (10%)"
     )
+
+
+# ---------------------------------------------------------------------------
+# 2-axis coordinated planner tests
+# ---------------------------------------------------------------------------
+
+
+def test_2d_scurve_diagonal_endpoints():
+    traj_az, traj_el = scurve_profile_2d(
+        p0_az=0.0, p0_el=0.0,
+        p_target_az=30.0, p_target_el=20.0,
+        v_max=V_MAX, a_max=A_MAX, j_max=J_MAX, tick_dt=TICK,
+    )
+    assert abs(traj_az.points[-1].pos - 30.0) < 1e-6
+    assert abs(traj_el.points[-1].pos - 20.0) < 1e-6
+    assert abs(traj_az.points[0].vel) < 1e-6
+    assert abs(traj_el.points[0].vel) < 1e-6
+    assert abs(traj_az.points[-1].vel) < 1e-6
+    assert abs(traj_el.points[-1].vel) < 1e-6
+
+
+def test_2d_scurve_matched_durations():
+    traj_az, traj_el = scurve_profile_2d(
+        p0_az=0.0, p0_el=0.0,
+        p_target_az=30.0, p_target_el=20.0,
+        v_max=V_MAX, a_max=A_MAX, j_max=J_MAX, tick_dt=TICK,
+    )
+    assert traj_az.total_duration == traj_el.total_duration
+    # Both share the same sample times.
+    assert len(traj_az.points) == len(traj_el.points)
+    for pa, pe in zip(traj_az.points, traj_el.points):
+        assert pa.t == pe.t
+
+
+def test_2d_scurve_straight_line_path():
+    # At every sample, the fraction of distance covered on each axis
+    # matches: (az(t) - p0_az) / delta_az == (el(t) - p0_el) / delta_el.
+    p0_az, p0_el = -5.0, 10.0
+    pt_az, pt_el = 25.0, -10.0
+    traj_az, traj_el = scurve_profile_2d(
+        p0_az=p0_az, p0_el=p0_el,
+        p_target_az=pt_az, p_target_el=pt_el,
+        v_max=V_MAX, a_max=A_MAX, j_max=J_MAX, tick_dt=TICK,
+    )
+    delta_az = pt_az - p0_az
+    delta_el = pt_el - p0_el
+    for pa, pe in zip(traj_az.points, traj_el.points):
+        frac_az = (pa.pos - p0_az) / delta_az
+        frac_el = (pe.pos - p0_el) / delta_el
+        assert abs(frac_az - frac_el) < 1e-9, (
+            f"path is not straight at t={pa.t}: frac_az={frac_az}, frac_el={frac_el}"
+        )
+
+
+def test_2d_scurve_per_axis_constraints():
+    traj_az, traj_el = scurve_profile_2d(
+        p0_az=0.0, p0_el=0.0,
+        p_target_az=30.0, p_target_el=20.0,
+        v_max=V_MAX, a_max=A_MAX, j_max=J_MAX, tick_dt=TICK,
+    )
+    assert _max_abs([p.vel for p in traj_az.points]) <= V_MAX + 1e-3
+    assert _max_abs([p.vel for p in traj_el.points]) <= V_MAX + 1e-3
+    assert _max_abs([p.acc for p in traj_az.points]) <= A_MAX + 1e-3
+    assert _max_abs([p.acc for p in traj_el.points]) <= A_MAX + 1e-3
+
+
+def test_2d_scurve_pure_az_matches_1d():
+    # Pure-az move (dir_el = 0) should reduce to the 1-D scurve on az.
+    p0, pt = 0.0, 60.0
+    traj_1d = scurve_profile(
+        p0=p0, v0=0.0, p_target=pt,
+        v_max=V_MAX, a_max=A_MAX, j_max=J_MAX, tick_dt=TICK,
+    )
+    traj_az_2d, traj_el_2d = scurve_profile_2d(
+        p0_az=p0, p0_el=0.0,
+        p_target_az=pt, p_target_el=0.0,
+        v_max=V_MAX, a_max=A_MAX, j_max=J_MAX, tick_dt=TICK,
+    )
+    assert abs(traj_az_2d.total_duration - traj_1d.total_duration) < 1e-3
+    # El trajectory should sit at 0 throughout.
+    assert _max_abs([p.pos for p in traj_el_2d.points]) < 1e-9
+    assert _max_abs([p.vel for p in traj_el_2d.points]) < 1e-9
+    assert _max_abs([p.acc for p in traj_el_2d.points]) < 1e-9
+    # Peak per-axis az velocity should match the 1-D peak.
+    assert abs(_max_abs([p.vel for p in traj_az_2d.points])
+               - _max_abs([p.vel for p in traj_1d.points])) < 1e-3
+
+
+def test_2d_scurve_pure_el_matches_1d():
+    p0, pt = 5.0, 45.0
+    traj_1d = scurve_profile(
+        p0=p0, v0=0.0, p_target=pt,
+        v_max=V_MAX, a_max=A_MAX, j_max=J_MAX, tick_dt=TICK,
+        wrap_target=False,
+    )
+    traj_az_2d, traj_el_2d = scurve_profile_2d(
+        p0_az=0.0, p0_el=p0,
+        p_target_az=0.0, p_target_el=pt,
+        v_max=V_MAX, a_max=A_MAX, j_max=J_MAX, tick_dt=TICK,
+    )
+    assert abs(traj_el_2d.total_duration - traj_1d.total_duration) < 1e-3
+    # Az trajectory is flat.
+    assert _max_abs([p.pos for p in traj_az_2d.points]) < 1e-9
+    assert _max_abs([p.vel for p in traj_az_2d.points]) < 1e-9
+
+
+def test_2d_trapezoid_short_move_triangular():
+    # 2° diagonal: too short to reach v_max. Peak per-axis vel < v_max.
+    traj_az, traj_el = trapezoidal_profile_2d(
+        p0_az=0.0, p0_el=0.0,
+        p_target_az=1.0, p_target_el=1.0,
+        v_max=V_MAX, a_max=A_MAX, tick_dt=TICK,
+    )
+    peak_az = _max_abs([p.vel for p in traj_az.points])
+    peak_el = _max_abs([p.vel for p in traj_el.points])
+    assert peak_az < V_MAX
+    assert peak_el < V_MAX
+    assert abs(traj_az.points[-1].pos - 1.0) < 1e-6
+    assert abs(traj_el.points[-1].pos - 1.0) < 1e-6
+
+
+def test_2d_scurve_wrap_az_short_path():
+    # p0_az=+170, target_az=-170 — short path is +20° CW via wrap.
+    traj_az, _ = scurve_profile_2d(
+        p0_az=170.0, p0_el=0.0,
+        p_target_az=-170.0, p_target_el=0.0,
+        v_max=V_MAX, a_max=A_MAX, j_max=J_MAX, tick_dt=TICK,
+        wrap_az=True,
+    )
+    # Planner works in unwrapped space internally; endpoint may read as
+    # +190 (170 + 20). Caller wrap_pm180s for comparison to measured.
+    end = traj_az.points[-1]
+    assert abs(end.pos - 190.0) < 1e-6
+    # Total motion is +20°, not +340°.
+    delta = end.pos - traj_az.points[0].pos
+    assert abs(delta - 20.0) < 1e-6
+
+
+def test_2d_scurve_no_wrap_cumulative():
+    # wrap_az=False — raw delta used (cumulative cable-wrap mode).
+    traj_az, _ = scurve_profile_2d(
+        p0_az=170.0, p0_el=0.0,
+        p_target_az=410.0, p_target_el=0.0,
+        v_max=V_MAX, a_max=A_MAX, j_max=J_MAX, tick_dt=TICK,
+        wrap_az=False,
+    )
+    assert abs(traj_az.points[-1].pos - 410.0) < 1e-6
+    delta = traj_az.points[-1].pos - traj_az.points[0].pos
+    assert abs(delta - 240.0) < 1e-6
+
+
+def test_2d_scurve_zero_length_move():
+    traj_az, traj_el = scurve_profile_2d(
+        p0_az=30.0, p0_el=20.0,
+        p_target_az=30.0, p_target_el=20.0,
+        v_max=V_MAX, a_max=A_MAX, j_max=J_MAX, tick_dt=TICK,
+    )
+    assert traj_az.total_duration == 0.0
+    assert traj_el.total_duration == 0.0
+    assert len(traj_az.points) == 1
+    assert len(traj_el.points) == 1
+    assert traj_az.points[0].pos == 30.0
+    assert traj_el.points[0].pos == 20.0
+
+
+def test_2d_scurve_45deg_max_per_axis_throughput():
+    # At a 45° diagonal, per-axis peak rate should equal v_max (direction
+    # projection scales path-length v_max_path = v_max/cos(45°) down to
+    # v_max per-axis). This is the whole point of the 1/max(|dir_i|) scaling.
+    traj_az, traj_el = scurve_profile_2d(
+        p0_az=0.0, p0_el=0.0,
+        p_target_az=60.0, p_target_el=60.0,
+        v_max=V_MAX, a_max=A_MAX, j_max=J_MAX, tick_dt=TICK,
+    )
+    peak_az = _max_abs([p.vel for p in traj_az.points])
+    peak_el = _max_abs([p.vel for p in traj_el.points])
+    # Both axes should peak right at V_MAX (long enough move to reach cruise).
+    assert abs(peak_az - V_MAX) < 1e-2
+    assert abs(peak_el - V_MAX) < 1e-2
