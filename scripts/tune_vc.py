@@ -199,13 +199,15 @@ def run_setpoints(cli: InstrumentedAlpacaClient, args) -> int:
 
     # Load cable-wrap limits (optional). If present, the FF controller
     # will plan in cumulative (unwrapped) space and refuse targets that
-    # would exceed the measured usable range.
+    # would exceed the measured usable range. `az_tracker` is created
+    # here as an empty placeholder; its state is loaded from disk (or
+    # reset) after the initial goto completes and we know the current
+    # wrapped encoder reading (see below).
     az_limits: AzimuthLimits | None = None
     az_tracker: CumulativeAzTracker | None = None
     if getattr(args, "use_az_limits", True):
         az_limits = AzimuthLimits.load()
         if az_limits is not None:
-            az_tracker = CumulativeAzTracker()
             print(f"AzimuthLimits loaded: usable "
                   f"[{az_limits.usable_ccw_cum_deg:+.1f}°, "
                   f"{az_limits.usable_cw_cum_deg:+.1f}°] "
@@ -235,7 +237,13 @@ def run_setpoints(cli: InstrumentedAlpacaClient, args) -> int:
             print(f"  (warning: initial goto did not reach 3° — dist={init_dist})")
         time.sleep(1.0)
         _, cur_az = _measure_altaz(cli, loc)
-        if az_tracker is not None:
+        if az_limits is not None:
+            # Load persisted cum-az state (or start fresh on power-cycle
+            # mismatch). Passing current_wrapped_az lets load_or_fresh
+            # detect a mount reset and bail safely.
+            az_tracker = CumulativeAzTracker.load_or_fresh(
+                current_wrapped_az_deg=cur_az,
+            )
             az_tracker.update(cur_az)
             print(f"Initial arrived: measured_az={cur_az:+.3f}°  "
                   f"cum_az={az_tracker.cum_az_deg:+.3f}°")
@@ -325,6 +333,14 @@ def run_setpoints(cli: InstrumentedAlpacaClient, args) -> int:
                 fallback_goto_used=stats["fallback_goto_used"],
             ))
             cur_az = meas_az
+            # Persist the updated cum-az after each successful setpoint so a
+            # mid-sweep crash still carries forward cable-wrap state.
+            if az_tracker is not None:
+                try:
+                    az_tracker.save()
+                except OSError as e:
+                    print(f"  (warning: CumulativeAzTracker.save failed: {e})",
+                          file=sys.stderr)
             logger.mark_event(
                 "setpoint_done", step=i, target_az=target, meas_az=meas_az,
                 residual=stats["final_residual_deg"],
@@ -350,6 +366,12 @@ def run_setpoints(cli: InstrumentedAlpacaClient, args) -> int:
         logger.set_phase("tune_vc_setpoints_done")
         logger.mark_event("run_end", total_wall_s=total_wall, steps=len(results))
     finally:
+        if az_tracker is not None:
+            try:
+                az_tracker.save()
+            except OSError as e:
+                print(f"  (warning: CumulativeAzTracker.save on exit failed: {e})",
+                      file=sys.stderr)
         logger.stop()
 
     print("=" * 78)

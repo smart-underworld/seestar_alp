@@ -14,12 +14,15 @@ display; cumulative is what the planner must respect.
 
 from __future__ import annotations
 
+import datetime
 import json
 import os
-from dataclasses import asdict, dataclass, field
+import sys
+from dataclasses import asdict, dataclass, field, fields
 
 
 _LIMITS_JSON = os.path.join(os.path.dirname(__file__), "plant_limits.json")
+_STATE_JSON = os.path.join(os.path.dirname(__file__), "plant_limits_state.json")
 
 
 @dataclass
@@ -73,7 +76,13 @@ class AzimuthLimits:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return cls(**data)
+            # Tolerate extra keys in the JSON (e.g. elevation-limits fields
+            # that are stored alongside but aren't part of this dataclass).
+            # Without this, `cls(**data)` raises TypeError on unknown kwargs
+            # and the whole file is silently treated as missing.
+            known = {f.name for f in fields(cls)}
+            filtered = {k: v for k, v in data.items() if k in known}
+            return cls(**filtered)
         except (OSError, json.JSONDecodeError, TypeError):
             return None
 
@@ -112,6 +121,69 @@ class CumulativeAzTracker:
         self.cum_az_deg = float(cum_az_deg)
         self._prev_wrapped = float(wrapped_az_deg)
         self._initialized = True
+
+    def to_dict(self) -> dict:
+        """Serialize tracker state for disk persistence."""
+        return {
+            "cum_az_deg": self.cum_az_deg,
+            "wrapped_az_deg": self._prev_wrapped,
+            "initialized": self._initialized,
+            "saved_at_iso": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+
+    def save(self, path: str = _STATE_JSON) -> None:
+        """Write cum-az state to disk so the next session can pick it up."""
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(self.to_dict(), f, indent=2)
+
+    @classmethod
+    def load_or_fresh(
+        cls,
+        current_wrapped_az_deg: float,
+        path: str = _STATE_JSON,
+        tol_deg: float = 2.0,
+    ) -> "CumulativeAzTracker":
+        """Load tracker state from disk, or start fresh on mismatch.
+
+        Returns a tracker. If `path` is missing, corrupt, or the saved
+        `wrapped_az_deg` differs from `current_wrapped_az_deg` by more than
+        `tol_deg` (indicating a power-cycle / home reset), a fresh
+        uninitialized tracker is returned (it will anchor to the next
+        `update()` reading). On success the tracker's `_prev_wrapped` is
+        re-anchored to the current reading, absorbing sub-tolerance drift
+        into `cum_az_deg`.
+        """
+        tracker = cls()
+        if not os.path.isfile(path):
+            return tracker
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            saved_cum = float(data["cum_az_deg"])
+            saved_wrapped = float(data["wrapped_az_deg"])
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            sys.stderr.write(
+                f"CumulativeAzTracker: failed to load {path}: {exc}; "
+                "starting fresh.\n"
+            )
+            return tracker
+        # Import here to avoid a cycle on module import.
+        from device.velocity_controller import wrap_pm180
+
+        drift = wrap_pm180(current_wrapped_az_deg - saved_wrapped)
+        if abs(drift) > tol_deg:
+            sys.stderr.write(
+                f"CumulativeAzTracker: saved wrapped_az={saved_wrapped:+.3f}° "
+                f"vs current={current_wrapped_az_deg:+.3f}° differ by "
+                f"{drift:+.3f}° (> tol={tol_deg}°). Assuming power-cycle/home "
+                "reset; starting cum_az at 0 from current position.\n"
+            )
+            return tracker
+        tracker.reset(
+            cum_az_deg=saved_cum + drift,
+            wrapped_az_deg=current_wrapped_az_deg,
+        )
+        return tracker
 
 
 def pick_cum_target(
