@@ -28,12 +28,19 @@ mount-to-world rotation.
 our 6°/s per-axis max). Satellite passes ≈ 0.5-3°/s (comfortable).
 Sub-degree tracking during cruise is the target.
 
-### Where we are (2026-04-21 end-of-session)
+### Where we are (2026-04-21 Phase 4.5 session, post-Run 16)
 
 The 2-axis closed-loop velocity controller is working for fixed
 setpoints. Az, el, and 2D diagonal moves converge to ≤ 0.25° residual.
-Peak accel-phase error 3-4°, down from 6-7° with tuning. Everything
-committed.
+**Feedforward velocity compensation integrated and hardware-verified
+at cruise** (0.05–0.25° typical |err|). Accel/decel peak error still
+2.6–4.5° due to the firmware stepper ramp from rest — pure transport
+delay that FF cannot compensate. Loose ends cleaned (persistent
+cum-az, chart error-axis resolution, completed el/2D tick logs). Run
+16 also surfaced and fixed a silent `AzimuthLimits.load` bug (unknown
+keys in `plant_limits.json`). **All Phase 4.5 code is uncommitted;
+mount is near CCW cable stop and needs recovery before the next
+hardware run.**
 
 **Gap to end goal:** the controller currently runs a pre-computed
 trajectory from `cur` to a single `target`. For tracking we need a
@@ -51,6 +58,12 @@ tracking horizon.
 | Diagonal speed fix (per-axis clamp) | **done** | `868490d` |
 | Velocity controller page (trajectory overlay, live mode) | **done** | `2040be6`, `9fc17f1`, `b631b35`, `e7b31bd` |
 | Dynamics tuning (a_max=4, j_max=12, cmd clamp at 6) | **done** | `c08eacc` |
+| FF velocity compensation `τ·a_ref` (az/el/2D) | **done (code)** — Run 16 validated cruise; accel peak limited by cold-start | Phase 4.5 |
+| Complete el_ff_tick / 2d_ff_tick logging (ref_acc, ref_vel per axis, v_ff) | **done** | Phase 4.5 |
+| Chart error y-axis autoscale with ±3° default | **done** | Phase 4.5 |
+| `CumulativeAzTracker` disk persistence (+ power-cycle reset detection) | **done (code)** — untested on hw (was masked by limits-load bug) | Phase 4.5 |
+| `AzimuthLimits.load` tolerates unknown JSON keys | **done** — fix of silent-load-fail surfaced by Run 16 step 6 cable hit | Phase 4.5 |
+| Clean re-run of 6-setpoint sweep with cable-wrap + persistence active | **pending** — needs mount recovery first | Phase 4.5 / post-recovery |
 | Streaming reference consumer (dynamic tracking) | **pending** | Phase 5 |
 | ECEF → mount-frame coordinate transforms | **pending** | Phase 5 |
 | Mount-to-world orientation calibration | **pending** | Phase 5 |
@@ -82,57 +95,105 @@ tracking horizon.
   the cable midpoint.
 - `compass_sensor.direction` is a separate MEMS magnetometer (uncalib).
 
-**What to do next (priority order, aligned with end-goal tracking):**
+**What to do next (priority order, post-Run 16 / 2026-04-21):**
 
-### 1. Feedforward velocity compensation (fast win, prerequisite for tracking)
+Run 16 (see Phase 4.5 results) confirmed FF is correct and gives
+cruise tracking of 0.05–0.25°, but accel/decel peaks still sit at
+2.6–4.5° because of cold-start firmware stepper ramp — pure transport
+delay that FF cannot compensate. Run 16 also exposed the
+`AzimuthLimits.load` bug (fixed this session) and ended with the
+mount against the CCW cable stop.
 
-Add `v_cmd = v_ref + tau * a_ref` at each tick. For a known
-first-order plant this analytically cancels the velocity lag.
-`ref_acc` is already exposed in `TrajectoryPoint.acc`. Single-line
-change in the tick loops of `move_azimuth_to_ff`,
-`move_elevation_to_ff`, `move_to_ff`. Expected peak error reduction:
-4° → 1-2°. **Same math is needed for tracking** — moving targets
-have continuous v_ref and a_ref that must be commanded forward.
+### 0. Recover mount + commit this session's code (immediate, no new design)
 
-### 2. Streaming reference consumer (core tracking capability)
+- **Mount recovery** — power-cycle (homes to cable midpoint + zeroes
+  encoder) or jog CW off the −90° wrapped position by hand before
+  any new hardware run.
+- **Commit Phase 4.5** — all edits in this session are uncommitted
+  (FF compensation in 3 tick loops, `el_ff_tick` / `2d_ff_tick` log
+  fields, `ERROR_Y_RANGE=3` + autoscale, `CumulativeAzTracker`
+  persistence + `AzimuthLimits.load` unknown-key tolerance,
+  `tests/test_plant_limits.py`, `.gitignore` entry, plan updates).
+  Consider splitting into 2–3 commits: FF-math-and-logs; tracker
+  persistence + limits-load fix; plan-doc update.
 
-Replace the fixed `p_target` trajectory with a time-varying reference
-`provider(t) → (az, el, v_az, v_el, a_az, a_el)`. See Phase 5 below
-for the full architecture. This is the bulk of the work for the
-tracking end-goal.
+### 1. Clean re-run of the 6-setpoint sweep (first thing post-recovery)
 
-### 3. ECEF → mount-frame coordinate transform
+Same sweep, but with `AzimuthLimits.load` now returning a real
+`AzimuthLimits`. This will:
+- Exercise cable-wrap planning end-to-end for the first time in
+  tune_vc (`pick_cum_target` + cumulative planning).
+- Exercise `CumulativeAzTracker.load_or_fresh` and the
+  `plant_limits_state.json` round-trip.
+- Give a clean FF-performance baseline that isn't corrupted by a
+  step-6 hard-stop event.
+- Verify the Live-mode trajectory overlay on the page during an
+  active run (`b631b35`).
 
-Given telescope ECEF position + mount-to-world rotation, convert
-target ECEF (x,y,z or lat/lon/alt + velocity) to mount-frame az/el
-at time t. Initial version can use compass+gravity for rough
-orientation; later calibrate via landmark sighting.
+### 2. Decide: is FF accuracy good enough to move to Phase 5?
 
-### 4. Cable-wrap planning for tracking horizon
+The end goal is tracking moving targets. For that, the dominant
+regime is **steady-state tracking of a smooth reference** — not
+point-to-point moves with cold-start. In the steady-state regime
+Run 16 showed 0.05–0.25° |err|, which already clears the sub-degree
+cruise spec.
 
-Before starting a track, look at the predicted trajectory over the
-next N seconds. Check whether cumulative az motion would exceed the
-cable budget. If so, call `unwind_azimuth` first. During tracking,
-monitor cum_az and pause/unwind if approaching the limit.
+Three options, in escalating cost:
 
-### 5. Additional controller tuning (if #1 isn't enough)
+- **(a)** Accept current FF. Begin Phase 5 (streaming reference
+  consumer). Revisit cold-start only if initial acquisition of a
+  moving target shows a large first-second miss.
+- **(b)** Try a simple cold-start compensator first (1-hour
+  experiment):
+  - Set `cold_start_lag_s = 0.5` on `move_azimuth_to_ff` — the
+    existing `t_offset` param in the planner shifts the trajectory
+    forward so the plant has 0.5 s to spool up before t=0 of the
+    reference. Run 9 tried this and saw it hurt short moves, but
+    that was pre-FF; with FF running, short moves use the FB P-term
+    and may handle the shift fine.
+  - Alternative: lower `a_max` 4→2 °/s² so the planner ramps slower
+    and the plant's firmware ramp keeps up.
+  - Pick whichever improves accel peak without degrading cruise.
+- **(c)** Full treatment: rate-limited / two-time-constant plant
+  model, refit τ for cold-start vs steady-state, feed asymmetric τ
+  into FF. High cost, only if (a) + (b) don't reach the target.
 
-- Lower `a_max` (4.0 → 2.0 °/s²) for smoother accel.
-- Increase `v_corr_max` (2.0 → 3.0 °/s) for faster error closure.
-- Increase `kp_pos` (0.5 → 1.0 /s) for more aggressive feedback.
-- Add `kd_vel` term (velocity damping via measured rate).
+Recommendation: do **(a)** — proceed to Phase 5. Cruise performance
+already satisfies the end-goal; cold-start is point-to-point-move
+regime that matters less for continuous tracking.
 
-### 6. Housekeeping
+### 3. Phase 5: streaming reference consumer (the end-goal work)
 
-- Velocity controller page: separate y-axis / log scale for error
-  (currently ±10° shared axis hides sub-degree tracking).
-- `CumulativeAzTracker` persistence across `tune_vc.py` restarts.
-- Clean 6-setpoint az sweep retry (Run 15 step 2 hit network error).
+See Phase 5 below for the full architecture. Implementation order:
+- 5.2.1 `ReferenceProvider` abstraction (time-varying callable).
+- 5.2.5 `StreamingFFController` — replaces `move_to_ff`'s single-
+  trajectory loop with an indefinite loop that re-samples the
+  provider each tick. The tick math inside is exactly what we have
+  now (`v_ff + τ·a_ref + FB`).
+- 5.2.3 ECEF ↔ mount-frame transforms
+  (`device/target_frame.py`).
+- 5.2.4 Rough mount-to-world calibration (compass + tilt).
+- 5.2.6 Cable-wrap planning for a tracking horizon.
+
+### 4. Housekeeping (can go alongside any of the above)
+
+- **Elevation limits in their own dataclass.** The `el_*` keys in
+  `plant_limits.json` triggered the load bug. Split them into an
+  `ElevationLimits` dataclass with its own `load`/`save`, and have
+  `tune_vc.py` + `move_elevation_to_ff` read from it, so the two
+  dataclasses can evolve independently.
+- **Separate y-axis zoom for error trace** (already tightened to
+  ±3° with autoscale; revisit if sub-0.1° tracking needs a log
+  option).
+- **Investigate `scope_get_equ_coord` stale-data behavior** — still
+  affects `issue_slew` / iscope goto (the initial goto in Run 16
+  logged dist=45.6° away from target with no effective motion).
+  Tracking doesn't need this, but goto does.
 
 **Session-restart cheat-sheet:**
 ```bash
-# Unit tests (38 should pass):
-uv run python -m pytest tests/test_auto_level.py tests/test_trajectory.py -q
+# Unit tests (46 should pass: 30 auto_level + 8 trajectory + 8 plant_limits):
+uv run python -m pytest tests/test_auto_level.py tests/test_trajectory.py tests/test_plant_limits.py -q
 
 # Hardware az setpoint sweep (loads plant_limits.json automatically):
 uv run python scripts/tune_vc.py --control feedforward \
@@ -1042,7 +1103,160 @@ front/templates/velocity_controller.html — trajectory-ref overlay from ff_tick
 | 4.4 **Combined `move_to_ff(az, el)`** | **DONE** | 2D velocity composition works (commit `68f21f1`). |
 | 4.5 **Diagonal speed fix** | **DONE** | Per-axis clamp, not magnitude. 4 diagonals ≤ 0.22° (commit `868490d`). |
 | 4.6 **Velocity controller page** | **DONE** | PositionLogger→horiz_coord, event field fix, el+2d overlay (commit `2040be6`). |
-| 4.7 **Streaming trajectory consumer** | **pending** | Next priority. |
+| 4.7 **Streaming trajectory consumer** | **pending** | Deferred to Phase 5. |
+
+---
+
+## Phase 4.5: FF velocity compensation + observability polish (2026-04-21)
+
+Tightens the existing closed-loop FF+FB controller and cleans the
+three loose ends that were blocking clean accel-phase analysis:
+tick-log completeness, chart error-axis resolution, and cumulative-az
+persistence across sessions.
+
+### Code changes (uncommitted)
+
+- **FF velocity compensation** in all three tick loops of
+  `device/velocity_controller.py`
+  (`move_azimuth_to_ff` ~line 714, `move_elevation_to_ff` ~line 1085,
+  `move_to_ff` ~lines 1331/1338):
+  ```
+  v_ff = ref.vel + VC_TAU_S * ref.acc     # τ = 0.348 s from Phase 1
+  v_cmd = v_ff + v_corr                    # FB stays as the P-term
+  ```
+  The 6.0 °/s plant clamp (`MAIN_RATE_DEGS`) stays in place and now
+  has a real purpose: during accel phases `v_ff` can briefly exceed
+  cruise `v_max = 5.0 °/s` by up to `τ · a_max = 0.348·4 ≈ 1.4 °/s`;
+  the 6 °/s clamp caps it at the plant limit and preserves the
+  1 °/s FB headroom set by the `c08eacc` dynamics tuning. No new
+  constants — `VC_TAU_S` already existed for the legacy PD predictor.
+
+- **Completed tick-log payloads**: `el_ff_tick` now carries `ref_acc`;
+  `2d_ff_tick` now carries per-axis `ref_vel_az/el`, `ref_acc_az/el`,
+  `v_ff_az/el`. The azimuth `ff_tick` now also emits `v_ff_degs`.
+  Post-run analysis can now decompose `v_cmd = v_ff + v_corr` per tick
+  for every controller, matching the az-only visibility we already
+  had.
+
+- **Chart error axis** in `front/templates/velocity_controller.html`:
+  default `ERROR_Y_RANGE` dropped from 10 → 3, and the `yErr` scale
+  switched from hardcoded `min/max` to `suggestedMin/suggestedMax`
+  with `grace: '10%'`. Sub-degree tracking is now readable; spikes
+  beyond ±3° still display (autoscale) without distorting the
+  calm-tracking zoom.
+
+- **`CumulativeAzTracker` persistence** in `device/plant_limits.py`:
+  new `to_dict()`, `save(path=_STATE_JSON)`, and classmethod
+  `load_or_fresh(current_wrapped_az_deg, path, tol_deg=2.0)`. State
+  lives in `device/plant_limits_state.json` (separate file from the
+  static `plant_limits.json` calibration; gitignored via `.gitignore`
+  entry added this session). `load_or_fresh` detects a power-cycle
+  by comparing saved `wrapped_az_deg` to the current encoder reading
+  — if the drift exceeds `tol_deg`, it logs a warning to stderr and
+  returns a fresh tracker; otherwise it absorbs the small drift into
+  `cum_az_deg`. `scripts/tune_vc.py` now saves tracker state after
+  each successful setpoint and in a `finally` block so a mid-sweep
+  crash still carries cable-wrap state forward.
+
+### Unit-test coverage
+
+`tests/test_plant_limits.py` (new, 8 tests): delta-integration via
+`update`, `reset` behavior, save/load round-trip, fresh-on-missing
+file, mismatch-detection reset (power-cycle simulation), small-drift
+absorption, corrupt-JSON fallback, and `AzimuthLimits.contains_cum`.
+Combined with the pre-existing suites:
+`tests/test_auto_level.py` + `tests/test_trajectory.py` +
+`tests/test_plant_limits.py` → **46 tests pass**.
+
+### Hardware-validation pass criteria
+
+Run the 6-setpoint az sweep
+(`--setpoints=-170,+30,-60,+90,-30,+170 --tol 0.3 --alt 10`). Expected:
+
+- All 6 steps converge within `settle_max_s = 5.0` with ≤ 0.3° final
+  residual (unchanged — FB still owns steady-state).
+- **Peak accel-phase |position_error| drops from 3–4° → 1–2°** —
+  the headline metric.
+- Zero oscillations (`flips = 0` per step).
+- Trajectory-reference overlay renders in Live mode of
+  `/velocity_controller` (verifies the `b631b35` live-endpoint fix
+  end-to-end).
+- `device/plant_limits_state.json` exists and contains a non-zero
+  `cum_az_deg` after the sweep.
+
+### Hardware-validation results (2026-04-21, Run 16)
+
+Log: `auto_level_logs/2026-04-21T19-03-35.positions.jsonl`. Sweep
+total_wall=227.7 s. **Steps 1–5 clean; step 6 slammed the CCW cable
+stop** — see "Discovered bug" below.
+
+| Step | target | wall | residual | flips | peak |err| | accel/cruise/decel peak |
+|------|-------:|-----:|---------:|------:|-----------:|------------------------:|
+| 1 | -170° | 41.8s | +0.129° | 0 | 3.49° | 2.57 / 0.13 / 3.49 |
+| 2 |  +30° | 41.3s | +0.149° | 0 | 4.45° | 4.45 / 0.25 / 3.81 |
+| 3 |  -60° | 25.2s | +0.163° | 0 | 3.49° | 3.49 / 2.04 / 2.82 |
+| 4 |  +90° | 37.8s | −0.141° | 0 | 3.30° | 3.30 / 0.19 / 2.43 |
+| 5 |  -30° | 32.4s | +0.173° | 0 | 3.92° | 3.39 / 2.53 / 3.92 |
+| 6 | +170° | 46.2s | −100.4° | 0 | 100.5° | 4.23 / 89.6 / 100.5  — **cable stop** |
+
+**FF verified active** at every tick
+(`v_ff_degs = ref_vel + 0.348·ref_acc` matches the log values exactly;
+`v_ff_degs` field present on all three event types per this session's
+logging change). Tick cadence: dt_mean = 0.50 s across all steps.
+
+**Headline finding.** The `1–2°` peak-accel target was *partially*
+achieved:
+- **Cruise tracking improved dramatically** — typical cruise |err| =
+  0.05–0.25° with the new FF (was an unmeasured-but-larger value
+  before; cruise was dominated by first-order lag which FF now
+  analytically cancels).
+- **Accel/decel peak error is only modestly reduced** (~2.6–4.5° peak,
+  was 3–4° reported baseline). Root cause visible in the tick logs:
+  mount does not reach commanded rate for ~1.5 s after move start
+  (meas_rate at t=1.5 s is only ~3.3 °/s while cmd_vel is clamped at
+  −6 °/s). That is consistent with the firmware's stepper ramp from
+  rest being slower than its steady-state time constant. **FF cannot
+  compensate pure transport delay** — the plant is not yet in the
+  first-order regime during cold-start + firmware ramp-up.
+
+**Final residuals** (0.13–0.17°) are indistinguishable from the
+pre-FF PD baseline — as expected, since the P-term closes steady
+state either way. No FF regression; small improvement in steady-state
+because FF frees FB of the v_ref=const bias it was absorbing before.
+
+### Discovered bug (fixed this session): AzimuthLimits.load silently drops
+
+`device/plant_limits.json` has elevation-limit keys
+(`el_hard_stop_up_deg`, `el_hard_stop_down_deg`, `el_usable_up_deg`,
+`el_usable_down_deg`, `el_measurement_date`) that aren't fields on the
+`AzimuthLimits` dataclass. `cls(**data)` raised `TypeError` on the
+unknown kwargs, which the `except` clause in `load()` swallowed,
+returning `None`. Visible symptom: `tune_vc.py` printed "No
+plant_limits.json found — skipping cable-wrap enforcement." even
+though the file was present and valid. Cable-wrap enforcement was
+**silently disabled for any caller since el fields were added**;
+step 6 of this run's sweep hit the CCW cable stop as a result.
+Persistence (Phase 4.5 change) was also inactive, since the tracker
+is only created when `az_limits is not None`.
+
+**Fix (this session)**: `AzimuthLimits.load` now filters the loaded
+dict through `{f.name for f in fields(cls)}` before calling the
+constructor, so extra keys are dropped instead of aborting load. One
+new classmethod fields-import, no signature change. Verified
+post-fix:
+```
+from device.plant_limits import AzimuthLimits
+l = AzimuthLimits.load()  # usable [-435, +435] now loads
+```
+Unit tests still green (46/46). Next hardware run will exercise
+cable-wrap planning + tracker persistence end-to-end.
+
+**Recovery state (2026-04-21, post-sweep):** mount at encoder
+az=−89.566° (≈ 0.7° off the CCW hard-stop wrapped position
+−90.266°), el parked at −89.800°. Cum-az history is lost because the
+tracker never initialized (see bug above). Before the next hardware
+run the mount should be power-cycled (homes to cable midpoint and
+resets encoder) or manually unwound CW.
 
 ---
 
@@ -1363,8 +1577,6 @@ cumulative az has drifted > 180° from cable center.
       fix (`e.event` not `e.name`), el trajectory overlay — `2040be6`.
 - [x] Firmware speed calibration: per-axis clamp at 1440, ratio=237,
       diagonal at 2036 gives full 6°/s per axis.
-- [ ] Full 6-setpoint sweep with cumulative limits (Run 15 step 2 hit
-      network disconnect; needs retry).
 - [x] Velocity controller page: live position display when no
       PositionLogger is running — new `/api/{id}/velocity_controller/live`
       endpoint polls `scope_get_horiz_coord` directly. Frontend "Live
@@ -1374,17 +1586,37 @@ cumulative az has drifted > 180° from cable center.
       MAIN_RATE_DEGS (6.0) not v_max (5.0). S-curve jerk-ramp t_j now
       matches plant tau. Feedback has 1°/s headroom during cruise
       (commit `c08eacc`).
-- [ ] Evaluate tracking error with new tuning (demo running at session
-      end — check page_demo.positions.jsonl).
-- [ ] Live endpoint: also return trajectory ref from JSONL tail — done
-      in `b631b35` but needs verification that the page renders it in
-      Live mode during an active controller run.
+- [x] FF velocity compensation `v_cmd = v_ref + τ·a_ref + FB` in all
+      three tick loops (az/el/2D). See Phase 4.5.
+- [x] Complete `el_ff_tick` / `2d_ff_tick` log payloads (ref_acc; per-axis
+      ref_vel/ref_acc on 2D; v_ff on all). See Phase 4.5.
+- [x] Chart error y-axis: ±3° default + autoscale with grace (was ±10°
+      fixed). See Phase 4.5.
+- [x] `CumulativeAzTracker` persistence + power-cycle-reset detection.
+      State saved to `device/plant_limits_state.json` after each
+      setpoint and on exit. See Phase 4.5. **Code only — untested on
+      hw due to the limits-load bug.**
+- [x] `AzimuthLimits.load` unknown-key tolerance fix (pre-existing
+      bug surfaced when Run 16 step 6 hit the CCW cable stop).
+- [x] Hardware validation (partial) — Run 16, 5/6 steps clean; cruise
+      tracking 0.05–0.25°. Accel/decel peak 2.6–4.5° (cold-start
+      limited). See Phase 4.5 "Hardware-validation results".
+- [ ] **Commit Phase 4.5 edits** (~ 6 files + new test file +
+      .gitignore + plan doc).
+- [ ] Mount recovery (power-cycle or manual CW jog off CCW stop).
+- [ ] Clean re-run of the 6-setpoint sweep with cable-wrap + tracker
+      persistence active. Verifies both the `AzimuthLimits.load` fix
+      and the persistence path end-to-end; absorbs Run-15 retry and
+      the Live-mode trajectory-overlay verification.
+- [ ] Evaluate tracking error with new tuning (demo running at
+      previous session end — check page_demo.positions.jsonl).
+      Orthogonal — may just roll into the clean re-run.
 - [ ] Investigate `scope_get_equ_coord` stale-data behavior — we
       bypass via `scope_get_horiz_coord`, but `issue_slew` / iscope
-      gotos still use RA/Dec which may explain why gotos miss by
-      30-100°.
-- [ ] Cable-wrap cumulative-az state persisted across restarts of
-      tune_vc (currently resets each run; fine for sweeps from home,
-      risky for multi-session tracking).
+      gotos still use RA/Dec. Seen again in Run 16: initial goto
+      reported dist=45.6° with no effective motion.
+- [ ] Optional: try `cold_start_lag_s = 0.5` or `a_max=2` to close
+      the accel-peak gap (only if Phase 5 shows initial acquisition
+      of a moving target is hurt by the current ramp behavior).
 - [ ] Streaming trajectory consumer for dynamic-target tracking
-      (Phase 4.7).
+      (Phase 5).
