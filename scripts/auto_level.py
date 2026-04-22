@@ -559,9 +559,12 @@ def _main_body(args, cli, loc, log_path, position_logger, tracker_holder):
         heading_s = f"{avg_heading:.1f}°" if avg_heading is not None else "n/a"
         print(f"       summary: balance_offset={offset_s}  heading={heading_s}")
 
+        std_x = statistics.stdev(xs) if len(xs) >= 2 else None
+        std_y = statistics.stdev(ys) if len(ys) >= 2 else None
         samples.append(AutoLevelSample(
             azimuth_deg=measured_az, sensor_x=avg_x, sensor_y=avg_y,
             sensor_z=avg_z, angle=avg_angle,
+            sensor_x_std=std_x, sensor_y_std=std_y,
         ))
         log_positions.append({
             "index": i - 1,
@@ -609,6 +612,38 @@ def _main_body(args, cli, loc, log_path, position_logger, tracker_holder):
     if args.no_live:
         return 0
 
+    # Point the scope at the uphill direction so the user can physically
+    # identify which side of the tripod is raised and adjust the legs
+    # accordingly. Post-anchor this is the world-frame uphill bearing;
+    # pre-anchor (tilt below the sign-anchor threshold) we fall back to
+    # the mount-frame tilt direction. Skip entirely when the tripod is
+    # already level within tolerance.
+    if fit.tilt_deg >= args.tolerance_deg:
+        if fit.uphill_world_az_deg is not None:
+            uphill_az = fit.uphill_world_az_deg
+            label = "uphill (world frame)"
+        else:
+            uphill_az = fit.tilt_mount_az_deg
+            label = "tilt-peak direction (pre-anchor)"
+        try:
+            cur_alt, cur_az = vc.measure_altaz(cli, loc)
+            print(f"Slewing to {label}: az={uphill_az:+.1f}° alt={target_alt:.1f}° "
+                  f"(from cur_az={cur_az:+.2f}°)")
+            vc.move_to_ff(
+                cli,
+                target_az_deg=uphill_az, target_el_deg=target_alt,
+                cur_az_deg=cur_az, cur_el_deg=cur_alt,
+                loc=loc, tag="[uphill]",
+                el_min_deg=5.0, el_max_deg=85.0,
+                arrive_tolerance_deg=0.5,
+            )
+            print("Scope now points toward the uphill direction — the side of the")
+            print("tripod the scope is facing is the HIGH side; raise the opposite")
+            print("legs (or lower the near leg) to level the tripod.")
+        except Exception as e:
+            print(f"(warning: uphill slew failed: {e}; continuing to live monitor)",
+                  file=sys.stderr)
+
     print()
     print("=== Live tilt monitor (Ctrl+C to exit) ===")
     print("Adjust the tripod slowly. The scope stays put; sensor axes are now fixed")
@@ -628,9 +663,35 @@ def _main_body(args, cli, loc, log_path, position_logger, tracker_holder):
 def _print_fit_block(fit) -> None:
     print()
     print("=== Auto-Level Fit ===")
-    print(f"  samples:          {fit.n_samples}")
-    print(f"  tilt magnitude:   {fit.amplitude:.4f} sensor units  ({fit.tilt_deg:.2f}°)")
-    print(f"  mount-az of tilt: {fit.tilt_mount_az_deg:.1f}°")
+    n_label = f"{fit.n_samples}"
+    if fit.dropped_indices:
+        n_label += (f"  (dropped {len(fit.dropped_indices)} outlier"
+                    f"{'s' if len(fit.dropped_indices) != 1 else ''}: "
+                    f"indices {fit.dropped_indices})")
+    print(f"  samples:          {n_label}")
+    # Tilt magnitude with 1σ from the fit covariance (Jacobian-propagated).
+    tilt_str = f"{fit.tilt_deg:.3f}°"
+    if fit.tilt_deg_std is not None:
+        tilt_str += f" ± {fit.tilt_deg_std:.3f}°"
+    print(f"  tilt magnitude:   {fit.amplitude:.4f} sensor units  ({tilt_str})")
+    az_str = f"{fit.tilt_mount_az_deg:.1f}°"
+    if fit.tilt_mount_az_std_deg is not None and math.isfinite(fit.tilt_mount_az_std_deg):
+        az_str += f" ± {fit.tilt_mount_az_std_deg:.1f}°"
+    print(f"  mount-az of tilt: {az_str}")
+    # Cartesian decomposition of the tilt vector — which side is higher
+    # along two orthogonal reference directions. Post-anchor the frame is
+    # world-aligned (+x=North, +y=East, so positive values indicate that
+    # side is raised); pre-anchor it's the mount frame with the convention
+    # that +x points along mount-az 0° and +y along mount-az 90°.
+    if fit.uphill_world_az_deg is not None:
+        az_ref = fit.uphill_world_az_deg
+        frame = "(world: +x=N, +y=E; positive = that side is higher)"
+    else:
+        az_ref = fit.tilt_mount_az_deg
+        frame = "(mount frame, pre-anchor; sign depends on uphill/downhill anchor)"
+    tilt_x_deg = fit.tilt_deg * math.cos(math.radians(az_ref))
+    tilt_y_deg = fit.tilt_deg * math.sin(math.radians(az_ref))
+    print(f"  tilt decomposed:  x={tilt_x_deg:+.3f}°  y={tilt_y_deg:+.3f}°  {frame}")
     if fit.uphill_world_az_deg is not None:
         from device.auto_level import azimuth_to_compass
         print(f"  uphill (world):   {fit.uphill_world_az_deg:.1f}°  "
@@ -639,7 +700,12 @@ def _print_fit_block(fit) -> None:
         print("  uphill (world):   <not yet anchored — slew-and-look step pending>")
     print(f"  sensor offsets:   x0={fit.x_offset:+.5f}  y0={fit.y_offset:+.5f}")
     print(f"  mean z:           {fit.mean_z:.5f}")
-    print(f"  fit rms residual: {fit.rms_residual:.6f}")
+    # RMS residual in degrees (same small-angle scale as tilt_deg). Compare
+    # to the tilt magnitude to gauge confidence: tilt_deg >> rms_deg → fit
+    # is well-resolved; tilt_deg ≈ rms_deg → tilt is at the noise floor.
+    rms_deg = math.degrees(fit.rms_residual / max(fit.mean_z, 1e-9))
+    print(f"  fit rms residual: {fit.rms_residual:.6f} sensor units  "
+          f"({rms_deg:.3f}°)")
 
 
 def _read_sign_flip() -> bool | None:

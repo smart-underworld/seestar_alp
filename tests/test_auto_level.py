@@ -32,20 +32,20 @@ def _synth_samples(
     sensor_z: float | None = 1.0,
     angle_scale_deg_per_unit: float | None = None,
     seed: int = 0,
+    populate_stds: bool = False,
 ) -> list[AutoLevelSample]:
-    """Generate synthetic samples matching the joint-fit model.
+    """Generate synthetic samples matching the physical joint-fit model.
 
-    Model:
-      x(θ) = A·cos(θ − φ) + x₀
-      y(θ) = A·sin(θ − φ) + y₀
-    (y-axis is 90° CCW from x-axis in body frame.)
+    Model (mount compass convention, +y is 90° CW from +x):
+      x(θ) =  A·cos(θ − φ) + x₀
+      y(θ) = -A·sin(θ − φ) + y₀
     """
     rng = np.random.default_rng(seed)
     samples: list[AutoLevelSample] = []
     for az_deg in azimuths_deg:
         phase = math.radians(az_deg - uphill_az_deg)
         x = amplitude * math.cos(phase) + x_offset
-        y = amplitude * math.sin(phase) + y_offset
+        y = -amplitude * math.sin(phase) + y_offset
         if noise:
             x += rng.normal(0.0, noise)
             y += rng.normal(0.0, noise)
@@ -61,6 +61,8 @@ def _synth_samples(
                 sensor_y=y,
                 sensor_z=sensor_z,
                 angle=angle,
+                sensor_x_std=(noise if populate_stds and noise > 0 else None),
+                sensor_y_std=(noise if populate_stds and noise > 0 else None),
             )
         )
     return samples
@@ -170,11 +172,11 @@ def test_joint_fit_tighter_than_per_axis_on_noisy_data():
 
     # Both per-axis fits should recover similar amplitudes (within the noise).
     assert abs(fit.x_axis.amplitude - fit.y_axis.amplitude) < 0.02
-    # With y = A·sin(θ − φ) and x = A·cos(θ − φ), the y-axis per-axis fit
-    # reports a phase 90° ahead of the x-axis phase (mod 360).
+    # With x(θ) = A·cos(θ − φ) and y(θ) = -A·sin(θ − φ), the y-axis per-axis
+    # fit reports a phase 90° BEHIND the x-axis phase (y lags x by 90°).
     dp = (fit.y_axis.phase_deg - fit.x_axis.phase_deg) % 360.0
-    # Normalize distance-from-90 into [0, 180].
-    off = min(abs(dp - 90.0), abs(dp - 90.0 - 360.0), abs(dp - 90.0 + 360.0))
+    # The expected offset is -90° ≡ 270° (mod 360).
+    off = min(abs(dp - 270.0), abs(dp - 270.0 - 360.0), abs(dp - 270.0 + 360.0))
     assert off < 10.0  # within noise tolerance
     # Joint amplitude should agree with per-axis averages to noise scale.
     axis_mean = 0.5 * (fit.x_axis.amplitude + fit.y_axis.amplitude)
@@ -188,6 +190,183 @@ def test_fit_requires_minimum_samples():
             AutoLevelSample(90, 0, 0),
             AutoLevelSample(180, 0, 0),
         ])
+
+
+# ---------------------------------------------------------------------------
+# Parameter covariance / uncertainty propagation
+# ---------------------------------------------------------------------------
+
+
+def test_parameter_covariance_near_zero_on_clean_data():
+    """Clean (noise-free) data should give ~0 uncertainty on tilt and direction."""
+    azs = planned_azimuths(12)
+    samples = _synth_samples(azs, 0.1, 45.0, 0.0, 0.0, noise=0.0)
+    fit = fit_auto_level(samples)
+    assert fit.amplitude_std is not None
+    assert fit.tilt_deg_std is not None
+    assert fit.tilt_mount_az_std_deg is not None
+    # Near-zero — allow a tiny floor for numerical noise.
+    assert fit.amplitude_std < 1e-8
+    assert fit.tilt_deg_std < 1e-6
+    assert fit.tilt_mount_az_std_deg < 1e-5
+
+
+def test_parameter_covariance_scales_with_noise_and_N():
+    """σ_A should scale roughly as noise/√N (standard LSQ scaling)."""
+    azs_small = planned_azimuths(6)
+    azs_large = planned_azimuths(48)
+    noise = 0.01
+
+    fit_small = fit_auto_level(
+        _synth_samples(azs_small, 0.1, 30.0, 0.0, 0.0, noise=noise, seed=1)
+    )
+    fit_large = fit_auto_level(
+        _synth_samples(azs_large, 0.1, 30.0, 0.0, 0.0, noise=noise, seed=1)
+    )
+    # Expect σ_large ≈ σ_small · √(6/48) = σ_small / √8.
+    ratio = fit_large.amplitude_std / fit_small.amplitude_std
+    expected = math.sqrt(6.0 / 48.0)
+    assert 0.5 * expected < ratio < 2.0 * expected
+
+
+def test_parameter_covariance_brackets_true_amplitude():
+    """Across Monte Carlo trials, 1σ bars should contain the truth ~68% of the time.
+
+    We use a loose band (40-95%) to stay robust to trial-to-trial variance
+    while still detecting a broken uncertainty estimate.
+    """
+    azs = planned_azimuths(12)
+    true_A = 0.1
+    uphill = 60.0
+    noise = 0.01
+    n_trials = 200
+    hits = 0
+    for seed in range(n_trials):
+        samples = _synth_samples(azs, true_A, uphill, 0.0, 0.0, noise=noise, seed=seed)
+        fit = fit_auto_level(samples)
+        if abs(fit.amplitude - true_A) <= fit.amplitude_std:
+            hits += 1
+    frac = hits / n_trials
+    assert 0.4 < frac < 0.95, f"1σ coverage {frac:.2%} out of expected ~68% band"
+
+
+# ---------------------------------------------------------------------------
+# Outlier rejection via MAD
+# ---------------------------------------------------------------------------
+
+
+def test_outlier_rejection_drops_contaminated_sample():
+    """A single wildly-wrong sample should be dropped and not affect the fit."""
+    azs = planned_azimuths(12)
+    true_A = 0.1
+    uphill = 45.0
+    samples = _synth_samples(azs, true_A, uphill, 0.0, 0.0, noise=0.002, seed=0)
+
+    # Inject a big outlier at sample index 5.
+    samples[5].sensor_x += 0.5
+    samples[5].sensor_y -= 0.5
+
+    fit_clean = fit_auto_level(samples, outlier_mad_threshold=3.5)
+    fit_contaminated = fit_auto_level(samples, outlier_mad_threshold=None)
+
+    # Outlier rejection should flag at least the injected one.
+    assert 5 in fit_clean.dropped_indices
+    # Cleaned fit should recover true params much better.
+    err_clean = abs(fit_clean.amplitude - true_A)
+    err_contaminated = abs(fit_contaminated.amplitude - true_A)
+    assert err_clean < 0.5 * err_contaminated
+    assert fit_clean.amplitude == pytest.approx(true_A, abs=0.01)
+
+
+def test_outlier_rejection_preserves_good_samples():
+    """With no outliers, the MAD pass should keep every sample."""
+    azs = planned_azimuths(12)
+    samples = _synth_samples(azs, 0.1, 30.0, 0.0, 0.0, noise=0.002, seed=9)
+    fit = fit_auto_level(samples, outlier_mad_threshold=3.5)
+    assert fit.dropped_indices == []
+    assert fit.n_samples == 12
+
+
+def test_outlier_rejection_disable_with_none():
+    """Passing None disables the outlier-rejection pass entirely."""
+    azs = planned_azimuths(12)
+    samples = _synth_samples(azs, 0.1, 30.0, 0.0, 0.0, noise=0.002, seed=9)
+    samples[3].sensor_x += 1.0  # contaminate
+    fit = fit_auto_level(samples, outlier_mad_threshold=None)
+    assert fit.dropped_indices == []
+    assert fit.n_samples == 12  # no drop
+
+
+def test_outlier_rejection_refuses_to_drop_below_minimum():
+    """With only 4 samples, no outlier rejection runs (can't afford to drop)."""
+    azs = planned_azimuths(4)
+    samples = _synth_samples(azs, 0.1, 30.0, 0.0, 0.0, noise=0.001, seed=9)
+    samples[0].sensor_x += 1.0  # big outlier
+    fit = fit_auto_level(samples, outlier_mad_threshold=3.5)
+    # Must not drop — we need all 4 to fit 4 params.
+    assert fit.dropped_indices == []
+
+
+# ---------------------------------------------------------------------------
+# Inverse-variance weighting
+# ---------------------------------------------------------------------------
+
+
+def test_weighting_downweights_noisy_position():
+    """A sample with 10× higher sensor_*_std should contribute ~100× less weight.
+
+    Concretely: if we contaminate one sample but mark its stdev as 10×
+    the others, the fit should behave like that sample was down-weighted,
+    producing a fit closer to the uncontaminated truth than the unweighted
+    fit does.
+    """
+    azs = planned_azimuths(12)
+    true_A = 0.1
+    uphill = 30.0
+    base_noise = 0.002
+
+    samples_weighted = _synth_samples(
+        azs, true_A, uphill, 0.0, 0.0, noise=base_noise, seed=11,
+        populate_stds=True,
+    )
+    samples_unweighted = _synth_samples(
+        azs, true_A, uphill, 0.0, 0.0, noise=base_noise, seed=11,
+        populate_stds=False,
+    )
+
+    # Contaminate index 7 (moderately, so outlier rejection doesn't fire
+    # at the default threshold) and mark its std as much larger.
+    samples_weighted[7].sensor_x += 0.02
+    samples_weighted[7].sensor_y -= 0.02
+    samples_weighted[7].sensor_x_std = base_noise * 10.0
+    samples_weighted[7].sensor_y_std = base_noise * 10.0
+    samples_unweighted[7].sensor_x += 0.02
+    samples_unweighted[7].sensor_y -= 0.02
+
+    # Disable outlier rejection to isolate the weighting effect.
+    fit_w = fit_auto_level(samples_weighted, outlier_mad_threshold=None)
+    fit_u = fit_auto_level(samples_unweighted, outlier_mad_threshold=None)
+
+    err_w = abs(fit_w.amplitude - true_A)
+    err_u = abs(fit_u.amplitude - true_A)
+    assert err_w < err_u  # weighting improved the fit
+
+
+def test_weighting_with_zero_std_falls_back_to_uniform():
+    """Zero/NaN/missing stds should not blow up or divide-by-zero."""
+    azs = planned_azimuths(8)
+    samples = _synth_samples(azs, 0.1, 20.0, 0.0, 0.0, noise=0.001)
+    # Mix of None, 0, and positive stds.
+    for i, s in enumerate(samples):
+        if i % 3 == 0:
+            s.sensor_x_std = None
+        elif i % 3 == 1:
+            s.sensor_x_std = 0.0
+        else:
+            s.sensor_x_std = 0.001
+    fit = fit_auto_level(samples)
+    assert fit.amplitude == pytest.approx(0.1, abs=0.005)
+    assert fit.amplitude_std is not None
 
 
 def test_planned_azimuths_spacing():
@@ -296,10 +475,11 @@ def test_collect_samples_drives_loop_and_round_trips_fit():
             self.current_az = az_deg
 
         def read_sensor(self):
+            # Match the physical model: y = -A·sin(θ − φ) + y₀.
             phase = math.radians(self.current_az - uphill)
             return (
                 amplitude * math.cos(phase) + x0,
-                amplitude * math.sin(phase) + y0,
+                -amplitude * math.sin(phase) + y0,
                 90.0 - amplitude * 30.0,
             )
 
