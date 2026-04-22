@@ -28,7 +28,42 @@ mount-to-world rotation.
 our 6°/s per-axis max). Satellite passes ≈ 0.5-3°/s (comfortable).
 Sub-degree tracking during cruise is the target.
 
-### Where we are (2026-04-21 Phase 4.5 session, post-Run 16)
+### Where we are (2026-04-22 Phase 5 session — streaming tracking
+hardware-validated)
+
+**Phase 5 is shipped and hardware-proven.** The streaming FF+FB
+controller drives the real S50 against pre-recorded ECEF
+trajectories at sub-degree RMS on feasible passes. Committed across
+`5d73c2f` / `d44fe41` / `a0888c4`. Five live hardware tracks this
+session:
+
+- **UAL1266** (earlier run): az RMS 0.08° / peak 0.45°
+- **AAL1526**: az RMS 0.43° / peak 1.85°
+- **ae67c3 near-zenith**: az RMS 46.9° (expected saturation — see
+  Phase 5 results section)
+- **SIA37** (with pre-move): az RMS **0.17°** / peak 0.83°
+- **AAL254** (with pre-move): az RMS **0.38°** / peak 1.53°
+
+Tracking-error diagnosis on the clean (non-saturated) runs shows
+mount **trails** the reference by ~0.58 s of effective lag per unit
+velocity — a classic FF under-compensation pattern, no oscillation,
+zero saturation. **That's a controller-gain tuning problem, not an
+architecture problem** — see "What to do next" below.
+
+**Remaining gaps before real-world target acquisition:**
+- Compass calibration is best-effort at 24° RMS (uncalibrated
+  magnetometer); insufficient for FOV acquisition without plate-solve
+  or landmark sighting.
+- `pre_check` does not catch wrapped-cable-stop violations — manual
+  pre-positioning is needed for long CW/CCW sweeps until auto-
+  pre-positioning lands.
+- Near-zenith passes (el > 80°) are kinematically unfeasible on an
+  alt-az mount at our 6 °/s plant limit; need tighter filter or a
+  skip-zenith maneuver.
+
+The pre-Phase-5 state below is preserved for history.
+
+### Where we were (2026-04-21 Phase 4.5 session, post-Run 16)
 
 The 2-axis closed-loop velocity controller is working for fixed
 setpoints. Az, el, and 2D diagonal moves converge to ≤ 0.25° residual.
@@ -38,15 +73,7 @@ at cruise** (0.05–0.25° typical |err|). Accel/decel peak error still
 delay that FF cannot compensate. Loose ends cleaned (persistent
 cum-az, chart error-axis resolution, completed el/2D tick logs). Run
 16 also surfaced and fixed a silent `AzimuthLimits.load` bug (unknown
-keys in `plant_limits.json`). **All Phase 4.5 code is uncommitted;
-mount is near CCW cable stop and needs recovery before the next
-hardware run.**
-
-**Gap to end goal:** the controller currently runs a pre-computed
-trajectory from `cur` to a single `target`. For tracking we need a
-streaming reference that updates continuously, coordinate frame
-transforms (ECEF → mount-az/el), and cable-wrap planning over the
-tracking horizon.
+keys in `plant_limits.json`).
 
 | Component | Status | Commits |
 |---|---|---|
@@ -1627,3 +1654,296 @@ cumulative az has drifted > 180° from cable center.
       of a moving target is hurt by the current ramp behavior).
 - [ ] Streaming trajectory consumer for dynamic-target tracking
       (Phase 5).
+
+---
+
+## Phase 5 results (2026-04-21 / 2026-04-22) — streaming tracking shipped
+
+**Phase 5 M1–M5 are complete and hardware-validated.** The streaming FF+FB
+controller drives the real S50 against pre-recorded ECEF trajectories at
+sub-degree RMS on feasible passes. Core code, tests, and hardware runs all
+landed across commits `5d73c2f`, `d44fe41`, `a0888c4`.
+
+### Code shipped
+
+- **`scripts/trajectory/{observer,fetch_aircraft,fetch_satellites,replay}.py`**
+  (commit `5d73c2f`) — ECEF/ENU/topocentric utilities, OpenSky + Celestrak
+  fetchers, offline FF+FB replay harness. `replay.py` runs the same control
+  math against `FirstOrderLagModel` so we can score trajectories offline
+  before touching hardware.
+- **`device/target_frame.py`** — `MountFrame` with
+  `from_identity_enu()` / `from_euler_deg()` / `from_calibration_json()`
+  factories and ECEF → mount-frame az/el (+ v, a) transforms.
+- **`device/reference_provider.py`** — `ReferenceSample` dataclass,
+  `ReferenceProvider` protocol, `JsonlECEFProvider` concrete
+  implementation (CubicSpline on (az_cum, el) with ≤1 s tail extrapolation
+  and stale-flagging).
+- **`device/streaming_controller.py`** — `track(cli, provider, …)`:
+  indefinite FF+FB tick loop with the same math as `move_to_ff`:
+  `v_cmd = clamp(v_ref + τ·a_ref + clamp(kp_pos·err, ±v_corr_max), ±v_max)`.
+  Anchors to the mount's current cum_az at engagement so the encoder's
+  arbitrary power-on origin doesn't manifest as a 360° initial error.
+  1 s TTL on each `scope_speed_move` so crash/abort stops the motor in ≤1
+  tick. SIGINT clean exit. `pre_check()` validates the whole trajectory
+  against `AzimuthLimits.contains_cum` + per-axis FF saturation count.
+- **`scripts/trajectory/track.py`** — CLI entrypoint: connects Alpaca,
+  runs pre-check, opens `PositionLogger`, loads `CumulativeAzTracker`,
+  waits for head time, then `track()`. Auto-applies compass calibration
+  if `device/mount_calibration.json` exists; `--no-calibration` flag to
+  override.
+- **`scripts/trajectory/rank_targets.py`** — walks
+  `data/trajectories/**/*.jsonl`, runs `pre_check` + `simulate_replay`,
+  ranks targets by feasibility + tracking error + duration + mid-sky
+  bonus (prefers peak el ~60°). Tiangong pinned to top.
+- **`scripts/trajectory/time_shift.py`** — shifts all `t_unix` by a
+  constant so a recorded past pass can be mechanically re-run "starts
+  now." ECEF is earth-fixed; the (az, el) shape is identical.
+- **`scripts/trajectory/calibrate_compass.py`** (commit `a0888c4`) —
+  multi-station compass calibration. Saves
+  `device/mount_calibration.json` with `yaw_offset_deg`, per-station
+  readings, and residual RMS.
+- **Test coverage:** `tests/test_target_frame.py`,
+  `tests/test_reference_provider.py`, `tests/test_streaming_controller.py`
+  (with `tests/fakes/fake_mount.py` driving a real `FirstOrderLagModel`
+  plant under the hood). 34 tests pass in the fast lane.
+
+### Hardware validation runs (2026-04-22)
+
+All runs used the same controller defaults: `tau_s = 0.348`, `kp_pos =
+0.5`, `v_corr_max = 2.0`, `v_max = 6.0`, `latency_s = 0.4`, `tick_dt =
+0.5`. `yaw_offset_deg = −79.68°` from the compass calibration.
+
+| Target | Duration | Pre-move | Peak \|v_az\| | az RMS | az peak | el RMS | el peak | Saturations | Notes |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| **UAL1266** | 172 s | (home) | 2.13 °/s | 0.08° | 0.45° | 0.02° | 0.15° | 0 | Earlier session baseline |
+| **AAL1526** | 112 s | (home) | 1.96 °/s | 0.43° | 1.85° | 0.03° | 0.13° | 0 | Close pass; higher v → more error |
+| **ae67c3 (bad obs)** | — | — | — | — | — | — | — | — | Rejected in pre-check (89° el, 91°/s) after observer GPS correction |
+| **ae67c3 (corrected obs)** | 322 s | (home) | 7.00 °/s | 46.9° | 69.1° | 0.13° | 0.88° | 24 | Near-zenith (77.3° peak el), saturated through closest approach |
+| **SIA37** | 125 s | **−66°** | 3.11 °/s | 0.17° | 0.83° | 0.04° | 0.19° | 0 | Departing LAX; needed pre-move for 131° CW sweep |
+| **AAL254** | 260 s | **−57°** | 1.73 °/s | 0.38° | 1.53° | 0.07° | 0.25° | 0 | Arriving LAX; 116° CW sweep |
+
+Logs for each pass are under `auto_level_logs/2026-04-22T*.track-*.jsonl`
+and renderable in the `/velocity_controller` page via the
+`stream_tick` event payload (reuses existing log UI, zero frontend
+changes).
+
+### Observed error character (SIA37 + AAL254, non-saturated runs)
+
+- **Both tracks trail** (78% of ticks have err_az > 0 — mount behind
+  reference). Mean bias:
+  - SIA37: +0.11°
+  - AAL254: +0.23°
+- **No oscillation.** Zero-crossings 18/229 (SIA37) and 33/475
+  (AAL254) — consistent with a slowly decaying first-order lag tail,
+  not oscillation.
+- **No FF saturation** on either run (`v_corr_max`, `v_max`, `kp_pos`
+  all within budget).
+- **Error scales with reference velocity.** AAL254 correlation
+  `corr(err_az, v_ref_az) = +0.78`. Bias climbs linearly with
+  reference velocity:
+
+  | Phase | v_ref_az | err_az bias |
+  |---|---:|---:|
+  | first third | 0.02 °/s | 0.00° |
+  | middle third | 0.43 °/s | 0.19° |
+  | last third | 0.87 °/s | 0.51° |
+
+  Ratio ≈ **0.58 s of effective lag per unit reference velocity**.
+  Current compensation is `τ + latency = 0.348 + 0.4 = 0.75 s`, so
+  either τ is over-compensated or there is unmodelled gain that
+  converts to a proportional-to-velocity lag we're not catching.
+
+### Compass calibration (best effort)
+
+`scripts/trajectory/calibrate_compass.py` sweeps 5 encoder-az stations
+(±90° span), averages `compass_sensor.direction` at each, fits
+`yaw_offset_deg = mean(compass_dir − magnetic_declination − encoder_az)`
+using a circular mean. LA magnetic declination = +11.5°.
+
+Result: **yaw_offset_deg = −79.68°, residual RMS = 24.0°.** Raw per-
+station offsets ranged from −54° to −124°. The magnetometer has
+`cali = 0` (uncalibrated), shows severe soft-iron distortion (e.g.
+compass rotated only 21° as the mount rotated 90° from station 4 to
+station 5). Good enough to know roughly which direction the mount
+is looking, not good enough for FOV acquisition.
+
+Observer location was also corrected this session: default
+`(33.960583°N, −118.460139°W)` was replaced at runtime by the user-
+supplied (33°57′41.7″N, 118°27′28.9″W) = **(33.961583°N,
+−118.458028°W)** via `OBSERVER_LAT_DEG`/`OBSERVER_LON_DEG` env vars.
+Telescope-reported GPS `(33.9855°N, −118.445°W)` is ~2.7 km off the
+true position and **should not be used**.
+
+### Bugs / gaps found this session
+
+1. **`pre_check` does not validate wrapped cable-stop constraints.**
+   It checks `AzimuthLimits.contains_cum()` against the raw provider
+   `az_cum`, which is in true-topocentric absolute frame (±180°ish).
+   `contains_cum` succeeds for anything in ±435° — it doesn't know
+   about the wrapped stops at ±90°. So SIA37 and AAL254 both passed
+   pre-check despite their 131° / 116° CW sweeps exceeding the 180°
+   wrapped arc available to the mount from its current encoder az.
+   At runtime the firmware silently refused to move past the wrapped
+   stop, the controller kept integrating "I want more CW" into
+   `err_az`, and the run looked like a low-saturation low-RMS failure.
+   Manual pre-positioning (move mount to −66° / −57° before engaging)
+   worked around it.
+
+2. **`track.py` does not pass `starting_cum_az_deg` to `pre_check`.**
+   Even if `pre_check` were wrap-aware, it would need the anchor
+   offset to evaluate cable-feasibility against the actual mount
+   position.
+
+3. **Near-zenith passes are unfeasible.** ae67c3 with the corrected
+   observer showed peak el = 89.2° and peak v_az = 91 °/s through
+   closest approach — 15× plant limit. Pre-check correctly rejected
+   when el-limit was tight, but at 82° el-cap it passed and then the
+   mount saturated for ~12 s at 6 °/s while the reference moved 171°.
+   Alt-az mounts have a real zenith singularity; we should either
+   filter tighter at fetch time (max peak el ~70°) or add a
+   "skip-zenith" maneuver (lift the target off the zenith by a
+   constant offset during high-el portions).
+
+4. **Cable-stop convergence confusion.** When `move_to_ff` is asked
+   to home a mount that's butted against a wrapped cable stop, the
+   controller sometimes returns immediately without issuing motion
+   (observed twice — once during the initial Tiangong run, once during
+   the ae67c3 recovery sequence). CCW-only commands work fine
+   afterwards; specific interaction between `pick_cum_target`, fresh
+   `CumulativeAzTracker`, and the firmware wrapped-stop deserves a
+   targeted fix.
+
+5. **Aircraft fetch: OpenSky anonymous rate-limits after a few
+   minutes of polling** (HTTP 429). Switched default source to
+   `adsb.fi` (no auth, no published limit, ~2 s refresh in practice).
+   `scripts/trajectory/fetch_aircraft.py --source {adsbfi, opensky}`.
+   Also loosened filters after observing real LAX traffic:
+   `MIN_ALT_M = 100`, `MAX_ALT_M = 20 km`, `MAX_SLANT_M = 30 km`,
+   `MIN_TRACK_SAMPLES = 8`, `MIN_TRACK_DURATION_S = 30 s`. Altitude
+   band now filters per-sample (keeps in-band subsequence) rather
+   than rejecting whole tracks.
+
+---
+
+## What to do next (2026-04-22 session close → tomorrow)
+
+### Top priority: tune FF controller gains using the observed trailing error
+
+The AAL254 / SIA37 diagnostic points cleanly at an FF gain mismatch
+(+0.78 correlation between `err_az` and `v_ref_az`, 0.58 s effective lag
+per unit velocity, zero saturation). This is a **tuning problem, not
+an architecture problem** — we have the right control law, the
+coefficients are just off.
+
+**First-pass bump applied at session close (2026-04-22):**
+
+- `VC_TAU_S`: 0.348 → **0.55 s** (matches observed 0.58 s effective lag)
+- `kp_pos` default: 0.5 → **1.0** (doubled to close velocity-proportional
+  bias faster)
+- Applied globally: affects `move_to_ff` / setpoint moves as well as
+  streaming. Setpoint-sweep regression test is the first item to run
+  tomorrow (previous sweep at τ=0.348, kp_pos=0.5 gave 0.05–0.25°
+  cruise). If setpoint accel-peaks degrade, can bump streaming-only
+  via explicit args in `track.py`.
+- **No ki, no kd.** FF already provides model-based derivative; adding
+  a measured kd at 0.5 s tick amplifies noise. Integrator only helps
+  constant-offset bias; our current bias is velocity-proportional
+  (0.58 s·v_ref), which ki would winding up against instead of
+  closing.
+
+Specific experiments for follow-up sweeps, in priority order:
+
+1. **Sweep `kp_pos`** (now 1.0): try 0.7, 1.2, 1.5, 2.0 on a known
+   mid-rate trajectory (SIA37 is ideal — 131° CW sweep at 3 °/s peak,
+   125 s of data). Higher `kp_pos` closes velocity-proportional lag
+   faster; watch for oscillation onset (zero-crossings > 30% of
+   ticks → back off). Expect `az_err RMS` to drop from 0.17° →
+   0.05–0.10°.
+
+2. **Sweep `tau_s`** (now 0.55 s): try 0.40, 0.50, 0.60, 0.70.
+   The observed effective lag of 0.58 s suggests τ may actually be
+   under-compensated (we're currently short by ~0.23 s). Counter-
+   intuitively, *reducing* τ in the FF term could also help if the
+   0.4 s latency look-ahead is over-compensated. Either way, a sweep
+   directly reveals the optimum.
+
+3. **Sweep `latency_s`** (currently 0.4 s): 0.3, 0.5, 0.6. Directly
+   tests whether the look-ahead into the provider buffer matches the
+   actual RPC+plant delay.
+
+4. **Asymmetric τ check.** If accel-phase lag behaves differently
+   from decel-phase lag (easy to see by plotting err_az vs ref_v_az
+   colored by sign of a_ref), an asymmetric plant model may be
+   needed. Similar to `AsymmetricFirstOrderModel` in
+   `device/plant_models.py` — already coded, never used.
+
+5. **Add a tuning harness.** `scripts/tune_vc.py` already has the
+   scaffolding; extend it to replay a JSONL trajectory against the
+   real mount with different `(tau_s, kp_pos, v_corr_max, latency_s)`
+   combinations and score by az_err RMS / peak / correlation /
+   saturation. Each run is ~2 min + 1 min home — an hour buys
+   ~20 experiments.
+
+A well-tuned controller should give **az_err RMS < 0.1° and
+corr(err_az, v_ref_az) < 0.2** on clean mid-rate tracks like SIA37.
+UAL1266 already hit 0.08° RMS under the current gains, so we know
+the plant can get there.
+
+### Second priority: auto pre-positioning + wrap-aware pre-check
+
+Teaches `track.py` to compute the safe starting encoder az from the
+trajectory's CW/CCW sweep extent and `az_limits`, pre-move the mount
+there before engaging, and update `pre_check` to model the wrapped
+cable stops (not just the cumulative ±435° budget).
+
+Algorithm (concrete):
+
+1. Sample the provider to the trajectory end, produce `az_cum[i]`.
+2. Compute `delta_az[i] = az_cum[i] − az_cum[0]`, then
+   `d_min = min(delta_az)`, `d_max = max(delta_az)`.
+3. Given the wrapped stops at `cw_hard_stop_wrapped_deg` and
+   `ccw_hard_stop_wrapped_deg`, the safe starting encoder az range is
+   `[ccw_stop + pad − d_min, cw_stop − pad − d_max]` (closed
+   interval; empty ⇒ trajectory exceeds 180° minus 2·pad, not
+   trackable without cable-unwind).
+4. Pick center of the safe range; move mount there with `move_to_ff`;
+   re-anchor tracker; engage.
+5. If safe range is empty, report and exit with a useful error ("this
+   trajectory sweeps X° CW which exceeds the 180° cable budget; fetch
+   a shorter segment or skip").
+
+Also: fix `pre_check` to take an `anchor_mount_az_deg` param that
+applies the offset before checking limits. Needed for the above.
+
+### Third priority: improve compass calibration
+
+Current 24° RMS is too loose for FOV acquisition. Two options:
+
+- **Soft-iron ellipsoid fit.** `calibrate_compass.py` already captures
+  raw (x, y, z) magnetometer components at each station. Fit an
+  ellipsoid in the xy-plane (x² / A² + y² / B² + cross-term = 1),
+  map back to calibrated heading via `(x, y) → offset+scale+rotation
+  → atan2`. Standard procedure; 2–4 hours of work.
+- **Landmark sighting.** Manually align the scope to 3+ known-
+  compass-bearing objects (building corner, distant water tower,
+  sunset/sunrise bearing), record mount encoder az + known true az,
+  solve for yaw_offset by least squares. No magnetometer needed.
+  Faster if the user is available to physically identify landmarks.
+
+### Lower priority
+
+- Fix the cable-stop convergence bug in `move_to_ff` (reproducibly hangs
+  on large-wraparound targets when the mount is against a wrapped
+  stop).
+- Cable-wrap-aware direction planner in the streaming controller: for
+  a trajectory that sweeps more than 180°, pick CW vs CCW direction
+  based on the starting mount position and cable headroom. (M3 /
+  pre-check covers detection; this is the response.)
+- Plate-solve automated calibration (M7 — deferred). Solves one
+  captured frame during a satellite pass and refines the residual
+  rotation. Only needed once we want FOV acquisition without
+  spiral search.
+- Spiral-search acquisition overlay (M6 — deferred). Would close the
+  remaining uncertainty gap from the compass/tilt calibration so a
+  satellite lands in the FOV even without plate-solve.
+
