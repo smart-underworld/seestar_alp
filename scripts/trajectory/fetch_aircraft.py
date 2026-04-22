@@ -1,16 +1,18 @@
-"""Poll OpenSky Network (anonymous REST) for aircraft near the observer.
+"""Poll ADS-B data sources for aircraft near the observer.
+
+Supports two backends (--source):
+  adsb.fi   (default) — free, no auth, fast refresh
+  opensky   — anonymous OpenSky REST (rate-limited, ~10 s cadence)
 
 Writes one JSONL per qualifying aircraft track to an output directory.
 Filters by slant range ≤ 20 km, altitude 1–40 kft, peak elevation ≤ 80°.
 Tracks are resampled onto a 1 Hz grid via linear interpolation so
 downstream replay can step at a uniform tick rate.
 
-Anonymous OpenSky tolerates ~10 s cadence per IP; don't poll faster.
-See https://opensky-network.org/apidoc/rest.html
-
 Example:
 
-    python -m scripts.trajectory.fetch_aircraft --duration-min 30
+    python -m scripts.trajectory.fetch_aircraft --duration-min 5
+    python -m scripts.trajectory.fetch_aircraft --source opensky --duration-min 30
 """
 
 from __future__ import annotations
@@ -35,8 +37,9 @@ from scripts.trajectory.observer import (
 
 
 _OPENSKY_URL = "https://opensky-network.org/api/states/all"
+_ADSBFI_URL = "https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{dist_nm}"
 
-_BBOX = {  # ~20 km around (33.96°N, -118.46°W)
+_BBOX = {  # ~20 km around (33.96°N, -118.46°W) — used by OpenSky
     "lamin": 33.78, "lamax": 34.14,
     "lomin": -118.68, "lomax": -118.27,
 }
@@ -52,12 +55,12 @@ _IDX = {name: i for i, name in enumerate(_FIELDS)}
 
 
 # Filter thresholds.
-MIN_ALT_M = 304.8      # 1 000 ft
-MAX_ALT_M = 12192.0    # 40 000 ft
-MAX_SLANT_M = 20000.0  # 20 km peak-slant requirement (target must come inside this at least once)
+MIN_ALT_M = 100.0      # ~330 ft — skip ground-level tx only; LAX departures routinely climb slowly
+MAX_ALT_M = 20000.0    # 20 km (~65 000 ft) — above commercial cruise; covers everything typical
+MAX_SLANT_M = 30000.0  # 30 km peak-slant requirement (target must come inside this at least once)
 MAX_PEAK_EL_DEG = 80.0
-MIN_TRACK_SAMPLES = 30
-MIN_TRACK_DURATION_S = 60.0
+MIN_TRACK_SAMPLES = 8
+MIN_TRACK_DURATION_S = 30.0
 
 
 @dataclass
@@ -121,6 +124,60 @@ def extract_sample(sv: list) -> tuple[str, str, RawSample] | None:
     )
 
 
+def poll_once_adsbfi(
+    session: requests.Session, lat: float, lon: float, dist_nm: float = 17.0,
+    timeout: float = 20.0,
+) -> list[dict] | None:
+    """Single adsb.fi query. Returns list of aircraft dicts or None on error."""
+    url = _ADSBFI_URL.format(lat=lat, lon=lon, dist_nm=dist_nm)
+    try:
+        r = session.get(url, timeout=timeout)
+        r.raise_for_status()
+    except requests.RequestException as exc:
+        print(f"[fetch_aircraft] adsb.fi poll failed: {exc}", file=sys.stderr)
+        return None
+    try:
+        data = r.json()
+    except ValueError as exc:
+        print(f"[fetch_aircraft] adsb.fi bad JSON: {exc}", file=sys.stderr)
+        return None
+    return data.get("aircraft", data.get("ac", []))
+
+
+def extract_sample_adsbfi(ac: dict) -> tuple[str, str, RawSample] | None:
+    """Extract a RawSample from an adsb.fi aircraft dict."""
+    icao24 = ac.get("hex")
+    if not icao24:
+        return None
+    lat = ac.get("lat")
+    lon = ac.get("lon")
+    if lat is None or lon is None:
+        return None
+    alt = ac.get("alt_geom")
+    if alt is None:
+        alt = ac.get("alt_baro")
+    if alt is None or alt == "ground":
+        return None
+    try:
+        alt = float(alt)
+    except (TypeError, ValueError):
+        return None
+    # adsb.fi uses ft for altitude; convert to metres
+    alt_m = alt * 0.3048
+    callsign = (ac.get("flight") or "").strip()
+    gs_kts = ac.get("gs")
+    velocity_mps = float(gs_kts) * 0.514444 if gs_kts is not None else None
+    heading = _opt_float(ac.get("track"))
+    vrate_fpm = ac.get("baro_rate")
+    vrate_mps = float(vrate_fpm) * 0.00508 if vrate_fpm is not None else None
+    t_unix = time.time()
+    return icao24, callsign, RawSample(
+        t_unix=t_unix, lat=float(lat), lon=float(lon), alt_m=alt_m,
+        velocity_mps=velocity_mps, heading_deg=heading,
+        vertical_rate_mps=vrate_mps,
+    )
+
+
 def _opt_float(x) -> float | None:
     if x is None:
         return None
@@ -132,6 +189,7 @@ def _opt_float(x) -> float | None:
 
 def collect(
     duration_min: float, poll_s: float = 10.0, session: requests.Session | None = None,
+    source: str = "adsbfi", observer_lat: float = 33.960583, observer_lon: float = -118.460139,
 ) -> dict[str, AircraftTrack]:
     if session is None:
         session = requests.Session()
@@ -140,14 +198,23 @@ def collect(
     polls = 0
     while time.time() < end_at:
         poll_start = time.time()
-        states = poll_once(session)
+        results: list[tuple[str, str, RawSample]] = []
+        if source == "adsbfi":
+            ac_list = poll_once_adsbfi(session, observer_lat, observer_lon)
+            if ac_list is not None:
+                for ac in ac_list:
+                    parsed = extract_sample_adsbfi(ac)
+                    if parsed is not None:
+                        results.append(parsed)
+        else:
+            states = poll_once(session)
+            if states is not None:
+                for sv in states:
+                    parsed = extract_sample(sv)
+                    if parsed is not None:
+                        results.append(parsed)
         polls += 1
-        if states is not None:
-            for sv in states:
-                parsed = extract_sample(sv)
-                if parsed is None:
-                    continue
-                icao24, callsign, sample = parsed
+        for icao24, callsign, sample in results:
                 track = tracks.get(icao24)
                 if track is None:
                     track = AircraftTrack(icao24=icao24, callsign=callsign)
@@ -204,16 +271,28 @@ def _resample_1hz(
 def qualify_and_export(
     track: AircraftTrack, site: ObserverSite, out_dir: Path,
 ) -> Path | None:
+    # Per-sample altitude band filter: drop samples outside, keep the rest.
+    # A LAX departure starts at 0 m (on runway) and climbs; taking the
+    # in-band subsequence captures the useful part of the track.
+    in_band = [
+        s for s in track.samples
+        if MIN_ALT_M <= s.alt_m <= MAX_ALT_M
+    ]
+    n_dropped = len(track.samples) - len(in_band)
+    if n_dropped:
+        print(
+            f"[fetch_aircraft] {track.callsign or track.icao24}: "
+            f"dropped {n_dropped}/{len(track.samples)} samples outside alt band "
+            f"[{MIN_ALT_M:.0f}, {MAX_ALT_M:.0f}] m",
+            file=sys.stderr,
+        )
+    track.samples = in_band
+
     if len(track.samples) < MIN_TRACK_SAMPLES:
-        return _reject(track, "too few samples")
+        return _reject(track, f"too few in-band samples ({len(track.samples)})")
     span = track.samples[-1].t_unix - track.samples[0].t_unix
     if span < MIN_TRACK_DURATION_S:
         return _reject(track, f"span {span:.1f}s < {MIN_TRACK_DURATION_S}s")
-    # Altitude filter (reject whole track if any sample is out of the band).
-    alts = [s.alt_m for s in track.samples]
-    if min(alts) < MIN_ALT_M or max(alts) > MAX_ALT_M:
-        return _reject(
-            track, f"altitude out of band [{min(alts):.0f}, {max(alts):.0f}] m")
     # Range / elevation filter: use raw samples for quick check.
     ecef_raw = _track_ecef(track.samples)
     _, el_raw, slant_raw = ecef_array_to_topo(ecef_raw, site)
@@ -291,8 +370,9 @@ def _reject(track: AircraftTrack, reason: str) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--duration-min", type=float, default=30.0)
-    parser.add_argument("--poll-s", type=float, default=10.0)
+    parser.add_argument("--duration-min", type=float, default=5.0)
+    parser.add_argument("--poll-s", type=float, default=5.0)
+    parser.add_argument("--source", choices=["adsbfi", "opensky"], default="adsbfi")
     parser.add_argument(
         "--out-dir", type=Path, default=Path("data/trajectories/aircraft"),
     )
@@ -302,11 +382,15 @@ def main(argv: list[str] | None = None) -> int:
 
     site = build_site()
     print(
-        f"[fetch_aircraft] observer {site.lat_deg:+.6f}, {site.lon_deg:+.6f}, "
-        f"{site.alt_m:.0f} m — polling for {args.duration_min:.0f} min",
+        f"[fetch_aircraft] source={args.source} observer {site.lat_deg:+.6f}, "
+        f"{site.lon_deg:+.6f}, {site.alt_m:.0f} m — polling for "
+        f"{args.duration_min:.0f} min every {args.poll_s:.0f}s",
         file=sys.stderr,
     )
-    tracks = collect(args.duration_min, poll_s=args.poll_s)
+    tracks = collect(
+        args.duration_min, poll_s=args.poll_s, source=args.source,
+        observer_lat=site.lat_deg, observer_lon=site.lon_deg,
+    )
     print(f"[fetch_aircraft] collected {len(tracks)} candidate tracks",
           file=sys.stderr)
 

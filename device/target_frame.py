@@ -25,7 +25,9 @@ time stamp tags the sample but is not fed back into this transform.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -56,6 +58,32 @@ class MountFrame:
         if site is None:
             site = build_site()
         return cls(site=site, topo_to_mount=np.eye(3))
+
+    @classmethod
+    def from_calibration_json(
+        cls,
+        path: str | Path,
+        site: ObserverSite | None = None,
+    ) -> "MountFrame":
+        """Build a mount frame from a calibration JSON produced by
+        `scripts.trajectory.calibrate_compass`.
+
+        The calibration records `yaw_offset_deg` = how many degrees CCW
+        the mount's az=0 direction lies from true topocentric north.
+        That's directly what `from_euler_deg(yaw_deg=yaw_offset)` consumes.
+
+        Tilt (pitch/roll) is not yet applied — the balance sensor gives us
+        tilt magnitude but not a clean tilt-direction reference without
+        more work, and the typical tripod tilt of <1° is small compared
+        to the compass uncertainty. Future work.
+        """
+        p = Path(path)
+        with p.open("r", encoding="utf-8") as f:
+            cal = json.load(f)
+        yaw_offset = float(cal["yaw_offset_deg"])
+        return cls.from_euler_deg(
+            yaw_deg=yaw_offset, pitch_deg=0.0, roll_deg=0.0, site=site,
+        )
 
     @classmethod
     def from_euler_deg(

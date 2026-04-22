@@ -40,3 +40,7 @@ device/plant_limits_state.json
 
 # Fetched trajectory data (regenerable from OpenSky / Celestrak).
 data/trajectories/
+data/fetch_aircraft.log
+
+# Per-mount compass calibration — site-specific, regenerated via calibrate_compass.
+device/mount_calibration.json

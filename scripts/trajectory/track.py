@@ -102,6 +102,10 @@ def main(argv: list[str] | None = None) -> int:
         "--no-position-log", action="store_true",
         help="Disable PositionLogger (faster, but no post-run overlay)",
     )
+    parser.add_argument(
+        "--no-calibration", action="store_true",
+        help="Ignore device/mount_calibration.json, use identity frame",
+    )
     args = parser.parse_args(argv)
 
     if not args.trajectory.exists():
@@ -112,7 +116,21 @@ def main(argv: list[str] | None = None) -> int:
     loc = EarthLocation.from_geodetic(
         lon=site.lon_deg, lat=site.lat_deg, height=site.alt_m,
     )
-    mount_frame = MountFrame.from_identity_enu(site)
+    _cal_path = _REPO_ROOT / "device" / "mount_calibration.json"
+    if _cal_path.exists() and not getattr(args, "no_calibration", False):
+        mount_frame = MountFrame.from_calibration_json(_cal_path, site)
+        _cal = json.loads(_cal_path.read_text())
+        print(
+            f"[track] using mount calibration: yaw_offset="
+            f"{_cal['yaw_offset_deg']:+.2f}°  "
+            f"(residual {_cal.get('residual_rms_deg', 0.0):.2f}°, "
+            f"{_cal.get('n_stations', '?')} stations)",
+            file=sys.stderr,
+        )
+    else:
+        mount_frame = MountFrame.from_identity_enu(site)
+        print("[track] using identity mount frame (no calibration)",
+              file=sys.stderr)
 
     try:
         provider = JsonlECEFProvider(args.trajectory, mount_frame)
