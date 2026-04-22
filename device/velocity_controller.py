@@ -85,7 +85,12 @@ VC_STUCK_MIN_S = 2.0
 VC_STUCK_MOVE_FRAC = 0.2
 VC_MAX_HALVINGS = 4
 VC_DEFAULT_TIMEOUT_S = 120
-VC_TAU_S = 0.348                # first-order τ for the feedforward predictor.
+VC_TAU_S = 0.348                # first-order τ for the plant model. Used by:
+                                # (1) move_azimuth_to_ff / move_elevation_to_ff
+                                #     / move_to_ff for velocity feedforward
+                                #     v_cmd = v_ref + τ·a_ref + FB;
+                                # (2) legacy move_azimuth_to_pd deadbeat
+                                #     predictor.
                                 # Phase 1 fit (fw-timestamped step_response data,
                                 # 20 bursts, trimmed to motor_active window):
                                 # tau=0.348s, k_dc=0.996, train pos-RMSE 0.70°.
@@ -710,11 +715,16 @@ def move_azimuth_to_ff(
         elif v_corr < -v_corr_max:
             v_corr = -v_corr_max
 
-        # Total commanded velocity, clamped to plant rate.
-        cmd_vel = ref.vel + v_corr
+        # Feedforward: invert the first-order plant lag so the commanded
+        # velocity leads the reference by τ·a. For a plant with transfer
+        # function 1/(τs+1), v_cmd = v_ref + τ·a_ref makes the output
+        # track v_ref exactly. VC_TAU_S = 0.348s from Phase 1 sysid.
+        v_ff = ref.vel + VC_TAU_S * ref.acc
+        cmd_vel = v_ff + v_corr
         # Clamp at the PLANT's max rate (MAIN_RATE_DEGS), not the planner's
-        # cruise speed (v_max). This leaves headroom above the planned
-        # trajectory for the feedback correction to close tracking error.
+        # cruise speed (v_max). The τ·a_ref term can briefly push v_ff above
+        # v_max during accel phases (≈ 0.348 × 4.0 = 1.4°/s); the 6°/s clamp
+        # caps at the plant limit and preserves the 1°/s FB headroom.
         if cmd_vel > MAIN_RATE_DEGS:
             cmd_vel = MAIN_RATE_DEGS
         elif cmd_vel < -MAIN_RATE_DEGS:
@@ -746,6 +756,7 @@ def move_azimuth_to_ff(
                 meas_az=measured_az,
                 tracking_err_deg=abs(position_error),
                 position_error_deg=position_error,
+                v_ff_degs=v_ff,
                 v_corr_degs=v_corr, cmd_vel_degs=cmd_vel,
                 cmd_speed=speed_cmd, cmd_angle=angle_cmd,
             )
@@ -1082,10 +1093,10 @@ def move_elevation_to_ff(
         elif v_corr < -v_corr_max:
             v_corr = -v_corr_max
 
-        cmd_vel = ref.vel + v_corr
-        # Clamp at the PLANT's max rate (MAIN_RATE_DEGS), not the planner's
-        # cruise speed (v_max). This leaves headroom above the planned
-        # trajectory for the feedback correction to close tracking error.
+        # Feedforward plant-inversion: v_cmd = v_ref + τ·a_ref + FB. See the
+        # matching block in move_azimuth_to_ff for the derivation.
+        v_ff = ref.vel + VC_TAU_S * ref.acc
+        cmd_vel = v_ff + v_corr
         if cmd_vel > MAIN_RATE_DEGS:
             cmd_vel = MAIN_RATE_DEGS
         elif cmd_vel < -MAIN_RATE_DEGS:
@@ -1111,9 +1122,10 @@ def move_elevation_to_ff(
             position_logger.mark_event(
                 "el_ff_tick",
                 t_rel=t_rel, fw_t=fw_t_now, t_plant=t_plant,
-                ref_pos=ref.pos, ref_vel=ref.vel,
+                ref_pos=ref.pos, ref_vel=ref.vel, ref_acc=ref.acc,
                 meas_el=measured_alt,
                 position_error_deg=position_error,
+                v_ff_degs=v_ff,
                 v_corr_degs=v_corr, cmd_vel_degs=cmd_vel,
                 cmd_speed=speed_cmd, cmd_angle=angle_cmd,
             )
@@ -1323,19 +1335,21 @@ def move_to_ff(
         else:
             t_plant = t_rel
 
-        # Az reference + feedback.
+        # Az reference + feedforward + feedback.
         t_az = max(0.0, min(t_plant, traj_az.total_duration))
         ref_az = traj_az.sample(t_az)
         err_az = wrap_pm180(ref_az.pos - measured_az)
         v_corr_az = max(-v_corr_max, min(v_corr_max, kp_pos * err_az))
-        v_cmd_az = ref_az.vel + v_corr_az
+        v_ff_az = ref_az.vel + VC_TAU_S * ref_az.acc
+        v_cmd_az = v_ff_az + v_corr_az
 
-        # El reference + feedback.
+        # El reference + feedforward + feedback.
         t_el = max(0.0, min(t_plant, traj_el.total_duration))
         ref_el = traj_el.sample(t_el)
         err_el = ref_el.pos - measured_alt
         v_corr_el = max(-v_corr_max, min(v_corr_max, kp_pos * err_el))
-        v_cmd_el = ref_el.vel + v_corr_el
+        v_ff_el = ref_el.vel + VC_TAU_S * ref_el.acc
+        v_cmd_el = v_ff_el + v_corr_el
 
         # Clamp each axis independently at v_max. The firmware clamps
         # per-axis at speed=1440 internally, so the total speed CAN exceed
@@ -1368,8 +1382,11 @@ def move_to_ff(
                 "2d_ff_tick",
                 t_rel=t_rel, fw_t=fw_t_now, t_plant=t_plant,
                 ref_az=ref_az.pos, ref_el=ref_el.pos,
+                ref_vel_az=ref_az.vel, ref_vel_el=ref_el.vel,
+                ref_acc_az=ref_az.acc, ref_acc_el=ref_el.acc,
                 meas_az=measured_az, meas_el=measured_alt,
                 err_az=err_az, err_el=err_el,
+                v_ff_az=v_ff_az, v_ff_el=v_ff_el,
                 v_cmd_az=v_cmd_az, v_cmd_el=v_cmd_el,
                 v_mag=v_mag, cmd_speed=speed_cmd, cmd_angle=angle_cmd,
             )

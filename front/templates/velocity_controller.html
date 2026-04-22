@@ -97,11 +97,12 @@
   // so 4 s gives us a comfortable window even with sample bursts.
   const LIVE_WINDOW_S = 4.0;
 
-  // Axis ranges. Error axis is fixed at ±10° per the user's spec.
+  // Axis ranges. Error axis defaults to ±ERROR_Y_RANGE but autoscales
+  // larger when a spike exceeds it (via suggestedMin/suggestedMax).
   // Azimuth uses the controller's [-180, +180) convention.
   // Elevation uses the telescope's practical range (empirically seen down
   // to ~-45° at rest; clamped to 90° upward).
-  const ERROR_Y_RANGE = 10;
+  const ERROR_Y_RANGE = 3;
   const AZ_Y_MIN = -180, AZ_Y_MAX = 180;
   const EL_Y_MIN = -45,  EL_Y_MAX = 90;
 
@@ -139,8 +140,9 @@
           x: { type: 'linear', title: { display: true, text: 'elapsed (s)' } },
           yErr: {
             position: 'left',
-            title: { display: true, text: 'error (°, ±10)' },
-            min: -ERROR_Y_RANGE, max: ERROR_Y_RANGE,
+            title: { display: true, text: `error (°, default ±${ERROR_Y_RANGE})` },
+            suggestedMin: -ERROR_Y_RANGE, suggestedMax: ERROR_Y_RANGE,
+            grace: '10%',
             grid: { color: 'rgba(197,48,48,0.1)' },
           },
           yPos: {
