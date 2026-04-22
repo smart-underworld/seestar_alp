@@ -705,8 +705,15 @@ def move_azimuth_to_ff(
         # is the trajectory rate at "now" as the plant sees it. Splitting
         # into two refs (one at t_rel for cmd, one at t_plant for error)
         # introduces a phase offset equal to RPC latency.
+        # When planning in cumulative coords, ref.pos lives in the same
+        # unwrapped frame as az_tracker.cum_az_deg and the trajectory can
+        # span multiple wraps — diff them directly. Wrapped mode compares
+        # against the wrapped measurement with wrap_pm180.
         ref = traj.sample(t_plant_clamped)
-        position_error = wrap_pm180(ref.pos - measured_az)
+        if use_cumulative:
+            position_error = ref.pos - az_tracker.cum_az_deg
+        else:
+            position_error = wrap_pm180(ref.pos - measured_az)
 
         # P-term feedback with clamp.
         v_corr = kp_pos * position_error
@@ -1216,6 +1223,7 @@ def move_to_ff(
     arrive_tolerance_deg: float = 0.3,
     settle_max_s: float = 5.0,
     converged_ticks_required: int = 2,
+    force_cum_az_target: Optional[float] = None,
 ) -> tuple[float, float, dict]:
     """Closed-loop FF+FB 2-axis mover — az and el simultaneously.
 
@@ -1247,13 +1255,27 @@ def move_to_ff(
         target_el_deg = el_max_deg
 
     # Resolve az target (cumulative-aware if limits present).
+    # When force_cum_az_target is set, it bypasses pick_cum_target and is
+    # used as the cumulative planning target directly — needed for
+    # cable-recentering, where the caller wants to unwind to cum=0 even
+    # when the short wrapped path would go the other way.
     use_cum = az_limits is not None and az_tracker is not None
     if use_cum:
-        from device.plant_limits import pick_cum_target
         p0_az = az_tracker.cum_az_deg
-        p_target_az = pick_cum_target(
-            p0_az, cur_az_deg, target_az_deg, az_limits,
-        )
+        if force_cum_az_target is not None:
+            if not az_limits.contains_cum(force_cum_az_target):
+                raise ValueError(
+                    f"force_cum_az_target={force_cum_az_target:+.3f}° outside "
+                    f"usable cable-wrap range "
+                    f"[{az_limits.usable_ccw_cum_deg:+.1f}, "
+                    f"{az_limits.usable_cw_cum_deg:+.1f}]"
+                )
+            p_target_az = force_cum_az_target
+        else:
+            from device.plant_limits import pick_cum_target
+            p_target_az = pick_cum_target(
+                p0_az, cur_az_deg, target_az_deg, az_limits,
+            )
     else:
         p0_az = cur_az_deg
         p_target_az = target_az_deg
@@ -1321,6 +1343,7 @@ def move_to_ff(
             "2d_ff_start",
             target_az=target_az_deg, target_el=target_el_deg,
             cur_az=cur_az_deg, cur_el=cur_el_deg,
+            p_target_az_cum=p_target_az,
             traj_az_dur=traj_az.total_duration,
             traj_el_dur=traj_el.total_duration,
             path_len_deg=_path_len_deg,
@@ -1350,9 +1373,16 @@ def move_to_ff(
             t_plant = t_rel
 
         # Az reference + feedforward + feedback.
+        # When planning in cumulative coords (use_cum), ref_az.pos lives in
+        # the same unwrapped frame as az_tracker.cum_az_deg, and the
+        # trajectory can span multiple wraps — diff them directly. Wrapped
+        # mode compares against the wrapped measurement with wrap_pm180.
         t_az = max(0.0, min(t_plant, traj_az.total_duration))
         ref_az = traj_az.sample(t_az)
-        err_az = wrap_pm180(ref_az.pos - measured_az)
+        if use_cum:
+            err_az = ref_az.pos - az_tracker.cum_az_deg
+        else:
+            err_az = wrap_pm180(ref_az.pos - measured_az)
         v_corr_az = max(-v_corr_max, min(v_corr_max, kp_pos * err_az))
         v_ff_az = ref_az.vel + VC_TAU_S * ref_az.acc
         v_cmd_az = v_ff_az + v_corr_az
@@ -1464,6 +1494,220 @@ def move_to_ff(
         )
 
     return measured_alt, measured_az, stats
+
+
+# ---------------------------------------------------------------------------
+# Goto-origin convenience (end-of-session homing + cable-wrap recenter)
+# ---------------------------------------------------------------------------
+
+
+def goto_origin(
+    cli: MountClient,
+    loc: EarthLocation,
+    *,
+    az_limits: Optional[Any] = None,
+    position_logger: Any = None,
+    tag: str = "[origin]",
+    v_max: float = PLAN_MAX_RATE_DEGS,
+    a_max: float = 4.0,
+    j_max: float = 12.0,
+    tick_dt: float = 0.5,
+    settle_s: float = 1.5,
+    profile: str = "scurve",
+    kp_pos: float = 0.5,
+    v_corr_max: float = 2.0,
+    arrive_tolerance_deg: float = 0.3,
+    settle_max_s: float = 5.0,
+    converged_ticks_required: int = 2,
+    # stop-hit (homing) params
+    hard_stop_speed: int = 1440,
+    hard_stop_stall_tol_deg: float = 5.0,
+    hard_stop_check_dt_s: float = 1.5,
+    hard_stop_max_time_s: float = 260.0,
+    hard_stop_direction: Optional[str] = None,
+) -> tuple[float, float, dict]:
+    """Home the mount to (az=0, el=0) via a cable hard stop.
+
+    This is the deterministic homing primitive: it always drives the az
+    axis until the cable hits a mechanical stop, uses that known absolute
+    cumulative position as the reference, and then commands a precise
+    unwind to ``cum_az=0`` simultaneously with an el move to the horizon.
+    Any existing ``CumulativeAzTracker`` state is ignored — the hard-stop
+    strike is the authoritative reference.
+
+    Direction picking: if ``hard_stop_direction`` is None (default), picks
+    whichever stop is closer in **wrapped** az (the axes' quickest possible
+    stall, if luck has us on the first turn toward that stop). Otherwise
+    pass ``'ccw'`` or ``'cw'`` to force a direction.
+
+    Note: wrapped az alone does not uniquely determine cumulative az (any
+    wrapped value matches 2–3 cum positions within the ±450° range), so
+    we still need to stall to pin the cum reference exactly. Picking the
+    smart direction optimizes the lucky-case motion time; worst case is
+    the same as always-one-direction.
+
+    Requires ``AzimuthLimits`` (either passed or loadable from
+    ``plant_limits.json``) — without cable geometry we can't compute the
+    unwind target.
+
+    Handles ``ensure_scenery_mode``, ``set_tracking(False)``, idle wait,
+    stall detection (dithered burst commands), the coordinated 2-D
+    unwind via ``move_to_ff``, and tracker ``save()`` at the end. Caller
+    only needs ``cli`` and ``loc``.
+    """
+    import random
+    from device.plant_limits import AzimuthLimits, CumulativeAzTracker
+
+    if az_limits is None:
+        az_limits = AzimuthLimits.load()
+    if az_limits is None:
+        raise ValueError(
+            "goto_origin requires AzimuthLimits (pass az_limits=... or "
+            "populate device/plant_limits.json) — cable-wrap geometry is "
+            "needed to compute the unwind from the hard stop."
+        )
+
+    ensure_scenery_mode(cli)
+    set_tracking(cli, False)
+    wait_for_mount_idle(cli, timeout_s=5.0)
+
+    alt_before, az_before, _ = measure_altaz_timed(cli, loc)
+
+    # Pick direction. Distance-in-wrapped to each hard stop:
+    d_ccw = abs(wrap_pm180(az_before - az_limits.ccw_hard_stop_wrapped_deg))
+    d_cw = abs(wrap_pm180(az_before - az_limits.cw_hard_stop_wrapped_deg))
+    if hard_stop_direction is None:
+        chosen = "ccw" if d_ccw <= d_cw else "cw"
+    elif hard_stop_direction in ("ccw", "cw"):
+        chosen = hard_stop_direction
+    else:
+        raise ValueError(
+            f"hard_stop_direction must be 'ccw', 'cw', or None; "
+            f"got {hard_stop_direction!r}"
+        )
+    if chosen == "ccw":
+        burst_angle = 180
+        stop_cum_ref = az_limits.ccw_hard_stop_cum_deg
+        stop_wrapped_ref = az_limits.ccw_hard_stop_wrapped_deg
+    else:
+        burst_angle = 0
+        stop_cum_ref = az_limits.cw_hard_stop_cum_deg
+        stop_wrapped_ref = az_limits.cw_hard_stop_wrapped_deg
+
+    print(f"{tag} before: az={az_before:+.3f}  el={alt_before:+.3f}  "
+          f"(d_ccw={d_ccw:.1f}°, d_cw={d_cw:.1f}° — picking {chosen.upper()})",
+          flush=True)
+
+    if position_logger is not None:
+        position_logger.mark_event(
+            "goto_origin_start",
+            az_before=az_before, alt_before=alt_before,
+            d_ccw_wrapped_deg=d_ccw, d_cw_wrapped_deg=d_cw,
+            chosen_direction=chosen,
+        )
+
+    # Stage 1: drive into the chosen hard stop with dithered bursts so
+    # the firmware doesn't dedup consecutive identical speed_moves.
+    rng = random.Random(0x60710)
+    def _dither_dur() -> int:
+        return rng.choice([6, 7, 8, 9, 10])
+    def _issue() -> None:
+        speed_move(cli, hard_stop_speed, burst_angle, _dither_dur())
+
+    t_stage1_start = time.monotonic()
+    _issue()
+    next_reissue_t = t_stage1_start + rng.uniform(4.5, 5.5)
+
+    prev_wrapped = az_before
+    stall_streak = 0
+    motion_total = 0.0
+    bursts_issued = 1
+    # Need ~2 consecutive low-progress windows before declaring stall,
+    # but skip the first few seconds (firmware cold-start ramp-up).
+    stall_start_warmup_s = 2.5
+    while True:
+        elapsed = time.monotonic() - t_stage1_start
+        if elapsed > hard_stop_max_time_s:
+            speed_move(cli, 0, 0, 1)
+            wait_for_mount_idle(cli, timeout_s=3.0)
+            raise RuntimeError(
+                f"goto_origin: stall not detected within "
+                f"{hard_stop_max_time_s:.0f}s (moved {motion_total:.0f}° "
+                f"total); cable is 900° max — check hardware or "
+                f"plant_limits.json"
+            )
+        time.sleep(hard_stop_check_dt_s)
+        if time.monotonic() >= next_reissue_t:
+            _issue()
+            bursts_issued += 1
+            next_reissue_t = time.monotonic() + rng.uniform(4.5, 5.5)
+        _, cur_wrapped, _ = measure_altaz_timed(cli, loc)
+        delta = wrap_pm180(cur_wrapped - prev_wrapped)
+        motion_total += abs(delta)
+        prev_wrapped = cur_wrapped
+        warming_up = (time.monotonic() - t_stage1_start) < stall_start_warmup_s
+        if abs(delta) < hard_stop_stall_tol_deg and not warming_up:
+            stall_streak += 1
+            if stall_streak >= 2:
+                break
+        else:
+            stall_streak = 0
+
+    speed_move(cli, 0, 0, 1)
+    wait_for_mount_idle(cli, timeout_s=3.0)
+
+    _, az_at_stop, _ = measure_altaz_timed(cli, loc)
+    drift_from_ref = wrap_pm180(az_at_stop - stop_wrapped_ref)
+    t_stage1_elapsed = time.monotonic() - t_stage1_start
+
+    print(f"{tag} stalled {chosen.upper()} at az={az_at_stop:+.3f}  "
+          f"(expected ~{stop_wrapped_ref:+.3f}, drift {drift_from_ref:+.3f}°)  "
+          f"motion={motion_total:.1f}°  bursts={bursts_issued}  "
+          f"t={t_stage1_elapsed:.1f}s", flush=True)
+
+    if position_logger is not None:
+        position_logger.mark_event(
+            "goto_origin_stalled",
+            az_at_stop=az_at_stop, drift_from_ref_deg=drift_from_ref,
+            motion_total_deg=motion_total, bursts_issued=bursts_issued,
+            stage1_elapsed_s=t_stage1_elapsed,
+        )
+
+    # Stage 2: fresh tracker anchored at the hard stop, unwind to cum=0.
+    tracker = CumulativeAzTracker()
+    tracker.reset(cum_az_deg=stop_cum_ref, wrapped_az_deg=az_at_stop)
+    alt_at_stop, _, _ = measure_altaz_timed(cli, loc)
+
+    print(f"{tag} unwind: tracker cum={stop_cum_ref:+.1f} -> 0  "
+          f"(delta {-stop_cum_ref:+.1f}°)", flush=True)
+
+    meas_alt, meas_az, stats = move_to_ff(
+        cli,
+        target_az_deg=0.0, target_el_deg=0.0,
+        cur_az_deg=az_at_stop, cur_el_deg=alt_at_stop,
+        loc=loc,
+        tag=tag, position_logger=position_logger,
+        v_max=v_max, a_max=a_max, j_max=j_max,
+        tick_dt=tick_dt, settle_s=settle_s, profile=profile,
+        az_limits=az_limits, az_tracker=tracker,
+        kp_pos=kp_pos, v_corr_max=v_corr_max,
+        arrive_tolerance_deg=arrive_tolerance_deg,
+        settle_max_s=settle_max_s,
+        converged_ticks_required=converged_ticks_required,
+        force_cum_az_target=0.0,
+    )
+
+    try:
+        tracker.save()
+    except OSError:
+        pass
+
+    stats["hard_stop_direction"] = chosen
+    stats["hard_stop_az_at_stall"] = az_at_stop
+    stats["hard_stop_drift_from_ref_deg"] = drift_from_ref
+    stats["hard_stop_motion_total_deg"] = motion_total
+    stats["hard_stop_elapsed_s"] = t_stage1_elapsed
+    return meas_alt, meas_az, stats
 
 
 # ---------------------------------------------------------------------------

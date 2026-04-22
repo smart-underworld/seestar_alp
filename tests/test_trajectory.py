@@ -461,3 +461,60 @@ def test_2d_scurve_45deg_max_per_axis_throughput():
     # Both axes should peak right at V_MAX (long enough move to reach cruise).
     assert abs(peak_az - V_MAX) < 1e-2
     assert abs(peak_el - V_MAX) < 1e-2
+
+
+def test_2d_scurve_cumulative_target_unwinds():
+    # force_cum_az_target path: from a wound-up cum_az=+300, a plan to
+    # cum=0 with wrap_az=False should travel a raw -300 deg delta, NOT
+    # the +60 deg short wrap. This is the mechanism goto_origin's
+    # recenter_cable uses to actually unwind rather than re-wrap.
+    traj_az, traj_el = scurve_profile_2d(
+        p0_az=+300.0, p0_el=0.0,
+        p_target_az=0.0, p_target_el=0.0,
+        v_max=V_MAX, a_max=A_MAX, j_max=J_MAX, tick_dt=TICK,
+        wrap_az=False,
+    )
+    # Endpoint at cum=0, not wrapped.
+    assert abs(traj_az.points[-1].pos - 0.0) < 1e-6
+    # Total delta is exactly -300, covering a full unwrap.
+    delta = traj_az.points[-1].pos - traj_az.points[0].pos
+    assert abs(delta - (-300.0)) < 1e-6
+    # Velocity direction is negative throughout the motion (CCW unwind).
+    motion_vels = [p.vel for p in traj_az.points if abs(p.vel) > 1e-6]
+    assert all(v < 0 for v in motion_vels)
+    # El stays flat at 0.
+    assert _max_abs([p.pos for p in traj_el.points]) < 1e-9
+
+
+def test_move_to_ff_force_cum_az_target_out_of_range_raises():
+    # When force_cum_az_target is outside the usable cable range,
+    # move_to_ff should raise ValueError before issuing any motion.
+    # A minimal MountClient stub is enough — move_to_ff should fail
+    # during the planning stage, before any RPCs.
+    from device.plant_limits import AzimuthLimits, CumulativeAzTracker
+    from device.velocity_controller import move_to_ff
+
+    class _DummyClient:
+        def method_sync(self, method, params=None):
+            raise AssertionError(f"no RPCs expected; got {method!r}")
+
+    limits = AzimuthLimits(
+        ccw_hard_stop_cum_deg=-450.0, cw_hard_stop_cum_deg=+450.0,
+        padding_deg=15.0,
+    )
+    tracker = CumulativeAzTracker()
+    tracker.reset(cum_az_deg=0.0, wrapped_az_deg=0.0)
+
+    try:
+        move_to_ff(
+            cli=_DummyClient(),
+            target_az_deg=0.0, target_el_deg=0.0,
+            cur_az_deg=0.0, cur_el_deg=0.0,
+            loc=None,  # not used before the raise
+            az_limits=limits, az_tracker=tracker,
+            force_cum_az_target=+500.0,  # outside [-435, +435] usable
+        )
+    except ValueError as e:
+        assert "force_cum_az_target" in str(e)
+    else:
+        raise AssertionError("ValueError not raised for out-of-range target")
