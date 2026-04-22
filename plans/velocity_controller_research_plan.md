@@ -1251,12 +1251,19 @@ l = AzimuthLimits.load()  # usable [-435, +435] now loads
 Unit tests still green (46/46). Next hardware run will exercise
 cable-wrap planning + tracker persistence end-to-end.
 
-**Recovery state (2026-04-21, post-sweep):** mount at encoder
-az=−89.566° (≈ 0.7° off the CCW hard-stop wrapped position
-−90.266°), el parked at −89.800°. Cum-az history is lost because the
-tracker never initialized (see bug above). Before the next hardware
-run the mount should be power-cycled (homes to cable midpoint and
-resets encoder) or manually unwound CW.
+**Recovery state (2026-04-21, post-sweep, post-jog):** mount was at
+encoder az=−89.566° right after the sweep (≈ 0.7° off the CCW
+hard-stop wrapped position −90.266°). Recovered with a chained CW
+jog: 9 dithered `speed_move(1440, 0, [10|9]s)` bursts, +473.6° total
+unwrap delta, ended at az=+45.359° — roughly cable midpoint, well
+away from both stops. Burst 8 was firmware-dedup'd at the ~80 s
+mark (same `(speed, angle, dur)` as an earlier burst); burst 9
+restored motion. Mount is safe for the next hardware session. For a
+truly clean cum-az baseline the user may still want to power-cycle
+(homes to true midpoint and re-zeroes the encoder) before a long
+tracking run, but fresh-start tracker anchoring at wrapped 0 is
+within ~45° of true midpoint and the ±435° usable range easily
+accommodates that.
 
 ---
 
