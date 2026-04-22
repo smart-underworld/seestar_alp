@@ -99,15 +99,23 @@
 
   // Axis ranges. Error axis defaults to ±ERROR_Y_RANGE but autoscales
   // larger when a spike exceeds it (via suggestedMin/suggestedMax).
-  // Azimuth uses the controller's [-180, +180) convention.
+  // Azimuth is displayed in compass [0, 360) so the wrap falls at due
+  // North (off-screen for most tracking) instead of due South. The
+  // on-disk convention remains [-180, +180); we remap at the display
+  // layer only. Error axis still uses ±180 since angle differences are
+  // signed.
   // Elevation uses the telescope's practical range (empirically seen down
   // to ~-45° at rest; clamped to 90° upward).
   const ERROR_Y_RANGE = 3;
-  const AZ_Y_MIN = -180, AZ_Y_MAX = 180;
+  const AZ_Y_MIN = 0, AZ_Y_MAX = 360;
   const EL_Y_MIN = -45,  EL_Y_MAX = 90;
 
   function wrapPm180(deg){
     return ((deg + 540) % 360) - 180;
+  }
+
+  function wrap0_360(deg){
+    return ((deg % 360) + 360) % 360;
   }
 
   function makeAxisChart(ctx, posMin, posMax, posLabel) {
@@ -162,7 +170,7 @@
 
   const azChart = makeAxisChart(
     document.getElementById('azChart').getContext('2d'),
-    AZ_Y_MIN, AZ_Y_MAX, `azimuth (°, ${AZ_Y_MIN}..${AZ_Y_MAX})`,
+    AZ_Y_MIN, AZ_Y_MAX, `azimuth (°, 0..360 compass)`,
   );
   const elChart = makeAxisChart(
     document.getElementById('elChart').getContext('2d'),
@@ -254,7 +262,7 @@
       const t = s.t - t0;
       // Command = measured position (what we've actually driven the mount to).
       if (s.az_deg !== null && s.az_deg !== undefined){
-        azCmd.push({ x: t, y: s.az_deg });
+        azCmd.push({ x: t, y: wrap0_360(s.az_deg) });
         latestAz = s.az_deg;
       }
       if (s.alt_deg !== null && s.alt_deg !== undefined){
@@ -263,7 +271,7 @@
       }
       // Setpoint = commanded target.
       if (s.commanded_az_deg !== null && s.commanded_az_deg !== undefined){
-        azSet.push({ x: t, y: s.commanded_az_deg });
+        azSet.push({ x: t, y: wrap0_360(s.commanded_az_deg) });
         latestAzSet = s.commanded_az_deg;
         if (s.az_deg !== null && s.az_deg !== undefined){
           const e = wrapPm180(s.commanded_az_deg - s.az_deg);
@@ -295,6 +303,10 @@
       const ref = [], err = [];
       const GAP_S = 2.0;
       let prevEpoch = null;
+      // Az-like position keys get wrapped to [0, 360) for display so the
+      // ref curve shares the compass convention with `measured`. Elevation
+      // keys stay raw.
+      const isAzKey = posKey.includes('az') || posKey === 'ref_pos';
       for (const e of events){
         if (!eventNames.includes(e.event)) continue;
         const refVal = e[posKey];
@@ -304,7 +316,7 @@
           ref.push({ x: tRel, y: null });
           err.push({ x: tRel, y: null });
         }
-        ref.push({ x: tRel, y: refVal });
+        ref.push({ x: tRel, y: isAzKey ? wrap0_360(refVal) : refVal });
         // Tracking error: prefer the controller's pre-computed field,
         // then fall back to computing ref − meas.
         const posErr = e[errKey] ?? e.position_error_deg;
@@ -313,7 +325,7 @@
         } else {
           const measVal = e[measKey];
           if (measVal !== undefined && measVal !== null){
-            const d = posKey.includes('az') || posKey === 'ref_pos'
+            const d = isAzKey
               ? wrapPm180(refVal - measVal) : (refVal - measVal);
             err.push({ x: tRel, y: d });
           }
@@ -397,8 +409,8 @@
     const kpis = [
       { k: 'phase',             v: currentPhase },
       { k: 'step',              v: `${currentStep}` },
-      { k: 'az ref',            v: fmt(displayAzSet) },
-      { k: 'az measured',       v: fmt(latestAz) },
+      { k: 'az ref',            v: fmt(displayAzSet === null || displayAzSet === undefined ? displayAzSet : wrap0_360(displayAzSet)) },
+      { k: 'az measured',       v: fmt(latestAz === null || latestAz === undefined ? latestAz : wrap0_360(latestAz)) },
       { k: 'az error',          v: fmt(displayAzErr) },
       { k: 'el ref',            v: fmt(displayElSet) },
       { k: 'el measured',       v: fmt(latestEl) },
