@@ -37,3 +37,6 @@ auto_level_logs/
 
 # CumulativeAzTracker runtime state (per-device, dynamic — not calibration).
 device/plant_limits_state.json
+
+# Fetched trajectory data (regenerable from OpenSky / Celestrak).
+data/trajectories/

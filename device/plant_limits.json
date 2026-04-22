@@ -8,7 +8,7 @@
   "measurement_date": "2026-04-21T13:15:22.915981",
   "el_hard_stop_up_deg": 85.779,
   "el_hard_stop_down_deg": -85.882,
-  "el_usable_up_deg": 70.8,
-  "el_usable_down_deg": -70.9,
+  "el_usable_up_deg": 85.0,
+  "el_usable_down_deg": -85.0,
   "el_measurement_date": "2026-04-21T13:30"
 }
