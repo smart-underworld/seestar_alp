@@ -30,8 +30,8 @@ import numpy as np
 
 from device.plant_limits import AzimuthLimits
 from device.plant_models import FirstOrderLagModel
-
-from scripts.trajectory.observer import unwrap_az_series
+from device.reference_provider import JsonlECEFProvider, ReferenceProvider
+from device.target_frame import MountFrame
 
 
 # Defaults matching Phase 4.5 velocity_controller constants.
@@ -69,43 +69,17 @@ def load_trajectory(path: Path) -> TrajectoryFile:
     return TrajectoryFile(header=header, samples=samples)
 
 
-def resample_to_ticks(
-    traj: TrajectoryFile, tick_dt: float,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Return (t_grid, az_cum_deg, el_deg) on a uniform tick grid.
-
-    az is unwrapped into a cumulative (non-wrapping) series before
-    interpolation so a crossing through ±180° doesn't produce a spurious
-    360° step in the reference.
-    """
-    t_raw = np.array([s["t_unix"] for s in traj.samples])
-    az_raw = np.array([s["az_deg"] for s in traj.samples])
-    el_raw = np.array([s["el_deg"] for s in traj.samples])
-    az_cum_raw = unwrap_az_series(az_raw)
-
-    t0 = float(t_raw[0])
-    t1 = float(t_raw[-1])
-    # Snap to an integer number of ticks.
-    n = int(np.floor((t1 - t0) / tick_dt)) + 1
-    t_grid = t0 + np.arange(n) * tick_dt
-    az_cum = np.interp(t_grid, t_raw, az_cum_raw)
-    el = np.interp(t_grid, t_raw, el_raw)
-    return t_grid, az_cum, el
-
-
-def _smoothed_rates(
-    position: np.ndarray, tick_dt: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Central differences + short moving-average smoothing → (v, a)."""
-    v = np.gradient(position, tick_dt)
-    a = np.gradient(v, tick_dt)
-    # 3-sample moving average → ~1.5 tick (0.75 s) smoothing for the
-    # acceleration term. Short enough to preserve real dynamics, long
-    # enough to suppress gradient double-derivative noise.
-    if len(a) >= 3:
-        kernel = np.ones(3) / 3.0
-        a = np.convolve(a, kernel, mode="same")
-    return v, a
+def _provider_from_trajectory(
+    traj: TrajectoryFile, mount_frame: MountFrame,
+) -> JsonlECEFProvider:
+    """Build a JsonlECEFProvider from an already-parsed TrajectoryFile."""
+    t = np.array([s["t_unix"] for s in traj.samples], dtype=float)
+    ecef = np.array([
+        (s["ecef_x"], s["ecef_y"], s["ecef_z"]) for s in traj.samples
+    ], dtype=float)
+    return JsonlECEFProvider.from_samples(
+        header=traj.header, t_unix=t, ecef_xyz=ecef, mount_frame=mount_frame,
+    )
 
 
 @dataclass
@@ -137,17 +111,66 @@ def simulate_replay(
     v_corr_max: float = V_CORR_MAX_DEGS,
     use_ff: bool = True,
     az_limits: AzimuthLimits | None = None,
+    mount_frame: MountFrame | None = None,
 ) -> ReplayResult:
     """Simulate FF+FB tracking on a first-order plant.
+
+    Builds a `JsonlECEFProvider` from the trajectory + `mount_frame`
+    (identity ENU if not provided), then dispatches to
+    `simulate_replay_with_provider`. Kept as the public entry for the
+    existing `tests/test_trajectory_pipeline.py` fixtures.
+    """
+    if mount_frame is None:
+        mount_frame = MountFrame.from_identity_enu()
+    provider = _provider_from_trajectory(traj, mount_frame)
+    return simulate_replay_with_provider(
+        provider=provider,
+        header=traj.header,
+        tick_dt=tick_dt, tau_s=tau_s, k_dc=k_dc,
+        v_max=v_max, kp_pos=kp_pos, v_corr_max=v_corr_max,
+        use_ff=use_ff, az_limits=az_limits,
+    )
+
+
+def simulate_replay_with_provider(
+    provider: ReferenceProvider,
+    header: dict,
+    tick_dt: float = TICK_DT_S,
+    tau_s: float = TAU_S,
+    k_dc: float = K_DC,
+    v_max: float = V_MAX_DEGS,
+    kp_pos: float = KP_POS,
+    v_corr_max: float = V_CORR_MAX_DEGS,
+    use_ff: bool = True,
+    az_limits: AzimuthLimits | None = None,
+) -> ReplayResult:
+    """Run the FF+FB tick loop against any ReferenceProvider.
 
     Matches device.velocity_controller.move_to_ff semantics: each tick,
     `v_cmd = v_ff + v_corr` where v_corr = clamp(kp_pos · pos_err, ±v_corr_max)
     and v_ff = v_ref + τ · a_ref (or just v_ref when use_ff=False). The
     total command is clamped to ±v_max before being sent to the plant.
     """
-    t_grid, az_ref, el_ref = resample_to_ticks(traj, tick_dt)
-    v_ref_az, a_ref_az = _smoothed_rates(az_ref, tick_dt)
-    v_ref_el, a_ref_el = _smoothed_rates(el_ref, tick_dt)
+    t0, t1 = provider.valid_range()
+    n = int(np.floor((t1 - t0) / tick_dt)) + 1
+    t_grid = t0 + np.arange(n) * tick_dt
+
+    # Pre-sample the provider onto the tick grid so downstream arrays match
+    # the old behavior. Provider-driven v, a come from spline derivatives.
+    az_ref = np.empty(n)
+    el_ref = np.empty(n)
+    v_ref_az = np.empty(n)
+    v_ref_el = np.empty(n)
+    a_ref_az = np.empty(n)
+    a_ref_el = np.empty(n)
+    for i in range(n):
+        s = provider.sample(float(t_grid[i]))
+        az_ref[i] = s.az_cum_deg
+        el_ref[i] = s.el_deg
+        v_ref_az[i] = s.v_az_degs
+        v_ref_el[i] = s.v_el_degs
+        a_ref_az[i] = s.a_az_degs2
+        a_ref_el[i] = s.a_el_degs2
 
     if use_ff:
         v_ff_az = v_ref_az + tau_s * a_ref_az
@@ -160,7 +183,6 @@ def simulate_replay(
     model.tau = tau_s
     model.k_dc = k_dc
 
-    n = len(t_grid)
     v_cmd_az = np.zeros(n)
     v_cmd_el = np.zeros(n)
     az_sim = np.zeros(n)
@@ -173,7 +195,6 @@ def simulate_replay(
     sat_el = 0
 
     for i in range(n):
-        # Feedback on position error at this tick.
         err_az = az_ref[i] - az_sim[i]
         err_el = el_ref[i] - el_sim[i]
         v_corr_az = np.clip(kp_pos * err_az, -v_corr_max, v_corr_max)
@@ -189,12 +210,9 @@ def simulate_replay(
         v_cmd_az[i] = cmd_az
         v_cmd_el[i] = cmd_el
         if i == n - 1:
-            # No more ticks after this; sim endpoint is already stored.
             break
-        # Step plant by one tick.
         v_sim_az_next = model.predict_rate(v_sim_az, cmd_az, tick_dt)
         v_sim_el_next = model.predict_rate(v_sim_el, cmd_el, tick_dt)
-        # Trapezoidal position update over the tick.
         az_sim[i + 1] = az_sim[i] + 0.5 * (v_sim_az + v_sim_az_next) * tick_dt
         el_sim[i + 1] = el_sim[i] + 0.5 * (v_sim_el + v_sim_el_next) * tick_dt
         v_sim_az = v_sim_az_next
@@ -216,7 +234,7 @@ def simulate_replay(
         az_err=az_err, el_err=el_err,
         az_sat_count=sat_az, el_sat_count=sat_el,
         cable_wrap_violations=cable_violations,
-        header=traj.header,
+        header=header,
     )
 
 
