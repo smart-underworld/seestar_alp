@@ -1,3 +1,4 @@
+interop_pem.pem
 .git
 .pytest_cache
 .venv
@@ -30,3 +31,16 @@ messages*.db
 test_schedule_1.json
 test_schedule.json
 alpyca_EQFirmware.log
+
+# Auto-level run logs (captured per-run JSON for offline math replay)
+auto_level_logs/
+
+# CumulativeAzTracker runtime state (per-device, dynamic — not calibration).
+device/plant_limits_state.json
+
+# Fetched trajectory data (regenerable from OpenSky / Celestrak).
+data/trajectories/
+data/fetch_aircraft.log
+
+# Per-mount compass calibration — site-specific, regenerated via calibrate_compass.
+device/mount_calibration.json

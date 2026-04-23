@@ -2116,7 +2116,8 @@ class HomeResource:
         telescopes = get_telescopes_state()
         telescope = telescopes[0]  # We just force it to first telescope
         context = get_context(telescope["device_num"], req)
-        del context["telescopes"]
+        if "telescopes" in context:
+            del context["telescopes"]
         if len(telescopes) > 1:
             redirect(f"/{telescope['device_num']}/")
         else:
@@ -4061,6 +4062,242 @@ class StatsResource:
         render_template(req, resp, "stats.html", stats=stats, now=now, **context)
 
 
+# ---------------------------------------------------------------------------
+# Velocity-controller live-status page
+#
+# Reads JSONL position logs written by device.velocity_controller.PositionLogger
+# and exposes them as chart-friendly JSON. Lets the user watch the velocity
+# controller's az/error/rate/commanded-speed traces live while iterating on
+# tuning knobs. Per-telescope-id route so the URL matches the rest of the
+# app's /<id>/<resource> convention.
+# ---------------------------------------------------------------------------
+
+_AUTO_LEVEL_LOG_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "auto_level_logs")
+)
+
+
+def _parse_jsonl_log_timestamp(ts_str):
+    """Parse an ISO-8601 UTC timestamp from the JSONL logs into epoch seconds."""
+    try:
+        s = ts_str.rstrip("Z")
+        dt = datetime.fromisoformat(s).replace(tzinfo=pytz.UTC)
+        return dt.timestamp()
+    except Exception:
+        return None
+
+
+class VelocityControllerResource:
+    """Serve the velocity-controller live-status page."""
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        context = get_context(telescope_id, req)
+        render_template(
+            req, resp, "velocity_controller.html",
+            telescope_id=telescope_id, **context,
+        )
+
+
+class VelocityControllerLiveResource:
+    """Return a single live position snapshot from the raw encoder.
+
+    Polls ``scope_get_horiz_coord`` → ``[alt, az]`` on the target
+    telescope. No PositionLogger needed — works during manual jogs,
+    idle, or any state where the telescope proxy is reachable.
+    """
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        try:
+            result = method_sync("scope_get_horiz_coord", telescope_id)
+            if isinstance(result, list) and len(result) >= 2:
+                coords = result
+            elif isinstance(result, dict):
+                coords = result.get("result", result.get("Value"))
+                if not (isinstance(coords, list) and len(coords) >= 2):
+                    resp.status = falcon.HTTP_200
+                    resp.content_type = "application/json"
+                    resp.text = json.dumps({"error": "unexpected", "raw": str(result)[:200]})
+                    return
+            else:
+                resp.status = falcon.HTTP_200
+                resp.content_type = "application/json"
+                resp.text = json.dumps({"error": "unexpected", "raw": str(result)[:200]})
+                return
+            payload = {"alt_deg": float(coords[0]), "az_deg": float(coords[1])}
+            # Read the latest trajectory setpoint from the most recent
+            # PositionLogger JSONL (if one exists and is being written).
+            traj = VelocityControllerLiveResource._latest_trajectory_ref()
+            if traj:
+                payload.update(traj)
+        except Exception as e:
+            payload = {"error": str(e)}
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(payload)
+
+    @staticmethod
+    def _latest_trajectory_ref():
+        """Read the tail of the newest .positions.jsonl and extract the
+        latest trajectory reference (from ff_tick / el_ff_tick / 2d_ff_tick
+        events) plus the commanded setpoint from the latest sample.
+
+        Returns a dict with ref_az, ref_el, commanded_az, commanded_el
+        (any may be None) or None if no recent log exists.
+        """
+        try:
+            log_dir = _AUTO_LEVEL_LOG_DIR
+            files = sorted(
+                (f for f in os.listdir(log_dir) if f.endswith(".positions.jsonl")),
+                reverse=True,
+            )
+            if not files:
+                return None
+            path = os.path.join(log_dir, files[0])
+            # Check freshness: skip if file hasn't been modified in > 30 s.
+            if time.time() - os.path.getmtime(path) > 30:
+                return None
+            # Read last ~20 lines (enough to find a recent tick event).
+            with open(path, "rb") as f:
+                f.seek(0, 2)
+                size = f.tell()
+                f.seek(max(0, size - 8192))
+                tail = f.read().decode("utf-8", errors="replace")
+            lines = tail.strip().split("\n")
+            ref_az = ref_el = cmd_az = cmd_el = phase = None
+            for line in reversed(lines[-30:]):
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                kind = rec.get("kind")
+                if kind == "sample":
+                    if cmd_az is None:
+                        cmd_az = rec.get("commanded_az_deg")
+                    if cmd_el is None:
+                        cmd_el = rec.get("commanded_alt_deg")
+                    if phase is None:
+                        phase = rec.get("phase")
+                elif kind == "event":
+                    ev = rec.get("event", "")
+                    if ev == "2d_ff_tick":
+                        if ref_az is None:
+                            ref_az = rec.get("ref_az")
+                        if ref_el is None:
+                            ref_el = rec.get("ref_el")
+                    elif ev == "ff_tick" and ref_az is None:
+                        ref_az = rec.get("ref_pos")
+                    elif ev == "el_ff_tick" and ref_el is None:
+                        ref_el = rec.get("ref_pos")
+                if ref_az is not None and ref_el is not None and cmd_az is not None:
+                    break
+            out = {}
+            if ref_az is not None:
+                out["ref_az_deg"] = ref_az
+            if ref_el is not None:
+                out["ref_el_deg"] = ref_el
+            if cmd_az is not None:
+                out["commanded_az_deg"] = cmd_az
+            if cmd_el is not None:
+                out["commanded_el_deg"] = cmd_el
+            if phase is not None:
+                out["phase"] = phase
+            return out if out else None
+        except Exception:
+            return None
+
+
+class VelocityControllerLogsResource:
+    """List recent position-log JSONL files, newest first.
+
+    The logs aren't currently tagged by telescope_id (they come from
+    scripts/auto_level.py which runs against one scope at a time). We
+    still accept a telescope_id in the URL for route-shape consistency.
+    """
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        logs = []
+        try:
+            for name in sorted(os.listdir(_AUTO_LEVEL_LOG_DIR)):
+                if name.endswith(".positions.jsonl"):
+                    logs.append(name)
+        except FileNotFoundError:
+            pass
+        logs.reverse()  # newest-first (filenames sort lexicographically by timestamp)
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps({"logs": logs[:25]})
+
+
+class VelocityControllerLogResource:
+    """Return parsed samples + events for one JSONL log file.
+
+    Query params:
+        name:  JSONL filename under auto_level_logs/
+        limit: max number of `sample` records to return (tail) — default 1500
+    """
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        name = req.get_param("name") or ""
+        limit = int(req.get_param("limit") or 1500)
+        # Guard against path escape.
+        if not name or ".." in name or "/" in name or "\\" in name:
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "invalid name"})
+            return
+        path = os.path.join(_AUTO_LEVEL_LOG_DIR, name)
+        if not os.path.isfile(path):
+            resp.status = falcon.HTTP_404
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "not found"})
+            return
+
+        samples = []
+        events = []
+        header = None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except Exception:
+                        continue
+                    ts = _parse_jsonl_log_timestamp(rec.get("t", ""))
+                    rec["t"] = ts
+                    kind = rec.get("kind")
+                    if kind == "header":
+                        header = rec
+                    elif kind == "sample":
+                        samples.append(rec)
+                    elif kind == "event":
+                        events.append(rec)
+        except OSError as e:
+            resp.status = falcon.HTTP_500
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": f"read failed: {e}"})
+            return
+
+        if len(samples) > limit:
+            samples = samples[-limit:]
+
+        payload = {
+            "name": name,
+            "poll_interval_s": (header or {}).get("poll_interval_s"),
+            "samples": samples,
+            "events": events,
+        }
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(payload)
+
+
 class StatsContentResource:
     _last_render_by_key = {}
     _lock = threading.Lock()
@@ -5216,6 +5453,26 @@ class FrontMain:
         app.add_route("/localsearch", GetLocalSearch())
         app.add_route("/getminorplanetcoordinates", GetMinorPlanetCoordinates())
         app.add_route("/getaavsocoordinates", GetAAVSOSearch())
+        app.add_route(
+            "/api/{telescope_id:int}/velocity_controller/live",
+            VelocityControllerLiveResource(),
+        )
+        app.add_route(
+            "/{telescope_id:int}/velocity_controller",
+            VelocityControllerResource(),
+        )
+        app.add_route(
+            "/{telescope_id:int}/velocity_controller/",
+            VelocityControllerResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/velocity_controller/logs",
+            VelocityControllerLogsResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/velocity_controller/log",
+            VelocityControllerLogResource(),
+        )
         app.add_route("/config", ConfigResource())
         app.add_route("/pa_refine", BlindPolarAlignResource())
 

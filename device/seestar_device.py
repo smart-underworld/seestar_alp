@@ -301,7 +301,8 @@ class Seestar:
                 time.sleep(3)
                 return False
             # todo : don't send if not connected or socket is null?
-            self.logger.debug(f"sending: {data}")
+            if '"id":420' not in data:
+                self.logger.info(f"[{self.device_name}] scope send: {data.rstrip()}")
             self.s.sendall(
                 data.encode()
             )  # TODO: would utf-8 or unicode_escaped help here
@@ -497,11 +498,10 @@ class Seestar:
 
                     if "jsonrpc" in parsed_data:
                         # {"jsonrpc":"2.0","Timestamp":"9507.244805160","method":"scope_get_equ_coord","result":{"ra":17.093056,"dec":34.349722},"code":0,"id":83}
+                        if parsed_data.get("method") != "scope_get_equ_coord":
+                            self.logger.info(f"[{self.device_name}] scope recv: {parsed_data}")
                         if parsed_data["method"] == "scope_get_equ_coord":
-                            self.logger.debug(f"{parsed_data}")
                             self.update_equ_coord(parsed_data)
-                        else:
-                            self.logger.debug(f"{parsed_data}")
                         if parsed_data["method"] == "get_view_state":
                             self.update_view_state(parsed_data)
                         # keep a running queue of last 100 responses for sync call results
@@ -663,7 +663,13 @@ class Seestar:
                         f"SLOW message response.  {elapsed} seconds. {cur_cmdid=} {data=}"
                     )
                     # todo : dump out stats.  last run time on threads, connection status, etc.
-            time.sleep(0.5)
+            # Poll for response dict insertion. 0.01s (was 0.5s) is a 50x
+            # improvement on minimum RPC latency — the response is populated
+            # by the separate TCP reader thread the moment the firmware
+            # replies, so the sleep here is only caller-side poll cadence.
+            # Firmware round-trip is ~10-30 ms; at 10 ms poll we hit the
+            # firmware floor with negligible CPU overhead (~100 polls/s).
+            time.sleep(0.01)
         self.logger.debug(f"response is {self.response_dict[cur_cmdid]}")
         return self.response_dict[cur_cmdid]
 
@@ -2612,6 +2618,20 @@ class Seestar:
         else:
             self.is_watch_events = True
 
+            # Start the receive thread before the first reconnect so that the
+            # firmware-7.18+ PEM auth handshake (issued inside reconnect()) can
+            # actually observe the device's replies — response_dict is populated
+            # only by this thread. get_socket_msg() handles self.s is None by
+            # sleeping, so starting early is safe.
+            try:
+                self.get_msg_thread = threading.Thread(
+                    target=self.receive_message_thread_fn, daemon=True
+                )
+                self.get_msg_thread.name = f"IncomingMsgThread:{self.device_name}"
+                self.get_msg_thread.start()
+            except Exception:
+                pass
+
             for i in range(3, 0, -1):
                 if self.reconnect():
                     self.logger.info(f"{self.device_name} Connected")
@@ -2627,14 +2647,6 @@ class Seestar:
                 )
 
             try:
-                # Start up heartbeat and receive threads
-
-                self.get_msg_thread = threading.Thread(
-                    target=self.receive_message_thread_fn, daemon=True
-                )
-                self.get_msg_thread.name = f"IncomingMsgThread:{self.device_name}"
-                self.get_msg_thread.start()
-
                 self.heartbeat_msg_thread = threading.Thread(
                     target=self.heartbeat_message_thread_fn, daemon=True
                 )
