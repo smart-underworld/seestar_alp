@@ -2086,6 +2086,8 @@ class Seestar:
 
     def insert_schedule_item_before(self, params):
         targeted_item_id = params["before_id"]
+        if not targeted_item_id:
+            return self.add_schedule_item(params)
         index = 0
         if self.schedule["state"] == "working":
             active_schedule_item_id = self.schedule["current_item_id"]
@@ -2267,6 +2269,13 @@ class Seestar:
                 "An existing scheduler is active. Returned with no action.",
             )
 
+        if self.scheduler_thread is not None and self.scheduler_thread.is_alive():
+            return self.json_result(
+                "start_scheduler",
+                -1,
+                "Scheduler thread is still winding down. Please wait a moment and try again.",
+            )
+
         if "start_item" in params:
             self.schedule["item_number"] = params["start_item"]
         else:
@@ -2421,6 +2430,11 @@ class Seestar:
                 time.sleep(2)
                 while startup_thread.is_alive():
                     update_time()
+                    if self.schedule["state"] != "working":
+                        self.logger.info(
+                            "Scheduler stopped while start_up_sequence was running; exiting startup wait."
+                        )
+                        break
                     time.sleep(2)
             elif action == "action_set_dew_heater":
                 self.logger.info(
