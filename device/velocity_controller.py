@@ -152,7 +152,20 @@ def _rate_to_speed(rate_degs: float) -> int:
 
 
 def speed_move(cli: MountClient, speed: int, angle: int, dur_sec: int) -> None:
-    """Issue a single scope_speed_move. Caller owns sequencing / timing."""
+    """Issue a single scope_speed_move. Caller owns sequencing / timing.
+
+    Refuses while `SunSafetyMonitor` holds the emergency lockout — see
+    `device.sun_safety`. The monitor's own jog bypasses this wrapper by
+    calling `cli.method_sync("scope_speed_move", ...)` directly, so it
+    stays the single privileged motion source during the lockout window.
+    """
+    # Lazy import so this module stays importable without the sun_safety
+    # module in minimal environments (scripts, unit tests of other parts).
+    from device.sun_safety import SunSafetyLocked, sun_safety_is_locked_out
+    if sun_safety_is_locked_out():
+        raise SunSafetyLocked(
+            "sun-safety emergency lockout active — speed_move refused"
+        )
     cli.method_sync(
         "scope_speed_move",
         {"speed": int(speed), "angle": int(angle), "dur_sec": int(dur_sec)},

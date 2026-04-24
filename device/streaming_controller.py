@@ -34,6 +34,7 @@ from astropy.coordinates import EarthLocation
 
 from device.plant_limits import AzimuthLimits, CumulativeAzTracker
 from device.reference_provider import ReferenceProvider
+from device.sun_safety import SunSafetyLocked, is_sun_safe as _is_sun_safe
 from device.velocity_controller import (
     MAIN_RATE_DEGS,
     SPEED_PER_DEG_PER_SEC,
@@ -496,6 +497,21 @@ def track(
                 )
                 break
 
+            # 4b. Sun-avoidance runtime net. Coarse check on the
+            #     reference sample's (az_cum, el) treated as sky — valid
+            #     after rotation calibration, approximate otherwise.
+            #     SunSafetyMonitor is the authoritative backstop; this
+            #     just catches trajectories whose provider output rolls
+            #     into the cone mid-run so we abort before the mount
+            #     commits to the slew.
+            sun_safe, sun_reason = _is_sun_safe(
+                ref.az_cum_deg % 360.0, float(ref.el_deg),
+            )
+            if not sun_safe:
+                exit_reason = "sun_avoidance"
+                errors.append(sun_reason)
+                break
+
             # 5. Compose firmware command.
             v_mag = float(np.hypot(v_cmd_az, v_cmd_el))
             speed = int(round(v_mag * SPEED_PER_DEG_PER_SEC))
@@ -511,6 +527,12 @@ def track(
             if not dry_run and speed > 0:
                 try:
                     speed_move(cli, speed, angle, TICK_CMD_DUR_S)
+                except SunSafetyLocked as exc:
+                    # Monitor is running the jog; step out so the
+                    # session's LiveTrackManager.stop() can tear us down.
+                    errors.append(str(exc))
+                    exit_reason = "sun_avoidance"
+                    break
                 except Exception as exc:
                     errors.append(f"speed_move failed: {exc}")
                     exit_reason = "mount_error"

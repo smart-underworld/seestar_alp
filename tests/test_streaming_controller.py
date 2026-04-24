@@ -170,6 +170,70 @@ def test_track_stop_signal_aborts(tmp_path):
     assert t_elapsed < 2.5
 
 
+def test_track_exits_when_per_tick_sun_guard_trips(tmp_path, monkeypatch):
+    """Controller bails with exit_reason='sun_avoidance' when the per-tick
+    guard marks the reference sample unsafe (e.g. trajectory rolls into
+    the sun cone). Monkeypatches the guard so this runs deterministically
+    at any time of day."""
+    path = tmp_path / "flight.jsonl"
+    t0 = time.time() + 0.3
+    _write_fixture(path, t0_unix=t0, duration_s=3.0, dt=0.5)
+    mf = MountFrame.from_identity_enu()
+    provider = JsonlECEFProvider(path, mf, extrapolation_s=1.0)
+    cli = FakeMountClient()
+    first = provider.sample(t0)
+    cli.set_position(az_deg=first.az_cum_deg, el_deg=first.el_deg)
+
+    # Force the guard to always refuse.
+    import device.streaming_controller as sc
+    monkeypatch.setattr(
+        sc, "_is_sun_safe",
+        lambda az, el: (False, "sun_avoidance: forced by test"),
+    )
+
+    result = track(cli, provider, max_duration_s=10.0)
+    assert result.exit_reason == "sun_avoidance"
+    assert any("sun_avoidance" in e for e in result.errors)
+
+
+def test_track_exits_sun_avoidance_when_speed_move_locked_out(tmp_path):
+    """If the lockout-aware speed_move raises SunSafetyLocked mid-track,
+    the controller exits with exit_reason='sun_avoidance' instead of
+    retrying."""
+    from device.sun_safety import (
+        SunSafetyMonitor,
+        get_sun_monitor,
+        set_sun_monitor,
+    )
+
+    path = tmp_path / "flight.jsonl"
+    t0 = time.time() + 0.3
+    _write_fixture(path, t0_unix=t0, duration_s=3.0, dt=0.5)
+    mf = MountFrame.from_identity_enu()
+    provider = JsonlECEFProvider(path, mf, extrapolation_s=1.0)
+    cli = FakeMountClient()
+    first = provider.sample(t0)
+    cli.set_position(az_deg=first.az_cum_deg, el_deg=first.el_deg)
+
+    class _FakeJog:
+        def __call__(self, *_a, **_kw):
+            pass
+
+    prev = get_sun_monitor()
+    m = SunSafetyMonitor(
+        altaz_reader=lambda: None, jog_command=_FakeJog(),
+        lat_deg=0.0, lon_deg=0.0,
+    )
+    m._emergency_lockout.set()  # pretend monitor is mid-jog
+    set_sun_monitor(m)
+    try:
+        result = track(cli, provider, max_duration_s=10.0)
+    finally:
+        set_sun_monitor(prev)
+
+    assert result.exit_reason == "sun_avoidance"
+
+
 def test_dry_run_does_not_command_mount(tmp_path):
     path = tmp_path / "flight.jsonl"
     t0 = time.time() + 0.3

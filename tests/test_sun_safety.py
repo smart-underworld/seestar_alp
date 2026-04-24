@@ -510,3 +510,53 @@ def test_set_and_get_sun_monitor_roundtrip():
         assert get_sun_monitor() is m
     finally:
         set_sun_monitor(prev)
+
+
+# --- speed_move wrapper: honors emergency lockout ------------------------
+
+
+class _DummyCli:
+    """Minimal MountClient double — just records method_sync calls."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
+
+    def method_sync(self, method: str, params=None):
+        self.calls.append((method, dict(params or {})))
+        return {"result": {}}
+
+
+def test_speed_move_passes_through_when_not_locked():
+    from device.sun_safety import get_sun_monitor, set_sun_monitor
+    from device.velocity_controller import speed_move
+    prev = get_sun_monitor()
+    set_sun_monitor(None)
+    try:
+        cli = _DummyCli()
+        speed_move(cli, speed=100, angle=45, dur_sec=1)
+        assert cli.calls == [
+            ("scope_speed_move", {"speed": 100, "angle": 45, "dur_sec": 1}),
+        ]
+    finally:
+        set_sun_monitor(prev)
+
+
+def test_speed_move_refuses_while_monitor_locked_out():
+    from device.sun_safety import SunSafetyLocked, get_sun_monitor, set_sun_monitor
+    from device.velocity_controller import speed_move
+    prev = get_sun_monitor()
+    m = SunSafetyMonitor(
+        altaz_reader=lambda: None,
+        jog_command=_FakeJog(),
+        lat_deg=0.0, lon_deg=0.0,
+    )
+    # Simulate the monitor mid-jog.
+    m._emergency_lockout.set()
+    set_sun_monitor(m)
+    try:
+        cli = _DummyCli()
+        with pytest.raises(SunSafetyLocked):
+            speed_move(cli, speed=100, angle=45, dur_sec=1)
+        assert cli.calls == []  # firmware never touched
+    finally:
+        set_sun_monitor(prev)
