@@ -91,6 +91,39 @@ def default_site() -> ObserverSite:
     return _DEFAULT_SITE
 
 
+def build_site_from_telescope(cli, alt_m: float) -> ObserverSite:
+    """Fetch the observer's lat/lon from the telescope's stored state
+    and build an ObserverSite at the given altitude.
+
+    The Seestar firmware exposes its configured geodetic origin via
+    ``get_device_state`` with key ``location_lon_lat`` — a two-element
+    list in ``[lon, lat]`` order (see device/seestar_device.py:1038).
+    Altitude isn't stored by the firmware, so the caller supplies it
+    (GPS-derived or prompted).
+    """
+    resp = cli.method_sync(
+        "get_device_state", {"keys": ["location_lon_lat"]},
+    )
+    if not isinstance(resp, dict):
+        raise RuntimeError(
+            "telescope did not return a valid response to "
+            "get_device_state (is the mount powered on and connected?)"
+        )
+    result = resp.get("result")
+    if not isinstance(result, dict) or "location_lon_lat" not in result:
+        raise RuntimeError(
+            f"telescope response missing 'location_lon_lat': {resp!r}"
+        )
+    lon_lat = result["location_lon_lat"]
+    if not (isinstance(lon_lat, (list, tuple)) and len(lon_lat) >= 2):
+        raise RuntimeError(
+            f"telescope 'location_lon_lat' malformed: {lon_lat!r}"
+        )
+    lon_deg = float(lon_lat[0])
+    lat_deg = float(lon_lat[1])
+    return build_site(lat_deg=lat_deg, lon_deg=lon_deg, alt_m=float(alt_m))
+
+
 def lla_to_ecef(
     lat_deg: float, lon_deg: float, alt_m: float,
 ) -> tuple[float, float, float]:
