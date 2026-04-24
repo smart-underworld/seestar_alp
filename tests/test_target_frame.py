@@ -222,6 +222,27 @@ def test_from_calibration_json_explicit_site_wins_over_embedded(tmp_path):
     assert mf.site.lat_deg == pytest.approx(40.0, abs=1e-9)
 
 
+def test_geometry_arrays_are_float64():
+    """Lock in the double-precision invariant. A float32 downcast of
+    the ENU rotation or ECEF origin would cost ~1 m of precision at
+    Earth-radius scale — enough to matter for near-pass LEO calibration."""
+    mf = MountFrame.from_euler_deg(yaw_deg=15.0, pitch_deg=0.5, roll_deg=-0.2)
+    assert mf.topo_to_mount.dtype == np.float64
+    assert mf.origin_offset_ecef_m.dtype == np.float64
+    assert mf.site.enu_rotation.dtype == np.float64
+    assert mf.site.ecef_xyz.dtype == np.float64
+    # Transforms must return float64 regardless of input dtype.
+    mf_id = MountFrame.from_identity_enu()
+    ecef_f32 = np.asarray(mf_id.site.ecef_xyz, dtype=np.float32)
+    az, el, slant = mf_id.ecef_to_mount_azel(ecef_f32)
+    assert isinstance(az, float) and isinstance(el, float) and isinstance(slant, float)
+    arr_f32 = np.asarray([mf_id.site.ecef_xyz], dtype=np.float32)
+    az_a, el_a, slant_a = mf_id.ecef_array_to_mount(arr_f32)
+    assert az_a.dtype == np.float64
+    assert el_a.dtype == np.float64
+    assert slant_a.dtype == np.float64
+
+
 def test_default_origin_offset_is_zero_and_backward_compat():
     mf_id = MountFrame.from_identity_enu()
     mf_yaw = MountFrame.from_euler_deg(yaw_deg=0.0, pitch_deg=0.0, roll_deg=0.0)

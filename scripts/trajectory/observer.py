@@ -35,6 +35,13 @@ OBSERVER_LON_DEG = _env_float("OBSERVER_LON_DEG", -118.460139)
 OBSERVER_ALT_M = _env_float("OBSERVER_ALT_M", 30.0)
 
 
+# All geometry arrays are float64. Explicit dtype throughout keeps a
+# downstream float32 input from silently downcasting rotation matrices
+# or the ECEF origin — 1 m of precision at Earth-radius scale requires
+# ~1e-7 relative precision, well beyond float32's 7-digit mantissa.
+_GEO_DTYPE = np.float64
+
+
 @dataclass(frozen=True)
 class ObserverSite:
     lat_deg: float
@@ -43,11 +50,13 @@ class ObserverSite:
     ecef_x: float
     ecef_y: float
     ecef_z: float
-    enu_rotation: np.ndarray  # shape (3, 3): rows are E, N, U in ECEF
+    enu_rotation: np.ndarray  # shape (3, 3), dtype float64. Rows are E, N, U in ECEF.
 
     @property
     def ecef_xyz(self) -> np.ndarray:
-        return np.array([self.ecef_x, self.ecef_y, self.ecef_z])
+        return np.array(
+            [self.ecef_x, self.ecef_y, self.ecef_z], dtype=_GEO_DTYPE,
+        )
 
 
 def _enu_rotation(lat_deg: float, lon_deg: float) -> np.ndarray:
@@ -59,7 +68,7 @@ def _enu_rotation(lat_deg: float, lon_deg: float) -> np.ndarray:
         [-sl,      cl,      0.0],
         [-sp * cl, -sp * sl, cp],
         [ cp * cl,  cp * sl, sp],
-    ])
+    ], dtype=_GEO_DTYPE)
 
 
 def build_site(
@@ -158,7 +167,7 @@ def ecef_to_topocentric(
     """
     if site is None:
         site = default_site()
-    v = np.asarray(ecef_xyz, dtype=float) - site.ecef_xyz
+    v = np.asarray(ecef_xyz, dtype=_GEO_DTYPE) - site.ecef_xyz
     enu = site.enu_rotation @ v
     east, north, up = enu[0], enu[1], enu[2]
     slant = float(np.sqrt(east * east + north * north + up * up))
@@ -176,7 +185,7 @@ def ecef_array_to_topo(
     """Batched ECEF → (az_deg, el_deg, slant_m). Input shape (N, 3)."""
     if site is None:
         site = default_site()
-    arr = np.asarray(ecef_xyz, dtype=float)
+    arr = np.asarray(ecef_xyz, dtype=_GEO_DTYPE)
     if arr.ndim != 2 or arr.shape[1] != 3:
         raise ValueError(f"expected shape (N, 3), got {arr.shape}")
     v = arr - site.ecef_xyz

@@ -50,7 +50,7 @@ class MountFrame:
     # optical centre at sub-metre precision (relevant for near-pass LEO
     # satellites and low-altitude drones; ~0.006°/metre at 10 km slant).
     origin_offset_ecef_m: np.ndarray = field(
-        default_factory=lambda: np.zeros(3)
+        default_factory=lambda: np.zeros(3, dtype=np.float64)
     )
 
     @classmethod
@@ -99,7 +99,7 @@ class MountFrame:
         roll_offset = float(cal.get("roll_offset_deg", 0.0))
         off = cal.get("origin_offset_ecef_m")
         origin_offset = (
-            np.asarray(off, dtype=float) if off is not None else np.zeros(3)
+            np.asarray(off, dtype=np.float64) if off is not None else np.zeros(3, dtype=np.float64)
         )
         if site is None:
             obs = cal.get("observer")
@@ -140,22 +140,25 @@ class MountFrame:
         cy, sy = np.cos(np.radians(yaw_deg)),   np.sin(np.radians(yaw_deg))
         cp, sp = np.cos(np.radians(pitch_deg)), np.sin(np.radians(pitch_deg))
         cr, sr = np.cos(np.radians(roll_deg)),  np.sin(np.radians(roll_deg))
+        # Explicit float64: rotation matrices end up in matmul against
+        # ECEF vectors where 1 m precision at Earth-radius scale needs
+        # ~1e-7 relative precision — well beyond float32's mantissa.
         r_yaw = np.array([[cy, -sy, 0.0],
                           [sy,  cy, 0.0],
-                          [0.0, 0.0, 1.0]])
+                          [0.0, 0.0, 1.0]], dtype=np.float64)
         r_pitch = np.array([[1.0, 0.0, 0.0],
                             [0.0,  cp, -sp],
-                            [0.0,  sp,  cp]])
+                            [0.0,  sp,  cp]], dtype=np.float64)
         r_roll = np.array([[ cr, 0.0, sr],
                            [0.0, 1.0, 0.0],
-                           [-sr, 0.0, cr]])
+                           [-sr, 0.0, cr]], dtype=np.float64)
         return cls(
             site=site,
             topo_to_mount=r_roll @ r_pitch @ r_yaw,
             origin_offset_ecef_m=(
-                np.zeros(3)
+                np.zeros(3, dtype=np.float64)
                 if origin_offset_ecef_m is None
-                else np.asarray(origin_offset_ecef_m, dtype=float)
+                else np.asarray(origin_offset_ecef_m, dtype=np.float64)
             ),
         )
 
@@ -163,7 +166,7 @@ class MountFrame:
 
     def _ecef_to_enu_mount(self, ecef_xyz: np.ndarray) -> np.ndarray:
         """ECEF (shape (3,) or (N, 3)) → ENU rotated into the mount frame."""
-        arr = np.asarray(ecef_xyz, dtype=float)
+        arr = np.asarray(ecef_xyz, dtype=np.float64)
         origin = self.site.ecef_xyz + self.origin_offset_ecef_m
         if arr.ndim == 1:
             v = arr - origin
@@ -181,7 +184,7 @@ class MountFrame:
         `az_deg` is in [0, 360). Callers that need a cumulative (non-wrapping)
         az series should use `ecef_traj_to_mount` instead.
         """
-        enu_m = self._ecef_to_enu_mount(np.asarray(ecef_xyz, dtype=float))
+        enu_m = self._ecef_to_enu_mount(np.asarray(ecef_xyz, dtype=np.float64))
         east, north, up = float(enu_m[0]), float(enu_m[1]), float(enu_m[2])
         slant = float(np.sqrt(east * east + north * north + up * up))
         if slant == 0.0:
@@ -194,7 +197,7 @@ class MountFrame:
         self, ecef_xyz: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Batched ECEF → (az_deg, el_deg, slant_m). Input shape (N, 3)."""
-        arr = np.asarray(ecef_xyz, dtype=float)
+        arr = np.asarray(ecef_xyz, dtype=np.float64)
         if arr.ndim != 2 or arr.shape[1] != 3:
             raise ValueError(f"expected shape (N, 3), got {arr.shape}")
         enu_m = self._ecef_to_enu_mount(arr)
@@ -223,7 +226,7 @@ class MountFrame:
 
         Returns a dict so callers don't have to juggle tuple order.
         """
-        t = np.asarray(t_unix, dtype=float)
+        t = np.asarray(t_unix, dtype=np.float64)
         if t.ndim != 1:
             raise ValueError(f"t_unix must be 1-D, got shape {t.shape}")
         if len(t) < 4:
