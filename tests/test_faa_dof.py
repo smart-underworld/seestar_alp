@@ -111,14 +111,16 @@ def _build_dof_line(
     agl_ft: int,
     amsl_ft: int,
     lighting: str,
+    h_acc: str,
+    v_acc: str,
     marking: str,
-    accuracy: str,
 ) -> str:
-    """Build a byte-aligned FAA DOF DAT line with the exact column
-    positions from the user guide."""
+    """Build a byte-aligned FAA DOF DAT line matching the real 2026
+    format. Layout comes from a CA ("06-") record pulled from the
+    live DAT zip."""
     return (
         f"{oas_state:>2}"                       # [0:2]  OAS state
-        " "
+        "-"                                      # [2]    separator
         f"{obs_num:>6}"                         # [3:9]  obs number
         " "
         "O"                                      # [10]   verified
@@ -134,30 +136,30 @@ def _build_dof_line(
         f"{lat_min:02d}"                        # [38:40]
         " "
         f"{lat_sec:05.2f}"                      # [41:46]
+        f"{lat_hemi}"                           # [46]
         " "
-        f"{lat_hemi}"                           # [47]
+        f"{lon_deg:03d}"                        # [48:51]
         " "
-        f"{lon_deg:03d}"                        # [49:52]
+        f"{lon_min:02d}"                        # [52:54]
         " "
-        f"{lon_min:02d}"                        # [53:55]
+        f"{lon_sec:05.2f}"                      # [55:60]
+        f"{lon_hemi}"                           # [60]
         " "
-        f"{lon_sec:05.2f}"                      # [56:61]
+        f"{obstacle_type:<13}"                  # [62:75]
+        "  "
+        f"{quantity:5d}"                        # [77:82]
         " "
-        f"{lon_hemi}"                           # [62]
+        f"{agl_ft:05d}"                         # [83:88]
         " "
-        f"{obstacle_type:<10}"                  # [64:74]
+        f"{amsl_ft:05d}"                        # [89:94]
         " "
-        f"{quantity:05d}"                       # [75:80]
+        f"{lighting}"                           # [95]
         " "
-        f"{agl_ft:5d}"                          # [81:86]
+        f"{h_acc}"                              # [97]
         " "
-        f"{amsl_ft:5d}"                         # [87:92]
+        f"{v_acc}"                              # [99]
         " "
-        f"{lighting}"                           # [93]
-        " "
-        f"{marking}"                            # [95]
-        "   "                                    # [96:99]
-        f"{accuracy:<2}"                        # [99:101]
+        f"{marking}"                            # [101]
     )
 
 
@@ -166,7 +168,7 @@ _HYPERION_LINE = _build_dof_line(
     lat_deg=33, lat_min=55, lat_sec=8.00, lat_hemi="N",
     lon_deg=118, lon_min=25, lon_sec=38.00, lon_hemi="W",
     obstacle_type="STACK", quantity=2, agl_ft=292, amsl_ft=339,
-    lighting="R", marking="M", accuracy="1A",
+    lighting="R", h_acc="1", v_acc="A", marking="M",
 )
 
 _CULVER_LINE = _build_dof_line(
@@ -174,7 +176,7 @@ _CULVER_LINE = _build_dof_line(
     lat_deg=34, lat_min=0, lat_sec=57.10, lat_hemi="N",
     lon_deg=118, lon_min=22, lon_sec=59.36, lon_hemi="W",
     obstacle_type="TOWER", quantity=1, agl_ft=280, amsl_ft=649,
-    lighting="N", marking="N", accuracy="1E",
+    lighting="N", h_acc="1", v_acc="E", marking="N",
 )
 
 

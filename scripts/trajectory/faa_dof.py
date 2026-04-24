@@ -5,34 +5,38 @@ observing site (Hyperion stack + Culver City tower) and a fetcher that
 parses the full DOF DAT file to produce a short list of visible
 landmarks when the defaults aren't suitable.
 
-The DAT file is fixed-width ASCII, one record per line. Column positions
-(1-indexed) from the FAA DOF User Guide, 0-indexed slice in brackets:
+The DAT file is fixed-width ASCII, one record per line. Positions
+below are 0-indexed half-open slices, derived from a real 2026-vintage
+DOF.DAT record:
 
-    1-2    [0:2]    OAS state code           (e.g. "06" for California)
-    4-9    [3:9]    obstacle number          (6 chars, zero-padded)
-    11     [10]     verification status      ("O"=verified, "U"=unverified)
-    13-14  [12:14]  country                  ("US")
-    16-17  [15:17]  state                    ("CA")
-    19-34  [18:34]  city                     (16 chars, space-padded)
-    36-37  [35:37]  lat degrees
-    39-40  [38:40]  lat minutes
-    42-46  [41:46]  lat seconds.hundredths   (SS.SS)
-    48     [47]     lat hemisphere           ("N"/"S")
-    50-52  [49:52]  lon degrees
-    54-55  [53:55]  lon minutes
-    57-61  [56:61]  lon seconds.hundredths
-    63     [62]     lon hemisphere           ("E"/"W")
-    65-74  [64:74]  obstacle type            (10 chars)
-    76-80  [75:80]  quantity
-    82-86  [81:86]  AGL height (ft, right-aligned)
-    88-92  [87:92]  AMSL height (ft, right-aligned)
-    94     [93]     lighting character       ("R"/"W"/"D"/"N"/...)
-    96     [95]     marking
-    100-101 [99:101] accuracy code           ("1A", "1E", ...)
+    [0:2]   OAS state code            ("06" for California)
+    [2]     "-"                       (state/obstacle separator)
+    [3:9]   obstacle number           (6 chars, zero-padded)
+    [10]    verification status       ("O" verified, "U" unverified)
+    [12:14] country                   ("US")
+    [15:17] state                     ("CA")
+    [18:34] city                      (16 chars, space-padded)
+    [35:37] lat degrees
+    [38:40] lat minutes
+    [41:46] lat seconds.hundredths    ("SS.SS")
+    [46]    lat hemisphere            ("N"/"S", packed — no leading space)
+    [48:51] lon degrees               (3 chars)
+    [52:54] lon minutes
+    [55:60] lon seconds.hundredths
+    [60]    lon hemisphere            ("E"/"W", packed)
+    [62:75] obstacle type             (13 chars, space-padded)
+    [77:82] quantity                  (5 chars, right-aligned)
+    [83:88] AGL height (ft)           (right-aligned)
+    [89:94] AMSL height (ft)
+    [95]    lighting character        ("R"/"W"/"D"/"N"/...)
+    [97]    horizontal accuracy code
+    [99]    vertical accuracy code
+    [101]   marking indicator
 
-The lat/lon fields are cross-checked with regex so minor column drift
-between FAA revisions doesn't break the parser. Rows that fail to
-parse cleanly are silently skipped — defaults bypass the parser.
+The lat/lon fields are double-checked with regex so rows with slight
+column drift between FAA revisions still parse. Rows that fail
+anything are silently skipped; the two hardcoded defaults bypass the
+parser entirely.
 """
 
 from __future__ import annotations
@@ -196,12 +200,13 @@ def fetch_dof_zip(
 
 
 # DOF lines have a leading bulk header / legend that we skip by requiring
-# the first two chars to be a 2-digit state code followed by a space.
-_STATE_CODE_RE = re.compile(r"^\d{2} ")
+# the first two chars to be a 2-digit state code followed by a dash.
+_STATE_CODE_RE = re.compile(r"^\d{2}-")
 # Inside each record, lat/lon blocks have a stable pattern we can
-# regex-match regardless of minor column drift.
-_LAT_RE = re.compile(r"\b(\d{2}) (\d{2}) (\d{2}\.\d{2}) ([NS])\b")
-_LON_RE = re.compile(r"\b(\d{3}) (\d{2}) (\d{2}\.\d{2}) ([EW])\b")
+# regex-match regardless of minor column drift. Hemisphere letter is
+# packed directly against the seconds field — no intervening space.
+_LAT_RE = re.compile(r"(\d{2}) (\d{2}) (\d{2}\.\d{2})([NS])")
+_LON_RE = re.compile(r"(\d{3}) (\d{2}) (\d{2}\.\d{2})([EW])")
 
 
 def _parse_dms(d: str, m: str, s: str, hemi: str) -> float:
@@ -216,34 +221,38 @@ def parse_dof_line(line: str) -> Landmark | None:
     malformed, a header, or missing required fields."""
     if not line or not _STATE_CODE_RE.match(line):
         return None
-    # Require at least 94 chars so lat/lon/AMSL/lighting are present.
-    if len(line) < 94:
+    # Require at least 96 chars so lat/lon/AMSL/lighting are present.
+    if len(line) < 96:
         return None
     try:
         state_code = line[0:2]
         obs_num = line[3:9].strip()
         oas = f"{state_code}-{obs_num}"
         city = line[18:34].strip()
-        lat_m = _LAT_RE.search(line[35:48])
-        lon_m = _LON_RE.search(line[49:63])
+        # Lat at [35:47] ("DD MM SS.SSH"); lon at [48:61] ("DDD MM SS.SSH").
+        lat_m = _LAT_RE.search(line[35:47])
+        lon_m = _LON_RE.search(line[48:61])
         if lat_m is None or lon_m is None:
             return None
         lat = _parse_dms(*lat_m.groups())
         lon = _parse_dms(*lon_m.groups())
-        obstacle_type = line[64:74].strip()
-        # AGL (cols 82-86) + AMSL (cols 88-92) are both right-aligned
-        # 5-char integer fields. Be tolerant of drift: if the canonical
-        # slices don't parse, fall back to scanning the 81:94 window
-        # for the two largest integer tokens (AMSL is the last one).
-        amsl_str = line[87:92].strip()
+        obstacle_type = line[62:75].strip()
+        # AGL [83:88] + AMSL [89:94] are right-aligned 5-char integer
+        # fields. If the canonical slice doesn't parse, scan the [82:95]
+        # window for integer tokens and take the last (AMSL).
+        amsl_str = line[89:94].strip()
         if not amsl_str.isdigit():
-            ints = [t for t in line[81:94].split() if t.isdigit()]
+            ints = [t for t in line[82:95].split() if t.isdigit()]
             if not ints:
                 return None
             amsl_str = ints[-1]
         amsl_ft = float(amsl_str)
-        lighting = line[93] if len(line) > 93 else " "
-        accuracy = line[99:101].strip() if len(line) >= 101 else ""
+        lighting = line[95] if len(line) > 95 else " "
+        # Horizontal accuracy at [97], vertical at [99]; concatenated
+        # (e.g. "1A", "4D", "5 ") matches the user-visible FAA convention.
+        h_acc = line[97] if len(line) > 97 else " "
+        v_acc = line[99] if len(line) > 99 else " "
+        accuracy = (h_acc + v_acc).strip()
         # Lighting codes: "R" L-864 red obstruction, "D" L-810 red side,
         # "W" white strobe, "H" high-intensity white, "M" medium-intensity,
         # "S" dual red/white. "N" = not lit per FAA record.
@@ -275,11 +284,11 @@ def iter_dof_records(zip_path: Path, *, state: str = "06"):
             return
         with zf.open(members[0]) as raw:
             wrapped = io.TextIOWrapper(raw, encoding="latin-1", errors="replace")
-            prefix = state + " "
+            prefix = state + "-"
             for line in wrapped:
                 if not line.startswith(prefix):
                     continue
-                lm = parse_dof_line(line.rstrip("\n"))
+                lm = parse_dof_line(line.rstrip("\r\n"))
                 if lm is not None:
                     yield lm
 
