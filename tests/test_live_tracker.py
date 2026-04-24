@@ -191,6 +191,37 @@ def test_target_catalog_live_missing_id_raises(tmp_path):
         catalog.make_provider("live", "anything", MountFrame.from_identity_enu())
 
 
+def test_target_catalog_defers_adsb_poller_until_list_live(tmp_path):
+    """Spec: starting a TargetCatalog must not spin up the adsb.fi
+    poller thread. Only `list_live()` should wake it up so the live
+    tracker stays quiescent when not in use."""
+    catalog = TargetCatalog(tmp_path, live_enabled=True)
+    # Just after construction: no thread should exist.
+    assert catalog._live_thread is None
+    try:
+        # Touching list_live() spins the poller up. Can't wait for real
+        # network traffic, but we can verify the thread is alive within
+        # a beat of the call returning.
+        catalog.list_live()
+        alive = False
+        for _ in range(20):
+            if catalog._live_thread is not None and catalog._live_thread.is_alive():
+                alive = True
+                break
+            time.sleep(0.05)
+        assert alive, "adsb.fi poller did not start after list_live()"
+    finally:
+        catalog.close()
+        if catalog._live_thread is not None:
+            catalog._live_thread.join(timeout=2.0)
+
+
+def test_target_catalog_live_disabled_never_starts_poller(tmp_path):
+    catalog = TargetCatalog(tmp_path, live_enabled=False)
+    catalog.list_live()
+    assert catalog._live_thread is None
+
+
 # --------- load_session_mount_frame --------------------------------------
 
 
@@ -337,6 +368,51 @@ def test_live_adsb_provider_stale_without_samples():
     provider = lt.LiveADSBProvider(buf, MountFrame.from_identity_enu())
     s = provider.sample(time.time())
     assert s.stale
+
+
+def test_auto_slew_refuses_when_target_inside_sun_cone(monkeypatch):
+    """Spec: LiveTrackSession._auto_slew must consult sun_safety.is_sun_safe
+    against the provider's first (az, el) and refuse the pre-slew
+    (exit_reason='sun_avoidance') rather than commanding the mount into
+    the cone."""
+    import device.live_tracker as lt
+    from device import sun_safety as ss
+
+    # Force is_sun_safe to always refuse. The session's cur_az/el
+    # reading comes from the fake client.
+    real_is_sun_safe = ss.is_sun_safe
+    monkeypatch.setattr(
+        ss, "is_sun_safe",
+        lambda *a, **kw: (False, "sun_avoidance: forced by test"),
+    )
+    try:
+        class _FakeCli:
+            def method_sync(self, method, params=None):
+                if method == "scope_get_horiz_coord":
+                    return {
+                        "result": [45.0, 0.0],
+                        "Timestamp": f"{time.time():.6f}",
+                    }
+                return {"result": None}
+
+        monkeypatch.setattr(lt, "AlpacaClient", lambda *a, **kw: _FakeCli())
+
+        session = LiveTrackSession(
+            telescope_id=77,
+            target_kind="file", target_id="fix", target_display_name="Fix",
+            provider=_StationaryProvider(t0=time.time() + 0.2),
+            offsets=AtomicOffsets(),
+            dry_run=True,
+        )
+        cli = _FakeCli()
+        loc = None  # loc is unused by measure_altaz_timed under the fake
+        session._auto_slew(cli, loc)
+    finally:
+        monkeypatch.setattr(ss, "is_sun_safe", real_is_sun_safe)
+
+    assert session._exit_reason == "sun_avoidance"
+    assert session._phase == "refused"
+    assert any("sun_avoidance" in e for e in session._errors)
 
 
 def test_stop_requested_during_preslew_records_exit_reason():

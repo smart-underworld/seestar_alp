@@ -445,6 +445,10 @@ class TargetCatalog:
     LIVE_POLL_INTERVAL_S = 5.0
     LIVE_MIN_SAMPLES = 4
     LIVE_BUFFER_TTL_S = 300.0
+    # Stop polling adsb.fi if `list_live()` hasn't been called for this
+    # long — the UI is not watching, so no point hammering the upstream.
+    # `list_live()` auto-restarts the poller on the next call.
+    LIVE_IDLE_TIMEOUT_S = 600.0
     # Keep aircraft from wheels-up onward (loaded heavy climbs ~6 m/s; at
     # 10 m we catch the rotation within ~2 s of liftoff). The
     # `extract_sample_adsbfi` layer above already drops adsb.fi's "ground"
@@ -470,8 +474,12 @@ class TargetCatalog:
         self._live_lock = threading.Lock()
         self._live_thread: threading.Thread | None = None
         self._live_stop = threading.Event()
-        if self._live_enabled:
-            self._start_live_poller()
+        # Deferred start: the adsb.fi poller does not run until the
+        # first `list_live()` call. This keeps the catalog cheap to
+        # instantiate at startup (see `device/live_tracker_service.py`).
+        # After that, the loop shuts itself down if `list_live()`
+        # hasn't been called for `LIVE_IDLE_TIMEOUT_S`.
+        self._last_access_t: float = 0.0
 
     # ---------- cached files ----------
 
@@ -516,6 +524,20 @@ class TargetCatalog:
         )
         self._live_thread.start()
 
+    def _ensure_poller_running(self) -> None:
+        """Spin the adsb.fi poller up if it is not already running.
+
+        Called from `list_live()` — the UI hit is the signal that the
+        user wants live targets. Idempotent and cheap when the thread
+        is alive.
+        """
+        if not self._live_enabled:
+            return
+        with self._live_lock:
+            alive = self._live_thread is not None and self._live_thread.is_alive()
+        if not alive:
+            self._start_live_poller()
+
     def close(self) -> None:
         self._live_stop.set()
 
@@ -527,6 +549,14 @@ class TargetCatalog:
     def _live_loop(self) -> None:
         backoff_s = 0.0
         while not self._live_stop.is_set():
+            # Idle shutdown: if the UI hasn't asked for live targets in
+            # a while, stop polling to be kind to adsb.fi. The next
+            # `list_live()` call will restart us.
+            if (
+                self._last_access_t > 0.0
+                and (time.time() - self._last_access_t) > self.LIVE_IDLE_TIMEOUT_S
+            ):
+                break
             t0 = time.time()
             ok = False
             try:
@@ -647,6 +677,10 @@ class TargetCatalog:
                     del self._live_buffers[k]
 
     def list_live(self) -> list[dict]:
+        # Touch first: mark the UI as interested, so the idle-shutdown
+        # branch in `_live_loop` won't hit right after we spin up.
+        self._last_access_t = time.time()
+        self._ensure_poller_running()
         with self._live_lock:
             bufs = list(self._live_buffers.values())
         bufs = [b for b in bufs if len(b) >= self.LIVE_MIN_SAMPLES]
@@ -1002,6 +1036,32 @@ class LiveTrackSession:
 
         target_az_wrapped = ((first.az_cum_deg + 180.0) % 360.0) - 180.0
         target_el = max(-30.0, min(85.0, first.el_deg))
+
+        # Pre-flight sun-avoidance check. Uses the target mount-frame
+        # (az, el) as an approximation of sky (az, el) — accurate after
+        # rotation calibration, conservative otherwise since we refuse
+        # a wider neighborhood than strictly needed.
+        from device.sun_safety import is_sun_safe as _is_sun_safe
+        sun_safe, sun_reason = _is_sun_safe(
+            target_az_wrapped % 360.0, float(target_el),
+        )
+        if not sun_safe:
+            with self._lock:
+                self._errors.append(sun_reason)
+                self._exit_reason = "sun_avoidance"
+                self._phase = "refused"
+            if self._position_logger is not None:
+                try:
+                    self._position_logger.mark_event(
+                        "pre_slew_refused_sun",
+                        target_az_deg=target_az_wrapped,
+                        target_el_deg=target_el,
+                        reason=sun_reason,
+                    )
+                except Exception:
+                    pass
+            return
+
         if self._position_logger is not None:
             try:
                 self._position_logger.mark_event(
