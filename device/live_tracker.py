@@ -158,16 +158,21 @@ def load_session_mount_frame() -> MountFrame:
 
     Falls back to an identity frame (rotation=I, translation=0) if the
     file is missing or unreadable. Called once per session start — the
-    future per-session calibration step just writes a new JSON and the
-    next track picks it up.
+    per-session calibration step writes a new JSON and the next track
+    picks it up.
+
+    Passes ``site=None`` to `from_calibration_json` so an ``observer``
+    block embedded in the calibration (written by
+    `calibrate_rotation.py`) wins over the env-var default. When no
+    observer is embedded, the method falls back to env-var ``build_site()``
+    internally.
     """
-    site = build_site()
     if _CAL_PATH.exists():
         try:
-            return MountFrame.from_calibration_json(_CAL_PATH, site)
+            return MountFrame.from_calibration_json(_CAL_PATH)
         except Exception:
             pass
-    return MountFrame.from_identity_enu(site)
+    return MountFrame.from_identity_enu()
 
 
 # ---------- TargetCatalog --------------------------------------------

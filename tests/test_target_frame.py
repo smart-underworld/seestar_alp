@@ -191,6 +191,37 @@ def test_from_calibration_json_reads_translation(tmp_path):
     assert np.allclose(mf.origin_offset_ecef_m, [1.5, -0.7, 0.3])
 
 
+def test_from_calibration_json_honors_embedded_observer(tmp_path):
+    """When the JSON carries an `observer` block and no explicit site
+    is passed, the resulting MountFrame is anchored at the embedded
+    lat/lon/alt — not the env-var default."""
+    custom = {"lat_deg": 35.0, "lon_deg": -120.0, "alt_m": 500.0}
+    cal = {
+        "yaw_offset_deg": 0.0,
+        "observer": custom,
+    }
+    p = tmp_path / "cal.json"
+    p.write_text(__import__("json").dumps(cal))
+    mf = MountFrame.from_calibration_json(p)
+    assert mf.site.lat_deg == pytest.approx(35.0, abs=1e-9)
+    assert mf.site.lon_deg == pytest.approx(-120.0, abs=1e-9)
+    assert mf.site.alt_m == pytest.approx(500.0, abs=1e-9)
+
+
+def test_from_calibration_json_explicit_site_wins_over_embedded(tmp_path):
+    """Caller-supplied `site` overrides the embedded observer block."""
+    from scripts.trajectory.observer import build_site
+    cal = {
+        "yaw_offset_deg": 0.0,
+        "observer": {"lat_deg": 35.0, "lon_deg": -120.0, "alt_m": 500.0},
+    }
+    p = tmp_path / "cal.json"
+    p.write_text(__import__("json").dumps(cal))
+    site = build_site(lat_deg=40.0, lon_deg=-100.0, alt_m=1000.0)
+    mf = MountFrame.from_calibration_json(p, site=site)
+    assert mf.site.lat_deg == pytest.approx(40.0, abs=1e-9)
+
+
 def test_default_origin_offset_is_zero_and_backward_compat():
     mf_id = MountFrame.from_identity_enu()
     mf_yaw = MountFrame.from_euler_deg(yaw_deg=0.0, pitch_deg=0.0, roll_deg=0.0)

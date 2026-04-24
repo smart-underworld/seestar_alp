@@ -74,18 +74,22 @@ class MountFrame:
     ) -> "MountFrame":
         """Build a mount frame from a calibration JSON.
 
-        Reads (all optional, default 0):
-        - `yaw_offset_deg` — CCW rotation of mount az=0 from topocentric
-          north. Produced by `scripts.trajectory.calibrate_compass`.
-        - `pitch_offset_deg`, `roll_offset_deg` — tilt of the mount
-          relative to the local horizontal plane. Currently only
-          produced by landmark-sighting calibration (magnetometer
-          cannot resolve tilt direction cleanly).
-        - `origin_offset_ecef_m` — 3-vector ECEF translation of the
-          mount origin relative to `ObserverSite.ecef_xyz`. Used when
-          a calibration step places the mount's optical centre at
-          sub-metre precision (relevant for LEO satellites / low-
-          altitude drones at <10 km slant).
+        Reads (all optional unless noted):
+        - `yaw_offset_deg` (required) — CCW rotation of mount az=0 from
+          topocentric north.
+        - `pitch_offset_deg`, `roll_offset_deg` (default 0) — tilt of
+          the mount relative to the local horizontal plane.
+        - `origin_offset_ecef_m` (default [0,0,0]) — 3-vector ECEF
+          translation of the mount origin relative to
+          `ObserverSite.ecef_xyz`. Lets a calibration step place the
+          mount's optical centre at sub-metre precision (relevant for
+          LEO / low-altitude drones at <10 km slant).
+        - `observer.{lat_deg, lon_deg, alt_m}` (optional block) — the
+          observer location that was active when the calibration was
+          solved. When present and the caller did not supply a `site`
+          explicitly, this block is used to build the site so that the
+          calibration and observer stay locked together. Caller-supplied
+          `site` still wins.
         """
         p = Path(path)
         with p.open("r", encoding="utf-8") as f:
@@ -97,6 +101,14 @@ class MountFrame:
         origin_offset = (
             np.asarray(off, dtype=float) if off is not None else np.zeros(3)
         )
+        if site is None:
+            obs = cal.get("observer")
+            if isinstance(obs, dict) and {"lat_deg", "lon_deg", "alt_m"} <= obs.keys():
+                site = build_site(
+                    lat_deg=float(obs["lat_deg"]),
+                    lon_deg=float(obs["lon_deg"]),
+                    alt_m=float(obs["alt_m"]),
+                )
         return cls.from_euler_deg(
             yaw_deg=yaw_offset,
             pitch_deg=pitch_offset,
