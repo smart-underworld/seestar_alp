@@ -62,6 +62,21 @@ is_frame_calibrated = true
 # compliance with the laws of your region.
 interop_pem = ""  # e.g. "/etc/seestar/seestar_client_key.pem"
 
+[sun_avoidance]
+# Always-on safety check: refuse to point the optical axis within
+# `min_separation_deg` of the sun whenever the sun is at least
+# `alt_threshold_deg` above the horizon (i.e. sun_alt >= -10° by
+# default). The Seestar S50 has no solar filter; pointing at or near
+# the sun can damage the sensor. On violation the mount jogs away from
+# the sun at `jog_speed` (firmware ~6°/s at 1440) for `jog_duration_s`
+# seconds, all tracking/calibration is aborted, and a banner appears
+# in the UI.
+enabled = true
+min_separation_deg = 30.0
+alt_threshold_deg = -10.0
+jog_speed = 1440
+jog_duration_s = 3
+
 [logging]
 log_level = 'INFO'   #'WARN' only if trouble    #'INFO' to output more logging      #'DEBUG' still more output
 log_prefix = ''
