@@ -1154,6 +1154,17 @@ class LiveTrackManager:
 
     def start(self, session: LiveTrackSession) -> LiveTrackSession:
         tid = int(session.telescope_id)
+        # Refuse if a calibration session is driving the same mount.
+        # Lazy import keeps this module independent of
+        # `device.rotation_calibration` at import time.
+        try:
+            from device.rotation_calibration import get_calibration_manager
+            if get_calibration_manager().is_running(tid):
+                raise RuntimeError(
+                    f"telescope {tid} is calibrating; stop the calibration first"
+                )
+        except ImportError:
+            pass
         with self._lock:
             existing = self._sessions.get(tid)
             if existing is not None and existing.is_alive():

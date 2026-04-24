@@ -8,37 +8,37 @@ mount or a network.
 Exposed API:
 
 - Dataclasses: :class:`Sighting`, :class:`RotationSolution`,
-  :class:`PriorInfo`.
+  :class:`PriorInfo`, :class:`CalibrationStatus`.
 - Constants: :data:`KEEP_MAX_AGE_S`, :data:`KEEP_MAX_DISTANCE_M` — the
   two thresholds behind the "clear or keep" heuristic.
 - Pure helpers:
-    - :func:`terrestrial_refraction_deg` — apparent el lift from
-      atmospheric bending over a ground path.
-    - :func:`predict_mount_azel` — (yaw, pitch, roll) + site +
-      landmark → (az, el, slant) in the mount frame, with optional
-      refraction lift.
-    - :func:`solve_rotation` — LM fit of the mount rotation to a
-      list of sightings. DoF is chosen by data amount by default.
-    - :func:`write_calibration` — write
-      ``device/mount_calibration.json`` with the schema consumers
-      read today.
-    - :func:`parse_calibrated_at` / :func:`inspect_prior` — surface
-      the on-disk calibration's age + distance from the current
-      GPS.
-    - :func:`decide_clear_or_keep` — boolean verdict consumed by the
-      REPL prompt and the web UI's default-checkbox state.
+    - :func:`terrestrial_refraction_deg`
+    - :func:`predict_mount_azel`
+    - :func:`solve_rotation`, :func:`write_calibration`
+    - :func:`parse_calibrated_at`, :func:`inspect_prior`,
+      :func:`decide_clear_or_keep`
+- Session:
+    - :class:`CalibrationSession` — thread-based mount driver for the
+      browser calibration UI, modelled on `LiveTrackSession`.
+    - :class:`CalibrationManager` — per-process singleton,
+      telescope-keyed. Cross-checks with the live-tracker manager so
+      the two flows can't drive the mount concurrently.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import queue
+import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import numpy as np
+from astropy.coordinates import EarthLocation
 from scipy.optimize import least_squares
 
 from device.target_frame import MountFrame
@@ -357,3 +357,519 @@ def write_calibration(
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
+
+
+# ---------- CalibrationSession --------------------------------------
+
+
+# Maximum per-command nudge, in degrees. Guards against a typo in the
+# web UI driving the mount tens of degrees in one request.
+MAX_NUDGE_PER_CMD_DEG = 5.0
+
+# Arrive tolerance for the pre-slew to each landmark (coarse) vs.
+# the nudge-to-beacon move (fine). Matches the CLI values.
+ARRIVE_TOL_SLEW_DEG = 0.3
+ARRIVE_TOL_NUDGE_DEG = 0.1
+
+
+@dataclass
+class _Command:
+    """Worker-thread queue entry."""
+    kind: str                       # "slew" | "nudge" | "sight" | "skip" | "commit" | "cancel"
+    payload: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class CalibrationStatus:
+    """JSON-serialisable session snapshot for the browser."""
+    active: bool
+    phase: str                      # init / slewing / nudging / sighting / review / committed / cancelled / error
+    target_idx: int
+    n_targets: int
+    current_landmark: dict | None    # {oas, name, true_az_deg, true_el_deg, slant_m, lit, accuracy_class}
+    target_az_deg: float | None      # pending encoder target (drives the mount)
+    target_el_deg: float | None
+    encoder_az_deg: float | None     # last-read encoder (polled each cycle)
+    encoder_el_deg: float | None
+    solution: dict | None            # {yaw, pitch, roll, rms, per_landmark}
+    errors: list[str]
+
+
+class CalibrationSession:
+    """Thread-backed calibration run. Mirrors LiveTrackSession: spawn
+    a daemon worker, expose `start/stop/is_alive/status`, accept
+    command posts (``nudge``, ``sight`` …) that flow through a
+    thread-safe queue so HTTP handlers can return immediately.
+
+    Workflow per target:
+      1. Pre-slew to the landmark's predicted encoder (az, el) under
+         any prior rotation supplied at construction time.
+      2. Operator nudges via the HTTP `/nudge` endpoint; each nudge
+         re-issues `move_to_ff` against the updated encoder target
+         and reads the encoder back.
+      3. Operator posts `/sight`; the session records the current
+         encoder as a Sighting, refits (yaw-only for 1, full 3-DOF
+         for ≥2), and auto-advances to the next landmark.
+
+    The session ignores repeat commands that are queued faster than
+    the mount can execute them (nudge coalescing keeps the latest
+    pending target rather than backing up a queue of moves).
+    """
+
+    # Polling cadence for encoder reads when the mount is idle (to
+    # keep the browser KPI strip responsive).
+    IDLE_POLL_DT_S = 0.5
+
+    def __init__(
+        self,
+        telescope_id: int,
+        targets: list[tuple[Landmark, float, float, float]],
+        site: ObserverSite,
+        *,
+        out_path: Path,
+        prior_frame: MountFrame | None = None,
+        alpaca_host: str = "127.0.0.1",
+        alpaca_port: int | None = None,
+        dry_run: bool = False,
+    ) -> None:
+        if not targets:
+            raise ValueError("need at least 1 target")
+        self.telescope_id = int(telescope_id)
+        self.targets = list(targets)
+        self.site = site
+        self.out_path = Path(out_path)
+        self._prior_frame = prior_frame
+        self._alpaca_host = alpaca_host
+        self._alpaca_port = alpaca_port
+        self.dry_run = bool(dry_run)
+
+        self._queue: queue.Queue[_Command] = queue.Queue()
+        self._stop_evt = threading.Event()
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+
+        # Mutable state protected by _lock.
+        self._phase = "init"
+        self._target_idx = 0
+        self._sightings: list[Sighting] = []
+        self._solution: RotationSolution | None = None
+        self._target_az: float | None = None
+        self._target_el: float | None = None
+        self._encoder_az: float | None = None
+        self._encoder_el: float | None = None
+        self._errors: list[str] = []
+
+    # ---------- public lifecycle ----------
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            raise RuntimeError("calibration session already running")
+        self._stop_evt.clear()
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"CalibrationSession({self.telescope_id})",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self, timeout: float = 5.0) -> None:
+        self._stop_evt.set()
+        self._queue.put(_Command("cancel"))
+        if self._thread is not None:
+            self._thread.join(timeout=timeout)
+
+    def is_alive(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def status(self) -> CalibrationStatus:
+        with self._lock:
+            lm_info = None
+            if 0 <= self._target_idx < len(self.targets):
+                lm, az, el, slant = self.targets[self._target_idx]
+                lm_info = {
+                    "oas": lm.oas,
+                    "name": lm.name,
+                    "true_az_deg": float(az),
+                    "true_el_deg": float(el),
+                    "slant_m": float(slant),
+                    "lit": bool(lm.lit),
+                    "accuracy_class": lm.accuracy_class,
+                }
+            sol_info = None
+            if self._solution is not None:
+                sol_info = {
+                    "yaw_deg": self._solution.yaw_deg,
+                    "pitch_deg": self._solution.pitch_deg,
+                    "roll_deg": self._solution.roll_deg,
+                    "residual_rms_deg": self._solution.residual_rms_deg,
+                    "per_landmark": list(self._solution.per_landmark),
+                }
+            return CalibrationStatus(
+                active=self.is_alive(),
+                phase=self._phase,
+                target_idx=self._target_idx,
+                n_targets=len(self.targets),
+                current_landmark=lm_info,
+                target_az_deg=self._target_az,
+                target_el_deg=self._target_el,
+                encoder_az_deg=self._encoder_az,
+                encoder_el_deg=self._encoder_el,
+                solution=sol_info,
+                errors=list(self._errors),
+            )
+
+    # ---------- command posts ----------
+
+    def nudge(self, d_az_deg: float, d_el_deg: float) -> None:
+        d_az = max(-MAX_NUDGE_PER_CMD_DEG, min(MAX_NUDGE_PER_CMD_DEG, float(d_az_deg)))
+        d_el = max(-MAX_NUDGE_PER_CMD_DEG, min(MAX_NUDGE_PER_CMD_DEG, float(d_el_deg)))
+        self._queue.put(_Command("nudge", {"d_az": d_az, "d_el": d_el}))
+
+    def sight(self) -> None:
+        self._queue.put(_Command("sight"))
+
+    def skip(self) -> None:
+        self._queue.put(_Command("skip"))
+
+    def commit(self) -> None:
+        self._queue.put(_Command("commit"))
+
+    def cancel(self) -> None:
+        self._queue.put(_Command("cancel"))
+
+    # ---------- worker thread ----------
+
+    def _run(self) -> None:
+        cli = None
+        try:
+            cli = self._connect_mount()
+            self._set_phase("slewing")
+            self._slew_to_target(cli, 0)
+            if self._stop_evt.is_set():
+                return
+            self._set_phase("nudging")
+            self._process_loop(cli)
+        except Exception as exc:  # noqa: BLE001 — surface any worker failure
+            with self._lock:
+                self._errors.append(f"worker crashed: {exc}")
+                self._phase = "error"
+        finally:
+            # Best-effort stop of any lingering motion.
+            if cli is not None and not self.dry_run:
+                try:
+                    cli.method_sync("scope_speed_move",
+                                    {"speed": 0, "angle": 0, "dur_sec": 0})
+                except Exception:
+                    pass
+
+    def _connect_mount(self):
+        """Import lazily so unit tests that stub AlpacaClient via the
+        module-level symbol pick up the stub without a prior import
+        side-effect."""
+        from device.alpaca_client import AlpacaClient
+        from device.config import Config
+        port = self._alpaca_port if self._alpaca_port is not None else int(Config.port)
+        cli = AlpacaClient(self._alpaca_host, port, self.telescope_id)
+        if self.dry_run:
+            return cli
+        try:
+            from device.velocity_controller import (
+                ensure_scenery_mode, set_tracking,
+            )
+            ensure_scenery_mode(cli)
+            set_tracking(cli, False)
+        except Exception as exc:
+            with self._lock:
+                self._errors.append(f"scenery/tracking setup: {exc}")
+        return cli
+
+    def _process_loop(self, cli) -> None:
+        """Dispatch commands until the queue is empty, then idle-poll
+        the encoder. Returns when a CMD_CANCEL is processed (already
+        handled inside the dispatcher, which sets phase to cancelled)."""
+        while not self._stop_evt.is_set():
+            try:
+                cmd = self._queue.get(timeout=self.IDLE_POLL_DT_S)
+            except queue.Empty:
+                # Idle tick: refresh encoder status so the UI polling
+                # loop stays live even when nothing else is happening.
+                self._poll_encoder_nonfatal(cli)
+                continue
+            if cmd.kind == "cancel":
+                self._set_phase("cancelled")
+                return
+            self._dispatch(cli, cmd)
+            if self._phase in ("committed", "cancelled", "error"):
+                return
+
+    def _dispatch(self, cli, cmd: _Command) -> None:
+        if cmd.kind == "nudge":
+            self._on_nudge(cli, float(cmd.payload["d_az"]),
+                           float(cmd.payload["d_el"]))
+        elif cmd.kind == "sight":
+            self._on_sight(cli)
+        elif cmd.kind == "skip":
+            self._on_skip(cli)
+        elif cmd.kind == "commit":
+            self._on_commit()
+
+    def _on_nudge(self, cli, d_az: float, d_el: float) -> None:
+        with self._lock:
+            if self._target_az is None or self._target_el is None:
+                # No pre-slew baseline yet; ignore.
+                return
+            self._target_az += d_az
+            self._target_el += d_el
+            target_az = self._target_az
+            target_el = self._target_el
+        # Coalesce: drain pending nudges queued behind this one, sum
+        # their deltas, and issue a single move to the final target.
+        while True:
+            try:
+                nxt = self._queue.get_nowait()
+            except queue.Empty:
+                break
+            if nxt.kind != "nudge":
+                # Put non-nudge command back on the queue front-ish; we
+                # can't peek, so just enqueue. Order preservation
+                # between the coalesced move and the subsequent command
+                # is preserved by the move completing first.
+                self._queue.put(nxt)
+                break
+            with self._lock:
+                self._target_az += float(nxt.payload["d_az"])
+                self._target_el += float(nxt.payload["d_el"])
+                target_az = self._target_az
+                target_el = self._target_el
+        self._set_phase("nudging")
+        if self.dry_run:
+            with self._lock:
+                self._encoder_az = target_az
+                self._encoder_el = target_el
+            return
+        try:
+            from device.velocity_controller import move_to_ff
+            loc = EarthLocation.from_geodetic(0, 0, 0)
+            cur_el = self._encoder_el if self._encoder_el is not None else target_el
+            cur_az = self._encoder_az if self._encoder_az is not None else target_az
+            new_el, new_az, _ = move_to_ff(
+                cli,
+                target_az_deg=target_az, target_el_deg=target_el,
+                cur_az_deg=cur_az, cur_el_deg=cur_el, loc=loc,
+                tag="[calibrate_web]", arrive_tolerance_deg=ARRIVE_TOL_NUDGE_DEG,
+            )
+            with self._lock:
+                self._encoder_az = new_az
+                self._encoder_el = new_el
+        except Exception as exc:
+            with self._lock:
+                self._errors.append(f"nudge move_to_ff failed: {exc}")
+
+    def _on_sight(self, cli) -> None:
+        """Record the current encoder as a Sighting and refit."""
+        self._poll_encoder_nonfatal(cli)
+        with self._lock:
+            if self._encoder_az is None or self._encoder_el is None:
+                self._errors.append("cannot sight: no encoder read yet")
+                return
+            if not (0 <= self._target_idx < len(self.targets)):
+                return
+            lm, true_az, true_el, slant = self.targets[self._target_idx]
+            s = Sighting(
+                landmark=lm,
+                encoder_az_deg=float(self._encoder_az),
+                encoder_el_deg=float(self._encoder_el),
+                true_az_deg=float(true_az),
+                true_el_deg=float(true_el),
+                slant_m=float(slant),
+                t_unix=time.time(),
+            )
+            self._sightings.append(s)
+            sightings = list(self._sightings)
+            next_idx = self._target_idx + 1
+        # Fit outside the lock.
+        try:
+            sol = solve_rotation(sightings, self.site)
+            with self._lock:
+                self._solution = sol
+        except ValueError as exc:
+            with self._lock:
+                self._errors.append(f"solve_rotation failed: {exc}")
+
+        with self._lock:
+            self._target_idx = next_idx
+        if next_idx >= len(self.targets):
+            self._set_phase("review")
+        else:
+            self._slew_to_target(cli, next_idx)
+            self._set_phase("nudging")
+
+    def _on_skip(self, cli) -> None:
+        with self._lock:
+            remaining = len(self.targets) - (self._target_idx + 1)
+            already_sighted = len(self._sightings)
+            projected = already_sighted + remaining
+        if projected < 2:
+            with self._lock:
+                self._errors.append(
+                    "cannot skip: would leave fewer than 2 sightings"
+                )
+            return
+        with self._lock:
+            next_idx = self._target_idx + 1
+            self._target_idx = next_idx
+        if next_idx >= len(self.targets):
+            self._set_phase("review")
+        else:
+            self._slew_to_target(cli, next_idx)
+            self._set_phase("nudging")
+
+    def _on_commit(self) -> None:
+        with self._lock:
+            sol = self._solution
+            sightings = list(self._sightings)
+        if sol is None or len(sightings) < 2:
+            with self._lock:
+                self._errors.append("cannot commit: need ≥ 2 sightings")
+            return
+        try:
+            write_calibration(self.out_path, sol, self.site, sol.per_landmark)
+        except Exception as exc:
+            with self._lock:
+                self._errors.append(f"write_calibration failed: {exc}")
+                self._phase = "error"
+            return
+        self._set_phase("committed")
+
+    def _slew_to_target(self, cli, idx: int) -> None:
+        """Drive the mount to the predicted encoder (az, el) for
+        ``targets[idx]``. Updates pending target + current encoder."""
+        if not (0 <= idx < len(self.targets)):
+            return
+        lm, _true_az, _true_el, _slant = self.targets[idx]
+        prior_frame = self._prior_frame or MountFrame.from_identity_enu(self.site)
+        pred_az, pred_el, _ = prior_frame.ecef_to_mount_azel(lm.ecef())
+        pred_az_wrapped = ((pred_az + 180.0) % 360.0) - 180.0
+        with self._lock:
+            self._target_az = pred_az_wrapped
+            self._target_el = pred_el
+        self._set_phase("slewing")
+        if self.dry_run:
+            with self._lock:
+                self._encoder_az = pred_az_wrapped
+                self._encoder_el = pred_el
+            return
+        try:
+            from device.velocity_controller import move_to_ff
+            loc = EarthLocation.from_geodetic(0, 0, 0)
+            cur_el, cur_az = self._read_encoder_nonfatal(cli)
+            if cur_el is None or cur_az is None:
+                cur_el, cur_az = pred_el, pred_az_wrapped
+            new_el, new_az, _ = move_to_ff(
+                cli,
+                target_az_deg=pred_az_wrapped, target_el_deg=pred_el,
+                cur_az_deg=cur_az, cur_el_deg=cur_el, loc=loc,
+                tag="[calibrate_web]", arrive_tolerance_deg=ARRIVE_TOL_SLEW_DEG,
+            )
+            with self._lock:
+                self._encoder_az = new_az
+                self._encoder_el = new_el
+        except Exception as exc:
+            with self._lock:
+                self._errors.append(f"slew to {lm.oas} failed: {exc}")
+
+    # ---------- helpers ----------
+
+    def _set_phase(self, phase: str) -> None:
+        with self._lock:
+            self._phase = phase
+
+    def _read_encoder_nonfatal(self, cli) -> tuple[float | None, float | None]:
+        if self.dry_run:
+            with self._lock:
+                return self._encoder_el, self._encoder_az
+        try:
+            from device.velocity_controller import measure_altaz_timed
+            alt, az, _ = measure_altaz_timed(
+                cli, EarthLocation.from_geodetic(0, 0, 0),
+            )
+            return float(alt), float(az)
+        except Exception:
+            return None, None
+
+    def _poll_encoder_nonfatal(self, cli) -> None:
+        el, az = self._read_encoder_nonfatal(cli)
+        if el is None or az is None:
+            return
+        with self._lock:
+            self._encoder_az = az
+            self._encoder_el = el
+
+
+# ---------- CalibrationManager ---------------------------------------
+
+
+class CalibrationManager:
+    """Process singleton keyed by telescope id. Mirrors
+    :class:`device.live_tracker.LiveTrackManager`."""
+
+    def __init__(self) -> None:
+        self._sessions: dict[int, CalibrationSession] = {}
+        self._lock = threading.Lock()
+
+    def get(self, telescope_id: int) -> CalibrationSession | None:
+        with self._lock:
+            return self._sessions.get(int(telescope_id))
+
+    def is_running(self, telescope_id: int) -> bool:
+        s = self.get(telescope_id)
+        return s is not None and s.is_alive()
+
+    def start(self, session: CalibrationSession) -> CalibrationSession:
+        tid = session.telescope_id
+        # Refuse if the live tracker is driving the same mount. The
+        # import is lazy so tests that stub either module don't pull
+        # the other unnecessarily.
+        try:
+            from device.live_tracker import get_manager as _get_tracker_mgr
+            tracker = _get_tracker_mgr().get(tid)
+            if tracker is not None and tracker.is_alive():
+                raise RuntimeError(
+                    f"telescope {tid} is live-tracking; stop first"
+                )
+        except ImportError:
+            pass
+        with self._lock:
+            existing = self._sessions.get(tid)
+            if existing is not None and existing.is_alive():
+                raise RuntimeError(
+                    f"telescope {tid} already calibrating; stop first"
+                )
+            self._sessions[tid] = session
+        session.start()
+        return session
+
+    def stop(self, telescope_id: int) -> CalibrationStatus | None:
+        s = self.get(telescope_id)
+        if s is None:
+            return None
+        s.stop()
+        return s.status()
+
+    def status(self, telescope_id: int) -> CalibrationStatus | None:
+        s = self.get(telescope_id)
+        return s.status() if s is not None else None
+
+
+_MANAGER: CalibrationManager | None = None
+_MANAGER_LOCK = threading.Lock()
+
+
+def get_calibration_manager() -> CalibrationManager:
+    """Process-level singleton. Matches the
+    ``device.live_tracker.get_manager`` pattern."""
+    global _MANAGER
+    with _MANAGER_LOCK:
+        if _MANAGER is None:
+            _MANAGER = CalibrationManager()
+        return _MANAGER
