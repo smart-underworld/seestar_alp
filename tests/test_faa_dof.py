@@ -10,6 +10,7 @@ from scripts.trajectory.faa_dof import (
     CULVER_CITY_06_001087,
     DEFAULT_LANDMARKS,
     HYPERION_06_000301,
+    LA_BROADCAST_06_000177,
     Landmark,
     filter_visible,
     iter_dof_records,
@@ -22,24 +23,34 @@ from scripts.trajectory.observer import build_site
 
 def test_default_landmarks_have_expected_oas():
     assert HYPERION_06_000301.oas == "06-000301"
-    assert CULVER_CITY_06_001087.oas == "06-001087"
+    assert LA_BROADCAST_06_000177.oas == "06-000177"
+    assert CULVER_CITY_06_001087.oas == "06-001087"  # kept, not default
     assert len(DEFAULT_LANDMARKS) == 2
+    assert DEFAULT_LANDMARKS == (HYPERION_06_000301, LA_BROADCAST_06_000177)
+    # Both defaults must be lit; otherwise a night run starts with
+    # at least one target the user can't see.
+    assert all(lm.lit for lm in DEFAULT_LANDMARKS)
 
 
-def test_hyperion_geometry_matches_faa_datasheet():
-    """Cross-check the observer→landmark az/el/slant against the values
-    from the FAA DOF sheet for the Dockweiler Beach site."""
+def test_default_landmarks_geometry_from_dockweiler():
+    """Cross-check each default against its FAA-datasheet bearing from
+    the Dockweiler site. Catches dtype / sign / unit regressions in
+    the ECEF → topocentric pipeline."""
     site = build_site(lat_deg=33.9615051, lon_deg=-118.4581361, alt_m=2.0)
     hits = filter_visible(list(DEFAULT_LANDMARKS), site, min_el_deg=0.0)
-    assert len(hits) >= 1
     lm_by_oas = {h[0].oas: h for h in hits}
+    # Hyperion primary beacon stack — FAA datasheet values.
     assert "06-000301" in lm_by_oas
-    _lm, az, el, slant = lm_by_oas["06-000301"]
-    # Datasheet: Az 148.87°, El +1.03°, slant 5,523 m. Allow a few percent
-    # for the observer altitude guess (2 m) and the AMSL → ECEF conversion.
+    _, az, el, slant = lm_by_oas["06-000301"]
     assert az == pytest.approx(148.87, abs=0.5)
     assert el == pytest.approx(1.03, abs=0.2)
     assert slant == pytest.approx(5523.0, rel=0.02)
+    # LA broadcast tower — looked up from DOF in this repo.
+    assert "06-000177" in lm_by_oas
+    _, az, el, slant = lm_by_oas["06-000177"]
+    assert az == pytest.approx(46.83, abs=0.3)
+    assert el == pytest.approx(0.86, abs=0.2)
+    assert slant == pytest.approx(10_750.0, rel=0.02)
 
 
 # ---------- filter_visible -------------------------------------------

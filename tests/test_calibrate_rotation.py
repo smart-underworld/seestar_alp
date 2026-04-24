@@ -29,7 +29,7 @@ from scripts.trajectory.calibrate_rotation import (
     write_calibration,
 )
 from scripts.trajectory.faa_dof import (
-    CULVER_CITY_06_001087,
+    LA_BROADCAST_06_000177,
     HYPERION_06_000301,
     Landmark,
 )
@@ -72,7 +72,7 @@ def test_solver_recovers_known_rotation_yaw_only():
     yaw_true, pitch_true, roll_true = 12.0, 0.0, 0.0
     sightings = [
         _synth_sighting(HYPERION_06_000301, site, yaw_true, pitch_true, roll_true),
-        _synth_sighting(CULVER_CITY_06_001087, site, yaw_true, pitch_true, roll_true),
+        _synth_sighting(LA_BROADCAST_06_000177, site, yaw_true, pitch_true, roll_true),
     ]
     sol = solve_rotation(sightings, site)
     assert sol.yaw_deg == pytest.approx(yaw_true, abs=0.01)
@@ -87,7 +87,7 @@ def test_solver_recovers_small_tilt():
     yaw_true, pitch_true, roll_true = -25.0, 0.8, -0.3
     sightings = [
         _synth_sighting(HYPERION_06_000301, site, yaw_true, pitch_true, roll_true),
-        _synth_sighting(CULVER_CITY_06_001087, site, yaw_true, pitch_true, roll_true),
+        _synth_sighting(LA_BROADCAST_06_000177, site, yaw_true, pitch_true, roll_true),
     ]
     sol = solve_rotation(sightings, site)
     # With only 2 sightings we can end up in a local min for the
@@ -133,7 +133,7 @@ def test_solver_dof_yaw_forces_yaw_only_even_with_two_sightings():
     yaw_true = -45.0
     two = [
         _synth_sighting(HYPERION_06_000301, site, yaw_true, 0.0, 0.0),
-        _synth_sighting(CULVER_CITY_06_001087, site, yaw_true, 0.0, 0.0),
+        _synth_sighting(LA_BROADCAST_06_000177, site, yaw_true, 0.0, 0.0),
     ]
     sol = solve_rotation(two, site, dof="yaw")
     assert sol.yaw_deg == pytest.approx(yaw_true, abs=0.02)

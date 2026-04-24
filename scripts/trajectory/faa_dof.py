@@ -98,20 +98,36 @@ HYPERION_06_000301 = Landmark(
     city="El Segundo / Playa del Rey",
 )
 
+LA_BROADCAST_06_000177 = Landmark(
+    oas="06-000177",
+    name="LA broadcast tower (Baldwin Hills cluster)",
+    lat_deg=34.027767,            # 34° 01' 39.96" N
+    lon_deg=-118.373250,           # 118° 22' 23.70" W
+    height_amsl_m=568.0 * 0.3048,  # 568 ft AMSL → 173.13 m (473 ft AGL)
+    lit=True,                      # L-864 red beacon per DOF record
+    accuracy_class="1B",           # ±25 ft horizontal, ±3 ft vertical
+    obstacle_type="TOWER",
+    city="Los Angeles",
+)
+
+# Kept for downstream tools that reference the original unlit Culver
+# City obstruction by name. Not a default — see LA_BROADCAST_06_000177
+# above, which sits 2.1° west on the same Baldwin Hills ridge and is
+# actually lit (usable at night).
 CULVER_CITY_06_001087 = Landmark(
     oas="06-001087",
-    name="Culver City tower (Baldwin Hills)",
+    name="Culver City tower (Baldwin Hills, unlit)",
     lat_deg=34.015863,
     lon_deg=-118.383156,
-    height_amsl_m=649.0 * 0.3048,  # 649 ft AMSL → 197.79 m
-    lit=False,                      # unlit per FAA record
+    height_amsl_m=649.0 * 0.3048,
+    lit=False,
     accuracy_class="1E",
     obstacle_type="TOWER",
     city="Culver City",
 )
 
 DEFAULT_LANDMARKS: tuple[Landmark, ...] = (
-    HYPERION_06_000301, CULVER_CITY_06_001087,
+    HYPERION_06_000301, LA_BROADCAST_06_000177,
 )
 
 
