@@ -147,6 +147,9 @@ def _build_front_test_app():
         "/api/{telescope_id:int}/calibration/cancel",
         front_app.CalibrationCancelResource(),
     )
+    # ---- Sun safety ----
+    app.add_route("/api/sun_safety/status", front_app.SunSafetyStatusResource())
+    app.add_route("/api/sun_safety/dismiss", front_app.SunSafetyDismissResource())
     return app
 
 
@@ -531,6 +534,94 @@ def test_06b_live_tracker_smoke(front_sim_bridge):
     assert r.status_code == 400
     r = client.simulate_post("/api/1/live_tracker/track", json="not-an-object")
     assert r.status_code == 400
+
+
+def test_06d_sun_safety_status_and_dismiss(front_sim_bridge):
+    """Contract for the two /api/sun_safety/* endpoints the global
+    banner polls. Covers: no-monitor → not tripped; monitor installed
+    + forced trip record → tripped + full payload; dismiss → not tripped."""
+    from datetime import datetime, timezone
+
+    from device import sun_safety as ss
+
+    client = front_sim_bridge["client"]
+
+    prev_monitor = ss.get_sun_monitor()
+    try:
+        # (1) No monitor installed → tripped=False, trip=None.
+        ss.set_sun_monitor(None)
+        r = client.simulate_get("/api/sun_safety/status")
+        assert r.status_code == 200
+        body = json.loads(r.text)
+        assert body == {"tripped": False, "trip": None}
+
+        # (2) Install a monitor; no trip yet → still tripped=False.
+        monitor = ss.SunSafetyMonitor(
+            altaz_reader=lambda: None,
+            jog_command=lambda *a, **kw: None,
+            lat_deg=33.96, lon_deg=-118.46,
+            jog_duration_s=0,
+        )
+        ss.set_sun_monitor(monitor)
+        r = client.simulate_get("/api/sun_safety/status")
+        body = json.loads(r.text)
+        assert body["tripped"] is False
+
+        # (3) Stuff a SafetyTrip directly → tripped=True + full payload.
+        trip = ss.SafetyTrip(
+            when_utc=datetime(2026, 4, 24, 18, 0, tzinfo=timezone.utc),
+            sun_az_deg=180.0, sun_alt_deg=33.0,
+            mount_az_deg=181.0, mount_el_deg=34.0,
+            separation_deg=1.4, cone_deg=30.0,
+            jog_angle_deg=225, jog_speed=1440, jog_duration_s=3,
+        )
+        with monitor._lock:
+            monitor._last_trip = trip
+            monitor._trip_dismissed = False
+        r = client.simulate_get("/api/sun_safety/status")
+        body = json.loads(r.text)
+        assert body["tripped"] is True
+        assert body["trip"]["cone_deg"] == 30.0
+        assert body["trip"]["separation_deg"] == 1.4
+        assert body["trip"]["jog_angle_deg"] == 225
+        assert body["trip"]["jog_speed"] == 1440
+        assert "message" in body["trip"]
+
+        # (4) Dismiss → tripped=False; repeated GET still false.
+        r = client.simulate_post("/api/sun_safety/dismiss")
+        assert r.status_code == 200
+        body = json.loads(r.text)
+        assert body["tripped"] is False
+        r = client.simulate_get("/api/sun_safety/status")
+        body = json.loads(r.text)
+        assert body["tripped"] is False
+    finally:
+        ss.set_sun_monitor(prev_monitor)
+
+
+def test_06e_live_tracker_adsbfi_poller_deferred_to_first_list_live():
+    """Spec: TargetCatalog does NOT spin up the adsb.fi poller at
+    instantiation — only on the first `list_live()` call. Keeps the
+    tracker quiescent when not in use."""
+    from device.live_tracker import TargetCatalog
+
+    catalog = TargetCatalog(live_enabled=True)
+    assert catalog._live_thread is None, \
+        "poller must not start at catalog construction"
+
+    try:
+        catalog.list_live()
+        alive = False
+        for _ in range(20):
+            if catalog._live_thread is not None and catalog._live_thread.is_alive():
+                alive = True
+                break
+            time.sleep(0.05)
+        assert alive, "poller should start after the first list_live() call"
+    finally:
+        catalog.close()
+        if catalog._live_thread is not None:
+            catalog._live_thread.join(timeout=2.0)
 
 
 def test_06c_calibrate_rotation_smoke(front_sim_bridge):

@@ -4566,6 +4566,64 @@ class LiveTrackerResetResource:
         resp.text = json.dumps({"offsets": _offset_snapshot_dict(snap)})
 
 
+# ---------- Sun safety resources -------------------------------------
+
+
+def _sun_safety_payload():
+    from device.sun_safety import get_sun_monitor
+
+    m = get_sun_monitor()
+    if m is None:
+        return {"tripped": False, "trip": None}
+    trip = m.last_trip()
+    if trip is None:
+        return {"tripped": False, "trip": None}
+    return {
+        "tripped": True,
+        "trip": {
+            "when_utc": trip.when_utc.isoformat(),
+            "sun_az_deg": round(trip.sun_az_deg, 2),
+            "sun_alt_deg": round(trip.sun_alt_deg, 2),
+            "mount_az_deg": round(trip.mount_az_deg, 2),
+            "mount_el_deg": round(trip.mount_el_deg, 2),
+            "separation_deg": round(trip.separation_deg, 2),
+            "cone_deg": round(trip.cone_deg, 2),
+            "jog_angle_deg": int(trip.jog_angle_deg),
+            "jog_speed": int(trip.jog_speed),
+            "jog_duration_s": int(trip.jog_duration_s),
+            "message": trip.message,
+        },
+    }
+
+
+class SunSafetyStatusResource:
+    """Returns `{tripped: bool, trip: {...} | null}` for the banner.
+
+    When the banner is dismissed, the monitor hides its `last_trip`
+    (tripped=False) until a new trip happens. The nav-bar banner
+    partial polls this endpoint every few seconds.
+    """
+
+    @staticmethod
+    def on_get(req, resp):
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(_sun_safety_payload())
+
+
+class SunSafetyDismissResource:
+    @staticmethod
+    def on_post(req, resp):
+        from device.sun_safety import get_sun_monitor
+
+        m = get_sun_monitor()
+        if m is not None:
+            m.dismiss_last_trip()
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(_sun_safety_payload())
+
+
 # ---------- Calibration Rotation resources ---------------------------
 
 
@@ -6198,6 +6256,15 @@ class FrontMain:
         app.add_route(
             "/api/{telescope_id:int}/live_tracker/offsets/reset",
             LiveTrackerResetResource(),
+        )
+        # ---- Sun safety (global; not per-telescope) ----
+        app.add_route(
+            "/api/sun_safety/status",
+            SunSafetyStatusResource(),
+        )
+        app.add_route(
+            "/api/sun_safety/dismiss",
+            SunSafetyDismissResource(),
         )
         # ---- Calibrate rotation (browser UI for 3-DOF calibration) ----
         app.add_route(

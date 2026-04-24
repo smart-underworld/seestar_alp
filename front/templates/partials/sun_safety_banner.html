@@ -1,0 +1,107 @@
+<!-- Sun-safety banner. Included at the top of base.html so it sits
+     above the nav on every page. Hidden until the monitor reports a
+     live, undismissed trip. Polls every 5 s (cheap — server-side
+     state read only). Dismiss POSTs to /api/sun_safety/dismiss and
+     then immediately polls again. -->
+<div id="sun-safety-banner" data-tripped="false"
+     style="display:none;"
+     hx-get="/api/sun_safety/status"
+     hx-trigger="load, every 5s"
+     hx-swap="none"
+     hx-on::after-request="window.__sunSafetyHandle(event)">
+</div>
+
+<style>
+  #sun-safety-banner.tripped {
+    display: block !important;
+    position: sticky;
+    top: 0;
+    z-index: 2000;
+    background: #b11a24;
+    color: #fff;
+    padding: 14px 20px;
+    font-weight: 600;
+    font-size: 1.05rem;
+    line-height: 1.35;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    border-bottom: 3px solid #6c0e16;
+  }
+  #sun-safety-banner .ssb-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-right: 8px;
+  }
+  #sun-safety-banner .ssb-detail {
+    font-weight: 400;
+    opacity: 0.95;
+    display: block;
+    margin-top: 4px;
+    font-size: 0.9rem;
+  }
+  #sun-safety-banner button.ssb-dismiss {
+    margin-left: 14px;
+    background: #fff;
+    color: #b11a24;
+    border: 0;
+    border-radius: 4px;
+    font-weight: 700;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+  #sun-safety-banner button.ssb-dismiss:hover {
+    background: #f3d6d8;
+  }
+</style>
+
+<script>
+(function () {
+  // Single handler reused across poll responses. Keeps all DOM mutation
+  // in one place so the HTMX swap="none" semantics stay predictable.
+  window.__sunSafetyHandle = function (event) {
+    try {
+      var xhr = event && event.detail && event.detail.xhr;
+      if (!xhr || xhr.status !== 200) return;
+      var data = JSON.parse(xhr.responseText);
+      var el = document.getElementById("sun-safety-banner");
+      if (!el) return;
+      if (!data.tripped || !data.trip) {
+        el.classList.remove("tripped");
+        el.style.display = "none";
+        el.dataset.tripped = "false";
+        el.innerHTML = "";
+        return;
+      }
+      var t = data.trip;
+      el.dataset.tripped = "true";
+      el.classList.add("tripped");
+      el.style.display = "block";
+      el.innerHTML =
+        '<span class="ssb-title">&#9888; SUN SAFETY TRIGGERED</span>' +
+        (t.message || "") +
+        '<button type="button" class="ssb-dismiss" ' +
+        '  onclick="window.__sunSafetyDismiss()">Dismiss</button>' +
+        '<span class="ssb-detail">' +
+        'separation ' + t.separation_deg + '&deg; &lt; cone ' + t.cone_deg + '&deg; ' +
+        '(sun az ' + t.sun_az_deg + '&deg; alt ' + t.sun_alt_deg + '&deg;, ' +
+        'mount az ' + t.mount_az_deg + '&deg; el ' + t.mount_el_deg + '&deg;) ' +
+        '&mdash; jogged ' + t.jog_duration_s + 's at speed ' + t.jog_speed +
+        ' angle ' + t.jog_angle_deg + '&deg;. ' +
+        'Tracking aborted; you now have manual control.' +
+        '</span>';
+    } catch (err) {
+      /* swallow — the next tick will retry */
+    }
+  };
+
+  window.__sunSafetyDismiss = function () {
+    fetch("/api/sun_safety/dismiss", {method: "POST"})
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        // Reuse the handler with a synthetic event shape.
+        window.__sunSafetyHandle({detail: {xhr: {status: 200, responseText: JSON.stringify(data)}}});
+      })
+      .catch(function () { /* ignore */ });
+  };
+})();
+</script>
