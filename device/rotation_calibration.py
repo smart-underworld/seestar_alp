@@ -811,6 +811,27 @@ class CalibrationSession:
         prior_frame = self._prior_frame or MountFrame.from_identity_enu(self.site)
         pred_az, pred_el, _ = prior_frame.ecef_to_mount_azel(lm.ecef())
         pred_az_wrapped = ((pred_az + 180.0) % 360.0) - 180.0
+
+        # Pre-flight sun-avoidance check. Uses the landmark's TRUE
+        # topocentric (az, el) — `_true_az` / `_true_el` were computed
+        # from the site + landmark position earlier in the pipeline and
+        # are in sky frame regardless of calibration state. This is
+        # authoritative for sun-separation and avoids any dependence on
+        # the (possibly wrong) prior frame. Stop the worker on failure
+        # so `_run()` bails before transitioning to the nudging phase.
+        from device.sun_safety import is_sun_safe as _is_sun_safe
+        sun_safe, sun_reason = _is_sun_safe(
+            float(_true_az) % 360.0, float(_true_el),
+        )
+        if not sun_safe:
+            with self._lock:
+                self._errors.append(
+                    f"{sun_reason} (landmark {getattr(lm, 'oas', '?')})"
+                )
+                self._phase = "error"
+            self._stop_evt.set()
+            return
+
         with self._lock:
             self._target_az = pred_az_wrapped
             self._target_el = pred_el

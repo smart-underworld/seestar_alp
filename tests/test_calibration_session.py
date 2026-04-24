@@ -162,6 +162,39 @@ def test_session_starts_and_slews_to_first_target(monkeypatch, tmp_path):
         session.stop()
 
 
+def test_slew_to_target_refuses_when_landmark_inside_sun_cone(monkeypatch, tmp_path):
+    """Spec: CalibrationSession._slew_to_target must call
+    device.sun_safety.is_sun_safe against the landmark's true
+    topocentric (az, el) and refuse — phase='error', sun_avoidance
+    recorded in errors — rather than commanding the mount toward it."""
+    site = _site()
+    cli = _FakeCli()
+    _install_fakes(monkeypatch, cli)
+
+    from device import sun_safety as ss
+    monkeypatch.setattr(
+        ss, "is_sun_safe",
+        lambda *a, **kw: (False, "sun_avoidance: forced by test"),
+    )
+
+    session = CalibrationSession(
+        telescope_id=1, targets=_targets(site), site=site,
+        out_path=tmp_path / "cal.json",
+    )
+    session.start()
+    try:
+        deadline = time.time() + 2.0
+        while time.time() < deadline:
+            if session.status().phase == "error":
+                break
+            time.sleep(0.02)
+        st = session.status()
+        assert st.phase == "error", f"phase={st.phase} errors={st.errors}"
+        assert any("sun_avoidance" in e for e in st.errors)
+    finally:
+        session.stop()
+
+
 def test_nudge_updates_target_and_encoder(monkeypatch, tmp_path):
     site = _site()
     cli = _FakeCli()
