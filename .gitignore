@@ -44,3 +44,5 @@ data/fetch_aircraft.log
 
 # Per-mount compass calibration — site-specific, regenerated via calibrate_compass.
 device/mount_calibration.json
+# Rotation-calibration REPL / web UI backs up the prior calibration to .bak on clear.
+device/mount_calibration.json.bak
