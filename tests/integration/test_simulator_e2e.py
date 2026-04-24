@@ -114,6 +114,39 @@ def _build_front_test_app():
         "/api/{telescope_id:int}/live_tracker/offsets/reset",
         front_app.LiveTrackerResetResource(),
     )
+    # ---- Calibration routes (mirror front/app.py FrontMain setup) ----
+    app.add_route(
+        "/{telescope_id:int}/calibrate_rotation",
+        front_app.CalibrateRotationResource(),
+    )
+    app.add_route(
+        "/api/{telescope_id:int}/calibration/prior",
+        front_app.CalibrationPriorResource(),
+    )
+    app.add_route(
+        "/api/{telescope_id:int}/calibration/targets",
+        front_app.CalibrationTargetsResource(),
+    )
+    app.add_route(
+        "/api/{telescope_id:int}/calibration/start",
+        front_app.CalibrationStartResource(),
+    )
+    app.add_route(
+        "/api/{telescope_id:int}/calibration/status",
+        front_app.CalibrationStatusResource(),
+    )
+    app.add_route(
+        "/api/{telescope_id:int}/calibration/nudge",
+        front_app.CalibrationNudgeResource(),
+    )
+    app.add_route(
+        "/api/{telescope_id:int}/calibration/sight",
+        front_app.CalibrationSightResource(),
+    )
+    app.add_route(
+        "/api/{telescope_id:int}/calibration/cancel",
+        front_app.CalibrationCancelResource(),
+    )
     return app
 
 
@@ -497,6 +530,52 @@ def test_06b_live_tracker_smoke(front_sim_bridge):
     r = client.simulate_post("/api/1/live_tracker/offsets", json=[1, 2, 3])
     assert r.status_code == 400
     r = client.simulate_post("/api/1/live_tracker/track", json="not-an-object")
+    assert r.status_code == 400
+
+
+def test_06c_calibrate_rotation_smoke(front_sim_bridge):
+    """Basic contract check for the calibrate-rotation page + API.
+
+    The simulator doesn't expose ``location_lon_lat`` via the Alpaca
+    method the backend calls, so ``/prior``, ``/targets``, and
+    ``/start`` all 503 cleanly on GPS fetch. That's the correct
+    behaviour — what we're checking here is that the routes are
+    registered and that error payloads are valid JSON. Mount-driving
+    paths are covered by the CalibrationSession unit tests with a
+    fake Alpaca client.
+    """
+    client = front_sim_bridge["client"]
+
+    page = client.simulate_get("/1/calibrate_rotation")
+    assert page.status_code == 200
+    assert "Calibrate" in page.text
+
+    # /status with no active session returns {"active": false}.
+    status = client.simulate_get("/api/1/calibration/status")
+    assert status.status_code == 200
+    body = json.loads(status.text)
+    assert body.get("active") is False
+
+    # /prior → 503 (GPS unavailable via the simulator) with an
+    # informative JSON body.
+    prior = client.simulate_get("/api/1/calibration/prior")
+    assert prior.status_code == 503
+    body = json.loads(prior.text)
+    assert "error" in body
+
+    # /targets likewise 503s on GPS fetch.
+    targets = client.simulate_get("/api/1/calibration/targets")
+    assert targets.status_code == 503
+
+    # Command posts against a nonexistent session → 404.
+    for path in ("sight", "cancel"):
+        r = client.simulate_post(
+            f"/api/1/calibration/{path}", json={},
+        )
+        assert r.status_code == 404
+
+    # Malformed body → 400.
+    r = client.simulate_post("/api/1/calibration/start", json=[1, 2, 3])
     assert r.status_code == 400
 
 

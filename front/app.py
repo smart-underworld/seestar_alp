@@ -4566,6 +4566,432 @@ class LiveTrackerResetResource:
         resp.text = json.dumps({"offsets": _offset_snapshot_dict(snap)})
 
 
+# ---------- Calibration Rotation resources ---------------------------
+
+
+_CALIBRATION_JSON_PATH = (
+    Path(__file__).resolve().parents[1] / "device" / "mount_calibration.json"
+)
+
+
+def _calibration_status_dict(status):
+    """Serialise a CalibrationStatus (or None) to a plain dict."""
+    if status is None:
+        return {"active": False}
+    return {
+        "active": status.active,
+        "phase": status.phase,
+        "target_idx": status.target_idx,
+        "n_targets": status.n_targets,
+        "current_landmark": status.current_landmark,
+        "target_az_deg": status.target_az_deg,
+        "target_el_deg": status.target_el_deg,
+        "encoder_az_deg": status.encoder_az_deg,
+        "encoder_el_deg": status.encoder_el_deg,
+        "solution": status.solution,
+        "errors": list(status.errors),
+    }
+
+
+class CalibrateRotationResource:
+    """Serve the browser calibration page."""
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        context = get_context(telescope_id, req)
+        render_template(
+            req, resp, "calibrate_rotation.html",
+            telescope_id=telescope_id, **context,
+        )
+
+
+class CalibrationPriorResource:
+    """Return on-disk calibration metadata (age, distance, embedded
+    altitude) so the setup panel can show a sensible default."""
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        from device.alpaca_client import AlpacaClient
+        from device.rotation_calibration import (
+            KEEP_MAX_AGE_S,
+            KEEP_MAX_DISTANCE_M,
+            decide_clear_or_keep,
+            inspect_prior,
+        )
+        from scripts.trajectory.observer import fetch_telescope_lonlat
+
+        try:
+            cli = AlpacaClient("127.0.0.1", int(Config.port), int(telescope_id))
+            lat, lon = fetch_telescope_lonlat(cli)
+        except Exception as exc:
+            resp.status = falcon.HTTP_503
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": f"GPS unavailable: {exc}"})
+            return
+        prior = inspect_prior(_CALIBRATION_JSON_PATH, lat, lon)
+        payload = {
+            "gps": {"lat_deg": lat, "lon_deg": lon},
+            "prior_present": prior is not None,
+            "default_keep": decide_clear_or_keep(prior),
+            "keep_max_age_s": KEEP_MAX_AGE_S,
+            "keep_max_distance_m": KEEP_MAX_DISTANCE_M,
+        }
+        if prior is not None:
+            payload["prior"] = {
+                "path": str(prior.path),
+                "age_s": prior.age_s,
+                "distance_from_current_m": prior.distance_from_current_m,
+                "observer_lat_deg": prior.observer_lat_deg,
+                "observer_lon_deg": prior.observer_lon_deg,
+                "observer_alt_m": prior.observer_alt_m,
+                "calibrated_at": (
+                    prior.calibrated_at.isoformat()
+                    if prior.calibrated_at is not None else None
+                ),
+            }
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(payload)
+
+
+class CalibrationTargetsResource:
+    """Return the two hardcoded defaults (or the top-10 FAA DOF
+    visible landmarks, when the defaults are below horizon)."""
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        from device.alpaca_client import AlpacaClient
+        from device.rotation_calibration import pointing_uncertainty_deg
+        from scripts.trajectory.faa_dof import (
+            DEFAULT_LANDMARKS,
+            aiming_hint,
+            faa_accuracy_ft,
+            fetch_nearby_landmarks,
+            filter_visible,
+        )
+        from scripts.trajectory.observer import (
+            build_site,
+            fetch_telescope_lonlat,
+        )
+
+        alt_raw = req.params.get("altitude_m", "2.0")
+        try:
+            alt_m = float(alt_raw)
+        except (TypeError, ValueError):
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "altitude_m must be numeric"})
+            return
+        try:
+            cli = AlpacaClient("127.0.0.1", int(Config.port), int(telescope_id))
+            lat, lon = fetch_telescope_lonlat(cli)
+        except Exception as exc:
+            resp.status = falcon.HTTP_503
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": f"GPS unavailable: {exc}"})
+            return
+        site = build_site(lat_deg=lat, lon_deg=lon, alt_m=alt_m)
+        defaults = filter_visible(
+            list(DEFAULT_LANDMARKS), site, min_el_deg=0.3,
+        )
+        dof = []
+        if len(defaults) < 2:
+            try:
+                candidates = fetch_nearby_landmarks(site)
+                dof = filter_visible(candidates, site, top_n=10)
+            except Exception:
+                dof = []
+
+        def _as_dict(entries):
+            out = []
+            for lm, az, el, slant in entries:
+                h_ft, v_ft = faa_accuracy_ft(lm.accuracy_class)
+                sigma_az, sigma_el = pointing_uncertainty_deg(
+                    slant, h_ft, v_ft,
+                )
+                out.append({
+                    "oas": lm.oas,
+                    "name": lm.name,
+                    "lat_deg": lm.lat_deg,
+                    "lon_deg": lm.lon_deg,
+                    "height_amsl_m": lm.height_amsl_m,
+                    "lit": bool(lm.lit),
+                    "accuracy_class": lm.accuracy_class,
+                    "obstacle_type": lm.obstacle_type,
+                    "city": lm.city,
+                    "true_az_deg": float(az),
+                    "true_el_deg": float(el),
+                    "slant_m": float(slant),
+                    "aiming_hint": aiming_hint(lm),
+                    "sigma_az_deg": _nan_to_none(sigma_az),
+                    "sigma_el_deg": _nan_to_none(sigma_el),
+                })
+            return out
+
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps({
+            "defaults": _as_dict(defaults),
+            "dof_fallback": _as_dict(dof),
+            "observer": {"lat_deg": lat, "lon_deg": lon, "alt_m": alt_m},
+        })
+
+
+def _nan_to_none(x):
+    """JSON doesn't encode NaN; map to null for clean UI handling."""
+    import math as _m
+    return None if x is None or not _m.isfinite(x) else float(x)
+
+
+class CalibrationStartResource:
+    """Body: {altitude_m, clear_prior, target_oas?}.
+
+    ``target_oas`` is an optional list of OAS strings; when absent the
+    session uses the above-horizon subset of DEFAULT_LANDMARKS. On
+    clear, the prior JSON is atomically renamed to ``.bak``."""
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        from device.alpaca_client import AlpacaClient
+        from device.rotation_calibration import (
+            CalibrationSession,
+            get_calibration_manager,
+        )
+        from device.target_frame import MountFrame
+        from scripts.trajectory.faa_dof import (
+            DEFAULT_LANDMARKS,
+            fetch_nearby_landmarks,
+            filter_visible,
+        )
+        from scripts.trajectory.observer import (
+            build_site,
+            fetch_telescope_lonlat,
+        )
+
+        try:
+            body = req.media or {}
+        except Exception:
+            body = {}
+        if not isinstance(body, dict):
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "request body must be a JSON object"})
+            return
+        try:
+            alt_m = float(body.get("altitude_m", 2.0))
+        except (TypeError, ValueError):
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "altitude_m must be numeric"})
+            return
+        clear_prior = bool(body.get("clear_prior", False))
+        dry_run = bool(body.get("dry_run", False))
+        target_oas = body.get("target_oas")
+        if target_oas is not None and not (
+            isinstance(target_oas, list)
+            and all(isinstance(x, str) for x in target_oas)
+        ):
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "target_oas must be a list of strings"})
+            return
+
+        try:
+            cli = AlpacaClient("127.0.0.1", int(Config.port), int(telescope_id))
+            lat, lon = fetch_telescope_lonlat(cli)
+        except Exception as exc:
+            resp.status = falcon.HTTP_503
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": f"GPS unavailable: {exc}"})
+            return
+        site = build_site(lat_deg=lat, lon_deg=lon, alt_m=alt_m)
+
+        prior_frame = None
+        if clear_prior and _CALIBRATION_JSON_PATH.exists():
+            bak = _CALIBRATION_JSON_PATH.with_suffix(
+                _CALIBRATION_JSON_PATH.suffix + ".bak",
+            )
+            try:
+                _CALIBRATION_JSON_PATH.replace(bak)
+            except OSError as exc:
+                resp.status = falcon.HTTP_500
+                resp.content_type = "application/json"
+                resp.text = json.dumps(
+                    {"error": f"could not back up prior calibration: {exc}"}
+                )
+                return
+        else:
+            if _CALIBRATION_JSON_PATH.exists():
+                try:
+                    prior_frame = MountFrame.from_calibration_json(
+                        _CALIBRATION_JSON_PATH, site=site,
+                    )
+                except Exception:
+                    prior_frame = None
+
+        default_hits = filter_visible(
+            list(DEFAULT_LANDMARKS), site, min_el_deg=0.3,
+        )
+        pool = list(default_hits)
+        if len(pool) < 2 or target_oas:
+            # Fall through to DOF when defaults aren't enough, or the
+            # caller is picking custom landmarks.
+            try:
+                candidates = fetch_nearby_landmarks(site)
+                dof_hits = filter_visible(candidates, site, top_n=30)
+            except Exception as exc:
+                dof_hits = []
+                dof_err = str(exc)
+            else:
+                dof_err = None
+            seen = {hit[0].oas for hit in pool}
+            for hit in dof_hits:
+                if hit[0].oas not in seen:
+                    pool.append(hit)
+                    seen.add(hit[0].oas)
+            if target_oas:
+                chosen = [h for h in pool if h[0].oas in target_oas]
+                missing = set(target_oas) - {h[0].oas for h in chosen}
+                if missing:
+                    resp.status = falcon.HTTP_400
+                    resp.content_type = "application/json"
+                    resp.text = json.dumps({
+                        "error": f"landmarks not visible or not found: "
+                                 f"{sorted(missing)}",
+                        "dof_fetch_error": dof_err,
+                    })
+                    return
+                targets = chosen
+            else:
+                targets = pool[:2]
+        else:
+            targets = default_hits[:2]
+
+        if len(targets) < 2:
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({
+                "error": "need at least 2 visible landmarks to calibrate",
+            })
+            return
+
+        session = CalibrationSession(
+            telescope_id=int(telescope_id),
+            targets=targets, site=site,
+            out_path=_CALIBRATION_JSON_PATH,
+            prior_frame=prior_frame,
+            dry_run=dry_run,
+        )
+        try:
+            get_calibration_manager().start(session)
+        except RuntimeError as exc:
+            resp.status = falcon.HTTP_409
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": str(exc)})
+            return
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(
+            _calibration_status_dict(
+                get_calibration_manager().status(int(telescope_id))
+            )
+        )
+
+
+class CalibrationStatusResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        from device.rotation_calibration import get_calibration_manager
+        status = get_calibration_manager().status(int(telescope_id))
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(_calibration_status_dict(status))
+
+
+def _calibration_post_command(req, resp, telescope_id, cmd_name, apply_fn):
+    """Shared body for the thin command POST endpoints (sight / skip /
+    commit / cancel). ``apply_fn(session)`` runs the session method."""
+    from device.rotation_calibration import get_calibration_manager
+    session = get_calibration_manager().get(int(telescope_id))
+    if session is None or not session.is_alive():
+        resp.status = falcon.HTTP_404
+        resp.content_type = "application/json"
+        resp.text = json.dumps({"error": "no active calibration session"})
+        return
+    try:
+        apply_fn(session)
+    except Exception as exc:
+        resp.status = falcon.HTTP_400
+        resp.content_type = "application/json"
+        resp.text = json.dumps({"error": f"{cmd_name} failed: {exc}"})
+        return
+    resp.status = falcon.HTTP_200
+    resp.content_type = "application/json"
+    resp.text = json.dumps(
+        _calibration_status_dict(
+            get_calibration_manager().status(int(telescope_id))
+        )
+    )
+
+
+class CalibrationNudgeResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        try:
+            body = req.media or {}
+        except Exception:
+            body = {}
+        if not isinstance(body, dict):
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "body must be a JSON object"})
+            return
+        try:
+            d_az = float(body.get("d_az", 0.0))
+            d_el = float(body.get("d_el", 0.0))
+        except (TypeError, ValueError):
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "d_az / d_el must be numeric"})
+            return
+        _calibration_post_command(
+            req, resp, telescope_id, "nudge",
+            lambda s: s.nudge(d_az, d_el),
+        )
+
+
+class CalibrationSightResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        _calibration_post_command(
+            req, resp, telescope_id, "sight", lambda s: s.sight(),
+        )
+
+
+class CalibrationSkipResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        _calibration_post_command(
+            req, resp, telescope_id, "skip", lambda s: s.skip(),
+        )
+
+
+class CalibrationCommitResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        _calibration_post_command(
+            req, resp, telescope_id, "commit", lambda s: s.commit(),
+        )
+
+
+class CalibrationCancelResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        _calibration_post_command(
+            req, resp, telescope_id, "cancel", lambda s: s.cancel(),
+        )
+
+
 class StatsContentResource:
     _last_render_by_key = {}
     _lock = threading.Lock()
@@ -5772,6 +6198,51 @@ class FrontMain:
         app.add_route(
             "/api/{telescope_id:int}/live_tracker/offsets/reset",
             LiveTrackerResetResource(),
+        )
+        # ---- Calibrate rotation (browser UI for 3-DOF calibration) ----
+        app.add_route(
+            "/{telescope_id:int}/calibrate_rotation",
+            CalibrateRotationResource(),
+        )
+        app.add_route(
+            "/{telescope_id:int}/calibrate_rotation/",
+            CalibrateRotationResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/calibration/prior",
+            CalibrationPriorResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/calibration/targets",
+            CalibrationTargetsResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/calibration/start",
+            CalibrationStartResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/calibration/status",
+            CalibrationStatusResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/calibration/nudge",
+            CalibrationNudgeResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/calibration/sight",
+            CalibrationSightResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/calibration/skip",
+            CalibrationSkipResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/calibration/commit",
+            CalibrationCommitResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/calibration/cancel",
+            CalibrationCancelResource(),
         )
         app.add_route("/config", ConfigResource())
         app.add_route("/pa_refine", BlindPolarAlignResource())

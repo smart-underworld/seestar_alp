@@ -1,0 +1,589 @@
+{% extends "base.html" %}
+{% block title %}Calibrate rotation — telescope {{ telescope_id }}{% endblock %}
+{% block content %}
+
+<style>
+  .cal-wrap { padding: 12px; }
+  .cal-grid {
+    display: grid;
+    grid-template-columns: minmax(360px, 1fr) 420px;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 960px) { .cal-grid { grid-template-columns: 1fr; } }
+  .cal-video-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .cal-video-box { position: relative; line-height: 0; border: 1px solid rgba(0,0,0,0.12); border-radius: 6px; overflow: hidden; background: #000; }
+  .cal-video-box img { width: 100%; height: auto; display: block; }
+  .cal-video-box svg.crosshair { position: absolute; inset: 0; pointer-events: none; }
+  .cal-video-aim { position: absolute; left: 10px; top: 10px; background: rgba(0,0,0,0.55); color: #fff; padding: 4px 8px; border-radius: 4px; font: 12px/1.3 monospace; max-width: 60%; }
+  .cal-card { padding: 10px 12px; border: 1px solid rgba(0,0,0,0.12); border-radius: 6px; background: rgba(0,0,0,0.02); }
+  .cal-card h4 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.7; }
+  .cal-controls-col { display: flex; flex-direction: column; gap: 12px; font-family: monospace; font-size: 13px; }
+  .cal-kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; margin: 6px 0; }
+  .cal-kpi { padding: 4px 8px; background: rgba(0,0,0,0.04); border-radius: 4px; font-size: 11px; }
+  .cal-kpi .k { opacity: 0.6; }
+  .cal-kpi .v { font-weight: bold; font-size: 13px; }
+  .cal-target { padding: 6px 8px; border-bottom: 1px solid rgba(0,0,0,0.08); cursor: pointer; }
+  .cal-target:hover { background: rgba(0,0,0,0.04); }
+  .cal-target.selected { background: rgba(59,130,246,0.12); border-left: 3px solid rgba(59,130,246,0.6); }
+  .cal-target .oas { font-weight: bold; }
+  .cal-target .geom { opacity: 0.75; }
+  .cal-target .aim  { opacity: 0.7; font-style: italic; }
+  .cal-target .lit-badge  { background: rgba(34,197,94,0.15); color: #166534; padding: 1px 6px; border-radius: 999px; font-size: 11px; margin-left: 6px; }
+  .cal-target .unlit-badge{ background: rgba(234,179,8,0.15);  color: #92400e; padding: 1px 6px; border-radius: 999px; font-size: 11px; margin-left: 6px; }
+  .cal-btn-row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .cal-btn { padding: 6px 12px; border: 1px solid rgba(0,0,0,0.2); background: transparent; cursor: pointer; border-radius: 4px; font-family: monospace; font-size: 12px; }
+  .cal-btn:hover:not(:disabled) { background: rgba(0,0,0,0.05); }
+  .cal-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .cal-btn.primary { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.5); }
+  .cal-btn.danger  { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.5); }
+  .cal-btn.success { background: rgba(34,197,94,0.15); border-color: rgba(34,197,94,0.5); }
+  .cal-nudge-pad { display: grid; grid-template-columns: repeat(3, 56px); grid-auto-rows: 44px; gap: 4px; justify-content: center; margin: 10px auto; }
+  .cal-nudge-pad button { font-size: 16px; border: 1px solid rgba(0,0,0,0.2); background: rgba(0,0,0,0.03); border-radius: 4px; cursor: pointer; }
+  .cal-nudge-pad button:hover:not(:disabled) { background: rgba(0,0,0,0.08); }
+  .cal-nudge-pad button:disabled { opacity: 0.3; cursor: not-allowed; }
+  .cal-step-row { display: flex; gap: 4px; justify-content: center; margin: 4px 0; }
+  .cal-step-row button { flex: 0 0 auto; }
+  .cal-step-row button.active { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.5); font-weight: bold; }
+  .cal-resid-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 6px; }
+  .cal-resid-table th, .cal-resid-table td { padding: 3px 6px; text-align: right; border-bottom: 1px solid rgba(0,0,0,0.06); }
+  .cal-resid-table th { text-align: left; }
+  .cal-resid-table td:first-child { text-align: left; }
+  .cal-resid-table tr.out-of-tol td { background: rgba(234,179,8,0.12); }
+  .cal-banner { padding: 8px 12px; border-radius: 6px; background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25); margin-bottom: 8px; }
+  .cal-banner .oas { font-weight: bold; }
+  .cal-banner .aim { margin-top: 4px; opacity: 0.85; font-style: italic; }
+  .cal-altitude-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .cal-altitude-row input[type=number] { width: 80px; font-family: monospace; }
+  .cal-prior-block { padding: 6px 8px; background: rgba(0,0,0,0.03); border-radius: 4px; font-size: 12px; margin-bottom: 8px; }
+  .cal-err { color: #b91c1c; font-size: 11px; margin-top: 4px; white-space: pre-wrap; }
+  .cal-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 10px 20px; border-radius: 6px; background: rgba(34,197,94,0.9); color: white; font-family: monospace; z-index: 1000; }
+</style>
+
+<div class="cal-wrap" data-telescope-id="{{ telescope_id }}"
+     data-imager-root="{{ imager_root }}" data-root="{{ root }}">
+  <div style="display:flex; justify-content:space-between; align-items:baseline;">
+    <h2 style="margin:0 0 12px;">Calibrate rotation — telescope {{ telescope_id }}</h2>
+    <a href="{{ root }}/live_tracker" style="font-size:13px;">← Live Tracker</a>
+  </div>
+
+  <div class="cal-grid">
+    <!-- LEFT: video + crosshair + KPI strip -->
+    <div class="cal-video-col">
+      <div class="cal-video-box">
+        <img id="cal-vid" src="{{ imager_root }}/vid" alt="Live camera view"/>
+        <div id="cal-aim-label" class="cal-video-aim" style="display:none;"></div>
+        <!--
+          Crosshair overlay. The `viewBox` is centred on 0,0 so the
+          centre gap + outer reticle scale with the image naturally.
+          Lines are split into four segments so a 16-pixel gap at the
+          centre keeps the beacon visible through the crosshair.
+        -->
+        <svg class="crosshair" viewBox="-100 -100 200 200" preserveAspectRatio="xMidYMid meet">
+          <g stroke="rgba(255,64,64,0.6)" stroke-width="0.5" fill="none">
+            <line x1="-100" y1="0" x2="-8" y2="0"/>
+            <line x1="8"    y1="0" x2="100" y2="0"/>
+            <line x1="0" y1="-100" x2="0" y2="-8"/>
+            <line x1="0"   y1="8" x2="0" y2="100"/>
+            <!-- 4 short centre ticks so the user can see they're on centre without covering the beacon -->
+            <line x1="-3" y1="0" x2="-1" y2="0" stroke-width="0.8"/>
+            <line x1="1"  y1="0" x2="3"  y2="0" stroke-width="0.8"/>
+            <line x1="0" y1="-3" x2="0" y2="-1" stroke-width="0.8"/>
+            <line x1="0"  y1="1" x2="0" y2="3"  stroke-width="0.8"/>
+            <!-- Outer reticle — a ~40x40 reference square centred on target -->
+            <rect x="-10" y="-10" width="20" height="20" stroke="rgba(255,64,64,0.35)" stroke-width="0.3" fill="none"/>
+          </g>
+        </svg>
+      </div>
+      <div class="cal-card">
+        <h4>Telemetry</h4>
+        <div class="cal-kpi-row">
+          <div class="cal-kpi"><div class="k">phase</div><div class="v" id="cal-kpi-phase">—</div></div>
+          <div class="cal-kpi"><div class="k">target idx</div><div class="v" id="cal-kpi-idx">—</div></div>
+          <div class="cal-kpi"><div class="k">enc az</div><div class="v" id="cal-kpi-encaz">—</div></div>
+          <div class="cal-kpi"><div class="k">enc el</div><div class="v" id="cal-kpi-encel">—</div></div>
+          <div class="cal-kpi"><div class="k">tgt az</div><div class="v" id="cal-kpi-tgtaz">—</div></div>
+          <div class="cal-kpi"><div class="k">tgt el</div><div class="v" id="cal-kpi-tgtel">—</div></div>
+          <div class="cal-kpi"><div class="k">fit RMS</div><div class="v" id="cal-kpi-rms">—</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: state-machine panels -->
+    <div class="cal-controls-col">
+      <!-- SETUP -->
+      <div class="cal-card" id="cal-panel-setup">
+        <h4>Setup</h4>
+        <div class="cal-prior-block" id="cal-prior-block">loading prior metadata…</div>
+        <div class="cal-altitude-row">
+          <span>Altitude:</span>
+          <label><input type="radio" name="cal-alt-src" value="lookup" checked> lookup</label>
+          <label><input type="radio" name="cal-alt-src" value="prior"> prior</label>
+          <label><input type="radio" name="cal-alt-src" value="manual"> manual</label>
+          <input type="number" id="cal-alt-manual" step="0.1" value="2.0" disabled>
+          <span>m AMSL</span>
+        </div>
+        <h4 style="margin-top:10px;">Targets</h4>
+        <div id="cal-target-list">loading…</div>
+        <div class="cal-btn-row">
+          <button id="cal-start-btn" class="cal-btn primary" disabled>Start calibration</button>
+          <label style="margin-left:auto;"><input type="checkbox" id="cal-clear-prior"> clear prior</label>
+        </div>
+        <div class="cal-err" id="cal-setup-err" style="display:none;"></div>
+      </div>
+
+      <!-- ACTIVE -->
+      <div class="cal-card" id="cal-panel-active" style="display:none;">
+        <h4>Active landmark</h4>
+        <div class="cal-banner" id="cal-active-banner">
+          <div><span class="oas" id="cal-active-oas">—</span> · <span id="cal-active-name">—</span></div>
+          <div id="cal-active-geom" style="font-size:11px; opacity:0.8;">—</div>
+          <div class="aim" id="cal-active-aim">—</div>
+        </div>
+
+        <h4 style="margin-top:10px;">Step size</h4>
+        <div class="cal-step-row" id="cal-step-row">
+          <button class="cal-btn" data-step="0.05">±0.05°</button>
+          <button class="cal-btn active" data-step="0.2">±0.2°</button>
+          <button class="cal-btn" data-step="1.0">±1°</button>
+        </div>
+
+        <h4 style="margin-top:10px;">Nudge</h4>
+        <div class="cal-nudge-pad" id="cal-nudge-pad">
+          <button data-az="-1" data-el="1">↖</button>
+          <button data-az="0"  data-el="1">↑</button>
+          <button data-az="1"  data-el="1">↗</button>
+          <button data-az="-1" data-el="0">←</button>
+          <button disabled>●</button>
+          <button data-az="1"  data-el="0">→</button>
+          <button data-az="-1" data-el="-1">↙</button>
+          <button data-az="0"  data-el="-1">↓</button>
+          <button data-az="1"  data-el="-1">↘</button>
+        </div>
+        <div style="text-align:center; font-size:11px; opacity:0.7;">
+          (arrow keys also work; Enter = sight)
+        </div>
+
+        <div class="cal-btn-row" style="margin-top:10px;">
+          <button id="cal-sight-btn"  class="cal-btn success">Sight ✓</button>
+          <button id="cal-skip-btn"   class="cal-btn">Skip</button>
+          <button id="cal-cancel-btn" class="cal-btn danger" style="margin-left:auto;">Cancel</button>
+        </div>
+
+        <h4 style="margin-top:10px;">Fit so far</h4>
+        <table class="cal-resid-table" id="cal-resid-table">
+          <thead>
+            <tr><th>OAS</th><th>d az (°)</th><th>d el (°)</th><th>FAA σ az</th><th>FAA σ el</th><th>OK?</th></tr>
+          </thead>
+          <tbody id="cal-resid-body"></tbody>
+        </table>
+      </div>
+
+      <!-- REVIEW -->
+      <div class="cal-card" id="cal-panel-review" style="display:none;">
+        <h4>Review</h4>
+        <div id="cal-review-summary" style="margin-bottom:6px;">—</div>
+        <table class="cal-resid-table">
+          <thead>
+            <tr><th>OAS</th><th>d az (°)</th><th>d el (°)</th><th>FAA σ az</th><th>FAA σ el</th><th>OK?</th></tr>
+          </thead>
+          <tbody id="cal-review-body"></tbody>
+        </table>
+        <div class="cal-btn-row" style="margin-top:10px;">
+          <button id="cal-commit-btn"  class="cal-btn primary">Commit</button>
+          <button id="cal-discard-btn" class="cal-btn danger">Discard</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const wrap = document.querySelector('.cal-wrap');
+  const telescopeId = wrap.dataset.telescopeId || '1';
+  const apiRoot = `/api/${telescopeId}/calibration`;
+
+  const els = {
+    priorBlock: document.getElementById('cal-prior-block'),
+    altRadios: document.querySelectorAll('input[name=cal-alt-src]'),
+    altManual: document.getElementById('cal-alt-manual'),
+    targetList: document.getElementById('cal-target-list'),
+    startBtn: document.getElementById('cal-start-btn'),
+    clearPrior: document.getElementById('cal-clear-prior'),
+    setupErr: document.getElementById('cal-setup-err'),
+    panelSetup: document.getElementById('cal-panel-setup'),
+    panelActive: document.getElementById('cal-panel-active'),
+    panelReview: document.getElementById('cal-panel-review'),
+    activeOas: document.getElementById('cal-active-oas'),
+    activeName: document.getElementById('cal-active-name'),
+    activeGeom: document.getElementById('cal-active-geom'),
+    activeAim: document.getElementById('cal-active-aim'),
+    stepRow: document.getElementById('cal-step-row'),
+    nudgePad: document.getElementById('cal-nudge-pad'),
+    sightBtn: document.getElementById('cal-sight-btn'),
+    skipBtn: document.getElementById('cal-skip-btn'),
+    cancelBtn: document.getElementById('cal-cancel-btn'),
+    commitBtn: document.getElementById('cal-commit-btn'),
+    discardBtn: document.getElementById('cal-discard-btn'),
+    residBody: document.getElementById('cal-resid-body'),
+    reviewBody: document.getElementById('cal-review-body'),
+    reviewSummary: document.getElementById('cal-review-summary'),
+    aimLabel: document.getElementById('cal-aim-label'),
+    kpiPhase: document.getElementById('cal-kpi-phase'),
+    kpiIdx: document.getElementById('cal-kpi-idx'),
+    kpiEncAz: document.getElementById('cal-kpi-encaz'),
+    kpiEncEl: document.getElementById('cal-kpi-encel'),
+    kpiTgtAz: document.getElementById('cal-kpi-tgtaz'),
+    kpiTgtEl: document.getElementById('cal-kpi-tgtel'),
+    kpiRMS: document.getElementById('cal-kpi-rms'),
+  };
+
+  let state = {
+    priorInfo: null,
+    targets: [],           // [{oas, ..., aiming_hint, sigma_az_deg, sigma_el_deg}]
+    selectedOas: new Set(),
+    stepDeg: 0.2,
+    sessionActive: false,
+    phase: 'idle',
+  };
+
+  function fmt(v, d=2, suffix='°') {
+    if (v == null || !isFinite(v)) return '—';
+    return (v >= 0 ? '+' : '') + Number(v).toFixed(d) + suffix;
+  }
+  function fmtSigma(v) {
+    if (v == null || !isFinite(v)) return 'unknown';
+    return '±' + Number(v).toFixed(3) + '°';
+  }
+
+  // ---- setup panel load ----
+
+  async function loadSetup() {
+    try {
+      const priorR = await fetch(`${apiRoot}/prior`);
+      if (priorR.ok) {
+        state.priorInfo = await priorR.json();
+      } else {
+        state.priorInfo = {error: (await priorR.json()).error || priorR.statusText};
+      }
+    } catch (e) { state.priorInfo = {error: String(e)}; }
+    renderPrior();
+
+    // Pick the best altitude source for the initial lookup:
+    // prior if it's local+recent, else lookup.
+    const altSource = (state.priorInfo && state.priorInfo.default_keep &&
+                       state.priorInfo.prior && state.priorInfo.prior.observer_alt_m != null)
+                      ? 'prior' : 'lookup';
+    document.querySelector(`input[name=cal-alt-src][value=${altSource}]`).checked = true;
+    if (altSource === 'prior') {
+      els.altManual.value = state.priorInfo.prior.observer_alt_m.toFixed(2);
+    }
+    await refreshTargets();
+  }
+
+  function renderPrior() {
+    const p = state.priorInfo;
+    if (!p) { els.priorBlock.textContent = 'no prior metadata'; return; }
+    if (p.error) { els.priorBlock.textContent = `prior lookup failed: ${p.error}`; return; }
+    if (!p.prior_present) { els.priorBlock.textContent = 'no prior calibration on disk.'; return; }
+    const age_h = p.prior.age_s != null ? (p.prior.age_s / 3600).toFixed(1) : '?';
+    const dist  = p.prior.distance_from_current_m != null ? p.prior.distance_from_current_m.toFixed(1) : '?';
+    els.priorBlock.innerHTML =
+      `prior at ${p.prior.path} · age ${age_h} h · ${dist} m from current GPS<br>` +
+      `default: <b>${p.default_keep ? 'keep' : 'clear'}</b>`;
+    els.clearPrior.checked = !p.default_keep;
+  }
+
+  async function refreshTargets() {
+    const altM = getAltitudeManualValue();
+    try {
+      const r = await fetch(`${apiRoot}/targets?altitude_m=${encodeURIComponent(altM)}`);
+      if (!r.ok) {
+        els.targetList.textContent = 'targets unavailable: ' + (await r.json()).error;
+        return;
+      }
+      const body = await r.json();
+      state.targets = (body.defaults || []).concat(body.dof_fallback || []);
+      renderTargets();
+    } catch (e) {
+      els.targetList.textContent = 'targets error: ' + e;
+    }
+  }
+
+  function getAltitudeManualValue() {
+    const chosen = document.querySelector('input[name=cal-alt-src]:checked').value;
+    if (chosen === 'manual') return parseFloat(els.altManual.value);
+    if (chosen === 'prior' && state.priorInfo && state.priorInfo.prior && state.priorInfo.prior.observer_alt_m != null) {
+      return state.priorInfo.prior.observer_alt_m;
+    }
+    // Lookup goes through the server; for the targets query use the
+    // user-entered value until the server returns its own altitude.
+    return parseFloat(els.altManual.value) || 2.0;
+  }
+
+  function renderTargets() {
+    const list = els.targetList;
+    list.innerHTML = '';
+    // Pre-select the first two (defaults).
+    state.selectedOas = new Set(state.targets.slice(0, 2).map(t => t.oas));
+    state.targets.forEach(t => {
+      const row = document.createElement('div');
+      row.className = 'cal-target' + (state.selectedOas.has(t.oas) ? ' selected' : '');
+      row.innerHTML =
+        `<div><span class="oas">${t.oas}</span> · ${t.name}` +
+          `<span class="${t.lit ? 'lit-badge' : 'unlit-badge'}">${t.lit ? 'LIT' : 'unlit'}</span></div>` +
+        `<div class="geom">az ${t.true_az_deg.toFixed(2)}° · el ${t.true_el_deg.toFixed(2)}° · slant ${(t.slant_m/1000).toFixed(2)} km · ` +
+          `FAA σ ${fmtSigma(t.sigma_az_deg)} az / ${fmtSigma(t.sigma_el_deg)} el · ${t.accuracy_class}</div>` +
+        `<div class="aim">Aim: ${t.aiming_hint}</div>`;
+      row.addEventListener('click', () => {
+        if (state.selectedOas.has(t.oas)) state.selectedOas.delete(t.oas);
+        else state.selectedOas.add(t.oas);
+        renderTargets();
+      });
+      list.appendChild(row);
+    });
+    els.startBtn.disabled = state.selectedOas.size < 2;
+  }
+
+  els.altRadios.forEach(r => r.addEventListener('change', () => {
+    els.altManual.disabled = r.value !== 'manual';
+    refreshTargets();
+  }));
+  els.altManual.addEventListener('change', refreshTargets);
+
+  // ---- start session ----
+
+  els.startBtn.addEventListener('click', async () => {
+    els.startBtn.disabled = true;
+    els.setupErr.style.display = 'none';
+    const body = {
+      altitude_m: getAltitudeManualValue(),
+      clear_prior: els.clearPrior.checked,
+      target_oas: Array.from(state.selectedOas),
+    };
+    try {
+      const r = await fetch(`${apiRoot}/start`, {
+        method:'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({error: r.statusText}));
+        els.setupErr.textContent = 'start failed: ' + (err.error || r.statusText);
+        els.setupErr.style.display = '';
+        els.startBtn.disabled = state.selectedOas.size < 2;
+        return;
+      }
+    } catch (e) {
+      els.setupErr.textContent = 'start failed: ' + e;
+      els.setupErr.style.display = '';
+      els.startBtn.disabled = state.selectedOas.size < 2;
+      return;
+    }
+    state.sessionActive = true;
+    showPanel('active');
+  });
+
+  // ---- nudge pad ----
+
+  els.stepRow.querySelectorAll('button').forEach(b => {
+    b.addEventListener('click', () => {
+      els.stepRow.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      state.stepDeg = parseFloat(b.dataset.step);
+    });
+  });
+
+  let pendingNudge = null;
+  function schedulePostNudge(d_az, d_el) {
+    // Client-side debounce so holding down an arrow doesn't flood
+    // the server with one request per keydown event.
+    if (pendingNudge) {
+      pendingNudge.d_az += d_az;
+      pendingNudge.d_el += d_el;
+      return;
+    }
+    pendingNudge = {d_az, d_el};
+    setTimeout(() => {
+      const body = pendingNudge;
+      pendingNudge = null;
+      fetch(`${apiRoot}/nudge`, {
+        method:'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+      }).catch(() => {});
+    }, 120);
+  }
+
+  els.nudgePad.querySelectorAll('button').forEach(b => {
+    if (b.disabled) return;
+    b.addEventListener('click', () => {
+      const az = parseFloat(b.dataset.az || '0');
+      const el = parseFloat(b.dataset.el || '0');
+      if (az === 0 && el === 0) return;
+      schedulePostNudge(az * state.stepDeg, el * state.stepDeg);
+    });
+  });
+
+  document.addEventListener('keydown', (ev) => {
+    if (!state.sessionActive) return;
+    if (ev.target && ['INPUT','SELECT','TEXTAREA'].includes(ev.target.tagName)) return;
+    let used = false;
+    if (ev.key === 'ArrowLeft')  { schedulePostNudge(-state.stepDeg, 0); used = true; }
+    if (ev.key === 'ArrowRight') { schedulePostNudge( state.stepDeg, 0); used = true; }
+    if (ev.key === 'ArrowUp')    { schedulePostNudge(0,  state.stepDeg); used = true; }
+    if (ev.key === 'ArrowDown')  { schedulePostNudge(0, -state.stepDeg); used = true; }
+    if (ev.key === 'Enter')      { postAction('sight'); used = true; }
+    if (used) ev.preventDefault();
+  });
+
+  async function postAction(action) {
+    try {
+      await fetch(`${apiRoot}/${action}`, {method:'POST'});
+    } catch (e) {}
+  }
+  els.sightBtn.addEventListener('click',  () => postAction('sight'));
+  els.skipBtn.addEventListener('click',   () => postAction('skip'));
+  els.cancelBtn.addEventListener('click', async () => {
+    await postAction('cancel');
+    state.sessionActive = false;
+    showPanel('setup');
+  });
+  els.commitBtn.addEventListener('click', async () => {
+    await postAction('commit');
+    // The poll will flip phase → committed; showPanel fires on status.
+  });
+  els.discardBtn.addEventListener('click', async () => {
+    await postAction('cancel');
+    state.sessionActive = false;
+    showPanel('setup');
+  });
+
+  function showPanel(which) {
+    els.panelSetup.style.display  = which === 'setup'  ? '' : 'none';
+    els.panelActive.style.display = which === 'active' ? '' : 'none';
+    els.panelReview.style.display = which === 'review' ? '' : 'none';
+  }
+
+  // ---- status polling ----
+
+  function withinTol(dx, sigma) {
+    // "OK" = residual < 2σ; matches the FAA-bound-is-2σ interpretation.
+    if (sigma == null || !isFinite(sigma)) return null;
+    return Math.abs(dx) <= 2 * sigma;
+  }
+
+  function residualRow(lm, meta, showTolerance) {
+    const d_az = lm.residual_az_deg;
+    const d_el = lm.residual_el_deg;
+    const saz = meta ? meta.sigma_az_deg : null;
+    const sel = meta ? meta.sigma_el_deg : null;
+    const okAz = withinTol(d_az, saz);
+    const okEl = withinTol(d_el, sel);
+    const ok   = (okAz !== false) && (okEl !== false);
+    const cls  = (showTolerance && ok === false) ? 'out-of-tol' : '';
+    const okText = ok == null ? '?' : (ok ? '✓' : '✗');
+    return `<tr class="${cls}">
+      <td>${lm.oas}</td><td>${fmt(d_az, 3)}</td><td>${fmt(d_el, 3)}</td>
+      <td>${fmtSigma(saz)}</td><td>${fmtSigma(sel)}</td>
+      <td>${okText}</td>
+    </tr>`;
+  }
+
+  async function refreshStatus() {
+    try {
+      const r = await fetch(`${apiRoot}/status`);
+      if (!r.ok) return;
+      const s = await r.json();
+      applyStatus(s);
+    } catch (e) {}
+  }
+
+  function applyStatus(s) {
+    state.phase = s.phase || 'idle';
+    els.kpiPhase.textContent = state.phase;
+    els.kpiIdx.textContent   = s.target_idx != null ? `${s.target_idx + 1}/${s.n_targets || '?'}` : '—';
+    els.kpiEncAz.textContent = fmt(s.encoder_az_deg, 3);
+    els.kpiEncEl.textContent = fmt(s.encoder_el_deg, 3);
+    els.kpiTgtAz.textContent = fmt(s.target_az_deg, 3);
+    els.kpiTgtEl.textContent = fmt(s.target_el_deg, 3);
+    els.kpiRMS.textContent   = s.solution && s.solution.residual_rms_deg != null
+                                ? s.solution.residual_rms_deg.toFixed(3) + '°' : '—';
+
+    if (s.current_landmark) {
+      els.activeOas.textContent = s.current_landmark.oas;
+      els.activeName.textContent = s.current_landmark.name;
+      els.activeGeom.textContent =
+        `true az ${s.current_landmark.true_az_deg.toFixed(2)}° · el ${s.current_landmark.true_el_deg.toFixed(2)}° · ` +
+        `slant ${(s.current_landmark.slant_m/1000).toFixed(2)} km · ` +
+        `FAA σ ${fmtSigma(s.current_landmark.sigma_az_deg)} / ${fmtSigma(s.current_landmark.sigma_el_deg)} · ` +
+        `${s.current_landmark.accuracy_class}`;
+      els.activeAim.textContent = 'Aim: ' + s.current_landmark.aiming_hint;
+      els.aimLabel.textContent  = s.current_landmark.aiming_hint;
+      els.aimLabel.style.display = '';
+    } else {
+      els.aimLabel.style.display = 'none';
+    }
+
+    // Running residuals in the active panel.
+    if (s.solution && s.solution.per_landmark) {
+      const metaByOas = {};
+      state.targets.forEach(t => { metaByOas[t.oas] = t; });
+      els.residBody.innerHTML = s.solution.per_landmark
+        .map(lm => residualRow(lm, metaByOas[lm.oas], true))
+        .join('');
+    } else {
+      els.residBody.innerHTML = '';
+    }
+
+    // Panel switching based on phase.
+    if (state.phase === 'review') {
+      showPanel('review');
+      renderReview(s);
+    } else if (state.phase === 'committed') {
+      state.sessionActive = false;
+      showToast('Calibration committed.');
+      setTimeout(() => { window.location.href = `${wrap.dataset.root}/live_tracker`; }, 1200);
+    } else if (state.phase === 'cancelled') {
+      state.sessionActive = false;
+      showPanel('setup');
+    } else if (state.phase === 'error') {
+      els.setupErr.textContent = 'session error: ' + (s.errors || []).join(' | ');
+      els.setupErr.style.display = '';
+      state.sessionActive = false;
+      showPanel('setup');
+    } else if (s.active) {
+      state.sessionActive = true;
+      showPanel('active');
+    }
+  }
+
+  function renderReview(s) {
+    if (!s.solution) return;
+    const sol = s.solution;
+    els.reviewSummary.innerHTML =
+      `yaw <b>${fmt(sol.yaw_deg, 3)}</b> · pitch <b>${fmt(sol.pitch_deg, 3)}</b> · roll <b>${fmt(sol.roll_deg, 3)}</b><br>` +
+      `residual RMS <b>${sol.residual_rms_deg.toFixed(3)}°</b>`;
+    const metaByOas = {};
+    state.targets.forEach(t => { metaByOas[t.oas] = t; });
+    els.reviewBody.innerHTML = sol.per_landmark
+      .map(lm => residualRow(lm, metaByOas[lm.oas], true))
+      .join('');
+  }
+
+  function showToast(msg) {
+    const div = document.createElement('div');
+    div.className = 'cal-toast';
+    div.textContent = msg;
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 2000);
+  }
+
+  // Kick things off.
+  loadSetup();
+  setInterval(refreshStatus, 1000);
+  refreshStatus();
+})();
+</script>
+{% endblock %}
