@@ -20,6 +20,7 @@ Scope:
 from __future__ import annotations
 
 import json
+import math
 import threading
 import time
 from collections import deque
@@ -76,6 +77,12 @@ TIME_OFFSET_BOUND_S = 30.0
 
 
 def _clamp(x: float, lo: float, hi: float) -> float:
+    # NaN compares false against every bound, so a naive min/max lets it
+    # slip through into the snapshot and then into the streaming loop,
+    # where it poisons the mount command. Reject explicitly so the
+    # endpoint handler can surface a 400 to the caller.
+    if math.isnan(x):
+        raise ValueError("offset value must be a finite number")
     return lo if x < lo else (hi if x > hi else x)
 
 

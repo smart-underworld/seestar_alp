@@ -54,6 +54,26 @@ def test_atomic_offsets_clamps_to_bounds():
     assert snap.time_offset_s == TIME_OFFSET_BOUND_S
 
 
+def test_atomic_offsets_rejects_nan():
+    """NaN values must raise before being stored — otherwise they
+    propagate through the streaming controller and poison the mount
+    command (NaN in az_bias → NaN in eff_ref_az → NaN velocity)."""
+    import math
+
+    import pytest
+    off = AtomicOffsets()
+    for field in ("az_bias_deg", "el_bias_deg", "along_deg", "cross_deg",
+                  "time_offset_s"):
+        with pytest.raises(ValueError):
+            off.set(**{field: float("nan")})
+    # Unchanged after failed set.
+    assert off.get() == OffsetSnapshot()
+    # +inf / -inf still clamp cleanly — not regressed by the NaN check.
+    snap = off.set(az_bias_deg=float("inf"))
+    assert math.isfinite(snap.az_bias_deg)
+    assert snap.az_bias_deg == AZ_BIAS_BOUND_DEG
+
+
 def test_atomic_offsets_partial_updates_preserve_other_fields():
     off = AtomicOffsets()
     off.set(az_bias_deg=0.2, el_bias_deg=-0.1, along_deg=0.05, cross_deg=0.02)

@@ -491,6 +491,14 @@ def test_06b_live_tracker_smoke(front_sim_bridge):
     )
     assert r.status_code == 404
 
+    # Malformed bodies return 400 (never a 500). A JSON array as the root
+    # would previously crash on `body.get(...)`; a NaN bias value would
+    # pass through _clamp and land in the streaming loop.
+    r = client.simulate_post("/api/1/live_tracker/offsets", json=[1, 2, 3])
+    assert r.status_code == 400
+    r = client.simulate_post("/api/1/live_tracker/track", json="not-an-object")
+    assert r.status_code == 400
+
 
 def test_07_schedule_lifecycle(front_sim_bridge):
     client = front_sim_bridge["client"]

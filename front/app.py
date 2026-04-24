@@ -4428,6 +4428,11 @@ class LiveTrackerTrackResource:
             body = req.media or {}
         except Exception:
             body = {}
+        if not isinstance(body, dict):
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "request body must be a JSON object"})
+            return
         kind = str(body.get("kind", "file"))
         target_id = body.get("id")
         dry_run = bool(body.get("dry_run", False))
@@ -4505,12 +4510,26 @@ class LiveTrackerOffsetsResource:
             body = req.media or {}
         except Exception:
             body = {}
+        if not isinstance(body, dict):
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "request body must be a JSON object"})
+            return
         allowed = {
             "time_offset_s", "az_bias_deg", "el_bias_deg",
             "along_deg", "cross_deg",
         }
         patch = {k: body[k] for k in allowed if k in body}
-        snap = get_manager().set_offsets(int(telescope_id), **patch)
+        # AtomicOffsets.set() calls float() + a NaN-aware clamp; both can
+        # raise on malformed input. Surface as 400 rather than letting the
+        # handler return a 500.
+        try:
+            snap = get_manager().set_offsets(int(telescope_id), **patch)
+        except (TypeError, ValueError) as exc:
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": str(exc)})
+            return
         if snap is None:
             resp.status = falcon.HTTP_404
             resp.content_type = "application/json"
@@ -4530,6 +4549,11 @@ class LiveTrackerResetResource:
             body = req.media or {}
         except Exception:
             body = {}
+        if not isinstance(body, dict):
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "request body must be a JSON object"})
+            return
         scope = str(body.get("scope", "all"))
         snap = get_manager().reset_offsets(int(telescope_id), scope=scope)
         if snap is None:
