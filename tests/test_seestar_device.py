@@ -190,6 +190,46 @@ def test_stop_scheduler_transitions_and_calls_ops(seestar):
     assert called == {"slew": 1, "stack": 1, "sound": 1}
 
 
+def test_slew_to_ra_dec_refuses_inside_sun_cone(monkeypatch, seestar):
+    """Spec: _slew_to_ra_dec converts (ra, dec) to sky (az, alt) and
+    refuses (returns False, no scope_goto sent) when the target is
+    inside the sun-avoidance cone."""
+    from device import sun_safety as ss
+    # Have the method's altaz conversion return a concrete (alt, az).
+    seestar.get_altaz_from_eq = lambda *_a, **_kw: [33.0, 180.0]
+    # Force is_sun_safe to refuse.
+    monkeypatch.setattr(
+        ss, "is_sun_safe",
+        lambda *a, **kw: (False, "sun_avoidance: forced by test"),
+    )
+    seestar.mark_op_state = lambda *_a, **_kw: None
+
+    sent = []
+    seestar.send_message_param_sync = lambda payload: (sent.append(payload) or {"result": "ok"})
+
+    ok = seestar._slew_to_ra_dec([5.0, 30.0])
+    assert ok is False
+    assert sent == [], "scope_goto must not be sent when sun-safety refuses"
+
+
+def test_slew_to_ra_dec_proceeds_when_altaz_conversion_unavailable(monkeypatch, seestar):
+    """If get_altaz_from_eq returns the 9999.9 sentinel (frame not set
+    up yet), the pre-flight check falls through and the slew still
+    goes out — the SunSafetyMonitor is the runtime backstop."""
+    # Sentinel return from get_altaz_from_eq.
+    seestar.get_altaz_from_eq = lambda *_a, **_kw: [9999.9, 9999.9]
+    seestar.mark_op_state = lambda *_a, **_kw: None
+    seestar.wait_end_op = lambda *_a, **_kw: True
+
+    sent = []
+    seestar.send_message_param_sync = lambda payload: (sent.append(payload) or {"result": "ok"})
+
+    ok = seestar._slew_to_ra_dec([5.0, 30.0])
+    assert ok is True
+    assert len(sent) == 1
+    assert sent[0]["method"] == "scope_goto"
+
+
 def test_goto_target_returns_false_if_already_in_goto(seestar):
     seestar.is_goto = lambda: True
     ok = seestar.goto_target(
