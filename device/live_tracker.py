@@ -1160,8 +1160,15 @@ class LiveTrackManager:
                 raise RuntimeError(
                     f"telescope {tid} already tracking; stop first"
                 )
+            # Start the thread inside the lock so the is_alive() check,
+            # thread spawn, and registry write are atomic. Otherwise two
+            # concurrent /track POSTs can both pass the check (the first
+            # session is registered but its thread hasn't been .start()-ed
+            # yet, so is_alive() returns False), and each spawns its own
+            # tracking thread. The losing session gets overwritten in the
+            # registry but its thread keeps running — orphaned from stop().
+            session.start()
             self._sessions[tid] = session
-        session.start()
         return session
 
     def stop(self, telescope_id: int) -> SessionStatus | None:

@@ -387,3 +387,40 @@ def test_live_track_manager_double_start_refuses(tmp_path, monkeypatch):
             mgr.start(make_session())
     finally:
         mgr.stop(101)
+
+
+def test_live_track_manager_start_atomic_under_lock():
+    """Regression for a TOCTOU race: session.start() must run while the
+    manager lock is held. Otherwise two concurrent mgr.start() calls
+    for the same telescope id can both pass the is_alive() check (the
+    first session is registered but its thread hasn't been spawned yet,
+    so is_alive() returns False) and spawn duplicate tracking threads
+    that both drive the mount."""
+    mgr = LiveTrackManager()
+    captured: dict[str, bool] = {}
+
+    class _FakeSession:
+        telescope_id = 300
+
+        def __init__(self) -> None:
+            self._alive = False
+
+        def start(self) -> None:
+            # Observe the manager lock from inside session.start(). If
+            # mgr.start() dropped the lock before calling us, a racing
+            # caller could observe is_alive()=False and overwrite the
+            # registry — exactly the bug this test guards against.
+            captured["lock_held_during_session_start"] = mgr._lock.locked()
+            self._alive = True
+
+        def is_alive(self) -> bool:
+            return self._alive
+
+        def stop(self, timeout: float = 5.0) -> None:
+            pass
+
+        def status(self):
+            return None
+
+    mgr.start(_FakeSession())
+    assert captured["lock_held_during_session_start"] is True
