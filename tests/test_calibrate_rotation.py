@@ -14,19 +14,21 @@ from unittest import mock
 
 import pytest
 
-from device.target_frame import MountFrame
-from scripts.trajectory.calibrate_rotation import (
+from device.rotation_calibration import (
     PriorInfo,
     RotationSolution,
     Sighting,
-    _altitude_menu,
-    _handle_clear_or_keep,
-    _inspect_prior,
-    _parse_calibrated_at,
-    _resolve_altitude,
+    inspect_prior,
+    parse_calibrated_at,
     solve_rotation,
     terrestrial_refraction_deg,
     write_calibration,
+)
+from device.target_frame import MountFrame
+from scripts.trajectory.calibrate_rotation import (
+    _altitude_menu,
+    _handle_clear_or_keep,
+    _resolve_altitude,
 )
 from scripts.trajectory.faa_dof import (
     LA_BROADCAST_06_000177,
@@ -260,13 +262,13 @@ def test_lookup_elevation_raises_on_malformed_payload(monkeypatch):
         lookup_elevation(0.0, 0.0)
 
 
-# ---------- _parse_calibrated_at -------------------------------------
+# ---------- parse_calibrated_at -------------------------------------
 
 
-def test_parse_calibrated_at_legacy_dash_format():
+def testparse_calibrated_at_legacy_dash_format():
     """The shipped calibrate_compass output uses dashes everywhere
     including the timezone offset; fromisoformat can't read that."""
-    dt = _parse_calibrated_at("2026-04-21T23-28-52-0700")
+    dt = parse_calibrated_at("2026-04-21T23-28-52-0700")
     assert dt is not None
     # UTC-7 → UTC: 23:28:52 -07:00 == 06:28:52 UTC next day
     assert dt.tzinfo is timezone.utc
@@ -274,19 +276,19 @@ def test_parse_calibrated_at_legacy_dash_format():
     assert dt.hour == 6 and dt.minute == 28 and dt.second == 52
 
 
-def test_parse_calibrated_at_iso_colon_format():
-    dt = _parse_calibrated_at("2026-04-22T06:28:52+00:00")
+def testparse_calibrated_at_iso_colon_format():
+    dt = parse_calibrated_at("2026-04-22T06:28:52+00:00")
     assert dt is not None
     assert dt.hour == 6 and dt.minute == 28
 
 
-def test_parse_calibrated_at_none_on_missing_or_bad():
-    assert _parse_calibrated_at(None) is None
-    assert _parse_calibrated_at("") is None
-    assert _parse_calibrated_at("not a timestamp") is None
+def testparse_calibrated_at_none_on_missing_or_bad():
+    assert parse_calibrated_at(None) is None
+    assert parse_calibrated_at("") is None
+    assert parse_calibrated_at("not a timestamp") is None
 
 
-# ---------- _inspect_prior + _handle_clear_or_keep -------------------
+# ---------- inspect_prior + _handle_clear_or_keep -------------------
 
 
 def _write_prior(
@@ -305,15 +307,15 @@ def _now_dash(offset_hours: float = 0.0) -> str:
     return dt.strftime("%Y-%m-%dT%H-%M-%S%z")
 
 
-def test_inspect_prior_missing_file(tmp_path):
-    assert _inspect_prior(tmp_path / "nope.json", 0.0, 0.0) is None
+def testinspect_prior_missing_file(tmp_path):
+    assert inspect_prior(tmp_path / "nope.json", 0.0, 0.0) is None
 
 
-def test_inspect_prior_recent_local_defaults_keep(tmp_path):
+def testinspect_prior_recent_local_defaults_keep(tmp_path):
     p = tmp_path / "cal.json"
     _write_prior(p, lat=33.96, lon=-118.46, alt=2.0,
                  ts_iso=_now_dash(offset_hours=1.0))
-    info = _inspect_prior(p, current_lat=33.96, current_lon=-118.46)
+    info = inspect_prior(p, current_lat=33.96, current_lon=-118.46)
     assert info is not None
     assert info.age_s is not None and info.age_s < 6 * 3600
     assert info.distance_from_current_m is not None
@@ -321,25 +323,25 @@ def test_inspect_prior_recent_local_defaults_keep(tmp_path):
     assert info.should_default_keep is True
 
 
-def test_inspect_prior_stale_defaults_clear(tmp_path):
+def testinspect_prior_stale_defaults_clear(tmp_path):
     p = tmp_path / "cal.json"
     _write_prior(p, lat=33.96, lon=-118.46, alt=2.0,
                  ts_iso=_now_dash(offset_hours=10.0))
-    info = _inspect_prior(p, current_lat=33.96, current_lon=-118.46)
+    info = inspect_prior(p, current_lat=33.96, current_lon=-118.46)
     assert info.should_default_keep is False
 
 
-def test_inspect_prior_moved_defaults_clear(tmp_path):
+def testinspect_prior_moved_defaults_clear(tmp_path):
     p = tmp_path / "cal.json"
     _write_prior(p, lat=33.96, lon=-118.46, alt=2.0,
                  ts_iso=_now_dash(offset_hours=0.0))
     # Current GPS 50 m north of prior — well beyond the 10 m threshold.
-    info = _inspect_prior(p, current_lat=33.96 + 50 / 111_320.0,
+    info = inspect_prior(p, current_lat=33.96 + 50 / 111_320.0,
                           current_lon=-118.46)
     assert info.should_default_keep is False
 
 
-def test_inspect_prior_without_observer_block_cannot_default_keep(tmp_path):
+def testinspect_prior_without_observer_block_cannot_default_keep(tmp_path):
     """Legacy compass output has no `observer` block; fail safe →
     default clear."""
     p = tmp_path / "cal.json"
@@ -347,7 +349,7 @@ def test_inspect_prior_without_observer_block_cannot_default_keep(tmp_path):
         "yaw_offset_deg": -79.0, "residual_rms_deg": 0.2,
         "calibrated_at": _now_dash(offset_hours=0.1),
     }))
-    info = _inspect_prior(p, 33.96, -118.46)
+    info = inspect_prior(p, 33.96, -118.46)
     assert info is not None
     assert info.observer_lat_deg is None
     assert info.should_default_keep is False
@@ -367,7 +369,7 @@ def test_handle_clear_or_keep_default_keep(monkeypatch, tmp_path):
     p = tmp_path / "cal.json"
     _write_prior(p, lat=33.96, lon=-118.46, alt=2.0,
                  ts_iso=_now_dash(offset_hours=0.5))
-    prior = _inspect_prior(p, 33.96, -118.46)
+    prior = inspect_prior(p, 33.96, -118.46)
     monkeypatch.setattr("builtins.input", lambda _p: "")  # Enter
     kept = _handle_clear_or_keep(_fake_args(), prior)
     assert kept is True
@@ -380,7 +382,7 @@ def test_handle_clear_or_keep_default_clear(monkeypatch, tmp_path):
     p = tmp_path / "cal.json"
     _write_prior(p, lat=33.96, lon=-118.46, alt=2.0,
                  ts_iso=_now_dash(offset_hours=20.0))
-    prior = _inspect_prior(p, 33.96, -118.46)
+    prior = inspect_prior(p, 33.96, -118.46)
     monkeypatch.setattr("builtins.input", lambda _p: "")
     kept = _handle_clear_or_keep(_fake_args(), prior)
     assert kept is False
@@ -393,7 +395,7 @@ def test_handle_clear_or_keep_yes_flag_forces_clear(tmp_path):
     p = tmp_path / "cal.json"
     _write_prior(p, lat=33.96, lon=-118.46, alt=2.0,
                  ts_iso=_now_dash(offset_hours=0.1))
-    prior = _inspect_prior(p, 33.96, -118.46)
+    prior = inspect_prior(p, 33.96, -118.46)
     kept = _handle_clear_or_keep(_fake_args(yes_clear=True), prior)
     assert kept is False
     assert not p.exists()
@@ -404,7 +406,7 @@ def test_handle_clear_or_keep_keep_flag_forces_keep(tmp_path):
     p = tmp_path / "cal.json"
     _write_prior(p, lat=33.96, lon=-118.46, alt=2.0,
                  ts_iso=_now_dash(offset_hours=30.0))
-    prior = _inspect_prior(p, 33.96, -118.46)
+    prior = inspect_prior(p, 33.96, -118.46)
     kept = _handle_clear_or_keep(_fake_args(keep_prior=True), prior)
     assert kept is True
     assert p.exists()
