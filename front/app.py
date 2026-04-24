@@ -4298,6 +4298,250 @@ class VelocityControllerLogResource:
         resp.text = json.dumps(payload)
 
 
+class LiveTrackerResource:
+    """Serve the live plane/satellite tracker page."""
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        # The /live/video partial endpoint caches its last-rendered HTML
+        # and returns 204-No-Content on repeats so HTMX polling doesn't
+        # waste bandwidth. That cache lives for the life of the server
+        # process, so a page reload would see 204 on its first request
+        # and the record-button slot would stay empty. Flush the cache
+        # here so the tracker page always gets a fresh 200 on first load.
+        try:
+            LiveVideoResource.clear_cache_for_telescope(int(telescope_id))
+        except Exception:
+            pass
+        context = get_context(telescope_id, req)
+        render_template(
+            req, resp, "live_tracker.html",
+            telescope_id=telescope_id, **context,
+        )
+
+
+def _live_tracker_status_dict(status):
+    """Serialize a SessionStatus (or None) to a plain dict for JSON."""
+    if status is None:
+        return {"active": False}
+    return {
+        "active": status.active,
+        "target_kind": status.target_kind,
+        "target_id": status.target_id,
+        "target_display_name": status.target_display_name,
+        "phase": status.phase,
+        "elapsed_s": status.elapsed_s,
+        "exit_reason": status.exit_reason,
+        "heading_deg": status.heading_deg,
+        "heading_locked": status.heading_locked,
+        "d_az_deg": status.d_az_deg,
+        "d_el_deg": status.d_el_deg,
+        "eff_ref_az_cum_deg": status.eff_ref_az_cum_deg,
+        "eff_ref_el_deg": status.eff_ref_el_deg,
+        "cur_cum_az_deg": status.cur_cum_az_deg,
+        "cur_el_deg": status.cur_el_deg,
+        "err_az_deg": status.err_az_deg,
+        "err_el_deg": status.err_el_deg,
+        "tick": status.tick,
+        "errors": list(status.errors),
+    }
+
+
+def _offset_snapshot_dict(snap):
+    if snap is None:
+        return None
+    return {
+        "time_offset_s": snap.time_offset_s,
+        "az_bias_deg": snap.az_bias_deg,
+        "el_bias_deg": snap.el_bias_deg,
+        "along_deg": snap.along_deg,
+        "cross_deg": snap.cross_deg,
+    }
+
+
+class LiveTrackerTargetsResource:
+    """Enumerate trackable targets (cached files + live ADS-B in v2)."""
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        from device.live_tracker import get_catalog
+
+        catalog = get_catalog()
+        cached = [
+            {
+                "id": t.id,
+                "display_name": t.display_name,
+                "kind": t.kind,
+                "source": t.source,
+                "duration_s": t.duration_s,
+                "peak_el_deg": t.peak_el_deg,
+                "min_slant_m": t.min_slant_m,
+                "n_samples": t.n_samples,
+            }
+            for t in catalog.list_cached()
+        ]
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps({
+            "live": catalog.list_live(),
+            "cached": cached,
+        })
+
+
+class LiveTrackerStatusResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        from device.live_tracker import get_manager
+
+        status = get_manager().status(int(telescope_id))
+        session = get_manager().get(int(telescope_id))
+        # Only publish offsets while the session is alive. Once stopped,
+        # the offsets are frozen on the session object but surfacing them
+        # would clobber any fresh slider state the UI is building for the
+        # next track.
+        offsets = (
+            _offset_snapshot_dict(session.offsets.get())
+            if session is not None and session.is_alive()
+            else None
+        )
+        payload = _live_tracker_status_dict(status)
+        payload["offsets"] = offsets
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(payload)
+
+
+class LiveTrackerTrackResource:
+    """Start a new live-tracker session for the telescope."""
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        from device.live_tracker import (
+            AtomicOffsets,
+            LiveTrackSession,
+            get_catalog,
+            get_manager,
+            load_session_mount_frame,
+        )
+
+        try:
+            body = req.media or {}
+        except Exception:
+            body = {}
+        kind = str(body.get("kind", "file"))
+        target_id = body.get("id")
+        dry_run = bool(body.get("dry_run", False))
+        auto_slew = bool(body.get("auto_slew", True))
+        if not target_id:
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "missing 'id'"})
+            return
+
+        catalog = get_catalog()
+        mount_frame = load_session_mount_frame()
+        try:
+            provider = catalog.make_provider(kind, target_id, mount_frame)
+        except (KeyError, NotImplementedError, ValueError) as exc:
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": str(exc)})
+            return
+
+        display_name = target_id
+        if kind == "file":
+            for t in catalog.list_cached():
+                if t.id == target_id:
+                    display_name = t.display_name
+                    break
+        elif kind == "live":
+            for t in catalog.list_live():
+                if t.get("id") == target_id:
+                    display_name = t.get("display_name") or target_id
+                    break
+
+        session = LiveTrackSession(
+            telescope_id=int(telescope_id),
+            target_kind=kind,
+            target_id=str(target_id),
+            target_display_name=display_name,
+            provider=provider,
+            offsets=AtomicOffsets(),
+            dry_run=dry_run,
+            auto_slew=auto_slew,
+        )
+        try:
+            get_manager().start(session)
+        except RuntimeError as exc:
+            resp.status = falcon.HTTP_409
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": str(exc)})
+            return
+
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(
+            _live_tracker_status_dict(get_manager().status(int(telescope_id)))
+        )
+
+
+class LiveTrackerStopResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        from device.live_tracker import get_manager
+
+        status = get_manager().stop(int(telescope_id))
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(_live_tracker_status_dict(status))
+
+
+class LiveTrackerOffsetsResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        from device.live_tracker import get_manager
+
+        try:
+            body = req.media or {}
+        except Exception:
+            body = {}
+        allowed = {
+            "time_offset_s", "az_bias_deg", "el_bias_deg",
+            "along_deg", "cross_deg",
+        }
+        patch = {k: body[k] for k in allowed if k in body}
+        snap = get_manager().set_offsets(int(telescope_id), **patch)
+        if snap is None:
+            resp.status = falcon.HTTP_404
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "no active session"})
+            return
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps({"offsets": _offset_snapshot_dict(snap)})
+
+
+class LiveTrackerResetResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        from device.live_tracker import get_manager
+
+        try:
+            body = req.media or {}
+        except Exception:
+            body = {}
+        scope = str(body.get("scope", "all"))
+        snap = get_manager().reset_offsets(int(telescope_id), scope=scope)
+        if snap is None:
+            resp.status = falcon.HTTP_404
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "no active session"})
+            return
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps({"offsets": _offset_snapshot_dict(snap)})
+
+
 class StatsContentResource:
     _last_render_by_key = {}
     _lock = threading.Lock()
@@ -5472,6 +5716,38 @@ class FrontMain:
         app.add_route(
             "/api/{telescope_id:int}/velocity_controller/log",
             VelocityControllerLogResource(),
+        )
+        app.add_route(
+            "/{telescope_id:int}/live_tracker",
+            LiveTrackerResource(),
+        )
+        app.add_route(
+            "/{telescope_id:int}/live_tracker/",
+            LiveTrackerResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/live_tracker/targets",
+            LiveTrackerTargetsResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/live_tracker/status",
+            LiveTrackerStatusResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/live_tracker/track",
+            LiveTrackerTrackResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/live_tracker/stop",
+            LiveTrackerStopResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/live_tracker/offsets",
+            LiveTrackerOffsetsResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/live_tracker/offsets/reset",
+            LiveTrackerResetResource(),
         )
         app.add_route("/config", ConfigResource())
         app.add_route("/pa_refine", BlindPolarAlignResource())

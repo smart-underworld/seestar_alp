@@ -1,0 +1,588 @@
+{% extends "base.html" %}
+{% block title %}Live Tracker — telescope {{ telescope_id }}{% endblock %}
+{% block content %}
+
+<style>
+  .lt-wrap { padding: 12px; }
+  .lt-grid {
+    display: grid;
+    grid-template-columns: minmax(320px, 1fr) 380px;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .lt-grid { grid-template-columns: 1fr; }
+  }
+  .lt-video-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .lt-video-col img { max-height: 70vh; width: auto; max-width: 100%; display: block; border: 1px solid rgba(0,0,0,0.1); border-radius: 6px; }
+  .lt-controls-col {
+    display: flex; flex-direction: column; gap: 12px;
+    font-family: monospace; font-size: 13px;
+  }
+  .lt-card { padding: 10px 12px; border: 1px solid rgba(0,0,0,0.12); border-radius: 6px; background: rgba(0,0,0,0.02); }
+  .lt-card h4 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.7; }
+  .lt-status-pill { display: inline-flex; align-items: center; gap: 8px; padding: 3px 10px; border-radius: 999px; font-weight: bold; font-size: 12px; }
+  .lt-status-pill .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .lt-status-pill.active { background: rgba(34,197,94,0.15); color: #22c55e; }
+  .lt-status-pill.active .dot { background: #22c55e; box-shadow: 0 0 4px #22c55e; }
+  .lt-status-pill.idle { background: rgba(148,163,184,0.15); color: #94a3b8; }
+  .lt-status-pill.idle .dot { background: #94a3b8; }
+  .lt-status-pill.locked { background: rgba(234,179,8,0.15); color: #eab308; }
+  .lt-status-pill.locked .dot { background: #eab308; }
+  .lt-target-list { max-height: 200px; overflow-y: auto; border: 1px solid rgba(0,0,0,0.1); border-radius: 4px; }
+  .lt-target-row { padding: 4px 8px; cursor: pointer; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,0.05); }
+  .lt-target-row:hover { background: rgba(0,0,0,0.04); }
+  .lt-target-row.selected { background: rgba(59,130,246,0.12); font-weight: bold; }
+  .lt-target-row.tracking { background: rgba(34,197,94,0.18); font-weight: bold; border-left: 3px solid #22c55e; }
+  .lt-target-row.tracking::before { content: "▶ "; color: #22c55e; }
+  .lt-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+  .lt-tab-btn { flex: 1; padding: 4px 8px; border: 1px solid rgba(0,0,0,0.15); background: transparent; cursor: pointer; border-radius: 4px; font-family: monospace; font-size: 12px; }
+  .lt-tab-btn.active { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.5); font-weight: bold; }
+  .lt-tab-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .lt-slider-row { display: grid; grid-template-columns: 48px 1fr 80px; gap: 6px; align-items: center; margin: 4px 0; }
+  .lt-slider-row input[type=range] { width: 100%; }
+  .lt-slider-row .v { text-align: right; }
+  .lt-2dpad { width: 200px; height: 200px; margin: 8px auto; border: 1px solid rgba(0,0,0,0.15); border-radius: 4px; background: rgba(0,0,0,0.02); }
+  .lt-totals { text-align: center; font-size: 12px; margin-top: 4px; }
+  .lt-btn-row { display: flex; gap: 6px; margin-top: 6px; }
+  .lt-btn { padding: 5px 10px; border: 1px solid rgba(0,0,0,0.2); background: transparent; cursor: pointer; border-radius: 4px; font-family: monospace; font-size: 12px; }
+  .lt-btn:hover:not(:disabled) { background: rgba(0,0,0,0.05); }
+  .lt-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .lt-btn.primary { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.5); }
+  .lt-btn.danger { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.5); }
+  .lt-chart-box { height: 220px; margin-top: 12px; background: rgba(0,0,0,0.02); padding: 4px 8px 8px; border: 1px solid rgba(0,0,0,0.12); border-radius: 6px; }
+  .lt-kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; margin: 8px 0; }
+  .lt-kpi { padding: 4px 8px; background: rgba(0,0,0,0.03); border-radius: 4px; font-size: 11px; }
+  .lt-kpi .k { opacity: 0.6; }
+  .lt-kpi .v { font-weight: bold; font-size: 13px; }
+</style>
+
+<div class="lt-wrap" data-telescope-id="{{ telescope_id }}" data-imager-root="{{ imager_root }}" data-root="{{ root }}">
+  <h2>Live Tracker — telescope {{ telescope_id }}</h2>
+
+  <div class="lt-grid">
+    <!-- LEFT: video + record + telemetry -->
+    <div class="lt-video-col">
+      <img id="lt-vid" src="{{ imager_root }}/vid" alt="Live camera view"/>
+      <div class="lt-card">
+        <h4>Recording</h4>
+        <div id="lt-record-slot" hx-get="{{ root }}/live/video" hx-trigger="load, every 2s" hx-swap="innerHTML"></div>
+      </div>
+      <div class="lt-card">
+        <h4>Tracking status</h4>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:6px;">
+          <span id="lt-status-pill" class="lt-status-pill idle"><span class="dot"></span><span id="lt-status-text">idle</span></span>
+          <span id="lt-heading-pill" class="lt-status-pill locked" style="display:none;"><span class="dot"></span><span>heading locked</span></span>
+          <span id="lt-active-target" style="font-weight:bold; font-size:14px;">no target</span>
+        </div>
+        <div class="lt-kpi-row">
+          <div class="lt-kpi"><div class="k">target</div><div class="v" id="lt-kpi-target">—</div></div>
+          <div class="lt-kpi"><div class="k">elapsed</div><div class="v" id="lt-kpi-elapsed">—</div></div>
+          <div class="lt-kpi"><div class="k">ref az</div><div class="v" id="lt-kpi-refaz">—</div></div>
+          <div class="lt-kpi"><div class="k">ref el</div><div class="v" id="lt-kpi-refel">—</div></div>
+          <div class="lt-kpi"><div class="k">err az</div><div class="v" id="lt-kpi-erraz">—</div></div>
+          <div class="lt-kpi"><div class="k">err el</div><div class="v" id="lt-kpi-errel">—</div></div>
+        </div>
+        <div class="lt-chart-box"><canvas id="lt-chart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: target picker + offset controls -->
+    <div class="lt-controls-col">
+      <div class="lt-card">
+        <h4>Target</h4>
+        <div class="lt-tabs" id="lt-target-tabs">
+          <button class="lt-tab-btn" data-tab="live">Live</button>
+          <button class="lt-tab-btn active" data-tab="cached">Cached</button>
+        </div>
+        <input type="search" id="lt-target-filter" placeholder="filter by callsign or id…"
+               style="width:100%; padding:3px 6px; margin-bottom:6px; font-family:monospace; font-size:12px; background:transparent; color:inherit; border:1px solid rgba(0,0,0,0.15); border-radius:4px;"/>
+        <div class="lt-target-list" id="lt-target-list">loading…</div>
+        <div class="lt-btn-row">
+          <button id="lt-start-btn" class="lt-btn primary" disabled>Start track</button>
+          <button id="lt-stop-btn" class="lt-btn danger" disabled>Stop</button>
+          <label style="margin-left:auto;"><input type="checkbox" id="lt-autoslew" checked> auto-slew</label>
+          <label><input type="checkbox" id="lt-dryrun"> dry-run</label>
+        </div>
+      </div>
+
+      <div class="lt-card">
+        <h4>Time offset</h4>
+        <div class="lt-slider-row">
+          <span>Δt</span>
+          <input type="range" id="lt-time" min="-30" max="30" step="0.1" value="0">
+          <span class="v" id="lt-time-v">+0.0 s</span>
+        </div>
+      </div>
+
+      <div class="lt-card">
+        <h4>Spatial offset</h4>
+        <div class="lt-tabs" id="lt-basis-tabs">
+          <button class="lt-tab-btn active" data-basis="azel">Az / El</button>
+          <button class="lt-tab-btn" data-basis="alongcross" id="lt-basis-ac">Along / Cross</button>
+        </div>
+        <div id="lt-basis-azel">
+          <div class="lt-slider-row">
+            <span>Az</span>
+            <input type="range" id="lt-az" min="-5" max="5" step="0.02" value="0">
+            <span class="v" id="lt-az-v">+0.00°</span>
+          </div>
+          <div class="lt-slider-row">
+            <span>El</span>
+            <input type="range" id="lt-el" min="-5" max="5" step="0.02" value="0">
+            <span class="v" id="lt-el-v">+0.00°</span>
+          </div>
+          <div class="lt-btn-row">
+            <button class="lt-btn" id="lt-reset-azel">Reset Az/El</button>
+          </div>
+        </div>
+        <div id="lt-basis-ac" style="display:none;">
+          <div class="lt-slider-row">
+            <span>Along</span>
+            <input type="range" id="lt-along" min="-5" max="5" step="0.02" value="0">
+            <span class="v" id="lt-along-v">+0.00°</span>
+          </div>
+          <div class="lt-slider-row">
+            <span>Cross</span>
+            <input type="range" id="lt-cross" min="-5" max="5" step="0.02" value="0">
+            <span class="v" id="lt-cross-v">+0.00°</span>
+          </div>
+          <div class="lt-btn-row">
+            <button class="lt-btn" id="lt-reset-ac">Reset Along/Cross</button>
+          </div>
+        </div>
+
+        <svg class="lt-2dpad" id="lt-pad" viewBox="-5.5 -5.5 11 11" preserveAspectRatio="xMidYMid meet">
+          <!-- 1° grid -->
+          <g stroke="currentColor" stroke-opacity="0.25" stroke-width="0.02">
+            <line x1="-5" y1="0" x2="5" y2="0"/>
+            <line x1="0" y1="-5" x2="0" y2="5"/>
+            <line x1="-1" y1="-5" x2="-1" y2="5"/>
+            <line x1="1" y1="-5" x2="1" y2="5"/>
+            <line x1="-2" y1="-5" x2="-2" y2="5"/>
+            <line x1="2" y1="-5" x2="2" y2="5"/>
+            <line x1="-5" y1="-1" x2="5" y2="-1"/>
+            <line x1="-5" y1="1" x2="5" y2="1"/>
+            <line x1="-5" y1="-2" x2="5" y2="-2"/>
+            <line x1="-5" y1="2" x2="5" y2="2"/>
+          </g>
+          <!-- Heading arrows (shown only when heading known) -->
+          <g id="lt-pad-heading" style="display:none;">
+            <line id="lt-pad-along" x1="0" y1="0" x2="2" y2="0" stroke="rgba(59,130,246,0.6)" stroke-width="0.08" marker-end="url(#lt-arrow)"/>
+            <line id="lt-pad-cross" x1="0" y1="0" x2="0" y2="-2" stroke="rgba(168,85,247,0.6)" stroke-width="0.08" marker-end="url(#lt-arrow)"/>
+          </g>
+          <defs>
+            <marker id="lt-arrow" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="4" markerHeight="4" orient="auto">
+              <path d="M 0 0 L 6 3 L 0 6 z" fill="rgba(0,0,0,0.6)"/>
+            </marker>
+          </defs>
+          <!-- Total-bias dot -->
+          <circle id="lt-pad-dot" cx="0" cy="0" r="0.18" fill="#ef4444"/>
+        </svg>
+        <div class="lt-totals">total: <span id="lt-totals">+0.00°, +0.00°</span></div>
+        <div class="lt-btn-row">
+          <button class="lt-btn" id="lt-reset-all">Reset all</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+  const wrap = document.querySelector('.lt-wrap');
+  const telescopeId = wrap.dataset.telescopeId || '1';
+  const apiRoot = `/api/${telescopeId}/live_tracker`;
+
+  // --- state ---
+  let selectedTarget = null; // {kind, id, display_name}
+  let activeTab = 'cached';
+  let activeBasis = 'azel';
+  let offsetSnapshot = { time_offset_s: 0, az_bias_deg: 0, el_bias_deg: 0, along_deg: 0, cross_deg: 0 };
+  let statusLast = null;
+  let lastRenderedActiveId = null;
+
+  // --- elements ---
+  const startBtn = document.getElementById('lt-start-btn');
+  const stopBtn = document.getElementById('lt-stop-btn');
+  const dryRunEl = document.getElementById('lt-dryrun');
+  const autoSlewEl = document.getElementById('lt-autoslew');
+  const statusPill = document.getElementById('lt-status-pill');
+  const statusText = document.getElementById('lt-status-text');
+  const headingPill = document.getElementById('lt-heading-pill');
+  const basisAcBtn = document.getElementById('lt-basis-ac');
+  const padDot = document.getElementById('lt-pad-dot');
+  const padHeading = document.getElementById('lt-pad-heading');
+  const padAlong = document.getElementById('lt-pad-along');
+  const padCross = document.getElementById('lt-pad-cross');
+  const totalsEl = document.getElementById('lt-totals');
+
+  // --- target picker ---
+  document.querySelectorAll('#lt-target-tabs .lt-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#lt-target-tabs .lt-tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeTab = btn.dataset.tab;
+      renderTargetList();
+    });
+  });
+
+  let targetCache = { live: [], cached: [] };
+  async function refreshTargets() {
+    try {
+      const r = await fetch(`${apiRoot}/targets`);
+      targetCache = await r.json();
+      renderTargetList();
+    } catch (e) {
+      document.getElementById('lt-target-list').textContent = 'error loading targets';
+    }
+  }
+  function renderTargetList() {
+    const list = document.getElementById('lt-target-list');
+    const filterEl = document.getElementById('lt-target-filter');
+    const q = (filterEl?.value || '').trim().toLowerCase();
+    const allRows = targetCache[activeTab] || [];
+    const rows = q
+      ? allRows.filter(t => {
+          const id = (t.id || t.icao24 || '').toLowerCase();
+          const name = (t.display_name || '').toLowerCase();
+          return id.includes(q) || name.includes(q);
+        })
+      : allRows;
+    if (!rows.length) {
+      if (!allRows.length) {
+        list.textContent = activeTab === 'live'
+          ? 'no live targets'
+          : 'no cached trajectories';
+      } else {
+        list.textContent = `no match for "${q}" (${allRows.length} hidden)`;
+      }
+      return;
+    }
+    list.innerHTML = '';
+    const activeId = (statusLast && statusLast.active) ? statusLast.target_id : null;
+    const activeKind = (statusLast && statusLast.active) ? statusLast.target_kind : null;
+    rows.forEach(t => {
+      const row = document.createElement('div');
+      row.className = 'lt-target-row';
+      const id = t.id || t.icao24;
+      const rowKind = activeTab === 'live' ? 'live' : 'file';
+      if (activeId === id && activeKind === rowKind) {
+        row.classList.add('tracking');
+      } else if (selectedTarget && selectedTarget.id === id && selectedTarget.kind === rowKind) {
+        row.classList.add('selected');
+      }
+      let right = '';
+      if (activeTab === 'cached') {
+        right = `${(t.duration_s||0).toFixed(0)}s · el≤${(t.peak_el_deg||0).toFixed(0)}°`;
+      } else {
+        const az = (t.current_az_deg||0).toFixed(0);
+        const el = (t.current_el_deg||0).toFixed(0);
+        const distKm = (t.current_slant_m||0) / 1000;
+        const altFt = (t.current_alt_m||0) * 3.281;
+        const gsKt = (t.current_velocity_mps||0) * 1.944;
+        const azr = (t.current_az_rate_degs||0).toFixed(2);
+        const elr = (t.current_el_rate_degs||0).toFixed(2);
+        right = `az${az}° el${el}° · ${distKm.toFixed(1)}km ${(altFt/1000).toFixed(1)}kft ${gsKt.toFixed(0)}kt · ${azr}/${elr}°/s`;
+      }
+      row.innerHTML = `<span>${t.display_name || id}</span><span style="opacity:0.6; font-size:11px;">${right}</span>`;
+      row.addEventListener('click', () => {
+        selectedTarget = {
+          kind: activeTab === 'live' ? 'live' : 'file',
+          id: id,
+          display_name: t.display_name || id,
+        };
+        renderTargetList();
+        startBtn.disabled = false;
+      });
+      list.appendChild(row);
+    });
+  }
+  refreshTargets();
+  setInterval(refreshTargets, 15000);
+
+  document.getElementById('lt-target-filter').addEventListener('input', renderTargetList);
+
+  // --- basis tabs ---
+  document.querySelectorAll('#lt-basis-tabs .lt-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      document.querySelectorAll('#lt-basis-tabs .lt-tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeBasis = btn.dataset.basis;
+      document.getElementById('lt-basis-azel').style.display = activeBasis === 'azel' ? '' : 'none';
+      document.getElementById('lt-basis-ac').style.display   = activeBasis === 'alongcross' ? '' : 'none';
+    });
+  });
+
+  // --- sliders ---
+  function fmtDeg(v){ return (v>=0?'+':'') + Number(v).toFixed(2) + '°'; }
+  function fmtSec(v){ return (v>=0?'+':'') + Number(v).toFixed(1) + ' s'; }
+
+  const bindings = [
+    ['lt-time',  'lt-time-v',  'time_offset_s', fmtSec],
+    ['lt-az',    'lt-az-v',    'az_bias_deg',   fmtDeg],
+    ['lt-el',    'lt-el-v',    'el_bias_deg',   fmtDeg],
+    ['lt-along', 'lt-along-v', 'along_deg',     fmtDeg],
+    ['lt-cross', 'lt-cross-v', 'cross_deg',     fmtDeg],
+  ];
+  let pendingPost = null;
+  function schedulePost(){
+    if (pendingPost) clearTimeout(pendingPost);
+    // Always post the full local snapshot so the server reconciles every
+    // field (avoids stale slider values lingering from a previous session).
+    pendingPost = setTimeout(() => postOffsets({...offsetSnapshot}), 150);
+  }
+  bindings.forEach(([sid, lid, field, fmt]) => {
+    const s = document.getElementById(sid);
+    const l = document.getElementById(lid);
+    s.addEventListener('input', () => {
+      const v = parseFloat(s.value);
+      l.textContent = fmt(v);
+      offsetSnapshot[field] = v;
+      updatePadDot();
+      schedulePost();
+    });
+  });
+
+  async function postOffsets(body) {
+    try {
+      const r = await fetch(`${apiRoot}/offsets`, {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+      });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j.offsets) {
+        offsetSnapshot = j.offsets;
+        syncSlidersFromSnapshot();
+      }
+    } catch (e) {}
+  }
+  function syncSlidersFromSnapshot(){
+    // Only set values (don't fire input). This is a clamp reconciliation.
+    const map = {
+      'lt-time': ['time_offset_s', fmtSec, 'lt-time-v'],
+      'lt-az':   ['az_bias_deg',   fmtDeg, 'lt-az-v'],
+      'lt-el':   ['el_bias_deg',   fmtDeg, 'lt-el-v'],
+      'lt-along':['along_deg',     fmtDeg, 'lt-along-v'],
+      'lt-cross':['cross_deg',     fmtDeg, 'lt-cross-v'],
+    };
+    Object.entries(map).forEach(([sid, [field, fmt, lid]]) => {
+      const s = document.getElementById(sid); const l = document.getElementById(lid);
+      const v = offsetSnapshot[field];
+      if (Math.abs(parseFloat(s.value) - v) > 1e-6) { s.value = v; }
+      l.textContent = fmt(v);
+    });
+    updatePadDot();
+  }
+
+  async function reset(scope) {
+    // Apply locally first so the UI is always responsive (server returns
+    // 404 when there's no active session, but the user still expects the
+    // sliders to snap back).
+    if (scope === 'azel' || scope === 'all') {
+      offsetSnapshot.az_bias_deg = 0;
+      offsetSnapshot.el_bias_deg = 0;
+    }
+    if (scope === 'alongcross' || scope === 'all') {
+      offsetSnapshot.along_deg = 0;
+      offsetSnapshot.cross_deg = 0;
+    }
+    if (scope === 'all') {
+      offsetSnapshot.time_offset_s = 0;
+    }
+    syncSlidersFromSnapshot();
+    // Then reconcile with server (no-op if no session).
+    try {
+      const r = await fetch(`${apiRoot}/offsets/reset`, {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({scope}),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        if (j.offsets) { offsetSnapshot = j.offsets; syncSlidersFromSnapshot(); }
+      }
+    } catch (e) {}
+  }
+  document.getElementById('lt-reset-azel').addEventListener('click', () => reset('azel'));
+  document.getElementById('lt-reset-ac').addEventListener('click', () => reset('alongcross'));
+  document.getElementById('lt-reset-all').addEventListener('click', () => reset('all'));
+
+  // --- start/stop ---
+  startBtn.addEventListener('click', async () => {
+    if (!selectedTarget) return;
+    startBtn.disabled = true;
+    try {
+      const r = await fetch(`${apiRoot}/track`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          kind: selectedTarget.kind,
+          id: selectedTarget.id,
+          dry_run: dryRunEl.checked,
+          auto_slew: autoSlewEl.checked,
+        }),
+      });
+      if (!r.ok) { alert('start failed: ' + await r.text()); startBtn.disabled = false; return; }
+    } catch (e) { alert('start failed: ' + e); startBtn.disabled = false; return; }
+    stopBtn.disabled = false;
+    refreshStatus();
+  });
+  stopBtn.addEventListener('click', async () => {
+    stopBtn.disabled = true;
+    await fetch(`${apiRoot}/stop`, {method:'POST'});
+    startBtn.disabled = selectedTarget ? false : true;
+  });
+
+  // --- status polling ---
+  const azHist = []; const elHist = []; const timeHist = [];
+  const refAzHist = []; const refElHist = [];
+  const MAX_HIST = 120;
+  async function refreshStatus(){
+    try {
+      const r = await fetch(`${apiRoot}/status`);
+      const s = await r.json();
+      statusLast = s;
+      if (s.offsets) { offsetSnapshot = s.offsets; syncSlidersFromSnapshot(); }
+      renderStatus(s);
+      // Re-render target list when the active-tracking target changes so the
+    // ▶ highlight on the selected row keeps up without waiting for the
+    // next 15 s /targets poll.
+    const curActiveId = s.active ? s.target_id : null;
+    if (curActiveId !== lastRenderedActiveId) {
+      lastRenderedActiveId = curActiveId;
+      renderTargetList();
+    }
+    if (s.active && s.cur_cum_az_deg != null) {
+        const t = Date.now() / 1000;
+        timeHist.push(t);
+        azHist.push(s.cur_cum_az_deg);
+        elHist.push(s.cur_el_deg);
+        refAzHist.push(s.eff_ref_az_cum_deg);
+        refElHist.push(s.eff_ref_el_deg);
+        while (timeHist.length > MAX_HIST) {
+          timeHist.shift(); azHist.shift(); elHist.shift(); refAzHist.shift(); refElHist.shift();
+        }
+        updateChart();
+      }
+    } catch (e) {}
+  }
+  function renderStatus(s){
+    if (s.active) {
+      statusPill.classList.remove('idle'); statusPill.classList.add('active');
+      statusText.textContent = s.phase || 'tracking';
+      stopBtn.disabled = false;
+      startBtn.disabled = true;
+    } else {
+      statusPill.classList.add('idle'); statusPill.classList.remove('active');
+      statusText.textContent = s.exit_reason || 'idle';
+      stopBtn.disabled = true;
+      startBtn.disabled = !selectedTarget;
+    }
+    headingPill.style.display = s.heading_locked ? '' : 'none';
+    // Disable along/cross basis tab when heading locked.
+    if (s.heading_locked) {
+      basisAcBtn.disabled = true;
+      basisAcBtn.title = 'target too slow — along/cross basis unavailable';
+    } else {
+      basisAcBtn.disabled = false;
+      basisAcBtn.title = '';
+    }
+    document.getElementById('lt-kpi-target').textContent = s.target_display_name || '—';
+    const at = document.getElementById('lt-active-target');
+    if (s.active && s.target_display_name) {
+      at.textContent = `tracking: ${s.target_display_name}`;
+      at.style.color = '#22c55e';
+    } else if (s.target_display_name) {
+      at.textContent = `last: ${s.target_display_name}`;
+      at.style.color = '';
+    } else {
+      at.textContent = 'no target';
+      at.style.color = '';
+    }
+    document.getElementById('lt-kpi-elapsed').textContent = s.elapsed_s != null ? `${s.elapsed_s.toFixed(0)}s` : '—';
+    document.getElementById('lt-kpi-refaz').textContent = s.eff_ref_az_cum_deg != null ? s.eff_ref_az_cum_deg.toFixed(2)+'°' : '—';
+    document.getElementById('lt-kpi-refel').textContent = s.eff_ref_el_deg != null ? s.eff_ref_el_deg.toFixed(2)+'°' : '—';
+    document.getElementById('lt-kpi-erraz').textContent = s.err_az_deg != null ? s.err_az_deg.toFixed(3)+'°' : '—';
+    document.getElementById('lt-kpi-errel').textContent = s.err_el_deg != null ? s.err_el_deg.toFixed(3)+'°' : '—';
+    updatePadDot(s);
+  }
+  function updatePadDot(s){
+    const st = s || statusLast || {};
+    // Prefer the server-computed total (d_az, d_el) when it's available
+    // — the controller already applied ψ-rotation to along/cross. Else
+    // reconstruct client-side using the last known heading (or ψ=0° as
+    // a benign fallback so the sliders are visually responsive before
+    // the session ticks).
+    const hasServer = st.active && (st.tick || 0) > 0 && st.d_az_deg != null;
+    let daz, del;
+    if (hasServer) {
+      daz = st.d_az_deg;
+      del = st.d_el_deg;
+    } else {
+      // Only trust heading while a session is active; otherwise ψ=0 so
+      // the sliders are a simple az/el preview.
+      const psiDeg = (st.active && st.heading_deg != null && !st.heading_locked) ? st.heading_deg : 0;
+      const psi = psiDeg * Math.PI / 180;
+      const c = Math.cos(psi), s2 = Math.sin(psi);
+      const along = offsetSnapshot.along_deg || 0;
+      const cross = offsetSnapshot.cross_deg || 0;
+      daz = (offsetSnapshot.az_bias_deg||0) + along * c - cross * s2;
+      del = (offsetSnapshot.el_bias_deg||0) + along * s2 + cross * c;
+    }
+    padDot.setAttribute('cx', String(Math.max(-5, Math.min(5, daz))));
+    padDot.setAttribute('cy', String(-Math.max(-5, Math.min(5, del)))); // SVG y goes down; flip
+    totalsEl.textContent = `${(daz>=0?'+':'')}${daz.toFixed(2)}°, ${(del>=0?'+':'')}${del.toFixed(2)}°`;
+    if (st.active && st.heading_deg != null && !st.heading_locked) {
+      // ψ in degrees from +az (east-like) → SVG: x=cos(ψ), y=-sin(ψ).
+      const psi = st.heading_deg * Math.PI / 180;
+      const ax = Math.cos(psi) * 2, ay = -Math.sin(psi) * 2;
+      const cx = -Math.sin(psi) * 2, cy = -Math.cos(psi) * 2;
+      padAlong.setAttribute('x2', ax); padAlong.setAttribute('y2', ay);
+      padCross.setAttribute('x2', cx); padCross.setAttribute('y2', cy);
+      padHeading.style.display = '';
+    } else {
+      padHeading.style.display = 'none';
+    }
+  }
+  setInterval(refreshStatus, 1000);
+  refreshStatus();
+
+  // --- mini chart ---
+  const ctx = document.getElementById('lt-chart').getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {label:'az measured', data: [], borderColor:'#22c55e', pointRadius:0, tension:0.2},
+        {label:'az ref',      data: [], borderColor:'#16a34a', borderDash:[4,4], pointRadius:0, tension:0.2},
+        {label:'el measured', data: [], borderColor:'#3b82f6', pointRadius:0, tension:0.2, yAxisID:'y2'},
+        {label:'el ref',      data: [], borderColor:'#1d4ed8', borderDash:[4,4], pointRadius:0, tension:0.2, yAxisID:'y2'},
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      scales: {
+        y:  { position:'left',  title:{display:true,text:'az (°)'} },
+        y2: { position:'right', title:{display:true,text:'el (°)'}, grid:{drawOnChartArea:false} },
+      },
+      plugins: { legend: { labels: { font: {size:10} } } },
+    },
+  });
+  function updateChart(){
+    chart.data.labels = timeHist.map(t => {
+      const d = new Date(t*1000);
+      const hh = String(d.getHours()).padStart(2,'0');
+      const mm = String(d.getMinutes()).padStart(2,'0');
+      const ss = String(d.getSeconds()).padStart(2,'0');
+      return `${hh}:${mm}:${ss}`;
+    });
+    chart.data.datasets[0].data = azHist.slice();
+    chart.data.datasets[1].data = refAzHist.slice();
+    chart.data.datasets[2].data = elHist.slice();
+    chart.data.datasets[3].data = refElHist.slice();
+    chart.update('none');
+  }
+})();
+</script>
+{% endblock %}
