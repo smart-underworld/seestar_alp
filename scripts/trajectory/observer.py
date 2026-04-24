@@ -91,15 +91,14 @@ def default_site() -> ObserverSite:
     return _DEFAULT_SITE
 
 
-def build_site_from_telescope(cli, alt_m: float) -> ObserverSite:
-    """Fetch the observer's lat/lon from the telescope's stored state
-    and build an ObserverSite at the given altitude.
+def fetch_telescope_lonlat(cli) -> tuple[float, float]:
+    """Return ``(lat_deg, lon_deg)`` from the telescope's stored GPS.
 
     The Seestar firmware exposes its configured geodetic origin via
     ``get_device_state`` with key ``location_lon_lat`` — a two-element
     list in ``[lon, lat]`` order (see device/seestar_device.py:1038).
-    Altitude isn't stored by the firmware, so the caller supplies it
-    (GPS-derived or prompted).
+    Altitude isn't stored by the firmware, so callers resolve that
+    separately (manual entry, prior calibration, or elevation lookup).
     """
     resp = cli.method_sync(
         "get_device_state", {"keys": ["location_lon_lat"]},
@@ -119,8 +118,17 @@ def build_site_from_telescope(cli, alt_m: float) -> ObserverSite:
         raise RuntimeError(
             f"telescope 'location_lon_lat' malformed: {lon_lat!r}"
         )
-    lon_deg = float(lon_lat[0])
-    lat_deg = float(lon_lat[1])
+    return float(lon_lat[1]), float(lon_lat[0])
+
+
+def build_site_from_telescope(cli, alt_m: float) -> ObserverSite:
+    """Fetch the observer's lat/lon from the telescope's stored state
+    and build an ObserverSite at the given altitude.
+
+    Thin wrapper over :func:`fetch_telescope_lonlat` for callers that
+    don't need the intermediate lat/lon.
+    """
+    lat_deg, lon_deg = fetch_telescope_lonlat(cli)
     return build_site(lat_deg=lat_deg, lon_deg=lon_deg, alt_m=float(alt_m))
 
 
@@ -188,6 +196,62 @@ def wrap_pm180(deg: float) -> float:
     if d == -180.0:
         return 180.0
     return d
+
+
+def haversine_m(
+    lat1_deg: float, lon1_deg: float,
+    lat2_deg: float, lon2_deg: float,
+) -> float:
+    """Great-circle distance in metres between two WGS84 points.
+
+    Used by the calibration tool's staleness check and anywhere else
+    we need a quick 'has the observer moved?' test. Accuracy is ≲0.5%
+    — plenty for our ~10 m thresholds. Uses the standard Earth radius
+    6,371,000 m; we don't need WGS84 ellipsoidal precision here.
+    """
+    earth_r_m = 6_371_000.0
+    phi1 = np.radians(lat1_deg)
+    phi2 = np.radians(lat2_deg)
+    dphi = np.radians(lat2_deg - lat1_deg)
+    dlam = np.radians(lon2_deg - lon1_deg)
+    a = (
+        np.sin(dphi / 2.0) ** 2
+        + np.cos(phi1) * np.cos(phi2) * np.sin(dlam / 2.0) ** 2
+    )
+    c = 2.0 * np.arcsin(np.sqrt(min(1.0, float(a))))
+    return float(earth_r_m * c)
+
+
+def lookup_elevation(
+    lat_deg: float, lon_deg: float, *, timeout_s: float = 4.0,
+) -> float:
+    """Return the ground elevation in metres AMSL at the given
+    lat/lon, via the Open-Meteo free elevation API.
+
+    Raises ``RuntimeError`` on any HTTP, timeout, parse, or
+    schema-mismatch failure so callers can fall back without swallowing
+    the cause. The endpoint is unauthenticated and rate-limited to a
+    very generous cap — a single call per CLI invocation is safe.
+    """
+    import requests
+
+    url = "https://api.open-meteo.com/v1/elevation"
+    params = {"latitude": f"{lat_deg:.6f}", "longitude": f"{lon_deg:.6f}"}
+    try:
+        resp = requests.get(url, params=params, timeout=timeout_s)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.RequestException as exc:
+        raise RuntimeError(f"elevation lookup failed: {exc}") from exc
+    except ValueError as exc:
+        raise RuntimeError(f"elevation response not JSON: {exc}") from exc
+    elev = data.get("elevation") if isinstance(data, dict) else None
+    if not isinstance(elev, list) or not elev:
+        raise RuntimeError(f"elevation response malformed: {data!r}")
+    try:
+        return float(elev[0])
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"elevation value not numeric: {elev!r}") from exc
 
 
 def unwrap_az_series(wrapped_deg: np.ndarray) -> np.ndarray:

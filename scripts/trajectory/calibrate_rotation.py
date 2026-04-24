@@ -49,6 +49,7 @@ import math
 import sys
 import time
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -71,7 +72,10 @@ from scripts.trajectory.faa_dof import (
 )
 from scripts.trajectory.observer import (
     ObserverSite,
-    build_site_from_telescope,
+    build_site,
+    fetch_telescope_lonlat,
+    haversine_m,
+    lookup_elevation,
 )
 
 
@@ -504,7 +508,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=_CAL_PATH,
                         help="calibration output path (default device/mount_calibration.json)")
     parser.add_argument("--altitude-m", type=float, default=None,
-                        help="Observer altitude in metres AMSL. If omitted, prompts.")
+                        help="Observer altitude in metres AMSL. Overrides --altitude-source.")
+    parser.add_argument("--altitude-source", choices=("menu", "lookup", "prior", "prompt"),
+                        default="menu",
+                        help="Where to get the altitude from when --altitude-m is absent. "
+                             "'menu' (default) shows an interactive chooser with a smart "
+                             "default; 'lookup' hits Open-Meteo; 'prior' reuses the last "
+                             "calibration's altitude; 'prompt' asks the user.")
+    parser.add_argument("--yes-clear", action="store_true",
+                        help="Non-interactive: clear prior calibration (backup to .bak) "
+                             "before starting.")
+    parser.add_argument("--keep-prior", action="store_true",
+                        help="Non-interactive: keep prior calibration for seeding. "
+                             "Conflicts with --yes-clear.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Skip mount motion and skip writing the JSON.")
     parser.add_argument("--no-move", action="store_true",
@@ -519,9 +535,159 @@ def main(argv: list[str] | None = None) -> int:
                         help="Write calibration even if residual RMS > 0.5°.")
     args = parser.parse_args(argv)
 
+    if args.yes_clear and args.keep_prior:
+        parser.error("--yes-clear and --keep-prior are mutually exclusive")
     if args.sightings is not None:
         return _main_replay(args)
     return _main_live(args)
+
+
+# ---------- prior-calibration inspection -----------------------------
+
+
+_KEEP_MAX_AGE_S = 6 * 3600
+_KEEP_MAX_DISTANCE_M = 10.0
+
+
+@dataclass(frozen=True)
+class PriorInfo:
+    """Minimum of what we need to know about the on-disk calibration
+    to decide whether to keep it as a seed."""
+    path: Path
+    observer_lat_deg: float | None
+    observer_lon_deg: float | None
+    observer_alt_m: float | None
+    calibrated_at: datetime | None
+    age_s: float | None
+    distance_from_current_m: float | None
+
+    @property
+    def should_default_keep(self) -> bool:
+        if self.age_s is None or self.distance_from_current_m is None:
+            return False
+        return (
+            self.age_s < _KEEP_MAX_AGE_S
+            and self.distance_from_current_m < _KEEP_MAX_DISTANCE_M
+        )
+
+
+def _parse_calibrated_at(raw: str | None) -> datetime | None:
+    """Parse the ``calibrated_at`` string emitted by both the old
+    compass tool (``%Y-%m-%dT%H-%M-%S%z`` — dashes in the time AND the
+    timezone offset) and any future ISO-8601 writer. Returns an aware
+    datetime in UTC, or ``None`` if the input is missing / malformed."""
+    if not isinstance(raw, str) or not raw:
+        return None
+    candidates = (
+        "%Y-%m-%dT%H-%M-%S%z",   # legacy: 2026-04-21T23-28-52-0700
+        "%Y-%m-%dT%H:%M:%S%z",   # standard ISO 8601 with colons
+        "%Y-%m-%dT%H:%M:%S.%f%z",
+    )
+    for fmt in candidates:
+        try:
+            dt = datetime.strptime(raw, fmt)
+            return dt.astimezone(timezone.utc)
+        except ValueError:
+            continue
+    # Last resort: try fromisoformat (handles Z and colon tz).
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            return None
+        return dt.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _inspect_prior(
+    path: Path, current_lat: float, current_lon: float,
+) -> PriorInfo | None:
+    """Parse the prior calibration JSON (if any) and return the age +
+    distance metadata the clear-or-keep prompt uses. Returns ``None``
+    when the file doesn't exist."""
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return PriorInfo(path, None, None, None, None, None, None)
+    obs = payload.get("observer") if isinstance(payload, dict) else None
+    lat = lon = alt = None
+    if isinstance(obs, dict):
+        try:
+            lat = float(obs.get("lat_deg")) if obs.get("lat_deg") is not None else None
+            lon = float(obs.get("lon_deg")) if obs.get("lon_deg") is not None else None
+            alt = float(obs.get("alt_m")) if obs.get("alt_m") is not None else None
+        except (TypeError, ValueError):
+            lat = lon = alt = None
+    dt = _parse_calibrated_at(payload.get("calibrated_at") if isinstance(payload, dict) else None)
+    now = datetime.now(timezone.utc)
+    age = (now - dt).total_seconds() if dt is not None else None
+    dist = (
+        haversine_m(lat, lon, current_lat, current_lon)
+        if lat is not None and lon is not None else None
+    )
+    return PriorInfo(
+        path=path, observer_lat_deg=lat, observer_lon_deg=lon,
+        observer_alt_m=alt, calibrated_at=dt, age_s=age,
+        distance_from_current_m=dist,
+    )
+
+
+def _handle_clear_or_keep(
+    args: argparse.Namespace, prior: PriorInfo | None,
+) -> bool:
+    """Return True if the caller should use the prior for seeding,
+    False if it was (or never was) cleared.
+
+    Side effect on "clear": atomic rename to ``<path>.bak`` so the
+    user can undo.
+    """
+    if prior is None:
+        return False  # nothing on disk; nothing to prompt about
+    age_h = (prior.age_s / 3600.0) if prior.age_s is not None else None
+    dist_m = prior.distance_from_current_m
+    age_str = f"{age_h:.1f} h" if age_h is not None else "unknown age"
+    dist_str = f"{dist_m:.1f} m" if dist_m is not None else "no observer on file"
+    default_keep = prior.should_default_keep
+    _print(f"[calibrate] prior calibration at {prior.path}:")
+    _print(f"             age {age_str}, {dist_str} from current GPS → "
+           f"default: {'keep' if default_keep else 'clear'}")
+
+    if args.yes_clear:
+        decision_keep = False
+    elif args.keep_prior:
+        decision_keep = True
+    else:
+        prompt = "Clear prior calibration? " + ("[y/N]: " if default_keep else "[Y/n]: ")
+        try:
+            raw = input(prompt).strip().lower()
+        except EOFError:
+            raise SystemExit("aborted at clear-or-keep prompt")
+        if raw == "":
+            decision_keep = default_keep
+        elif raw in ("y", "yes"):
+            decision_keep = False
+        elif raw in ("n", "no"):
+            decision_keep = True
+        else:
+            _print("  unrecognised answer; keeping prior.")
+            decision_keep = True
+
+    if decision_keep:
+        _print("[calibrate] keeping prior calibration for seeding.")
+        return True
+    # Back up + remove so downstream seeding treats the scope as uncalibrated.
+    bak = prior.path.with_suffix(prior.path.suffix + ".bak")
+    try:
+        prior.path.replace(bak)
+        _print(f"[calibrate] moved {prior.path} → {bak}")
+    except OSError as exc:
+        _print(f"[calibrate] [warn] could not back up prior calibration: {exc}")
+    return False
+
+
+# ---------- altitude resolution --------------------------------------
 
 
 def _prompt_altitude() -> float:
@@ -534,6 +700,96 @@ def _prompt_altitude() -> float:
             return float(raw)
         except ValueError:
             _print("  need a number (e.g. 2, 30, 100)")
+
+
+def _resolve_altitude(
+    args: argparse.Namespace,
+    lat_deg: float, lon_deg: float,
+    prior: PriorInfo | None, prior_kept: bool,
+) -> float:
+    """Decide observer altitude (metres AMSL).
+
+    Priority: --altitude-m > --altitude-source (non-interactive) > menu.
+    The menu shows only options that are actually available (prior
+    entry only appears when a recent, local prior was kept).
+    """
+    if args.altitude_m is not None:
+        return float(args.altitude_m)
+
+    prior_available = (
+        prior_kept
+        and prior is not None
+        and prior.observer_alt_m is not None
+        and prior.distance_from_current_m is not None
+        and prior.distance_from_current_m < _KEEP_MAX_DISTANCE_M
+    )
+
+    source = args.altitude_source
+    if source == "prior":
+        if not prior_available:
+            raise SystemExit(
+                "--altitude-source prior requested but no nearby prior "
+                "calibration has a recorded altitude"
+            )
+        _print(f"[calibrate] altitude from prior calibration: "
+               f"{prior.observer_alt_m:.2f} m AMSL")
+        return float(prior.observer_alt_m)
+
+    if source == "lookup":
+        elev = lookup_elevation(lat_deg, lon_deg)
+        _print(f"[calibrate] altitude from Open-Meteo: {elev:.2f} m AMSL")
+        return elev
+
+    if source == "prompt":
+        return _prompt_altitude()
+
+    # Interactive menu.
+    return _altitude_menu(lat_deg, lon_deg, prior, prior_available)
+
+
+def _altitude_menu(
+    lat_deg: float, lon_deg: float,
+    prior: PriorInfo | None, prior_available: bool,
+) -> float:
+    """Interactive altitude source chooser. Default is 'prior' if
+    available (most accurate for re-runs), else 'lookup' if network
+    is present, else 'manual'."""
+    options: list[tuple[str, str]] = [("lookup", "elevation lookup (Open-Meteo)")]
+    if prior_available:
+        options.append(("prior", f"use prior calibration ({prior.observer_alt_m:.2f} m)"))
+    options.append(("manual", "enter manually"))
+    default_idx = 1 + (options.index(("prior", options[1][1])) if prior_available else 0)
+    while True:
+        _print("Observer altitude — pick a source:")
+        for i, (_key, desc) in enumerate(options, start=1):
+            marker = "  ← default" if i == default_idx else ""
+            _print(f"  [{i}] {desc}{marker}")
+        try:
+            raw = input(f"choice [{default_idx}]: ").strip()
+        except EOFError:
+            raise SystemExit("aborted at altitude menu")
+        if raw == "":
+            idx = default_idx
+        elif raw.isdigit() and 1 <= int(raw) <= len(options):
+            idx = int(raw)
+        else:
+            _print("  out of range; try again")
+            continue
+        key = options[idx - 1][0]
+        if key == "lookup":
+            try:
+                elev = lookup_elevation(lat_deg, lon_deg)
+            except RuntimeError as exc:
+                _print(f"  [lookup failed] {exc}")
+                continue  # re-show menu
+            _print(f"  → {elev:.2f} m AMSL")
+            return elev
+        if key == "prior":
+            assert prior is not None and prior.observer_alt_m is not None
+            _print(f"  → {prior.observer_alt_m:.2f} m AMSL")
+            return float(prior.observer_alt_m)
+        # manual
+        return _prompt_altitude()
 
 
 def _load_prior_frame(
@@ -550,9 +806,20 @@ def _load_prior_frame(
 def _main_live(args: argparse.Namespace) -> int:
     cli = AlpacaClient(args.host, args.port, args.device)
 
-    # Fetch observer lat/lon from the scope. Altitude from flag or prompt.
-    alt_m = args.altitude_m if args.altitude_m is not None else _prompt_altitude()
-    site = build_site_from_telescope(cli, alt_m=alt_m)
+    # Step 1: fetch GPS so both the staleness check and the altitude
+    # menu can use the current observer coordinates.
+    lat_deg, lon_deg = fetch_telescope_lonlat(cli)
+    _print(f"[calibrate] telescope GPS: lat={lat_deg:+.6f}° lon={lon_deg:+.6f}°")
+
+    # Step 2: inspect any prior calibration and ask whether to keep it.
+    prior = _inspect_prior(args.out, lat_deg, lon_deg)
+    prior_kept = _handle_clear_or_keep(args, prior)
+
+    # Step 3: resolve altitude. GPS altitude isn't exposed by the scope,
+    # so the options are: flag override, elevation lookup, reuse prior,
+    # or prompt. Menu picks a sensible default based on what's available.
+    alt_m = _resolve_altitude(args, lat_deg, lon_deg, prior, prior_kept)
+    site = build_site(lat_deg=lat_deg, lon_deg=lon_deg, alt_m=alt_m)
     _print(f"[calibrate] observer @ lat={site.lat_deg:+.6f}° "
            f"lon={site.lon_deg:+.6f}° alt={site.alt_m:.1f} m")
 
@@ -564,7 +831,7 @@ def _main_live(args: argparse.Namespace) -> int:
             _print(f"  [warn] scenery/tracking setup failed: {exc}")
 
     chosen = _choose_targets(site)
-    prior_frame = _load_prior_frame(args.out, site)
+    prior_frame = _load_prior_frame(args.out, site) if prior_kept else None
     if prior_frame is not None:
         _print(f"[calibrate] seeding from existing calibration at {args.out}")
 
