@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Calibrate rotation — telescope {{ telescope_id }}{% endblock %}
+{% block content %}
+<div class="cal-stub" data-telescope-id="{{ telescope_id }}"
+     data-imager-root="{{ imager_root }}" data-root="{{ root }}"
+     style="padding:12px;">
+  <h2>Calibrate rotation — telescope {{ telescope_id }}</h2>
+  <p style="opacity:0.7;">
+    Browser calibration mode. Three-panel UI lands in the next commit;
+    the page + HTTP endpoints are already wired so the backend can be
+    smoke-tested.
+  </p>
+  <ul>
+    <li><code>GET  /api/{{ telescope_id }}/calibration/prior</code> — prior metadata</li>
+    <li><code>GET  /api/{{ telescope_id }}/calibration/targets</code> — visible landmarks</li>
+    <li><code>POST /api/{{ telescope_id }}/calibration/start</code> — start session</li>
+    <li><code>GET  /api/{{ telescope_id }}/calibration/status</code> — poll state</li>
+    <li><code>POST /api/{{ telescope_id }}/calibration/nudge</code> — bump target</li>
+    <li><code>POST /api/{{ telescope_id }}/calibration/sight</code> — record sighting</li>
+    <li><code>POST /api/{{ telescope_id }}/calibration/skip</code> — advance</li>
+    <li><code>POST /api/{{ telescope_id }}/calibration/commit</code> — write JSON</li>
+    <li><code>POST /api/{{ telescope_id }}/calibration/cancel</code> — abort</li>
+  </ul>
+  <p><a href="{{ root }}/live_tracker">← Back to Live Tracker</a></p>
+</div>
+{% endblock %}
