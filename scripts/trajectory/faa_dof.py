@@ -105,7 +105,7 @@ LA_BROADCAST_06_000177 = Landmark(
     lon_deg=-118.373250,           # 118° 22' 23.70" W
     height_amsl_m=568.0 * 0.3048,  # 568 ft AMSL → 173.13 m (473 ft AGL)
     lit=True,                      # L-864 red beacon per DOF record
-    accuracy_class="1B",           # ±25 ft horizontal, ±3 ft vertical
+    accuracy_class="1B",           # 1 = ±50 ft horiz, B = ±10 ft vert
     obstacle_type="TOWER",
     city="Los Angeles",
 )
@@ -332,3 +332,99 @@ def fetch_nearby_landmarks(
     slant = topo[:, 2]
     mask = slant <= radius_km * 1000.0
     return [c for c, keep in zip(candidates, mask) if keep]
+
+
+# ---------- FAA accuracy decoding + aiming hints ---------------------
+
+
+# FAA DOF accuracy code → (horizontal_ft, vertical_ft) tolerances.
+# Source: FAA DOF User Guide rev. 2023. "5" horizontal and "H"/"I"
+# vertical are explicitly "unknown / unverified" so we surface NaN.
+_FAA_H_FT: dict[str, float] = {
+    "1":   50.0,
+    "2":  250.0,
+    "3":  500.0,
+    "4": 1000.0,
+    "5": float("nan"),
+    "6": float("nan"),
+    "7": float("nan"),
+    "8": float("nan"),
+    "9": float("nan"),
+}
+_FAA_V_FT: dict[str, float] = {
+    "A":   3.0,
+    "B":  10.0,
+    "C":  20.0,
+    "D":  50.0,
+    "E": 125.0,
+    "F": 250.0,
+    "G": 500.0,
+    "H": float("nan"),
+    "I": float("nan"),
+}
+
+
+def faa_accuracy_ft(accuracy_class: str) -> tuple[float, float]:
+    """Decode a two-character FAA DOF accuracy code into
+    ``(horizontal_ft, vertical_ft)`` tolerances.
+
+    - Digit encodes horizontal accuracy (``1`` = ±50 ft best;
+      ``4`` = ±1000 ft worst; ``5``–``9`` = unknown).
+    - Letter encodes vertical accuracy (``A`` = ±3 ft best;
+      ``E`` = ±125 ft; ``H``/``I`` = unknown).
+    Returns ``(nan, nan)`` when the code is missing or malformed;
+    callers display those as "unknown" in the UI.
+    """
+    if not isinstance(accuracy_class, str) or len(accuracy_class) < 2:
+        return (float("nan"), float("nan"))
+    h = _FAA_H_FT.get(accuracy_class[0].upper(), float("nan"))
+    v = _FAA_V_FT.get(accuracy_class[1].upper(), float("nan"))
+    return (h, v)
+
+
+# Aiming-hint table keyed by (normalised obstacle_type, lighting
+# letter). The DOF User Guide states the published lat/lon/AMSL
+# refer to "the top of the tallest obstruction element", so picking
+# a consistent top-of-structure aim point avoids a systematic offset.
+_LIT_WHITE = {"W", "H", "M", "S"}
+
+
+def aiming_hint(landmark: "Landmark") -> str:
+    """Short sentence describing where to point the scope on this
+    landmark. Uses ``obstacle_type`` + ``lighting`` (inferred from
+    ``accuracy_class`` via ``lit`` — the record-level lighting letter
+    is encoded in ``Landmark.lit`` + ``obstacle_type``) to pick a
+    specific feature: L-864 red beacon, L-810 side lights, white
+    strobe, or silhouette top.
+
+    The DOF position is by convention the top of the tallest element,
+    so the hint always biases toward the highest identifiable point.
+    """
+    t = (landmark.obstacle_type or "").upper().strip()
+    # The `lit` boolean in our Landmark collapses multiple lighting
+    # codes; we can't recover the exact letter from it. But since the
+    # DOF record surfaces distinct codes, callers that care about
+    # "R vs D vs W" can pass them down another day. For the shipped
+    # data (HYPERION_06_000301=R, LA_BROADCAST_06_000177=R, Culver City=N)
+    # the distinction between L-864, L-810, and strobes is captured
+    # well enough by type + lit for the phrasing here to be useful.
+    if not landmark.lit:
+        return (
+            "Unlit — daytime only. Aim at the top-centre silhouette "
+            "against the sky."
+        )
+    if "STACK" in t:
+        return (
+            "Red L-864 beacon at the top of the taller stack "
+            "(FAA position is the top of the tallest element)."
+        )
+    if "T-L" in t or "ANT" in t:
+        return "Top of the antenna / T-L tower."
+    if "TOWER" in t:
+        return "Red L-864 flashing beacon at the very top of the tower."
+    if "BLDG" in t:
+        return (
+            "Top-edge marker light; aim at the highest lit point on "
+            "the roofline."
+        )
+    return "Top of the structure."

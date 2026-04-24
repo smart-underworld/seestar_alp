@@ -144,6 +144,16 @@ def test_session_starts_and_slews_to_first_target(monkeypatch, tmp_path):
         # filter_visible ranks taller-first among lit landmarks, so the
         # LA broadcast tower (173 m AMSL) leads Hyperion (103 m AMSL).
         assert st.current_landmark["oas"] == "06-000177"
+        # Commit 4: status surfaces aiming_hint + FAA σ_az / σ_el so the
+        # UI doesn't have to re-derive them.
+        assert "aiming_hint" in st.current_landmark
+        assert isinstance(st.current_landmark["aiming_hint"], str)
+        assert st.current_landmark["aiming_hint"]
+        assert "sigma_az_deg" in st.current_landmark
+        assert "sigma_el_deg" in st.current_landmark
+        # LA broadcast is 1B — both σ should be finite small floats.
+        assert 0 < st.current_landmark["sigma_az_deg"] < 0.5
+        assert 0 < st.current_landmark["sigma_el_deg"] < 0.5
         # After the first slew, encoder should match the target (fake
         # teleports perfectly).
         assert st.encoder_az_deg == pytest.approx(st.target_az_deg, abs=1e-6)

@@ -58,7 +58,10 @@
 </style>
 
 <div class="lt-wrap" data-telescope-id="{{ telescope_id }}" data-imager-root="{{ imager_root }}" data-root="{{ root }}">
-  <h2>Live Tracker — telescope {{ telescope_id }}</h2>
+  <div style="display:flex; justify-content:space-between; align-items:baseline;">
+    <h2 style="margin:0 0 8px;">Live Tracker — telescope {{ telescope_id }}</h2>
+    <a href="{{ root }}/calibrate_rotation" style="font-size:13px;">Calibrate Mount →</a>
+  </div>
 
   <div class="lt-grid">
     <!-- LEFT: video + record + telemetry -->

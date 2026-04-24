@@ -4661,8 +4661,11 @@ class CalibrationTargetsResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
         from device.alpaca_client import AlpacaClient
+        from device.rotation_calibration import pointing_uncertainty_deg
         from scripts.trajectory.faa_dof import (
             DEFAULT_LANDMARKS,
+            aiming_hint,
+            faa_accuracy_ft,
             fetch_nearby_landmarks,
             filter_visible,
         )
@@ -4702,6 +4705,10 @@ class CalibrationTargetsResource:
         def _as_dict(entries):
             out = []
             for lm, az, el, slant in entries:
+                h_ft, v_ft = faa_accuracy_ft(lm.accuracy_class)
+                sigma_az, sigma_el = pointing_uncertainty_deg(
+                    slant, h_ft, v_ft,
+                )
                 out.append({
                     "oas": lm.oas,
                     "name": lm.name,
@@ -4715,6 +4722,9 @@ class CalibrationTargetsResource:
                     "true_az_deg": float(az),
                     "true_el_deg": float(el),
                     "slant_m": float(slant),
+                    "aiming_hint": aiming_hint(lm),
+                    "sigma_az_deg": _nan_to_none(sigma_az),
+                    "sigma_el_deg": _nan_to_none(sigma_el),
                 })
             return out
 
@@ -4725,6 +4735,12 @@ class CalibrationTargetsResource:
             "dof_fallback": _as_dict(dof),
             "observer": {"lat_deg": lat, "lon_deg": lon, "alt_m": alt_m},
         })
+
+
+def _nan_to_none(x):
+    """JSON doesn't encode NaN; map to null for clean UI handling."""
+    import math as _m
+    return None if x is None or not _m.isfinite(x) else float(x)
 
 
 class CalibrationStartResource:

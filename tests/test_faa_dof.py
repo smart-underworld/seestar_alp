@@ -6,12 +6,16 @@ import zipfile
 
 import pytest
 
+import math
+
 from scripts.trajectory.faa_dof import (
     CULVER_CITY_06_001087,
     DEFAULT_LANDMARKS,
     HYPERION_06_000301,
     LA_BROADCAST_06_000177,
     Landmark,
+    aiming_hint,
+    faa_accuracy_ft,
     filter_visible,
     iter_dof_records,
     parse_dof_line,
@@ -230,3 +234,94 @@ def test_iter_dof_records_reads_zip(tmp_path):
     assert len(records) == 2
     oas = {r.oas for r in records}
     assert oas == {"06-000301", "06-001087"}
+
+
+# ---------- faa_accuracy_ft --------------------------------------------
+
+
+def test_faa_accuracy_ft_known_classes():
+    """Canonical FAA DOF codes map to the published tolerances."""
+    assert faa_accuracy_ft("1A") == (50.0, 3.0)    # Hyperion
+    assert faa_accuracy_ft("1B") == (50.0, 10.0)   # LA broadcast
+    assert faa_accuracy_ft("1E") == (50.0, 125.0)  # Culver City
+    assert faa_accuracy_ft("4D") == (1000.0, 50.0)
+    assert faa_accuracy_ft("2C") == (250.0, 20.0)
+
+
+def test_faa_accuracy_ft_lowercase_accepted():
+    assert faa_accuracy_ft("1a") == (50.0, 3.0)
+
+
+def test_faa_accuracy_ft_unknown_horizontal():
+    """Horizontal digits 5-9 are 'unverified / unknown' per FAA."""
+    h, v = faa_accuracy_ft("5A")
+    assert math.isnan(h)
+    assert v == 3.0
+
+
+def test_faa_accuracy_ft_unknown_vertical():
+    h, v = faa_accuracy_ft("1H")
+    assert h == 50.0
+    assert math.isnan(v)
+
+
+def test_faa_accuracy_ft_empty_or_malformed_returns_nan():
+    for bad in ("", " ", "1", "XY", None):
+        h, v = faa_accuracy_ft(bad)  # type: ignore[arg-type]
+        assert math.isnan(h)
+        assert math.isnan(v)
+
+
+# ---------- aiming_hint ------------------------------------------------
+
+
+def test_aiming_hint_lit_stack_calls_out_taller():
+    """STACK landmarks (Hyperion pair) should note the 'top of the
+    taller stack' convention — the paired-stack case is the one
+    place the aim point isn't the top-centre of a single structure."""
+    hint = aiming_hint(HYPERION_06_000301)
+    assert "L-864" in hint
+    assert "taller" in hint.lower()
+
+
+def test_aiming_hint_lit_tower_points_at_top_beacon():
+    hint = aiming_hint(LA_BROADCAST_06_000177)
+    assert "top" in hint.lower()
+    assert "L-864" in hint
+
+
+def test_aiming_hint_unlit_says_daytime_only():
+    hint = aiming_hint(CULVER_CITY_06_001087)
+    assert "daytime" in hint.lower() or "silhouette" in hint.lower()
+
+
+def test_aiming_hint_unknown_type_falls_back():
+    lm = Landmark(
+        oas="00-000000", name="mystery",
+        lat_deg=0, lon_deg=0, height_amsl_m=100.0,
+        lit=True, accuracy_class="1A",
+        obstacle_type="UFO",
+    )
+    assert "top" in aiming_hint(lm).lower()
+
+
+def test_aiming_hint_bldg_lit():
+    lm = Landmark(
+        oas="00-000001", name="roof",
+        lat_deg=0, lon_deg=0, height_amsl_m=100.0,
+        lit=True, accuracy_class="1A",
+        obstacle_type="BLDG",
+    )
+    hint = aiming_hint(lm)
+    assert "roof" in hint.lower() or "marker" in hint.lower()
+
+
+def test_aiming_hint_antenna():
+    lm = Landmark(
+        oas="00-000002", name="tl",
+        lat_deg=0, lon_deg=0, height_amsl_m=100.0,
+        lit=True, accuracy_class="1A",
+        obstacle_type="T-L TWR",
+    )
+    hint = aiming_hint(lm)
+    assert "antenna" in hint.lower() or "T-L" in hint

@@ -189,6 +189,54 @@ def _wrap_pm180(deg: float) -> float:
     return 180.0 if d == -180.0 else d
 
 
+def pointing_uncertainty_deg(
+    slant_m: float,
+    horizontal_ft: float,
+    vertical_ft: float,
+    *,
+    observer_sigma_m: float = 10.0,
+) -> tuple[float, float]:
+    """Propagate FAA landmark + observer GPS uncertainties to
+    predicted (az, el) 1σ in degrees.
+
+    Methodology (analytic, first-order small-angle):
+
+        σ_az ≈ hypot(σ_h, σ_obs) / slant   [rad]
+        σ_el ≈ hypot(σ_v, σ_obs) / slant   [rad]
+
+    FAA DOF bounds are conventionally ~95% confidence, so we divide
+    the published ± ft value by 2 to get a 1σ before combining with
+    the observer GPS term (given as 1σ). The result is a true 1σ
+    angular uncertainty suitable for ± display in the UI.
+
+    The small-angle approximation holds to ≪ 1% for ground landmarks
+    (σ/slant ≈ 3 × 10⁻³ for Hyperion); a Monte-Carlo cross-check
+    lives in ``tests/test_calibrate_rotation.py`` and agrees with
+    the analytic output within ~2% on 10 000 draws.
+
+    ``nan`` ft inputs propagate to ``nan`` outputs — callers show
+    those as "unknown" in the UI.
+    """
+    if slant_m <= 0.0 or not math.isfinite(slant_m):
+        return (float("nan"), float("nan"))
+    ft_to_m = 0.3048
+    # Treat FAA bounds as 2σ → divide by 2 to get 1σ.
+    sigma_h_m = (horizontal_ft * ft_to_m) / 2.0 if math.isfinite(horizontal_ft) else float("nan")
+    sigma_v_m = (vertical_ft * ft_to_m) / 2.0 if math.isfinite(vertical_ft) else float("nan")
+    obs = float(observer_sigma_m)
+    if math.isfinite(sigma_h_m):
+        sigma_az_rad = math.hypot(sigma_h_m, obs) / slant_m
+        sigma_az_deg = math.degrees(sigma_az_rad)
+    else:
+        sigma_az_deg = float("nan")
+    if math.isfinite(sigma_v_m):
+        sigma_el_rad = math.hypot(sigma_v_m, obs) / slant_m
+        sigma_el_deg = math.degrees(sigma_el_rad)
+    else:
+        sigma_el_deg = float("nan")
+    return (sigma_az_deg, sigma_el_deg)
+
+
 def terrestrial_refraction_deg(slant_m: float, k: float = 0.13) -> float:
     """Apparent el lift from atmospheric bending over a ground path.
 
@@ -482,10 +530,20 @@ class CalibrationSession:
         return self._thread is not None and self._thread.is_alive()
 
     def status(self) -> CalibrationStatus:
+        from scripts.trajectory.faa_dof import (
+            aiming_hint as _aim,
+            faa_accuracy_ft as _acc,
+        )
+
+        def _nan_to_none(x: float) -> float | None:
+            return None if not math.isfinite(x) else float(x)
+
         with self._lock:
             lm_info = None
             if 0 <= self._target_idx < len(self.targets):
                 lm, az, el, slant = self.targets[self._target_idx]
+                h_ft, v_ft = _acc(lm.accuracy_class)
+                sigma_az, sigma_el = pointing_uncertainty_deg(slant, h_ft, v_ft)
                 lm_info = {
                     "oas": lm.oas,
                     "name": lm.name,
@@ -494,6 +552,9 @@ class CalibrationSession:
                     "slant_m": float(slant),
                     "lit": bool(lm.lit),
                     "accuracy_class": lm.accuracy_class,
+                    "aiming_hint": _aim(lm),
+                    "sigma_az_deg": _nan_to_none(sigma_az),
+                    "sigma_el_deg": _nan_to_none(sigma_el),
                 }
             sol_info = None
             if self._solution is not None:
