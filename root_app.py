@@ -14,6 +14,7 @@ from front.app import FrontMain, get_live_status
 
 from device.app import DeviceMain  # type: ignore
 from device.config import Config  # type: ignore
+from device.live_tracker_service import LiveTrackerMain  # type: ignore
 from device import log  # type: ignore
 from device import telescope  # type: ignore
 
@@ -53,10 +54,11 @@ class AppRunner:
 
 
 class ConfigChangeHandler(FileSystemEventHandler):
-    def __init__(self, path, alp, front):
+    def __init__(self, path, alp, front, live=None):
         self.path = path
         self.alp = alp
         self.front = front
+        self.live = live
         self.last_restart = time.time()
 
     def on_modified(self, event):
@@ -65,6 +67,8 @@ class ConfigChangeHandler(FileSystemEventHandler):
             Config.load_toml()
             self.alp.reload()
             self.front.reload()
+            if self.live is not None:
+                self.live.reload()
         # else:
         #    print(f"ConfigChangeHandler Ignoring event type: {event.event_type}  path : {event.src_path}")
 
@@ -86,7 +90,11 @@ if __name__ == "__main__":
     front = AppRunner(logger, "Front", FrontMain)
     front.start()
 
-    event_handler = ConfigChangeHandler(Config.path_to_dat, main, front)
+    logger.info("Starting LiveTracker service")
+    live = AppRunner(logger, "LiveTracker", LiveTrackerMain)
+    live.start()
+
+    event_handler = ConfigChangeHandler(Config.path_to_dat, main, front, live=live)
     observer = Observer()
     observer.schedule(
         event_handler, path=os.path.dirname(Config.path_to_dat), recursive=True
