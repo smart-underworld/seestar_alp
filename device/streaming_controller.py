@@ -22,10 +22,12 @@ front-end overlay.
 
 from __future__ import annotations
 
+import math
 import signal
 import threading
 import time
 from dataclasses import dataclass, field
+from typing import Callable
 
 import numpy as np
 from astropy.coordinates import EarthLocation
@@ -53,6 +55,56 @@ V_CORR_MAX_DEGS = 2.0
 TICK_CMD_DUR_S = 1
 STALE_TOLERANCE_TICKS = 4  # consecutive stale samples that force exit
 MAX_DURATION_S = 900.0      # 15 min hard cap
+# Threshold below which the instantaneous track heading is considered
+# ill-defined (geostationary-like target). ψ freezes at the last good value
+# and along/cross offsets stop updating until |v| rises again.
+V_MIN_HEADING_LOCK_DEGS = 0.05
+# EWMA time constant for ψ (track heading). ~2 s gives a clean filter at
+# 0.5 s tick rate without noticeable lag.
+HEADING_EWMA_TAU_S = 2.0
+
+
+@dataclass(frozen=True)
+class OffsetSnapshot:
+    """Immutable snapshot of user-driven offsets, produced by an external
+    offset provider. Defaults leave the tracker behavior unchanged.
+
+    - time_offset_s: added to the per-tick provider query time. Positive
+      values look ahead along the trajectory; negative look behind.
+    - az_bias_deg / el_bias_deg: additive bias in the mount frame, fixed
+      regardless of target heading.
+    - along_deg / cross_deg: additive bias rotated into the mount frame by
+      the instantaneous track heading (ψ). "Along +" points in the
+      direction of motion; "Cross +" is 90° CCW of Along+.
+    """
+    time_offset_s: float = 0.0
+    az_bias_deg: float = 0.0
+    el_bias_deg: float = 0.0
+    along_deg: float = 0.0
+    cross_deg: float = 0.0
+
+
+_ZERO_OFFSETS = OffsetSnapshot()
+
+
+@dataclass(frozen=True)
+class TickInfo:
+    """Summary of one tick, passed to an optional tick_callback so callers
+    (e.g. a web session wrapper) can expose live status without re-deriving
+    quantities the loop already computed."""
+    tick: int
+    t_wall: float
+    heading_deg: float               # ψ (EWMA) in degrees, wrapped to [0, 360)
+    heading_locked: bool             # True when ψ was frozen (|v|<v_min)
+    d_az_deg: float                  # total az bias applied this tick
+    d_el_deg: float                  # total el bias applied this tick
+    eff_ref_az_cum_deg: float
+    eff_ref_el_deg: float
+    cur_cum_az_deg: float
+    cur_el_deg: float
+    err_az_deg: float
+    err_el_deg: float
+    ref_stale: bool
 
 
 @dataclass
@@ -198,6 +250,8 @@ def track(
     el_max_deg: float = 85.0,
     el_min_deg: float = -85.0,
     dry_run: bool = False,
+    offset_provider: Callable[[], OffsetSnapshot] | None = None,
+    tick_callback: Callable[[TickInfo], None] | None = None,
 ) -> TrackResult:
     """Indefinite FF+FB tick loop tracking a ReferenceProvider.
 
@@ -306,6 +360,17 @@ def track(
     stale_streak = 0
     exit_reason = "end_of_track"
 
+    # Track heading EWMA state. heading_rad_ewma holds the filter output;
+    # heading_locked becomes True on ticks where |v| is too small to give a
+    # meaningful direction (ψ is frozen at its last good value).
+    heading_rad_ewma: float = 0.0
+    heading_initialised = False
+    heading_locked = True
+    # Alpha for a first-order EWMA over a signal sampled at tick_dt.
+    ewma_alpha = 1.0 - math.exp(-tick_dt / max(HEADING_EWMA_TAU_S, 1e-6))
+
+    last_offset_snapshot: OffsetSnapshot | None = None
+
     try:
         while True:
             tick_start = time.monotonic()
@@ -319,6 +384,25 @@ def track(
                 errors.append(f"max_duration_s={max_duration_s} reached")
                 break
 
+            off = offset_provider() if offset_provider is not None else _ZERO_OFFSETS
+            if (
+                position_logger is not None
+                and last_offset_snapshot is not None
+                and off != last_offset_snapshot
+            ):
+                try:
+                    position_logger.mark_event(
+                        "offset_change",
+                        time_offset_s=off.time_offset_s,
+                        az_bias_deg=off.az_bias_deg,
+                        el_bias_deg=off.el_bias_deg,
+                        along_deg=off.along_deg,
+                        cross_deg=off.cross_deg,
+                    )
+                except Exception:
+                    pass
+            last_offset_snapshot = off
+
             # 1. Measure.
             try:
                 alt, az_wrapped, _fw_t = measure_altaz_timed(
@@ -331,8 +415,8 @@ def track(
             cur_cum_az = az_tracker.update(az_wrapped)
             cur_el = alt
 
-            # 2. Sample provider at latency-compensated time.
-            t_query = time.time() + latency_s
+            # 2. Sample provider at latency-compensated time (+ user time offset).
+            t_query = time.time() + latency_s + off.time_offset_s
             if t_query > prov_t1 + provider.__dict__.get("extrapolation_s", 1.0):
                 # Past extrapolation horizon — a graceful end-of-track.
                 exit_reason = "end_of_track"
@@ -355,11 +439,38 @@ def track(
             else:
                 stale_streak = 0
 
-            # 3. Controller math. Apply the start-of-track offset so the
-            #    mount tracks deltas regardless of its arbitrary encoder
-            #    origin.
-            eff_ref_az = ref.az_cum_deg + az_offset
-            eff_ref_el = ref.el_deg + el_offset
+            # Update heading EWMA from the reference velocity, unless
+            # |v| is too small to trust the direction.
+            v_mag_ref = math.hypot(ref.v_az_degs, ref.v_el_degs)
+            if v_mag_ref >= V_MIN_HEADING_LOCK_DEGS:
+                new_h = math.atan2(ref.v_el_degs, ref.v_az_degs)
+                if not heading_initialised:
+                    heading_rad_ewma = new_h
+                    heading_initialised = True
+                else:
+                    # Branch-unwrap toward current EWMA so 359°→1° doesn't
+                    # bias the filter.
+                    delta = math.atan2(
+                        math.sin(new_h - heading_rad_ewma),
+                        math.cos(new_h - heading_rad_ewma),
+                    )
+                    heading_rad_ewma = heading_rad_ewma + ewma_alpha * delta
+                heading_locked = False
+            else:
+                heading_locked = True  # keep previous ψ
+
+            cos_h = math.cos(heading_rad_ewma) if heading_initialised else 1.0
+            sin_h = math.sin(heading_rad_ewma) if heading_initialised else 0.0
+            d_az_rel = off.along_deg * cos_h - off.cross_deg * sin_h
+            d_el_rel = off.along_deg * sin_h + off.cross_deg * cos_h
+            d_az = off.az_bias_deg + (0.0 if not heading_initialised else d_az_rel)
+            d_el = off.el_bias_deg + (0.0 if not heading_initialised else d_el_rel)
+
+            # 3. Controller math. Apply the start-of-track anchor offset +
+            #    user bias so the mount tracks deltas regardless of its
+            #    arbitrary encoder origin.
+            eff_ref_az = ref.az_cum_deg + az_offset + d_az
+            eff_ref_el = ref.el_deg + el_offset + d_el
             err_az = eff_ref_az - cur_cum_az
             err_el = eff_ref_el - cur_el
             v_corr_az = _clip_scalar(kp_pos * err_az, -v_corr_max, v_corr_max)
@@ -424,6 +535,33 @@ def track(
                     stale=ref.stale, extrapolated=ref.extrapolated,
                     dry_run=dry_run,
                 )
+
+            if tick_callback is not None:
+                try:
+                    heading_deg = (
+                        (math.degrees(heading_rad_ewma) + 360.0) % 360.0
+                        if heading_initialised
+                        else 0.0
+                    )
+                    tick_callback(
+                        TickInfo(
+                            tick=ticks,
+                            t_wall=time.time(),
+                            heading_deg=heading_deg,
+                            heading_locked=heading_locked or not heading_initialised,
+                            d_az_deg=d_az,
+                            d_el_deg=d_el,
+                            eff_ref_az_cum_deg=eff_ref_az,
+                            eff_ref_el_deg=eff_ref_el,
+                            cur_cum_az_deg=cur_cum_az,
+                            cur_el_deg=cur_el,
+                            err_az_deg=err_az,
+                            err_el_deg=err_el,
+                            ref_stale=ref.stale,
+                        )
+                    )
+                except Exception:
+                    pass
 
             az_errs.append(err_az)
             el_errs.append(err_el)
