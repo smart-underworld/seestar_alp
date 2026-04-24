@@ -15,7 +15,9 @@ import pytest
 from device.sun_safety import (
     DEFAULT_ALT_THRESHOLD_DEG,
     SafetyTrip,
+    SunSafetyMonitor,
     angular_separation,
+    compute_jog_angle,
     compute_sun_altaz,
     is_sun_safe,
 )
@@ -231,3 +233,280 @@ def test_safety_trip_default_message():
         jog_angle_deg=0, jog_speed=1440, jog_duration_s=3,
     )
     assert "Sun safety triggered" in trip.message
+
+
+# --- compute_jog_angle ----------------------------------------------------
+
+
+def _apply_jog(mount_az, mount_el, angle_deg, jog_speed=1440, jog_duration_s=3.0):
+    """Forward-simulate exactly what the monitor does: motion in (daz, del)."""
+    rate = jog_speed / 237.0
+    step = rate * jog_duration_s
+    rad = math.radians(angle_deg)
+    new_az = (mount_az + step * math.cos(rad)) % 360.0
+    new_el = max(-90.0, min(90.0, mount_el + step * math.sin(rad)))
+    return new_az, new_el
+
+
+def _sep_after_jog(mount_az, mount_el, sun_az, sun_alt, angle):
+    new_az, new_el = _apply_jog(mount_az, mount_el, angle)
+    return angular_separation(new_az, new_el, sun_az, sun_alt)
+
+
+def test_jog_increases_separation_sun_east_mount_west():
+    sun_az, sun_alt = 90.0, 30.0
+    mount_az, mount_el = 100.0, 30.0  # 10° east of mount; inside 30° cone
+    sep_before = angular_separation(mount_az, mount_el, sun_az, sun_alt)
+    angle = compute_jog_angle(mount_az, mount_el, sun_az, sun_alt)
+    sep_after = _sep_after_jog(mount_az, mount_el, sun_az, sun_alt, angle)
+    assert sep_after > sep_before, f"angle={angle} sep before={sep_before} after={sep_after}"
+
+
+def test_jog_increases_separation_sun_west_mount_east():
+    sun_az, sun_alt = 270.0, 30.0
+    mount_az, mount_el = 260.0, 30.0
+    sep_before = angular_separation(mount_az, mount_el, sun_az, sun_alt)
+    angle = compute_jog_angle(mount_az, mount_el, sun_az, sun_alt)
+    sep_after = _sep_after_jog(mount_az, mount_el, sun_az, sun_alt, angle)
+    assert sep_after > sep_before
+
+
+def test_jog_increases_separation_sun_above_mount():
+    # Sun at 40° alt, mount at 30° alt — optical axis pointing low at same az.
+    sun_az, sun_alt = 180.0, 40.0
+    mount_az, mount_el = 180.0, 30.0
+    sep_before = angular_separation(mount_az, mount_el, sun_az, sun_alt)
+    angle = compute_jog_angle(mount_az, mount_el, sun_az, sun_alt)
+    sep_after = _sep_after_jog(mount_az, mount_el, sun_az, sun_alt, angle)
+    assert sep_after > sep_before
+    # Should be moving downward (angle near 270° = -el).
+    assert 200 < angle < 340
+
+
+def test_jog_increases_separation_sun_below_mount():
+    sun_az, sun_alt = 180.0, 20.0
+    mount_az, mount_el = 180.0, 30.0
+    sep_before = angular_separation(mount_az, mount_el, sun_az, sun_alt)
+    angle = compute_jog_angle(mount_az, mount_el, sun_az, sun_alt)
+    sep_after = _sep_after_jog(mount_az, mount_el, sun_az, sun_alt, angle)
+    assert sep_after > sep_before
+    # Should be moving up (near 90°).
+    assert 20 < angle < 160
+
+
+def test_jog_direction_is_opposite_from_sun_in_az_el_space():
+    # 45° diagonal from sun in (daz, del) space → jog should be ~225°
+    # (i.e. 45° + 180°).
+    sun_az, sun_alt = 100.0, 40.0
+    mount_az, mount_el = 110.0, 50.0   # +10° in az, +10° in el from sun
+    angle = compute_jog_angle(mount_az, mount_el, sun_az, sun_alt)
+    # direction-to-sun has atan2(-10, -10) = -135° → -135 + 360 = 225°.
+    # away-from-sun direction: atan2(10, 10) = 45° ≈ the answer.
+    assert abs(angle - 45) < 2
+
+
+def test_jog_never_decreases_separation_over_random_inputs():
+    """Property check: the function must not pick a direction that
+    brings the mount closer to the sun."""
+    rng = __import__("random").Random(1234)
+    failures = []
+    for _ in range(200):
+        sun_az = rng.uniform(0, 360)
+        sun_alt = rng.uniform(-5, 75)
+        # Mount somewhere in the 30° cone around the sun.
+        daz = rng.uniform(-20, 20)
+        del_ = rng.uniform(-20, 20)
+        mount_az = (sun_az + daz) % 360.0
+        mount_el = max(-85.0, min(85.0, sun_alt + del_))
+        if math.hypot(daz, del_) < 0.1:
+            continue  # degenerate: mount coincides with sun
+        sep_before = angular_separation(mount_az, mount_el, sun_az, sun_alt)
+        angle = compute_jog_angle(mount_az, mount_el, sun_az, sun_alt)
+        sep_after = _sep_after_jog(mount_az, mount_el, sun_az, sun_alt, angle)
+        if sep_after < sep_before - 1e-3:
+            failures.append(
+                f"sun=({sun_az:.1f},{sun_alt:.1f}) mount=({mount_az:.1f},{mount_el:.1f})"
+                f" angle={angle} sep {sep_before:.2f}→{sep_after:.2f}"
+            )
+    assert not failures, "jog decreased separation:\n" + "\n".join(failures[:5])
+
+
+# --- SunSafetyMonitor: lockout + jog behavior ----------------------------
+
+
+class _FakeJog:
+    def __init__(self) -> None:
+        self.calls: list[tuple[int, int, int]] = []
+        self.was_locked_during_call: list[bool] = []
+        self._monitor: SunSafetyMonitor | None = None
+
+    def bind(self, m: SunSafetyMonitor) -> None:
+        self._monitor = m
+
+    def __call__(self, speed: int, angle: int, dur: int) -> None:
+        self.calls.append((speed, angle, dur))
+        if self._monitor is not None:
+            self.was_locked_during_call.append(self._monitor.is_locked_out())
+
+
+def test_monitor_trips_and_calls_abort_then_jog_then_releases():
+    # Mount pointing RIGHT at a fixed sun position; monitor should trip.
+    sun_pos = (180.0, 30.0)
+
+    # Patch compute_sun_altaz via the module so tick() sees a known sun.
+    from device import sun_safety as ss
+    real = ss.compute_sun_altaz
+    ss.compute_sun_altaz = lambda **kw: sun_pos
+    try:
+        aborts: list[int] = []
+        jog = _FakeJog()
+        m = SunSafetyMonitor(
+            altaz_reader=lambda: (181.0, 31.0),   # 1.4° from sun
+            jog_command=jog,
+            abort_active=lambda: aborts.append(1),
+            lat_deg=33.96, lon_deg=-118.46,
+            jog_duration_s=0,   # make the post-jog sleep fast
+        )
+        jog.bind(m)
+        # Drive one tick in-line; don't bother with the thread loop.
+        m._tick()
+    finally:
+        ss.compute_sun_altaz = real
+
+    assert len(aborts) == 1, "abort_active should be called exactly once"
+    assert len(jog.calls) == 1, "jog_command should be called exactly once"
+    speed, angle, dur = jog.calls[0]
+    assert speed == 1440
+    assert dur == 0
+    assert 0 <= angle < 360
+    # Lockout should have been set during the jog call.
+    assert jog.was_locked_during_call == [True]
+    # After _trigger_emergency returns, lockout should be cleared.
+    assert m.is_locked_out() is False
+    trip = m.last_trip()
+    assert trip is not None
+    assert trip.cone_deg == 30.0
+    assert trip.separation_deg < 30.0
+    assert trip.jog_angle_deg == angle
+
+
+def test_monitor_skips_when_sun_below_threshold():
+    from device import sun_safety as ss
+    real = ss.compute_sun_altaz
+    ss.compute_sun_altaz = lambda **kw: (180.0, -15.0)  # below -10° default
+    try:
+        jog = _FakeJog()
+        m = SunSafetyMonitor(
+            altaz_reader=lambda: (180.0, -15.0),  # pointing RIGHT at sun
+            jog_command=jog,
+            lat_deg=33.96, lon_deg=-118.46,
+            jog_duration_s=0,
+        )
+        m._tick()
+    finally:
+        ss.compute_sun_altaz = real
+    assert jog.calls == []
+    assert m.last_trip() is None
+
+
+def test_monitor_does_not_trip_when_altaz_reader_returns_none():
+    # Simulates "mount not plate-solved; RA/Dec unreliable".
+    from device import sun_safety as ss
+    real = ss.compute_sun_altaz
+    ss.compute_sun_altaz = lambda **kw: (180.0, 30.0)
+    try:
+        jog = _FakeJog()
+        m = SunSafetyMonitor(
+            altaz_reader=lambda: None,
+            jog_command=jog,
+            lat_deg=33.96, lon_deg=-118.46,
+            jog_duration_s=0,
+        )
+        m._tick()
+    finally:
+        ss.compute_sun_altaz = real
+    assert jog.calls == []
+    assert m.last_trip() is None
+
+
+def test_monitor_skip_when_disabled():
+    from device import sun_safety as ss
+    real = ss.compute_sun_altaz
+    ss.compute_sun_altaz = lambda **kw: (180.0, 30.0)
+    try:
+        jog = _FakeJog()
+        m = SunSafetyMonitor(
+            altaz_reader=lambda: (180.0, 30.0),
+            jog_command=jog,
+            lat_deg=33.96, lon_deg=-118.46,
+            jog_duration_s=0,
+            enabled=False,
+        )
+        m._tick()
+    finally:
+        ss.compute_sun_altaz = real
+    assert jog.calls == []
+
+
+def test_monitor_dismiss_hides_last_trip():
+    from device import sun_safety as ss
+    real = ss.compute_sun_altaz
+    ss.compute_sun_altaz = lambda **kw: (180.0, 30.0)
+    try:
+        m = SunSafetyMonitor(
+            altaz_reader=lambda: (181.0, 31.0),
+            jog_command=_FakeJog(),
+            lat_deg=33.96, lon_deg=-118.46,
+            jog_duration_s=0,
+        )
+        m._tick()
+    finally:
+        ss.compute_sun_altaz = real
+    assert m.last_trip() is not None
+    m.dismiss_last_trip()
+    assert m.last_trip() is None
+
+
+def test_reload_updates_thresholds_without_restart():
+    m = SunSafetyMonitor(
+        altaz_reader=lambda: None,
+        jog_command=_FakeJog(),
+        lat_deg=33.96, lon_deg=-118.46,
+    )
+    assert m.min_separation_deg == 30.0
+    assert m.enabled is True
+    m.reload(min_separation_deg=15.0, enabled=False)
+    assert m.min_separation_deg == 15.0
+    assert m.enabled is False
+
+
+# --- module-level singleton helpers --------------------------------------
+
+
+def test_sun_safety_is_locked_out_without_monitor():
+    from device.sun_safety import (
+        get_sun_monitor,
+        set_sun_monitor,
+        sun_safety_is_locked_out,
+    )
+    prev = get_sun_monitor()
+    set_sun_monitor(None)
+    try:
+        assert sun_safety_is_locked_out() is False
+    finally:
+        set_sun_monitor(prev)
+
+
+def test_set_and_get_sun_monitor_roundtrip():
+    from device.sun_safety import get_sun_monitor, set_sun_monitor
+    prev = get_sun_monitor()
+    m = SunSafetyMonitor(
+        altaz_reader=lambda: None,
+        jog_command=_FakeJog(),
+        lat_deg=0.0, lon_deg=0.0,
+    )
+    set_sun_monitor(m)
+    try:
+        assert get_sun_monitor() is m
+    finally:
+        set_sun_monitor(prev)
