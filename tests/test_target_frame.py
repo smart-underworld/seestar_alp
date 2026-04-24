@@ -142,3 +142,112 @@ def test_trajectory_rejects_short_input():
     mf = MountFrame.from_identity_enu()
     with pytest.raises(ValueError):
         mf.ecef_traj_to_mount(np.zeros((3, 3)), np.zeros(3))
+
+
+# --------------- SE(3) origin offset --------------------------------
+
+
+def test_origin_offset_shifts_target_azel():
+    """A 1 m ECEF translation of the mount origin must shift the computed
+    azimuth of a nearby target by the expected amount.
+
+    A target 1000 m due east of the nominal site, with the mount origin
+    shifted 10 m *east* of the nominal site as well, should appear 990 m
+    east of the mount origin — i.e. az still ~90°, but slant reduced by
+    ~10 m.
+    """
+    mf0 = MountFrame.from_identity_enu()
+    site = mf0.site
+    # Build a 10 m east translation in ECEF. East unit vector in ECEF is
+    # the first row of the ENU rotation (maps ECEF→ENU; its transpose maps
+    # ENU→ECEF, so the east unit in ECEF is column 0 of enu_rotation.T =
+    # row 0 of enu_rotation).
+    east_ecef = site.enu_rotation[0]  # unit ECEF vector pointing east
+    offset = 10.0 * east_ecef
+    mf_shift = MountFrame.from_euler_deg(
+        yaw_deg=0.0, pitch_deg=0.0, roll_deg=0.0,
+        origin_offset_ecef_m=offset,
+    )
+    # Target ~1000 m due east of the *nominal* site.
+    lat, lon = _offset_latlon(site.lat_deg, site.lon_deg, 0.0, 1000.0)
+    ecef = lla_to_ecef(lat, lon, site.alt_m)
+    _az0, _el0, slant0 = mf0.ecef_to_mount_azel(ecef)
+    az1, el1, slant1 = mf_shift.ecef_to_mount_azel(ecef)
+    # The 10 m east shift of the mount origin must reduce the apparent
+    # slant by ~10 m (target is 10 m closer to the shifted origin).
+    assert (slant0 - slant1) == pytest.approx(10.0, abs=0.1)
+    assert az1 == pytest.approx(90.0, abs=0.05)
+    assert abs(el1) < 1.0
+
+
+def test_from_calibration_json_reads_translation(tmp_path):
+    cal = {
+        "yaw_offset_deg": 12.5,
+        "origin_offset_ecef_m": [1.5, -0.7, 0.3],
+    }
+    p = tmp_path / "cal.json"
+    p.write_text(__import__("json").dumps(cal))
+    mf = MountFrame.from_calibration_json(p)
+    assert np.allclose(mf.origin_offset_ecef_m, [1.5, -0.7, 0.3])
+
+
+def test_from_calibration_json_honors_embedded_observer(tmp_path):
+    """When the JSON carries an `observer` block and no explicit site
+    is passed, the resulting MountFrame is anchored at the embedded
+    lat/lon/alt — not the env-var default."""
+    custom = {"lat_deg": 35.0, "lon_deg": -120.0, "alt_m": 500.0}
+    cal = {
+        "yaw_offset_deg": 0.0,
+        "observer": custom,
+    }
+    p = tmp_path / "cal.json"
+    p.write_text(__import__("json").dumps(cal))
+    mf = MountFrame.from_calibration_json(p)
+    assert mf.site.lat_deg == pytest.approx(35.0, abs=1e-9)
+    assert mf.site.lon_deg == pytest.approx(-120.0, abs=1e-9)
+    assert mf.site.alt_m == pytest.approx(500.0, abs=1e-9)
+
+
+def test_from_calibration_json_explicit_site_wins_over_embedded(tmp_path):
+    """Caller-supplied `site` overrides the embedded observer block."""
+    from scripts.trajectory.observer import build_site
+    cal = {
+        "yaw_offset_deg": 0.0,
+        "observer": {"lat_deg": 35.0, "lon_deg": -120.0, "alt_m": 500.0},
+    }
+    p = tmp_path / "cal.json"
+    p.write_text(__import__("json").dumps(cal))
+    site = build_site(lat_deg=40.0, lon_deg=-100.0, alt_m=1000.0)
+    mf = MountFrame.from_calibration_json(p, site=site)
+    assert mf.site.lat_deg == pytest.approx(40.0, abs=1e-9)
+
+
+def test_geometry_arrays_are_float64():
+    """Lock in the double-precision invariant. A float32 downcast of
+    the ENU rotation or ECEF origin would cost ~1 m of precision at
+    Earth-radius scale — enough to matter for near-pass LEO calibration."""
+    mf = MountFrame.from_euler_deg(yaw_deg=15.0, pitch_deg=0.5, roll_deg=-0.2)
+    assert mf.topo_to_mount.dtype == np.float64
+    assert mf.origin_offset_ecef_m.dtype == np.float64
+    assert mf.site.enu_rotation.dtype == np.float64
+    assert mf.site.ecef_xyz.dtype == np.float64
+    # Transforms must return float64 regardless of input dtype.
+    mf_id = MountFrame.from_identity_enu()
+    ecef_f32 = np.asarray(mf_id.site.ecef_xyz, dtype=np.float32)
+    az, el, slant = mf_id.ecef_to_mount_azel(ecef_f32)
+    assert isinstance(az, float) and isinstance(el, float) and isinstance(slant, float)
+    arr_f32 = np.asarray([mf_id.site.ecef_xyz], dtype=np.float32)
+    az_a, el_a, slant_a = mf_id.ecef_array_to_mount(arr_f32)
+    assert az_a.dtype == np.float64
+    assert el_a.dtype == np.float64
+    assert slant_a.dtype == np.float64
+
+
+def test_default_origin_offset_is_zero_and_backward_compat():
+    mf_id = MountFrame.from_identity_enu()
+    mf_yaw = MountFrame.from_euler_deg(yaw_deg=0.0, pitch_deg=0.0, roll_deg=0.0)
+    assert np.allclose(mf_id.origin_offset_ecef_m, 0.0)
+    assert np.allclose(mf_yaw.origin_offset_ecef_m, 0.0)
+    # Observer position should resolve to zero slant as before.
+    az, el, slant = mf_id.ecef_to_mount_azel(mf_id.site.ecef_xyz)
+    assert slant < 1e-3

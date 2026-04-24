@@ -35,6 +35,13 @@ OBSERVER_LON_DEG = _env_float("OBSERVER_LON_DEG", -118.460139)
 OBSERVER_ALT_M = _env_float("OBSERVER_ALT_M", 30.0)
 
 
+# All geometry arrays are float64. Explicit dtype throughout keeps a
+# downstream float32 input from silently downcasting rotation matrices
+# or the ECEF origin — 1 m of precision at Earth-radius scale requires
+# ~1e-7 relative precision, well beyond float32's 7-digit mantissa.
+_GEO_DTYPE = np.float64
+
+
 @dataclass(frozen=True)
 class ObserverSite:
     lat_deg: float
@@ -43,11 +50,13 @@ class ObserverSite:
     ecef_x: float
     ecef_y: float
     ecef_z: float
-    enu_rotation: np.ndarray  # shape (3, 3): rows are E, N, U in ECEF
+    enu_rotation: np.ndarray  # shape (3, 3), dtype float64. Rows are E, N, U in ECEF.
 
     @property
     def ecef_xyz(self) -> np.ndarray:
-        return np.array([self.ecef_x, self.ecef_y, self.ecef_z])
+        return np.array(
+            [self.ecef_x, self.ecef_y, self.ecef_z], dtype=_GEO_DTYPE,
+        )
 
 
 def _enu_rotation(lat_deg: float, lon_deg: float) -> np.ndarray:
@@ -59,7 +68,7 @@ def _enu_rotation(lat_deg: float, lon_deg: float) -> np.ndarray:
         [-sl,      cl,      0.0],
         [-sp * cl, -sp * sl, cp],
         [ cp * cl,  cp * sl, sp],
-    ])
+    ], dtype=_GEO_DTYPE)
 
 
 def build_site(
@@ -91,6 +100,47 @@ def default_site() -> ObserverSite:
     return _DEFAULT_SITE
 
 
+def fetch_telescope_lonlat(cli) -> tuple[float, float]:
+    """Return ``(lat_deg, lon_deg)`` from the telescope's stored GPS.
+
+    The Seestar firmware exposes its configured geodetic origin via
+    ``get_device_state`` with key ``location_lon_lat`` — a two-element
+    list in ``[lon, lat]`` order (see device/seestar_device.py:1038).
+    Altitude isn't stored by the firmware, so callers resolve that
+    separately (manual entry, prior calibration, or elevation lookup).
+    """
+    resp = cli.method_sync(
+        "get_device_state", {"keys": ["location_lon_lat"]},
+    )
+    if not isinstance(resp, dict):
+        raise RuntimeError(
+            "telescope did not return a valid response to "
+            "get_device_state (is the mount powered on and connected?)"
+        )
+    result = resp.get("result")
+    if not isinstance(result, dict) or "location_lon_lat" not in result:
+        raise RuntimeError(
+            f"telescope response missing 'location_lon_lat': {resp!r}"
+        )
+    lon_lat = result["location_lon_lat"]
+    if not (isinstance(lon_lat, (list, tuple)) and len(lon_lat) >= 2):
+        raise RuntimeError(
+            f"telescope 'location_lon_lat' malformed: {lon_lat!r}"
+        )
+    return float(lon_lat[1]), float(lon_lat[0])
+
+
+def build_site_from_telescope(cli, alt_m: float) -> ObserverSite:
+    """Fetch the observer's lat/lon from the telescope's stored state
+    and build an ObserverSite at the given altitude.
+
+    Thin wrapper over :func:`fetch_telescope_lonlat` for callers that
+    don't need the intermediate lat/lon.
+    """
+    lat_deg, lon_deg = fetch_telescope_lonlat(cli)
+    return build_site(lat_deg=lat_deg, lon_deg=lon_deg, alt_m=float(alt_m))
+
+
 def lla_to_ecef(
     lat_deg: float, lon_deg: float, alt_m: float,
 ) -> tuple[float, float, float]:
@@ -117,7 +167,7 @@ def ecef_to_topocentric(
     """
     if site is None:
         site = default_site()
-    v = np.asarray(ecef_xyz, dtype=float) - site.ecef_xyz
+    v = np.asarray(ecef_xyz, dtype=_GEO_DTYPE) - site.ecef_xyz
     enu = site.enu_rotation @ v
     east, north, up = enu[0], enu[1], enu[2]
     slant = float(np.sqrt(east * east + north * north + up * up))
@@ -135,7 +185,7 @@ def ecef_array_to_topo(
     """Batched ECEF → (az_deg, el_deg, slant_m). Input shape (N, 3)."""
     if site is None:
         site = default_site()
-    arr = np.asarray(ecef_xyz, dtype=float)
+    arr = np.asarray(ecef_xyz, dtype=_GEO_DTYPE)
     if arr.ndim != 2 or arr.shape[1] != 3:
         raise ValueError(f"expected shape (N, 3), got {arr.shape}")
     v = arr - site.ecef_xyz
@@ -155,6 +205,62 @@ def wrap_pm180(deg: float) -> float:
     if d == -180.0:
         return 180.0
     return d
+
+
+def haversine_m(
+    lat1_deg: float, lon1_deg: float,
+    lat2_deg: float, lon2_deg: float,
+) -> float:
+    """Great-circle distance in metres between two WGS84 points.
+
+    Used by the calibration tool's staleness check and anywhere else
+    we need a quick 'has the observer moved?' test. Accuracy is ≲0.5%
+    — plenty for our ~10 m thresholds. Uses the standard Earth radius
+    6,371,000 m; we don't need WGS84 ellipsoidal precision here.
+    """
+    earth_r_m = 6_371_000.0
+    phi1 = np.radians(lat1_deg)
+    phi2 = np.radians(lat2_deg)
+    dphi = np.radians(lat2_deg - lat1_deg)
+    dlam = np.radians(lon2_deg - lon1_deg)
+    a = (
+        np.sin(dphi / 2.0) ** 2
+        + np.cos(phi1) * np.cos(phi2) * np.sin(dlam / 2.0) ** 2
+    )
+    c = 2.0 * np.arcsin(np.sqrt(min(1.0, float(a))))
+    return float(earth_r_m * c)
+
+
+def lookup_elevation(
+    lat_deg: float, lon_deg: float, *, timeout_s: float = 4.0,
+) -> float:
+    """Return the ground elevation in metres AMSL at the given
+    lat/lon, via the Open-Meteo free elevation API.
+
+    Raises ``RuntimeError`` on any HTTP, timeout, parse, or
+    schema-mismatch failure so callers can fall back without swallowing
+    the cause. The endpoint is unauthenticated and rate-limited to a
+    very generous cap — a single call per CLI invocation is safe.
+    """
+    import requests
+
+    url = "https://api.open-meteo.com/v1/elevation"
+    params = {"latitude": f"{lat_deg:.6f}", "longitude": f"{lon_deg:.6f}"}
+    try:
+        resp = requests.get(url, params=params, timeout=timeout_s)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.RequestException as exc:
+        raise RuntimeError(f"elevation lookup failed: {exc}") from exc
+    except ValueError as exc:
+        raise RuntimeError(f"elevation response not JSON: {exc}") from exc
+    elev = data.get("elevation") if isinstance(data, dict) else None
+    if not isinstance(elev, list) or not elev:
+        raise RuntimeError(f"elevation response malformed: {data!r}")
+    try:
+        return float(elev[0])
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"elevation value not numeric: {elev!r}") from exc
 
 
 def unwrap_az_series(wrapped_deg: np.ndarray) -> np.ndarray:

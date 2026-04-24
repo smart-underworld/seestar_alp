@@ -87,6 +87,33 @@ def _build_front_test_app():
         "/{telescope_id:int}/schedule/state", front_app.ScheduleToggleResource()
     )
     app.add_route("/{telescope_id:int}/startup", front_app.StartupResource())
+    app.add_route(
+        "/{telescope_id:int}/live_tracker", front_app.LiveTrackerResource()
+    )
+    app.add_route(
+        "/api/{telescope_id:int}/live_tracker/targets",
+        front_app.LiveTrackerTargetsResource(),
+    )
+    app.add_route(
+        "/api/{telescope_id:int}/live_tracker/status",
+        front_app.LiveTrackerStatusResource(),
+    )
+    app.add_route(
+        "/api/{telescope_id:int}/live_tracker/track",
+        front_app.LiveTrackerTrackResource(),
+    )
+    app.add_route(
+        "/api/{telescope_id:int}/live_tracker/stop",
+        front_app.LiveTrackerStopResource(),
+    )
+    app.add_route(
+        "/api/{telescope_id:int}/live_tracker/offsets",
+        front_app.LiveTrackerOffsetsResource(),
+    )
+    app.add_route(
+        "/api/{telescope_id:int}/live_tracker/offsets/reset",
+        front_app.LiveTrackerResetResource(),
+    )
     return app
 
 
@@ -432,6 +459,45 @@ def test_06_live_page_mode_routing(front_sim_bridge):
         resp = client.simulate_get(path)
         assert resp.status_code == 200
         assert "Video" in resp.text or "Capture" in resp.text
+
+
+def test_06b_live_tracker_smoke(front_sim_bridge):
+    """Basic contract check for the new Live Tracker page + API."""
+    client = front_sim_bridge["client"]
+
+    # Page renders.
+    page = client.simulate_get("/1/live_tracker")
+    assert page.status_code == 200
+    assert "Live Tracker" in page.text
+
+    # /targets returns JSON with live/cached keys.
+    targets = client.simulate_get("/api/1/live_tracker/targets")
+    assert targets.status_code == 200
+    body = json.loads(targets.text)
+    assert "live" in body and "cached" in body
+    assert isinstance(body["live"], list)
+    assert isinstance(body["cached"], list)
+
+    # /status with no active session still returns JSON.
+    status = client.simulate_get("/api/1/live_tracker/status")
+    assert status.status_code == 200
+    st = json.loads(status.text)
+    assert "active" in st
+
+    # /offsets with no active session returns 404.
+    r = client.simulate_post(
+        "/api/1/live_tracker/offsets",
+        json={"az_bias_deg": 0.1},
+    )
+    assert r.status_code == 404
+
+    # Malformed bodies return 400 (never a 500). A JSON array as the root
+    # would previously crash on `body.get(...)`; a NaN bias value would
+    # pass through _clamp and land in the streaming loop.
+    r = client.simulate_post("/api/1/live_tracker/offsets", json=[1, 2, 3])
+    assert r.status_code == 400
+    r = client.simulate_post("/api/1/live_tracker/track", json="not-an-object")
+    assert r.status_code == 400
 
 
 def test_07_schedule_lifecycle(front_sim_bridge):

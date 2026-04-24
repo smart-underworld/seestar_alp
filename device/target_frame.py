@@ -26,7 +26,7 @@ time stamp tags the sample but is not fed back into this transform.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -45,6 +45,13 @@ class MountFrame:
     # coincides with topocentric ENU" (uncalibrated). Non-identity rotations
     # encode tripod tilt + compass offset.
     topo_to_mount: np.ndarray
+    # Refinement of the mount origin in ECEF metres, added on top of
+    # `site.ecef_xyz`. Lets a future calibration step place the mount's
+    # optical centre at sub-metre precision (relevant for near-pass LEO
+    # satellites and low-altitude drones; ~0.006°/metre at 10 km slant).
+    origin_offset_ecef_m: np.ndarray = field(
+        default_factory=lambda: np.zeros(3, dtype=np.float64)
+    )
 
     @classmethod
     def from_identity_enu(cls, site: ObserverSite | None = None) -> "MountFrame":
@@ -65,24 +72,49 @@ class MountFrame:
         path: str | Path,
         site: ObserverSite | None = None,
     ) -> "MountFrame":
-        """Build a mount frame from a calibration JSON produced by
-        `scripts.trajectory.calibrate_compass`.
+        """Build a mount frame from a calibration JSON.
 
-        The calibration records `yaw_offset_deg` = how many degrees CCW
-        the mount's az=0 direction lies from true topocentric north.
-        That's directly what `from_euler_deg(yaw_deg=yaw_offset)` consumes.
-
-        Tilt (pitch/roll) is not yet applied — the balance sensor gives us
-        tilt magnitude but not a clean tilt-direction reference without
-        more work, and the typical tripod tilt of <1° is small compared
-        to the compass uncertainty. Future work.
+        Reads (all optional unless noted):
+        - `yaw_offset_deg` (required) — CCW rotation of mount az=0 from
+          topocentric north.
+        - `pitch_offset_deg`, `roll_offset_deg` (default 0) — tilt of
+          the mount relative to the local horizontal plane.
+        - `origin_offset_ecef_m` (default [0,0,0]) — 3-vector ECEF
+          translation of the mount origin relative to
+          `ObserverSite.ecef_xyz`. Lets a calibration step place the
+          mount's optical centre at sub-metre precision (relevant for
+          LEO / low-altitude drones at <10 km slant).
+        - `observer.{lat_deg, lon_deg, alt_m}` (optional block) — the
+          observer location that was active when the calibration was
+          solved. When present and the caller did not supply a `site`
+          explicitly, this block is used to build the site so that the
+          calibration and observer stay locked together. Caller-supplied
+          `site` still wins.
         """
         p = Path(path)
         with p.open("r", encoding="utf-8") as f:
             cal = json.load(f)
         yaw_offset = float(cal["yaw_offset_deg"])
+        pitch_offset = float(cal.get("pitch_offset_deg", 0.0))
+        roll_offset = float(cal.get("roll_offset_deg", 0.0))
+        off = cal.get("origin_offset_ecef_m")
+        origin_offset = (
+            np.asarray(off, dtype=np.float64) if off is not None else np.zeros(3, dtype=np.float64)
+        )
+        if site is None:
+            obs = cal.get("observer")
+            if isinstance(obs, dict) and {"lat_deg", "lon_deg", "alt_m"} <= obs.keys():
+                site = build_site(
+                    lat_deg=float(obs["lat_deg"]),
+                    lon_deg=float(obs["lon_deg"]),
+                    alt_m=float(obs["alt_m"]),
+                )
         return cls.from_euler_deg(
-            yaw_deg=yaw_offset, pitch_deg=0.0, roll_deg=0.0, site=site,
+            yaw_deg=yaw_offset,
+            pitch_deg=pitch_offset,
+            roll_deg=roll_offset,
+            site=site,
+            origin_offset_ecef_m=origin_offset,
         )
 
     @classmethod
@@ -92,6 +124,7 @@ class MountFrame:
         pitch_deg: float,
         roll_deg: float,
         site: ObserverSite | None = None,
+        origin_offset_ecef_m: np.ndarray | None = None,
     ) -> "MountFrame":
         """Build a mount frame from Euler angles of the mount in ENU.
 
@@ -107,27 +140,39 @@ class MountFrame:
         cy, sy = np.cos(np.radians(yaw_deg)),   np.sin(np.radians(yaw_deg))
         cp, sp = np.cos(np.radians(pitch_deg)), np.sin(np.radians(pitch_deg))
         cr, sr = np.cos(np.radians(roll_deg)),  np.sin(np.radians(roll_deg))
+        # Explicit float64: rotation matrices end up in matmul against
+        # ECEF vectors where 1 m precision at Earth-radius scale needs
+        # ~1e-7 relative precision — well beyond float32's mantissa.
         r_yaw = np.array([[cy, -sy, 0.0],
                           [sy,  cy, 0.0],
-                          [0.0, 0.0, 1.0]])
+                          [0.0, 0.0, 1.0]], dtype=np.float64)
         r_pitch = np.array([[1.0, 0.0, 0.0],
                             [0.0,  cp, -sp],
-                            [0.0,  sp,  cp]])
+                            [0.0,  sp,  cp]], dtype=np.float64)
         r_roll = np.array([[ cr, 0.0, sr],
                            [0.0, 1.0, 0.0],
-                           [-sr, 0.0, cr]])
-        return cls(site=site, topo_to_mount=r_roll @ r_pitch @ r_yaw)
+                           [-sr, 0.0, cr]], dtype=np.float64)
+        return cls(
+            site=site,
+            topo_to_mount=r_roll @ r_pitch @ r_yaw,
+            origin_offset_ecef_m=(
+                np.zeros(3, dtype=np.float64)
+                if origin_offset_ecef_m is None
+                else np.asarray(origin_offset_ecef_m, dtype=np.float64)
+            ),
+        )
 
     # --------------------------- transforms ---------------------------
 
     def _ecef_to_enu_mount(self, ecef_xyz: np.ndarray) -> np.ndarray:
         """ECEF (shape (3,) or (N, 3)) → ENU rotated into the mount frame."""
-        arr = np.asarray(ecef_xyz, dtype=float)
+        arr = np.asarray(ecef_xyz, dtype=np.float64)
+        origin = self.site.ecef_xyz + self.origin_offset_ecef_m
         if arr.ndim == 1:
-            v = arr - self.site.ecef_xyz
+            v = arr - origin
             enu = self.site.enu_rotation @ v
             return self.topo_to_mount @ enu
-        v = arr - self.site.ecef_xyz
+        v = arr - origin
         enu = v @ self.site.enu_rotation.T
         return enu @ self.topo_to_mount.T
 
@@ -139,7 +184,7 @@ class MountFrame:
         `az_deg` is in [0, 360). Callers that need a cumulative (non-wrapping)
         az series should use `ecef_traj_to_mount` instead.
         """
-        enu_m = self._ecef_to_enu_mount(np.asarray(ecef_xyz, dtype=float))
+        enu_m = self._ecef_to_enu_mount(np.asarray(ecef_xyz, dtype=np.float64))
         east, north, up = float(enu_m[0]), float(enu_m[1]), float(enu_m[2])
         slant = float(np.sqrt(east * east + north * north + up * up))
         if slant == 0.0:
@@ -152,7 +197,7 @@ class MountFrame:
         self, ecef_xyz: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Batched ECEF → (az_deg, el_deg, slant_m). Input shape (N, 3)."""
-        arr = np.asarray(ecef_xyz, dtype=float)
+        arr = np.asarray(ecef_xyz, dtype=np.float64)
         if arr.ndim != 2 or arr.shape[1] != 3:
             raise ValueError(f"expected shape (N, 3), got {arr.shape}")
         enu_m = self._ecef_to_enu_mount(arr)
@@ -181,7 +226,7 @@ class MountFrame:
 
         Returns a dict so callers don't have to juggle tuple order.
         """
-        t = np.asarray(t_unix, dtype=float)
+        t = np.asarray(t_unix, dtype=np.float64)
         if t.ndim != 1:
             raise ValueError(f"t_unix must be 1-D, got shape {t.shape}")
         if len(t) < 4:

@@ -1930,6 +1930,49 @@ Current 24° RMS is too loose for FOV acquisition. Two options:
   solve for yaw_offset by least squares. No magnetometer needed.
   Faster if the user is available to physically identify landmarks.
 
+### Next up: two-tower rotation-matrix calibration (Phase 6, NEXT)
+
+Supersedes the yaw-only landmark sighting above. Instead of solving
+a single scalar yaw offset, solve the full 3-DOF topocentric→mount
+rotation (yaw + pitch + roll) plus the ECEF origin translation by
+sighting two FAA-lit obstruction towers visible from the observing
+site. Unblocks FOV acquisition for the Live Tracker and for near-pass
+LEO satellites where the current 24° RMS yaw uncertainty dominates.
+
+Approach (sketch — the user will share specifics before implementation):
+
+- Inputs per landmark: the landmark's known ECEF position (from FAA
+  Obstruction Evaluation / survey data) plus mount encoder
+  `(az, el)` read while the scope is pointed at the light at night
+  (the beacon flash is the alignment target).
+- Constraints per landmark: 2 (az, el). Two landmarks → 4 constraints;
+  rotation has 3 DoF, so the redundant degree provides residual for
+  gross-error detection (wrong beacon identified → high residual).
+- Translation: if the two towers are close enough to the observer
+  (≤ a few km slant) the parallax between "true ECEF direction" and
+  "mount-pointed direction" will constrain `origin_offset_ecef_m`
+  on top of the rotation. For the common case (1–10 km slant) expect
+  zero translation to be fine; include it in the solve but regularise
+  toward zero.
+- Solver: Levenberg–Marquardt over (yaw, pitch, roll,
+  origin_offset_ecef_m) minimising the sum of squared angular
+  residuals in the mount frame. Seed from the magnetometer yaw
+  estimate and zero tilt.
+- Output: write `device/mount_calibration.json` with
+  `{yaw_offset_deg, pitch_offset_deg, roll_offset_deg,
+   origin_offset_ecef_m}`. All four keys are already consumed by
+  `MountFrame.from_calibration_json` and surface into every new
+  `LiveTrackSession` via `device.live_tracker.load_session_mount_frame()`.
+- New script likely lives at `scripts/trajectory/calibrate_rotation.py`
+  alongside `calibrate_compass.py`. Interactive: walks the user
+  through sighting each tower, reads the mount, solves, writes JSON,
+  prints residuals + confidence.
+
+Success target: residual az/el error < 0.5° at each landmark (well
+under the Live Tracker FOV). Slant ≥ 2 km so parallax on the observer
+position itself is negligible. Works at night (beacons visible) and
+does not require the mount to be aligned north-up.
+
 ### Lower priority
 
 - Fix the cable-stop convergence bug in `move_to_ff` (reproducibly hangs

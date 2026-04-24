@@ -18,6 +18,8 @@ import numpy as np
 from device.plant_limits import AzimuthLimits, CumulativeAzTracker
 from device.reference_provider import JsonlECEFProvider
 from device.streaming_controller import (
+    OffsetSnapshot,
+    TickInfo,
     pre_check,
     track,
 )
@@ -183,3 +185,128 @@ def test_dry_run_does_not_command_mount(tmp_path):
     # In dry-run mode the only "commands" issued are the final zero-stop
     # (also skipped), so commands_received should be 0.
     assert cli.state.commands_received == 0
+
+
+# --------- offset_provider + tick_callback hooks -------------------------
+
+
+def _run_dry_with_offsets(
+    tmp_path: Path,
+    offsets: OffsetSnapshot,
+    duration_s: float = 3.0,
+) -> list[TickInfo]:
+    """Run a short dry-run track with a fixed offset snapshot and return
+    the TickInfo records captured by the callback."""
+    path = tmp_path / "flight.jsonl"
+    t0 = time.time() + 0.3
+    _write_fixture(path, t0_unix=t0, duration_s=duration_s, dt=0.5)
+    mf = MountFrame.from_identity_enu()
+    provider = JsonlECEFProvider(path, mf, extrapolation_s=1.0)
+    cli = FakeMountClient()
+    first = provider.sample(t0)
+    cli.set_position(az_deg=first.az_cum_deg, el_deg=first.el_deg)
+
+    captured: list[TickInfo] = []
+    track(
+        cli, provider,
+        dry_run=True, max_duration_s=10.0,
+        offset_provider=lambda: offsets,
+        tick_callback=captured.append,
+    )
+    return captured
+
+
+def test_tick_callback_receives_info_without_offsets(tmp_path):
+    ticks = _run_dry_with_offsets(tmp_path, OffsetSnapshot(), duration_s=2.0)
+    assert len(ticks) >= 2
+    assert all(isinstance(t, TickInfo) for t in ticks)
+    # With zero offsets the total bias must be exactly zero.
+    assert all(abs(t.d_az_deg) < 1e-9 and abs(t.d_el_deg) < 1e-9 for t in ticks)
+
+
+def test_az_el_bias_applied_as_absolute_shift(tmp_path):
+    bias = OffsetSnapshot(az_bias_deg=0.3, el_bias_deg=-0.2)
+    ticks = _run_dry_with_offsets(tmp_path, bias, duration_s=2.0)
+    assert ticks, "expected at least one tick"
+    for t in ticks:
+        assert abs(t.d_az_deg - 0.3) < 1e-9
+        assert abs(t.d_el_deg - (-0.2)) < 1e-9
+
+
+def test_along_cross_bias_rotates_with_heading(tmp_path):
+    """A target moving purely east-ward has ψ ≈ 0; along should map to
+    d_az, cross should map to d_el (since the along/cross basis has
+    Along+ aligned with heading and Cross+ 90° CCW of it)."""
+    bias = OffsetSnapshot(along_deg=0.4, cross_deg=0.1)
+    ticks = _run_dry_with_offsets(tmp_path, bias, duration_s=2.0)
+    # Ignore the first tick or two while ψ EWMA warms up.
+    tail = ticks[-3:]
+    assert tail, "no tail ticks"
+    for t in tail:
+        assert not t.heading_locked
+        assert abs(t.d_az_deg - 0.4) < 0.02
+        assert abs(t.d_el_deg - 0.1) < 0.02
+
+
+def test_heading_locks_at_low_velocity():
+    """A stationary-reference provider should freeze ψ and report
+    heading_locked=True."""
+    import types
+
+    from device.reference_provider import ReferenceSample
+    t0 = time.time() + 0.2
+    t1 = t0 + 3.0
+
+    def sample(t):
+        return ReferenceSample(
+            t_unix=float(t), az_cum_deg=10.0, el_deg=45.0,
+            v_az_degs=0.0, v_el_degs=0.0,
+            a_az_degs2=0.0, a_el_degs2=0.0,
+            stale=False, extrapolated=False,
+        )
+
+    provider = types.SimpleNamespace(
+        sample=sample,
+        valid_range=lambda: (t0, t1),
+    )
+
+    cli = FakeMountClient()
+    cli.set_position(az_deg=10.0, el_deg=45.0)
+
+    captured: list[TickInfo] = []
+    track(
+        cli, provider,
+        dry_run=True, max_duration_s=5.0,
+        offset_provider=lambda: OffsetSnapshot(along_deg=0.3),
+        tick_callback=captured.append,
+    )
+    assert captured, "no ticks captured"
+    # heading is locked when |v| < V_MIN_HEADING_LOCK_DEGS (=0.05°/s).
+    assert all(t.heading_locked for t in captured)
+    # And along/cross contribution must be suppressed (0.0) while locked.
+    for t in captured:
+        assert abs(t.d_az_deg) < 1e-9
+        assert abs(t.d_el_deg) < 1e-9
+
+
+def test_time_offset_shifts_query_time(tmp_path):
+    """Passing a positive time_offset_s reaches the end-of-track
+    faster; a large offset past the extrapolation horizon exits as
+    end_of_track near-immediately."""
+    path = tmp_path / "flight.jsonl"
+    t0 = time.time() + 0.3
+    _write_fixture(path, t0_unix=t0, duration_s=5.0, dt=0.5)
+    mf = MountFrame.from_identity_enu()
+    provider = JsonlECEFProvider(path, mf, extrapolation_s=1.0)
+    cli = FakeMountClient()
+    first = provider.sample(t0)
+    cli.set_position(az_deg=first.az_cum_deg, el_deg=first.el_deg)
+
+    # Offset well past the tail + extrapolation budget → immediate end.
+    result = track(
+        cli, provider,
+        dry_run=True, max_duration_s=10.0,
+        offset_provider=lambda: OffsetSnapshot(time_offset_s=30.0),
+    )
+    assert result.exit_reason == "end_of_track"
+    assert result.ticks == 0
