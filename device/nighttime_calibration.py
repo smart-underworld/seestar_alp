@@ -35,11 +35,14 @@ telescope. Allowed alongside ``CalibrateMotionSession``.
 
 from __future__ import annotations
 
+import logging
 import math
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 from device._atomic_json import write_atomic_json
 from device.plate_solver import (
@@ -604,6 +607,607 @@ def get_nighttime_manager() -> NighttimeCalibrationManager:
         if _MANAGER is None:
             _MANAGER = NighttimeCalibrationManager()
         return _MANAGER
+
+
+# ---------- auto-calibration -----------------------------------------
+#
+# Hands-free flow: pick a handful of bright sky targets in a sweet-spot
+# altitude window (60–80°), drive the mount to each one, plate-solve,
+# count successes, and stop once we've collected enough sightings for
+# the rotation fit. The operator clicks one button instead of slewing
+# manually for each capture.
+#
+# Altitude window rationale: above 80° the azimuth axis is geometrically
+# ill-conditioned (a small angular error projects to a huge az delta);
+# below 60° atmospheric refraction starts to dominate and trees / roof
+# lines obstruct typical backyard sites. 60–80° is the band where the
+# rotation fit converges cleanly with few sightings.
+
+
+_AUTO_LOG = logging.getLogger(__name__)
+
+
+# Default altitude window the picker filters into.
+AUTO_MIN_ALT_DEG = 60.0
+AUTO_MAX_ALT_DEG = 80.0
+# Number of candidates to surface; the runner stops as soon as it has
+# enough successes, so a generous pool just buys retries against
+# clouds / trees in any one direction.
+AUTO_DEFAULT_POOL_SIZE = 8
+# How long to wait after a slew completes before reading the encoder
+# and triggering the plate-solve. Three things have to settle in this
+# window:
+#
+#   1. Optical tube damps oscillations after the motors stop.
+#   2. Sidereal tracking re-engages (firmware emits ScopeTrack=on).
+#   3. The live-view pipeline produces a *fresh* exposure at the new
+#      pointing. In star mode the seestar reports fps ≈ 0.041 (a frame
+#      every ~24 s) — solving an old cached frame from the previous
+#      pointing is the dominant failure mode otherwise.
+#
+# 8 s is chosen as a compromise: well past mechanical settling, well
+# past tracking re-engage, and gives the firmware enough of a fresh
+# exposure window that the solver sees the new sky region rather than
+# the previous one.
+AUTO_SETTLE_AFTER_SLEW_S = 8.0
+# Per-target plate-solve budget; the firmware's solver typically
+# finishes in 5–15 s, so 90 s is generous.
+AUTO_PER_TARGET_SOLVE_TIMEOUT_S = 90.0
+# Live-view exposure set once at run start. ``start_solve`` plate-solves
+# whatever frame the live view most recently produced, so the operator's
+# previous ``exp_ms.continuous`` setting (could be 100 ms from a daytime
+# preview) directly affects how many stars are detectable. 2000 ms is
+# the seestar's documented sweet spot for star-mode plate-solving.
+AUTO_PLATE_SOLVE_EXPOSURE_MS = 2000
+
+
+@dataclass(frozen=True)
+class AutoCandidate:
+    """One auto-calibration waypoint: a celestial target + its predicted
+    (az, el) at session start. The runner uses ``az_deg``/``el_deg`` as
+    the slew destination; the actual sighting recorded against the fit
+    comes from the firmware plate-solver, not from this prediction."""
+
+    label: str
+    az_deg: float
+    el_deg: float
+    vmag: float | None = None
+    kind: str = "star"  # "star" | "planet" | "double"
+
+
+@dataclass
+class AutoCandidateState:
+    """Per-candidate progress, mutated as the runner iterates."""
+
+    candidate: AutoCandidate
+    status: str = "queued"  # queued|slewing|settling|solving|ok|fail|skipped
+    error: str | None = None
+    encoder_az_deg: float | None = None
+    encoder_el_deg: float | None = None
+    t_started_unix: float | None = None
+    t_finished_unix: float | None = None
+
+
+@dataclass
+class AutoRunStatus:
+    """JSON-serialisable snapshot of an :class:`NighttimeAutoRunner`."""
+
+    active: bool
+    phase: str  # "idle" | "running" | "done" | "cancelled" | "failed"
+    n_success: int
+    n_fail: int
+    n_success_target: int
+    current_idx: int | None
+    candidates: list[dict] = field(default_factory=list)
+    error: str | None = None
+
+
+def _angular_distance_deg(
+    az1_deg: float, el1_deg: float, az2_deg: float, el2_deg: float
+) -> float:
+    """Local copy of the celestial-targets helper so this module stays
+    importable in tests that don't pull in ephem."""
+    a_az = math.radians(az1_deg)
+    a_el = math.radians(el1_deg)
+    b_az = math.radians(az2_deg)
+    b_el = math.radians(el2_deg)
+    cos_sep = math.sin(a_el) * math.sin(b_el) + math.cos(a_el) * math.cos(
+        b_el
+    ) * math.cos(a_az - b_az)
+    cos_sep = max(-1.0, min(1.0, cos_sep))
+    return math.degrees(math.acos(cos_sep))
+
+
+def _az_in_window(
+    az_deg: float, az_min_deg: float | None, az_max_deg: float | None
+) -> bool:
+    """True iff ``az_deg`` (degrees, [0, 360)) lies in the azimuth window.
+
+    ``None`` for either bound means unrestricted on that side. Supports
+    wrap-around windows (``az_min_deg`` > ``az_max_deg`` means
+    e.g. 350° → 30° passing through 0°). Both bounds being ``None``
+    accepts everything, which keeps the existing tests / no-window
+    callers unchanged.
+    """
+    if az_min_deg is None and az_max_deg is None:
+        return True
+    az = float(az_deg) % 360.0
+    lo = float(az_min_deg) % 360.0 if az_min_deg is not None else 0.0
+    hi = float(az_max_deg) % 360.0 if az_max_deg is not None else 360.0
+    if lo <= hi:
+        return lo <= az <= hi
+    # Wrap-around window: az is in window if it's >= lo OR <= hi.
+    return az >= lo or az <= hi
+
+
+def pick_synthetic_waypoints(
+    *,
+    min_el_deg: float = AUTO_MIN_ALT_DEG,
+    max_el_deg: float = AUTO_MAX_ALT_DEG,
+    az_min_deg: float | None = None,
+    az_max_deg: float | None = None,
+    pool_size: int = AUTO_DEFAULT_POOL_SIZE,
+) -> list[AutoCandidate]:
+    """Emit ``pool_size`` synthetic (az, el) waypoints inside the
+    requested altitude/azimuth window.
+
+    Used when the hand-curated bright-star catalog has no entries in
+    the operator's visible-sky cone (e.g. a yard with obstructions to
+    the north). The seestar's onboard plate-solver doesn't need a
+    named target to solve — it just needs the camera pointed at any
+    star-rich patch. Waypoints are spaced evenly in az at the midpoint
+    elevation so the rotation fit gets the wide az diversity it
+    likes; a single elevation simplifies the geometry without harming
+    conditioning at this band.
+    """
+    n = max(1, int(pool_size))
+    el = (float(min_el_deg) + float(max_el_deg)) / 2.0
+    if az_min_deg is None and az_max_deg is None:
+        az_lo, az_hi = 0.0, 360.0
+        wrap = False
+    else:
+        az_lo = float(az_min_deg if az_min_deg is not None else 0.0) % 360.0
+        az_hi = float(az_max_deg if az_max_deg is not None else 360.0) % 360.0
+        wrap = az_lo > az_hi
+    span = (az_hi - az_lo) % 360.0 if wrap else (az_hi - az_lo)
+    if span <= 0.0:
+        span = 360.0
+    out: list[AutoCandidate] = []
+    for i in range(n):
+        # Place waypoints with margin from the window edges so we don't
+        # ride right against an obstruction the operator declared.
+        frac = (i + 0.5) / n
+        az = (az_lo + frac * span) % 360.0
+        out.append(
+            AutoCandidate(
+                label=f"sky az {az:.0f}° el {el:.0f}°",
+                az_deg=float(az),
+                el_deg=float(el),
+                vmag=None,
+                kind="sky",
+            )
+        )
+    return out
+
+
+def pick_auto_calibration_targets(
+    site: ObserverSite,
+    when_utc: datetime | None = None,
+    *,
+    min_el_deg: float = AUTO_MIN_ALT_DEG,
+    max_el_deg: float = AUTO_MAX_ALT_DEG,
+    max_mag: float = 3.5,
+    pool_size: int = AUTO_DEFAULT_POOL_SIZE,
+    az_min_deg: float | None = None,
+    az_max_deg: float | None = None,
+) -> list[AutoCandidate]:
+    """Return up to ``pool_size`` calibration-grade celestial targets in
+    the ``[min_el_deg, max_el_deg]`` altitude window, ordered for
+    maximum angular spread.
+
+    First entry is the highest-elevation target; each subsequent entry
+    is the candidate with the largest minimum great-circle distance to
+    the already-picked set (greedy farthest-point sampling). This
+    produces a sequence the rotation solver likes — wide az/el spread
+    at every prefix, so even a partial run (e.g. 3 of 8) is
+    well-conditioned.
+
+    ``az_min_deg`` / ``az_max_deg`` constrain the azimuth window when
+    the operator's site has obstructions in some directions
+    (e.g. trees, roof line). Both ``None`` means no constraint. Wrap-
+    around windows are supported (``min`` > ``max`` reads as a band
+    crossing 0°).
+
+    Falls back to an empty list when the catalog is fully obscured by
+    altitude/sun/moon constraints — caller should surface a clear
+    message rather than start a doomed run.
+    """
+    from scripts.trajectory.celestial_targets import (
+        all_targets,
+        filter_visible,
+    )
+
+    if when_utc is None:
+        when_utc = datetime.now(timezone.utc)
+    pool = all_targets(when_utc, site)
+    visible = filter_visible(
+        pool,
+        site,
+        when_utc,
+        min_el_deg=min_el_deg,
+        max_mag=max_mag,
+    )
+    # filter_visible has no max-altitude knob; clamp post-hoc.
+    visible = [(t, az, el) for (t, az, el) in visible if el <= max_el_deg]
+    # Apply optional azimuth window for obstructed-horizon sites.
+    visible = [
+        (t, az, el)
+        for (t, az, el) in visible
+        if _az_in_window(az, az_min_deg, az_max_deg)
+    ]
+    # Catalog is hand-curated (~30 entries) and biased northern. When
+    # the operator's visible-sky cone is to the south, the cataloged
+    # pool is often empty even though the patch of sky is full of
+    # stars. Fall back to synthetic az/el waypoints so the auto-run
+    # still has something to slew to — the plate-solver works fine
+    # without a "named target."
+    if not visible:
+        return pick_synthetic_waypoints(
+            min_el_deg=min_el_deg,
+            max_el_deg=max_el_deg,
+            az_min_deg=az_min_deg,
+            az_max_deg=az_max_deg,
+            pool_size=pool_size,
+        )
+    # Greedy farthest-point sampling. Start with the highest-elevation
+    # entry — gives the best plate-solve odds at the first sighting,
+    # which boosts confidence before the operator commits to the run.
+    visible.sort(key=lambda r: -r[2])
+    picked: list[tuple] = [visible[0]]
+    remaining = list(visible[1:])
+    while remaining and len(picked) < pool_size:
+        best_idx = 0
+        best_score = -1.0
+        for i, (_, az, el) in enumerate(remaining):
+            min_dist = min(
+                _angular_distance_deg(az, el, paz, pel)
+                for (_, paz, pel) in picked
+            )
+            if min_dist > best_score:
+                best_score = min_dist
+                best_idx = i
+        picked.append(remaining.pop(best_idx))
+    return [
+        AutoCandidate(
+            label=t.name,
+            az_deg=float(az),
+            el_deg=float(el),
+            vmag=float(t.vmag) if t.vmag is not None else None,
+            kind=t.kind,
+        )
+        for (t, az, el) in picked
+    ]
+
+
+SlewFunc = Callable[[float, float], bool]
+EncoderFunc = Callable[[], "tuple[float, float]"]
+PrepareFunc = Callable[[], None]
+
+
+class NighttimeAutoRunner:
+    """Drive a :class:`NighttimeCalibrationSession` through a list of
+    :class:`AutoCandidate` waypoints until ``n_success_target``
+    sightings land.
+
+    Single-flight: refuses to start while another auto-run is alive on
+    the same telescope. The daemon thread can be cancelled mid-run via
+    :meth:`stop` — the in-flight slew/solve completes (we never
+    interrupt the firmware), but no further candidates are visited.
+
+    Tracking policy: the seestar firmware re-engages sidereal tracking
+    automatically after each ``scope_goto``. We deliberately leave it
+    on. Even pre-calibration the GPS + level sensor + compass priors
+    keep the alt-az tracking accurate enough that stars stay points
+    over the 2 s exposure (the residual drift is well below the
+    plate-scale of one pixel). With tracking off, stars would streak
+    across the frame during the exposure, hurting solve odds at the
+    altitudes (60–80°) where azimuth slews fastest.
+    """
+
+    def __init__(
+        self,
+        session: NighttimeCalibrationSession,
+        candidates: list[AutoCandidate],
+        slew_func: SlewFunc,
+        encoder_func: EncoderFunc,
+        *,
+        prepare_func: PrepareFunc | None = None,
+        n_success_target: int = MIN_SIGHTINGS_FOR_APPLY,
+        per_target_solve_timeout_s: float = AUTO_PER_TARGET_SOLVE_TIMEOUT_S,
+        settle_after_slew_s: float = AUTO_SETTLE_AFTER_SLEW_S,
+        poll_interval_s: float = 0.5,
+    ) -> None:
+        self.session = session
+        self.candidates = list(candidates)
+        self.slew_func = slew_func
+        self.encoder_func = encoder_func
+        self.prepare_func = prepare_func
+        self.n_success_target = int(n_success_target)
+        self.per_target_solve_timeout_s = float(per_target_solve_timeout_s)
+        self.settle_after_slew_s = float(settle_after_slew_s)
+        self.poll_interval_s = float(poll_interval_s)
+
+        self._lock = threading.Lock()
+        self._states: list[AutoCandidateState] = [
+            AutoCandidateState(candidate=c) for c in self.candidates
+        ]
+        self._stop_evt = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._phase = "idle"
+        self._error: str | None = None
+        self._current_idx: int | None = None
+
+    # ---------- lifecycle ----------
+
+    def start(self) -> None:
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                raise RuntimeError("auto-run already in flight")
+            self._stop_evt.clear()
+            self._phase = "running"
+            self._error = None
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"NighttimeAutoRunner({self.session.telescope_id})",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_evt.set()
+        # Don't join: caller may be on the same event loop / poll
+        # thread, and the daemon will exit on its own.
+
+    def is_alive(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    # ---------- snapshot ----------
+
+    def status(self) -> AutoRunStatus:
+        with self._lock:
+            n_success = sum(1 for s in self._states if s.status == "ok")
+            n_fail = sum(1 for s in self._states if s.status in ("fail", "skipped"))
+            return AutoRunStatus(
+                active=self.is_alive(),
+                phase=self._phase,
+                n_success=n_success,
+                n_fail=n_fail,
+                n_success_target=self.n_success_target,
+                current_idx=self._current_idx,
+                candidates=[
+                    {
+                        "label": s.candidate.label,
+                        "az_deg": s.candidate.az_deg,
+                        "el_deg": s.candidate.el_deg,
+                        "vmag": s.candidate.vmag,
+                        "kind": s.candidate.kind,
+                        "status": s.status,
+                        "error": s.error,
+                        "encoder_az_deg": s.encoder_az_deg,
+                        "encoder_el_deg": s.encoder_el_deg,
+                    }
+                    for s in self._states
+                ],
+                error=self._error,
+            )
+
+    # ---------- main loop ----------
+
+    def _run(self) -> None:
+        try:
+            if self.prepare_func is not None:
+                try:
+                    self.prepare_func()
+                except Exception as exc:  # noqa: BLE001
+                    # Prep failure is non-fatal — the previous live-view
+                    # exposure may still be usable for plate-solve. Log
+                    # it for the operator but proceed.
+                    _AUTO_LOG.warning(
+                        "auto-calibrate: prepare_func failed (continuing): %s", exc
+                    )
+            for idx, state in enumerate(self._states):
+                if self._stop_evt.is_set():
+                    break
+                if self._count_successes() >= self.n_success_target:
+                    break
+                with self._lock:
+                    self._current_idx = idx
+                    state.status = "slewing"
+                    state.t_started_unix = time.time()
+                cand = state.candidate
+                _AUTO_LOG.info(
+                    "auto-calibrate: slewing to %s (az=%.2f° el=%.2f°)",
+                    cand.label,
+                    cand.az_deg,
+                    cand.el_deg,
+                )
+                try:
+                    ok = self.slew_func(cand.az_deg, cand.el_deg)
+                except Exception as exc:  # noqa: BLE001
+                    self._mark_state(state, "fail", f"slew error: {exc}")
+                    continue
+                if not ok:
+                    self._mark_state(state, "skipped", "slew refused")
+                    continue
+                # Brief settle so the optical tube damps after motors stop.
+                _wait_with_stop(self._stop_evt, self.settle_after_slew_s)
+                if self._stop_evt.is_set():
+                    self._mark_state(state, "skipped", "cancelled")
+                    break
+                with self._lock:
+                    state.status = "solving"
+                try:
+                    enc_az, enc_el = self.encoder_func()
+                except Exception as exc:  # noqa: BLE001
+                    self._mark_state(state, "fail", f"encoder read failed: {exc}")
+                    continue
+                with self._lock:
+                    state.encoder_az_deg = float(enc_az)
+                    state.encoder_el_deg = float(enc_el)
+                # Fire the plate-solve. The session enforces the altitude
+                # window; if we slewed to a candidate now obscured / drifted
+                # below the floor (rare), record a clean fail and move on.
+                # Snapshot the sightings count first so the post-poll check
+                # can tell ok from fail by seeing whether the list grew —
+                # comparing timestamps in last_failed is racy when two
+                # consecutive candidates resolve within the same second.
+                n_before = len(self.session.status().sightings)
+                try:
+                    self.session.capture_sighting(
+                        image_path=None,
+                        encoder_az_deg=float(enc_az),
+                        encoder_el_deg=float(enc_el),
+                    )
+                except (ValueError, RuntimeError) as exc:
+                    self._mark_state(state, "fail", f"capture rejected: {exc}")
+                    continue
+                outcome, reason = self._await_solve(n_before)
+                if outcome == "ok":
+                    self._mark_state(state, "ok", None)
+                else:
+                    self._mark_state(state, "fail", reason)
+            with self._lock:
+                if self._stop_evt.is_set():
+                    self._phase = "cancelled"
+                elif self._count_successes() >= self.n_success_target:
+                    self._phase = "done"
+                else:
+                    self._phase = "failed"
+                    if self._error is None:
+                        self._error = (
+                            f"only {self._count_successes()} successful sighting(s) "
+                            f"after {len(self._states)} candidates"
+                        )
+                self._current_idx = None
+        except Exception as exc:  # noqa: BLE001
+            _AUTO_LOG.exception("auto-calibrate run crashed")
+            with self._lock:
+                self._phase = "failed"
+                self._error = f"unexpected error: {exc}"
+                self._current_idx = None
+
+    def _await_solve(self, n_sightings_before: int) -> tuple[str, str | None]:
+        """Poll ``session.status()`` until the pending solve resolves.
+
+        Returns ``("ok", None)`` if the sightings list grew (the plate
+        solve produced a new accepted record), otherwise
+        ``("fail", reason)``. ``n_sightings_before`` is the snapshot
+        taken right before ``capture_sighting`` was invoked; comparing
+        against the current count is the only race-free way to decide
+        between ok and fail since the session's ``last_failed`` field
+        is sticky across candidates.
+        """
+        deadline = time.time() + self.per_target_solve_timeout_s
+        while not self._stop_evt.is_set() and time.time() < deadline:
+            st = self.session.status()
+            if st.pending is None:
+                if len(st.sightings) > n_sightings_before:
+                    return "ok", None
+                last_failed = st.last_failed
+                reason = "fail"
+                if last_failed is not None:
+                    reason = str(
+                        last_failed.get("error")
+                        or last_failed.get("status")
+                        or "fail"
+                    )
+                return "fail", reason
+            time.sleep(self.poll_interval_s)
+        if self._stop_evt.is_set():
+            return "fail", "cancelled"
+        # Timeout: discard the in-flight pending so the next cycle starts clean.
+        try:
+            self.session.skip_pending()
+        except Exception:  # noqa: BLE001
+            pass
+        return "fail", "solve timed out"
+
+    # ---------- helpers ----------
+
+    def _count_successes(self) -> int:
+        with self._lock:
+            return sum(1 for s in self._states if s.status == "ok")
+
+    def _mark_state(
+        self, state: AutoCandidateState, status: str, error: str | None
+    ) -> None:
+        with self._lock:
+            state.status = status
+            state.error = error
+            state.t_finished_unix = time.time()
+
+
+def _wait_with_stop(stop_evt: threading.Event, total_s: float) -> None:
+    """Sleep up to ``total_s`` seconds, returning early if ``stop_evt``
+    fires. Avoids ``time.sleep`` blocking cancellation."""
+    if total_s <= 0:
+        return
+    stop_evt.wait(timeout=float(total_s))
+
+
+# ---------- auto-runner manager --------------------------------------
+
+
+class NighttimeAutoManager:
+    """Process-singleton registry mirroring
+    :class:`NighttimeCalibrationManager`. One auto-runner per
+    telescope; refusing concurrent runs keeps the mount under a single
+    owner."""
+
+    def __init__(self) -> None:
+        self._runners: dict[int, NighttimeAutoRunner] = {}
+        self._lock = threading.Lock()
+
+    def get(self, telescope_id: int) -> NighttimeAutoRunner | None:
+        with self._lock:
+            return self._runners.get(int(telescope_id))
+
+    def start(
+        self, telescope_id: int, runner: NighttimeAutoRunner
+    ) -> NighttimeAutoRunner:
+        tid = int(telescope_id)
+        with self._lock:
+            existing = self._runners.get(tid)
+            if existing is not None and existing.is_alive():
+                raise RuntimeError(
+                    f"telescope {tid} already has an auto-run in flight"
+                )
+            self._runners[tid] = runner
+        runner.start()
+        return runner
+
+    def stop(self, telescope_id: int) -> AutoRunStatus | None:
+        runner = self.get(telescope_id)
+        if runner is None:
+            return None
+        runner.stop()
+        return runner.status()
+
+    def status(self, telescope_id: int) -> AutoRunStatus | None:
+        runner = self.get(telescope_id)
+        return runner.status() if runner is not None else None
+
+
+_AUTO_MANAGER: NighttimeAutoManager | None = None
+_AUTO_MANAGER_LOCK = threading.Lock()
+
+
+def get_nighttime_auto_manager() -> NighttimeAutoManager:
+    global _AUTO_MANAGER
+    with _AUTO_MANAGER_LOCK:
+        if _AUTO_MANAGER is None:
+            _AUTO_MANAGER = NighttimeAutoManager()
+        return _AUTO_MANAGER
 
 
 # Silence unused-import warnings.

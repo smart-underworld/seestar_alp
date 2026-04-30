@@ -151,8 +151,19 @@
           Sightings: <b id="cal-night-count">0</b>/<span id="cal-night-min">3</span> ·
           fit RMS: <span id="cal-night-rms">—</span>
         </div>
-        <div class="cal-btn-row">
-          <button id="cal-night-capture" class="cal-btn primary">📷 Capture sighting</button>
+        <div class="cal-btn-row" style="align-items:center; gap:6px; flex-wrap:wrap;">
+          <button id="cal-night-auto" class="cal-btn primary">🤖 Auto-calibrate (3 sightings)</button>
+          <button id="cal-night-auto-stop" class="cal-btn" style="display:none;">Stop auto</button>
+          <span style="font-size:11px; opacity:0.75; margin-left:8px;">visible az window:</span>
+          <input id="cal-night-auto-azmin" type="number" min="0" max="360" step="1" style="width:60px; font-size:11px;" placeholder="min" title="azimuth min (degrees), blank = full sky"/>
+          <span style="font-size:11px;">–</span>
+          <input id="cal-night-auto-azmax" type="number" min="0" max="360" step="1" style="width:60px; font-size:11px;" placeholder="max" title="azimuth max (degrees), blank = full sky"/>
+          <span style="font-size:11px; opacity:0.6;">°</span>
+        </div>
+        <div id="cal-night-auto-status" style="font-size:11px; margin-top:6px; opacity:0.85; display:none;"></div>
+        <div id="cal-night-auto-list" style="font-size:11px; margin-top:4px; display:none;"></div>
+        <div class="cal-btn-row" style="margin-top:8px;">
+          <button id="cal-night-capture" class="cal-btn">📷 Capture sighting</button>
           <button id="cal-night-skip" class="cal-btn">Skip pending</button>
           <button id="cal-night-cancel" class="cal-btn danger" style="margin-left:auto;">Cancel</button>
         </div>
@@ -1231,6 +1242,7 @@
   // ---- nighttime calibration (item 6) ----
 
   const nightRoot = `/api/${telescopeId}/calibrate_nighttime`;
+  const nightAutoRoot = `${nightRoot}/auto`;
   const nightEls = {
     toggleDay: document.getElementById('cal-mode-day'),
     toggleNight: document.getElementById('cal-mode-night'),
@@ -1247,14 +1259,20 @@
     pending: document.getElementById('cal-night-pending'),
     err: document.getElementById('cal-night-err'),
     tbody: document.getElementById('cal-night-tbody'),
+    auto: document.getElementById('cal-night-auto'),
+    autoStop: document.getElementById('cal-night-auto-stop'),
+    autoStatus: document.getElementById('cal-night-auto-status'),
+    autoList: document.getElementById('cal-night-auto-list'),
   };
   let nightAvailable = false;
+  let nightSolverKind = '';
 
   async function loadNightAvailability() {
     try {
       const r = await fetch(`${nightRoot}/availability`);
       const j = await r.json();
       nightAvailable = !!j.solver_available;
+      nightSolverKind = j.solver_kind || '';
       // Mirror availability into the unified-picker state so the
       // plate-solve "Add" button is gated the same way the legacy
       // nighttime tab is.
@@ -1316,22 +1334,25 @@
   nightEls.capture.addEventListener('click', async () => {
     nightEls.capture.disabled = true;
     nightEls.err.style.display = 'none';
-    // For MVP we let the operator paste an image path manually since
-    // capture + path discovery from the firmware is wired separately.
-    // A future iteration triggers the imager's capture command and
-    // hands the output filename here.
-    const path = window.prompt(
-      'Image path to plate-solve (full path to a captured FITS or JPEG):'
-    );
-    if (!path) {
-      nightEls.capture.disabled = false;
-      return;
+    // The Seestar firmware's onboard solver inspects the live view, so
+    // no host-side file is needed. Only the workstation `solve-field`
+    // fallback requires an on-disk FITS/JPEG.
+    let body = {};
+    if (nightSolverKind === 'solve-field') {
+      const path = window.prompt(
+        'Image path to plate-solve (full path to a captured FITS or JPEG):'
+      );
+      if (!path) {
+        nightEls.capture.disabled = false;
+        return;
+      }
+      body = {image_path: path.trim()};
     }
     try {
       const r = await fetch(`${nightRoot}/capture`, {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({image_path: path.trim()}),
+        body: JSON.stringify(body),
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
@@ -1374,6 +1395,76 @@
       nightEls.err.style.display = '';
     }
   });
+
+  nightEls.auto.addEventListener('click', async () => {
+    nightEls.err.style.display = 'none';
+    nightEls.auto.disabled = true;
+    const azMinInput = document.getElementById('cal-night-auto-azmin');
+    const azMaxInput = document.getElementById('cal-night-auto-azmax');
+    const azMinVal = azMinInput && azMinInput.value !== '' ? parseFloat(azMinInput.value) : null;
+    const azMaxVal = azMaxInput && azMaxInput.value !== '' ? parseFloat(azMaxInput.value) : null;
+    const body = {n_success_target: 3};
+    if (azMinVal !== null && !isNaN(azMinVal)) body.az_min_deg = azMinVal;
+    if (azMaxVal !== null && !isNaN(azMaxVal)) body.az_max_deg = azMaxVal;
+    try {
+      const r = await fetch(`${nightAutoRoot}/start`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        nightEls.err.textContent = err.error || 'auto-calibrate failed to start';
+        nightEls.err.style.display = '';
+        nightEls.auto.disabled = false;
+        return;
+      }
+      nightEls.autoStop.style.display = '';
+    } catch (e) {
+      nightEls.err.textContent = 'auto-calibrate error: ' + e;
+      nightEls.err.style.display = '';
+      nightEls.auto.disabled = false;
+    }
+  });
+
+  nightEls.autoStop.addEventListener('click', async () => {
+    try {
+      await fetch(`${nightAutoRoot}/stop`, {method:'POST'});
+    } catch (e) {}
+  });
+
+  async function refreshAutoStatus() {
+    if (nightEls.panel.style.display === 'none') return;
+    try {
+      const r = await fetch(`${nightAutoRoot}/state`);
+      if (!r.ok) return;
+      const s = await r.json();
+      if (!s.candidates || s.candidates.length === 0) {
+        nightEls.autoStatus.style.display = 'none';
+        nightEls.autoList.style.display = 'none';
+        nightEls.autoStop.style.display = 'none';
+        nightEls.auto.disabled = false;
+        return;
+      }
+      nightEls.autoStatus.style.display = '';
+      nightEls.autoList.style.display = '';
+      const phase = s.phase || 'idle';
+      nightEls.autoStatus.textContent =
+        `auto: ${phase} · ${s.n_success || 0}/${s.n_success_target || 3} good · ${s.n_fail || 0} fail` +
+        (s.error ? ` · ${s.error}` : '');
+      const glyphFor = (st) => ({
+        ok: '✅', fail: '❌', skipped: '⏭', slewing: '↗', solving: '⏳', queued: '·',
+      })[st] || '·';
+      nightEls.autoList.innerHTML = s.candidates.map((c, i) => {
+        const cur = (s.current_idx === i) ? ' style="font-weight:600;"' : '';
+        return `<div${cur}>${glyphFor(c.status)} ${c.label} · az ${c.az_deg.toFixed(1)}° el ${c.el_deg.toFixed(1)}°` +
+          (c.error ? ` — ${c.error}` : '') + `</div>`;
+      }).join('');
+      const running = s.active && (phase === 'running');
+      nightEls.autoStop.style.display = running ? '' : 'none';
+      nightEls.auto.disabled = running;
+    } catch (e) {}
+  }
 
   async function refreshNightStatus() {
     if (nightEls.panel.style.display === 'none') return;
@@ -1431,6 +1522,7 @@
   setInterval(refreshStatus, 1000);
   setInterval(refreshMotionStatus, 1000);
   setInterval(refreshNightStatus, 1500);
+  setInterval(refreshAutoStatus, 1500);
   refreshStatus();
 })();
 </script>

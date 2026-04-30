@@ -10,6 +10,7 @@ before asserting on status.
 from __future__ import annotations
 
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -626,3 +627,250 @@ def test_radec_to_topocentric_azel_roundtrip():
     az, el = radec_to_topocentric_azel(0.0, 0.0, time.time(), site)
     assert -360.0 <= az <= 720.0
     assert -90.0 <= el <= 90.0
+
+
+# ---------- auto-calibration ----------------------------------------
+
+
+def test_pick_auto_calibration_targets_filters_altitude_band(monkeypatch):
+    """Synthesise a catalog of stars at known (az, el) and verify the
+    picker keeps only the 60–80° band and orders them by greedy
+    farthest-point sampling."""
+    from datetime import datetime, timezone
+
+    import device.nighttime_calibration as nc
+    from scripts.trajectory.celestial_targets import CelestialTarget
+
+    fake_targets = [
+        CelestialTarget(name="LowStar", kind="star", ra_hours=0, dec_deg=0, vmag=2.0),
+        CelestialTarget(name="HighStar", kind="star", ra_hours=0, dec_deg=0, vmag=2.0),
+        CelestialTarget(name="ZenithStar", kind="star", ra_hours=0, dec_deg=0, vmag=2.0),
+        CelestialTarget(name="EastStar", kind="star", ra_hours=0, dec_deg=0, vmag=2.0),
+        CelestialTarget(name="WestStar", kind="star", ra_hours=0, dec_deg=0, vmag=2.0),
+    ]
+    az_el_by_name = {
+        "LowStar": (90.0, 30.0),  # below 60°, dropped
+        "HighStar": (10.0, 70.0),  # in band, highest el
+        "ZenithStar": (45.0, 85.0),  # above 80°, dropped
+        "EastStar": (90.0, 65.0),  # in band
+        "WestStar": (270.0, 65.0),  # in band, far from HighStar/EastStar
+    }
+
+    def fake_filter(targets, site, when_utc, **kwargs):
+        out = []
+        for t in targets:
+            az, el = az_el_by_name[t.name]
+            min_el = kwargs.get("min_el_deg", 20.0)
+            if el >= min_el:
+                out.append((t, az, el))
+        return out
+
+    monkeypatch.setattr(nc, "datetime", datetime)  # ensure import path stable
+    import scripts.trajectory.celestial_targets as ct
+
+    monkeypatch.setattr(ct, "filter_visible", fake_filter)
+    monkeypatch.setattr(ct, "all_targets", lambda when, site: list(fake_targets))
+
+    candidates = nc.pick_auto_calibration_targets(
+        _site(),
+        when_utc=datetime(2026, 4, 29, 6, 0, tzinfo=timezone.utc),
+        pool_size=5,
+    )
+    names = [c.label for c in candidates]
+    # Above-80° and below-60° entries dropped.
+    assert "ZenithStar" not in names
+    assert "LowStar" not in names
+    # First entry is the highest-elevation in-band candidate.
+    assert candidates[0].label == "HighStar"
+    # Greedy sampling spreads across azimuth — second pick is the
+    # farthest from the first (HighStar at az=10°), which is WestStar.
+    assert candidates[1].label == "WestStar"
+    # All survivors are in the 60–80° band.
+    for c in candidates:
+        assert 60.0 <= c.el_deg <= 80.0
+
+
+def test_pick_auto_calibration_targets_returns_empty_when_obscured(monkeypatch):
+    """Empty visible list → empty result, not a crash. The REST handler
+    relies on this to surface a clear error instead of starting a
+    doomed run."""
+    import device.nighttime_calibration as nc
+    import scripts.trajectory.celestial_targets as ct
+
+    monkeypatch.setattr(ct, "filter_visible", lambda *a, **k: [])
+    monkeypatch.setattr(ct, "all_targets", lambda when, site: [])
+    candidates = nc.pick_auto_calibration_targets(_site())
+    assert candidates == []
+
+
+def test_auto_runner_drives_session_to_three_successes(tmp_path, monkeypatch):
+    """End-to-end auto loop: 3 candidates, fake plate-solver returns
+    canned results, fake slew/encoder always succeed. Runner should
+    finish in ``done`` phase with all three sightings accepted."""
+    import device.nighttime_calibration as nc
+    from device.nighttime_calibration import (
+        AutoCandidate,
+        NighttimeAutoRunner,
+    )
+
+    monkeypatch.setattr(nc, "radec_to_topocentric_azel", lambda ra, dec, t, s: (ra, dec))
+    candidates = [
+        AutoCandidate(label="A", az_deg=10.0, el_deg=70.0),
+        AutoCandidate(label="B", az_deg=180.0, el_deg=72.0),
+        AutoCandidate(label="C", az_deg=300.0, el_deg=68.0),
+    ]
+    canned = {
+        "": SolveResult(
+            ra_deg=10.0, dec_deg=70.0, fov_x_deg=1.27, fov_y_deg=0.71,
+            position_angle_deg=0.0,
+        )
+    }
+    fake_solver = FakePlateSolver(canned)
+    session = _make_session(tmp_path, fake_solver)
+    encoder_pairs = iter([(10.0, 70.0), (180.0, 72.0), (300.0, 68.0)])
+    runner = NighttimeAutoRunner(
+        session=session,
+        candidates=candidates,
+        slew_func=lambda az, el: True,
+        encoder_func=lambda: next(encoder_pairs),
+        n_success_target=3,
+        settle_after_slew_s=0.0,
+        poll_interval_s=0.01,
+    )
+    runner.start()
+    assert _wait_for(lambda: runner.status().phase == "done", timeout_s=5.0)
+    st = runner.status()
+    assert st.n_success == 3
+    assert st.n_fail == 0
+    assert all(c["status"] == "ok" for c in st.candidates)
+    assert session.status().n_accepted == 3
+
+
+def test_auto_runner_records_slew_refusal(tmp_path):
+    """Sun-safety / horizon refusals (slew_func returns False) should
+    be recorded as ``skipped``, not crash the loop, and the runner
+    should continue to the next candidate."""
+    from device.nighttime_calibration import AutoCandidate, NighttimeAutoRunner
+
+    candidates = [
+        AutoCandidate(label="Refused", az_deg=10.0, el_deg=70.0),
+        AutoCandidate(label="Good", az_deg=180.0, el_deg=72.0),
+    ]
+    canned = {
+        "": SolveResult(
+            ra_deg=180.0, dec_deg=72.0, fov_x_deg=1.27, fov_y_deg=0.71,
+            position_angle_deg=0.0,
+        )
+    }
+    session = _make_session(tmp_path, FakePlateSolver(canned))
+
+    slew_calls = []
+
+    def slew(az, el):
+        slew_calls.append((az, el))
+        return az < 100.0  # first refused, second OK
+        # NOTE: the first candidate's slew returns False → skipped
+
+    # Override radec→azel for the second candidate's solve.
+    import device.nighttime_calibration as nc
+
+    nc.radec_to_topocentric_azel = lambda ra, dec, t, s: (ra, dec)
+    runner = NighttimeAutoRunner(
+        session=session,
+        candidates=candidates,
+        slew_func=lambda az, el: az > 100.0,
+        encoder_func=lambda: (180.0, 72.0),
+        n_success_target=1,
+        settle_after_slew_s=0.0,
+        poll_interval_s=0.01,
+    )
+    runner.start()
+    assert _wait_for(lambda: runner.status().phase == "done", timeout_s=5.0)
+    st = runner.status()
+    assert st.candidates[0]["status"] == "skipped"
+    assert st.candidates[1]["status"] == "ok"
+    assert st.n_success == 1
+
+
+def test_auto_runner_stops_on_cancel(tmp_path, monkeypatch):
+    """``stop()`` should make the loop bail without poisoning the
+    session — already-accepted sightings remain, no new ones are
+    added once the stop event fires."""
+    import threading
+
+    import device.nighttime_calibration as nc
+    from device.nighttime_calibration import AutoCandidate, NighttimeAutoRunner
+
+    monkeypatch.setattr(nc, "radec_to_topocentric_azel", lambda ra, dec, t, s: (ra, dec))
+    candidates = [AutoCandidate(label=f"T{i}", az_deg=i * 60.0, el_deg=70.0) for i in range(5)]
+    canned = {
+        "": SolveResult(
+            ra_deg=10.0, dec_deg=70.0, fov_x_deg=1.27, fov_y_deg=0.71,
+            position_angle_deg=0.0,
+        )
+    }
+    session = _make_session(tmp_path, FakePlateSolver(canned))
+    cancel_evt = threading.Event()
+
+    def slow_slew(az, el):
+        # First slew completes immediately; subsequent ones block until
+        # the test signals cancel via stop().
+        if az > 0.0 and not cancel_evt.is_set():
+            cancel_evt.wait(timeout=2.0)
+        return True
+
+    runner = NighttimeAutoRunner(
+        session=session,
+        candidates=candidates,
+        slew_func=slow_slew,
+        encoder_func=lambda: (10.0, 70.0),
+        n_success_target=99,
+        settle_after_slew_s=0.0,
+        poll_interval_s=0.01,
+    )
+    runner.start()
+    # Wait for at least one success, then cancel.
+    assert _wait_for(lambda: runner.status().n_success >= 1, timeout_s=5.0)
+    runner.stop()
+    cancel_evt.set()
+    assert _wait_for(lambda: runner.status().phase == "cancelled", timeout_s=5.0)
+    # Cancelled run preserved at least the first success.
+    assert runner.status().n_success >= 1
+
+
+def test_auto_manager_refuses_concurrent_runs(tmp_path, monkeypatch):
+    """The process-singleton manager rejects a second start while one
+    runner is alive on the same telescope — same mutex policy as the
+    nighttime session manager."""
+    import device.nighttime_calibration as nc
+    from device.nighttime_calibration import (
+        AutoCandidate,
+        NighttimeAutoManager,
+        NighttimeAutoRunner,
+    )
+
+    monkeypatch.setattr(nc, "radec_to_topocentric_azel", lambda ra, dec, t, s: (ra, dec))
+    session = _make_session(tmp_path, FakePlateSolver())
+    block = threading.Event()
+
+    def hold_slew(az, el):
+        block.wait(timeout=2.0)
+        return True
+
+    runner = NighttimeAutoRunner(
+        session=session,
+        candidates=[AutoCandidate(label="X", az_deg=0.0, el_deg=70.0)],
+        slew_func=hold_slew,
+        encoder_func=lambda: (0.0, 70.0),
+        n_success_target=1,
+        settle_after_slew_s=0.0,
+        poll_interval_s=0.01,
+    )
+    mgr = NighttimeAutoManager()
+    mgr.start(99, runner)
+    try:
+        with pytest.raises(RuntimeError, match="already"):
+            mgr.start(99, runner)
+    finally:
+        block.set()
+        runner.stop()

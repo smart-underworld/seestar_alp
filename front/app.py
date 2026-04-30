@@ -6178,6 +6178,402 @@ class CalibrateNighttimeApplyResource:
         resp.text = json.dumps(_nighttime_status_dict(session.status()))
 
 
+# ---- Auto-calibration (hands-free target picker + driver) -----------
+#
+# Picks bright sky targets in the 60–80° altitude band, slews to each
+# in turn, and plate-solves until the rotation fit has enough
+# sightings. Reuses the existing nighttime session so the per-sighting
+# audit / apply path is unchanged.
+
+
+def _auto_run_status_dict(status) -> dict:
+    if status is None:
+        return {"active": False}
+    return {
+        "active": status.active,
+        "phase": status.phase,
+        "n_success": status.n_success,
+        "n_fail": status.n_fail,
+        "n_success_target": status.n_success_target,
+        "current_idx": status.current_idx,
+        "candidates": list(status.candidates),
+        "error": status.error,
+    }
+
+
+def _make_nighttime_auto_slew_func(telescope_id: int, timeout_s: float = 120.0):
+    """Build the (az, alt) → success slew callback used by the auto-runner.
+
+    Sends ``scope_goto`` directly and listens on the event bus for the
+    ``ScopeGoto`` state=complete event, bypassing
+    ``Seestar._slew_to_ra_dec`` / ``wait_end_op("goto_target")``. The
+    legacy path polls ``event_state["AutoGoto"]`` for the completion
+    state, but firmware 7.32 emits ``ScopeGoto`` events instead and
+    never updates ``AutoGoto`` — so the legacy path hangs forever on
+    every goto. Doing our own event-bus subscription is the same
+    pattern :meth:`Seestar.request_plate_solve_sync` already uses for
+    ``PlateSolve``, just for the slew.
+    """
+    import threading as _threading
+
+    from device import telescope as _telescope_module
+    from device.sun_safety import is_sun_safe
+
+    def slew(az_deg: float, alt_deg: float) -> bool:
+        ra_hours, dec_deg = _azel_to_radec_for_telescope(
+            az_deg, alt_deg, telescope_id
+        )
+        sun_safe, reason = is_sun_safe(az_deg % 360.0, alt_deg)
+        if not sun_safe:
+            logger.info(
+                "auto-calibrate: refusing slew (az=%.1f° alt=%.1f°): %s",
+                az_deg,
+                alt_deg,
+                reason,
+            )
+            return False
+        dev = _telescope_module.get_seestar_device(int(telescope_id))
+        if dev is None:
+            raise RuntimeError(
+                f"auto-calibrate: telescope {telescope_id} not available"
+            )
+
+        # Defensively stop the calibrate-motion streaming controller if a
+        # page reload restarted it after auto-run began. Two velocity
+        # sources on the same mount yield "equipment is moving" 203
+        # errors on every scope_goto; one shot at the top of the run is
+        # not enough when the page can re-engage it asynchronously.
+        try:
+            from device.calibrate_motion import get_calibrate_motion_manager
+
+            mm = get_calibrate_motion_manager().get(int(telescope_id))
+            if mm is not None and mm.is_alive():
+                logger.info(
+                    "auto-calibrate: stopping motion session before slew"
+                )
+                mm.stop(timeout=2.0)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "auto-calibrate: pre-slew motion-stop failed: %s", exc
+            )
+
+        done = _threading.Event()
+        holder: dict = {}
+
+        def _on_event(sender, **_kw):
+            if not isinstance(sender, dict):
+                return
+            if sender.get("Event") != "ScopeGoto":
+                return
+            state = sender.get("state")
+            if state == "complete":
+                holder["ok"] = True
+                done.set()
+            elif state in ("fail", "cancel"):
+                holder["ok"] = False
+                holder["err"] = (
+                    sender.get("error") or f"scope_goto state={state}"
+                )
+                done.set()
+
+        dev.eventbus.connect(_on_event)
+        try:
+            ack = dev.send_message_param_sync(
+                {"method": "scope_goto", "params": [ra_hours, dec_deg]}
+            )
+            if isinstance(ack, dict) and "error" in ack:
+                # Firmware refused the goto outright (e.g. equipment-
+                # busy). Surface as a failure so the runner records it
+                # and moves on.
+                logger.warning(
+                    "auto-calibrate: scope_goto refused: %s", ack
+                )
+                return False
+            if not done.wait(timeout=float(timeout_s)):
+                logger.warning(
+                    "auto-calibrate: scope_goto did not complete within %.0fs",
+                    float(timeout_s),
+                )
+                return False
+            if not holder.get("ok"):
+                logger.warning(
+                    "auto-calibrate: scope_goto failed: %s",
+                    holder.get("err"),
+                )
+                return False
+            return True
+        finally:
+            try:
+                dev.eventbus.disconnect(_on_event)
+            except Exception:  # noqa: BLE001
+                pass
+
+    return slew
+
+
+def _make_nighttime_auto_encoder_func(telescope_id: int):
+    """Build the encoder-readout callback used by the auto-runner.
+
+    Prefers the calibrate-motion session's last-tick reading when one
+    is alive (cheap, in-process). Falls back to a direct mount RPC via
+    ``measure_altaz_timed`` so the auto-runner works whether or not the
+    operator is also driving the page UI.
+    """
+    from device.alpaca_client import AlpacaClient
+    from astropy.coordinates import EarthLocation
+
+    def read_encoder() -> tuple[float, float]:
+        from device.calibrate_motion import get_calibrate_motion_manager
+
+        ms = get_calibrate_motion_manager().get(int(telescope_id))
+        if ms is not None and ms.is_alive():
+            st = ms.status()
+            if st.cur_cum_az_deg is not None and st.cur_el_deg is not None:
+                return float(st.cur_cum_az_deg), float(st.cur_el_deg)
+        # Fall back to a direct mount read. ``measure_altaz_timed``
+        # ignores the EarthLocation arg, so a placeholder is fine.
+        from device.velocity_controller import measure_altaz_timed
+
+        cli = AlpacaClient("127.0.0.1", int(Config.port), int(telescope_id))
+        loc = EarthLocation.from_geodetic(0, 0, 0)
+        alt_deg, az_deg, _ = measure_altaz_timed(cli, loc)
+        return float(az_deg), float(alt_deg)
+
+    return read_encoder
+
+
+def _make_nighttime_auto_prepare_func(telescope_id: int, exposure_ms: int = 0):
+    """Build the one-shot prep callback used by the auto-runner.
+
+    Switches the firmware's live view to ``mode="star"`` so the camera
+    is configured for stellar exposures rather than the bright
+    short-exposure scenery view the calibrate-rotation page kicks on
+    load. Optionally bumps ``exp_ms.continuous`` when the caller
+    supplies a non-zero ``exposure_ms`` — by default we leave whatever
+    exposure the firmware was using, since experimentation shows
+    ``start_solve`` runs against a separate "focus-page verify"
+    capture that ignores the continuous setting anyway.
+
+    Failure is non-fatal — the runner logs and continues with whatever
+    state the live view already had.
+    """
+
+    def prepare() -> None:
+        # ``method_async`` because ``iscope_start_view`` tears down +
+        # re-establishes the RTSP stream, which can take a few seconds;
+        # we don't need to block on it.
+        try:
+            do_action_device(
+                "method_async",
+                int(telescope_id),
+                {"method": "iscope_start_view", "params": {"mode": "star"}},
+            )
+            logger.info("auto-calibrate: switched live view to star mode")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("auto-calibrate: star-mode switch failed: %s", exc)
+
+        if int(exposure_ms) > 0:
+            try:
+                do_action_device(
+                    "method_sync",
+                    int(telescope_id),
+                    {
+                        "method": "set_setting",
+                        "params": {
+                            "exp_ms": {"continuous": int(exposure_ms)}
+                        },
+                    },
+                )
+                logger.info(
+                    "auto-calibrate: set live-view exposure to %d ms",
+                    int(exposure_ms),
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "auto-calibrate: set_setting(exp_ms.continuous=%d) failed: %s",
+                    int(exposure_ms),
+                    exc,
+                )
+
+    return prepare
+
+
+class CalibrateNighttimeAutoStartResource:
+    """POST: kick off auto-calibration for ``telescope_id``.
+
+    Body: ``{n_success_target?: int = 3, max_mag?: float = 3.5,
+    pool_size?: int = 8}``. The site location is fetched from the
+    telescope's GPS — same path the manual /start uses — so the
+    operator doesn't have to re-enter coordinates.
+
+    Returns 409 if a run is already in flight, 503 if the GPS isn't
+    available, 400 if the candidate pool is empty (everything
+    obscured by sun/moon/altitude constraints).
+    """
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        from device.alpaca_client import AlpacaClient
+        from device.nighttime_calibration import (
+            NighttimeAutoRunner,
+            get_nighttime_auto_manager,
+            get_nighttime_manager,
+            pick_auto_calibration_targets,
+        )
+        from scripts.trajectory.observer import build_site, fetch_telescope_lonlat
+
+        try:
+            body = req.media or {}
+        except Exception:
+            body = {}
+        if not isinstance(body, dict):
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "request body must be a JSON object"})
+            return
+        try:
+            n_target = int(body.get("n_success_target", 3))
+        except (TypeError, ValueError):
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "n_success_target must be int"})
+            return
+        try:
+            max_mag = float(body.get("max_mag", 3.5))
+            pool_size = int(body.get("pool_size", 8))
+        except (TypeError, ValueError):
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "max_mag/pool_size must be numeric"})
+            return
+
+        # Optional az window for obstructed-horizon sites. Either bound
+        # may be omitted (unrestricted on that side); supplying both
+        # with min > max means a wrap-around band (e.g. 330..30 across
+        # north).
+        def _opt_float(key):
+            v = body.get(key)
+            if v is None:
+                return None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                raise ValueError(f"{key} must be numeric")
+
+        try:
+            az_min_deg = _opt_float("az_min_deg")
+            az_max_deg = _opt_float("az_max_deg")
+        except ValueError as exc:
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": str(exc)})
+            return
+        # We require an active nighttime session; auto-mode just drives it.
+        session = get_nighttime_manager().get(int(telescope_id))
+        if session is None or not session.is_active():
+            resp.status = falcon.HTTP_409
+            resp.content_type = "application/json"
+            resp.text = json.dumps(
+                {"error": "no active nighttime session; click Nighttime first"}
+            )
+            return
+        try:
+            cli = AlpacaClient("127.0.0.1", int(Config.port), int(telescope_id))
+            lat, lon = fetch_telescope_lonlat(cli)
+        except Exception as exc:
+            resp.status = falcon.HTTP_503
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": f"GPS unavailable: {exc}"})
+            return
+        site = build_site(lat_deg=lat, lon_deg=lon, alt_m=2.0)
+        candidates = pick_auto_calibration_targets(
+            site,
+            max_mag=max_mag,
+            pool_size=pool_size,
+            az_min_deg=az_min_deg,
+            az_max_deg=az_max_deg,
+        )
+        if not candidates:
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps(
+                {
+                    "error": "no calibration-grade targets between "
+                    "60° and 80° altitude right now (sun/moon/horizon)"
+                }
+            )
+            return
+        try:
+            exposure_ms = int(body.get("exposure_ms", 0))
+        except (TypeError, ValueError):
+            resp.status = falcon.HTTP_400
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": "exposure_ms must be int"})
+            return
+        # Stop the calibrate-motion streaming controller (if running) —
+        # it issues continuous scope_speed_move commands at the page's
+        # tick rate and would race with scope_goto, causing every slew
+        # to come back as firmware error 203 "equipment is moving".
+        # The page can re-engage the motion session once auto-run ends
+        # by reloading or clicking back into manual nudge mode.
+        try:
+            from device.calibrate_motion import get_calibrate_motion_manager
+
+            mm = get_calibrate_motion_manager().get(int(telescope_id))
+            if mm is not None and mm.is_alive():
+                logger.info(
+                    "auto-calibrate: stopping calibrate-motion session for telescope %d",
+                    int(telescope_id),
+                )
+                mm.stop(timeout=5.0)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "auto-calibrate: failed to stop calibrate-motion session: %s", exc
+            )
+        runner = NighttimeAutoRunner(
+            session=session,
+            candidates=candidates,
+            slew_func=_make_nighttime_auto_slew_func(int(telescope_id)),
+            encoder_func=_make_nighttime_auto_encoder_func(int(telescope_id)),
+            prepare_func=_make_nighttime_auto_prepare_func(
+                int(telescope_id), exposure_ms=exposure_ms
+            ),
+            n_success_target=max(1, n_target),
+        )
+        try:
+            get_nighttime_auto_manager().start(int(telescope_id), runner)
+        except RuntimeError as exc:
+            resp.status = falcon.HTTP_409
+            resp.content_type = "application/json"
+            resp.text = json.dumps({"error": str(exc)})
+            return
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(_auto_run_status_dict(runner.status()))
+
+
+class CalibrateNighttimeAutoStateResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        from device.nighttime_calibration import get_nighttime_auto_manager
+
+        status = get_nighttime_auto_manager().status(int(telescope_id))
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(_auto_run_status_dict(status))
+
+
+class CalibrateNighttimeAutoStopResource:
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        from device.nighttime_calibration import get_nighttime_auto_manager
+
+        status = get_nighttime_auto_manager().stop(int(telescope_id))
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(_auto_run_status_dict(status))
+
+
 # ---- Sky-visibility map (Bayesian active-sampling plate-solver) -----
 #
 # Long-running mapper that progressively builds a per-cell confidence
@@ -7944,6 +8340,18 @@ class FrontMain:
         app.add_route(
             "/api/{telescope_id:int}/calibrate_nighttime/apply",
             CalibrateNighttimeApplyResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/calibrate_nighttime/auto/start",
+            CalibrateNighttimeAutoStartResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/calibrate_nighttime/auto/state",
+            CalibrateNighttimeAutoStateResource(),
+        )
+        app.add_route(
+            "/api/{telescope_id:int}/calibrate_nighttime/auto/stop",
+            CalibrateNighttimeAutoStopResource(),
         )
         # ---- Sky-visibility map (Bayesian active sampling) ----
         app.add_route(
