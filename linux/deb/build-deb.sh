@@ -66,7 +66,7 @@ PKG_NAME="seestar-alp"
 case "${ARCH:-$(uname -m)}" in
     aarch64|arm64) ARCH="arm64"  ;;
     armv7l|armhf)  ARCH="armhf"  ;;
-    x86_64)        ARCH="amd64"  ;;
+    x86_64|amd64)  ARCH="amd64"  ;;
     *)             ARCH=$(uname -m) ;;
 esac
 DEB_FILE="${REPO_ROOT}/${PKG_NAME}_${DEB_VERSION}_${ARCH}.deb"
