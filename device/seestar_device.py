@@ -794,6 +794,44 @@ class Seestar:
             return self.stop_slew()
         return "goto stopped already: no action taken"
 
+    def force_stop_goto(self):
+        """Unconditional stop + force-clear of all goto state.
+
+        Use when the user-facing goto is wedged — e.g. AutoGoto plate-
+        solve has been retrying indefinitely (typical indoors / cloudy)
+        and the AutoGoto event state is stuck on ``working``, so
+        subsequent ``goto_target`` calls are rejected with "mount is in
+        goto routine". Sends the firmware ``iscope_stop_view`` and
+        force-clears every internal flag ``is_goto()`` /
+        ``goto_target()`` consult, so the next goto is accepted
+        immediately.
+
+        Returns ``{"ok": True, "stop_slew_result": <firmware reply>}``.
+        Idempotent: safe to call when no goto is in flight.
+        """
+        result = None
+        try:
+            result = self.stop_slew()
+        except Exception as exc:
+            self.logger.warning("force_stop_goto: stop_slew raised %s", exc)
+        try:
+            self.mark_goto_status_as_stopped()
+        except Exception:
+            pass
+        try:
+            self.mark_op_state("goto_target", "stopped")
+        except Exception:
+            pass
+        # If state is somehow still stuck, overwrite the event dict
+        # directly so is_goto() returns False.
+        if self.is_goto():
+            try:
+                self.event_state["AutoGoto"]["state"] = "stopped"
+            except Exception:
+                pass
+        self.logger.info("force_stop_goto: cleared local goto state")
+        return {"ok": True, "stop_slew_result": result}
+
     def mark_goto_status_as_start(self):
         self.mark_op_state("AutoGoto", "start")
 
