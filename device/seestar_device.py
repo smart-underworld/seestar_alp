@@ -809,6 +809,17 @@ class Seestar:
         Returns ``{"ok": True, "stop_slew_result": <firmware reply>}``.
         Idempotent: safe to call when no goto is in flight.
         """
+        # Use the standard stop_slew (iscope_stop_view stage:AutoGoto).
+        # An earlier attempt to use iscope_stop_view WITHOUT stage as a
+        # "stronger" reset turned out to side-trigger the firmware's
+        # SecondView / Sleep mode, so the next iscope_start_view would
+        # silently go to ContinuousExposure (live preview) instead of
+        # firing AutoGoto. The narrower stage:AutoGoto stop avoids
+        # that. The key value-add of force_stop_goto is therefore
+        # NOT a different firmware command but the force-clearing of
+        # local Python-side state below, so that is_goto() returns
+        # False immediately and the next goto_target is accepted
+        # without waiting for firmware events to flow back.
         result = None
         try:
             result = self.stop_slew()
@@ -827,6 +838,19 @@ class Seestar:
         if self.is_goto():
             try:
                 self.event_state["AutoGoto"]["state"] = "stopped"
+            except Exception:
+                pass
+        # Also clear the cached "PlateSolve fail" indicator so the
+        # status panel doesn't keep showing stale red after the
+        # operator has explicitly unwound the goto. The firmware
+        # never resends a PlateSolve event in response to
+        # iscope_stop_view; it only updates when a new plate-solve
+        # runs. Same reasoning for the lingering Exposure-AutoGoto
+        # tag that the eventstatus widget surfaces.
+        for stale_key in ("PlateSolve", "Exposure", "ContinuousExposure"):
+            try:
+                if stale_key in self.event_state:
+                    self.event_state[stale_key]["state"] = "stopped"
             except Exception:
                 pass
         self.logger.info("force_stop_goto: cleared local goto state")
