@@ -1093,6 +1093,15 @@
         {% for message in messages %}
             <div class="alert alert-primary" role="alert">{{ message }}</div>
         {% endfor %}
+        {% if needs_auth_warning | default(false) %}
+        <div class="alert alert-warning alert-dismissible" role="alert">
+            <strong>Authentication required:</strong>
+            Firmware 7.32+ requires authentication, but this device is not authenticated &mdash; most commands will fail.
+            Authenticate by running <a href="https://github.com/smart-underworld/seestar-proxy" target="_blank" rel="noopener">seestar-proxy</a>
+            and connecting via the Seestar app, or set <code>interop_pem</code> in your <code>config.toml</code>.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
         {% block content %}{% endblock %}
     </section>
 </main>

@@ -254,6 +254,10 @@ def _get_context_real(telescope_id, req):
                 else:  # in case we are dealing with federation with device id 0
                     current_exp = 0
 
+    needs_auth_warning = (
+        online and telescope_id > 0 and check_needs_auth(telescope_id)
+    )
+
     return {
         "telescope": telescope,
         "telescopes": telescopes,
@@ -275,6 +279,7 @@ def _get_context_real(telescope_id, req):
         "platform": os_platform,
         "defgain": defgain,
         "current_exp": current_exp,
+        "needs_auth_warning": needs_auth_warning,
     }
 
 
@@ -727,6 +732,28 @@ def get_firmware_ver_int(telescope_id):
         state = method_sync("get_device_state", telescope_id)
         return pydash.get(state, "device.firmware_ver_int", 0)
     return 0
+
+
+# Firmware 7.32 (int 2732) made authentication mandatory.
+_FW_AUTH_REQUIRED = 2732
+
+
+def check_needs_auth(telescope_id):
+    """Return True if firmware requires authentication but the device is not authenticated.
+
+    Firmware 7.32+ mandates authentication (via seestar-proxy or interop PEM).
+    We query pi_is_verified — safe to call unauthenticated — to detect the gap.
+    """
+    if not check_api_state(telescope_id):
+        return False
+    fw = get_firmware_ver_int(telescope_id)
+    if fw < _FW_AUTH_REQUIRED:
+        return False
+    try:
+        result = method_sync("pi_is_verified", telescope_id)
+        return not pydash.get(result, "is_verified", False)
+    except Exception:
+        return False
 
 
 def get_device_model(telescope_id):

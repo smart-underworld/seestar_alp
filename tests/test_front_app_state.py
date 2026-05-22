@@ -90,6 +90,7 @@ def _minimal_context(partial_path, online=True):
         "platform": "raspberry_pi",
         "defgain": 80,
         "current_exp": None,
+        "needs_auth_warning": False,
     }
 
 
@@ -1013,3 +1014,76 @@ def test_sparse_template_contexts_render_without_error(template_name, context):
     html = template.render(**context)
     assert isinstance(html, str)
     assert len(html) > 0
+
+
+# --- check_needs_auth ---
+
+
+def test_check_needs_auth_false_when_offline(monkeypatch):
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: False)
+    assert front_app.check_needs_auth(1) is False
+
+
+def test_check_needs_auth_false_for_old_firmware(monkeypatch):
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2718)
+    assert front_app.check_needs_auth(1) is False
+
+
+def test_check_needs_auth_true_when_unverified(monkeypatch):
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
+    monkeypatch.setattr(
+        front_app,
+        "method_sync",
+        lambda method, telescope_id=1, **kw: {"is_verified": False},
+    )
+    assert front_app.check_needs_auth(1) is True
+
+
+def test_check_needs_auth_false_when_verified(monkeypatch):
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
+    monkeypatch.setattr(
+        front_app,
+        "method_sync",
+        lambda method, telescope_id=1, **kw: {"is_verified": True},
+    )
+    assert front_app.check_needs_auth(1) is False
+
+
+def test_check_needs_auth_false_on_exception(monkeypatch):
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
+
+    def raise_error(method, telescope_id=1, **kw):
+        raise RuntimeError("connection failed")
+
+    monkeypatch.setattr(front_app, "method_sync", raise_error)
+    assert front_app.check_needs_auth(1) is False
+
+
+def test_auth_warning_rendered_in_base_template(monkeypatch):
+    context = _minimal_context("stats")
+    context["needs_auth_warning"] = True
+    context["flashed_messages"] = []
+    context["messages"] = []
+    context["version"] = "test"
+    context["now"] = "now"
+    template = front_app.fetch_template("base.html")
+    html = template.render(**context)
+    assert "Authentication required" in html
+    assert "seestar-proxy" in html
+    assert "interop_pem" in html
+
+
+def test_auth_warning_absent_when_not_needed(monkeypatch):
+    context = _minimal_context("stats")
+    context["needs_auth_warning"] = False
+    context["flashed_messages"] = []
+    context["messages"] = []
+    context["version"] = "test"
+    context["now"] = "now"
+    template = front_app.fetch_template("base.html")
+    html = template.render(**context)
+    assert "Authentication required" not in html

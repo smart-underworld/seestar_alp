@@ -290,7 +290,12 @@ class MethodResponse:
             self.Value = value
             logger.debug(f"{req.remote_addr} <- {str(value)}")
         self.ErrorNumber = err.number
-        self.ErrorMessage = err.message
+        if "message" in err.__dict__:
+            self.ErrorMessage = err.message
+        elif err.args:
+            self.ErrorMessage = str(err.args[0])
+        else:
+            self.ErrorMessage = ""
 
     @property
     def json(self) -> str:
