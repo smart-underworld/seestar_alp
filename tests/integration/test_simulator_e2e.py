@@ -855,14 +855,22 @@ def test_28_simulator_handles_set_stack_type(simulator_server):
     port = simulator_server["tcp_port"]
 
     for stack_type in ("SolarSystem", "MilkyWay", "DeepSky"):
-        _send_tcp_command(host, port, {"id": 2800, "method": "set_stack_type", "params": {"type": stack_type}})
-        state = _send_tcp_command(host, port, {"id": 2801, "method": "get_device_state"})
+        _send_tcp_command(
+            host,
+            port,
+            {"id": 2800, "method": "set_stack_type", "params": {"type": stack_type}},
+        )
+        state = _send_tcp_command(
+            host, port, {"id": 2801, "method": "get_device_state"}
+        )
         assert state["result"]["stack_type"] == stack_type, (
             f"Expected stack_type={stack_type!r} in device state"
         )
 
 
-def test_29_stack_type_in_image_form_reaches_device_layer(monkeypatch, front_sim_bridge):
+def test_29_stack_type_in_image_form_reaches_device_layer(
+    monkeypatch, front_sim_bridge
+):
     """stackType from an image POST is included in the start_mosaic payload."""
     captured = {}
 
@@ -879,6 +887,7 @@ def test_29_stack_type_in_image_form_reaches_device_layer(monkeypatch, front_sim
 
     # Add the image route to the test app so we can POST to it
     import falcon
+
     app = falcon.App()
     app.add_route("/{telescope_id:int}/image", front_app.ImageResource())
     client = testing.TestClient(app)
@@ -898,7 +907,9 @@ def test_29_stack_type_in_image_form_reaches_device_layer(monkeypatch, front_sim
     assert captured.get("start_mosaic_params", {}).get("stack_type") == "SolarSystem"
 
 
-def test_30_invalid_stack_type_normalised_to_deepsky_before_device(monkeypatch, front_sim_bridge):
+def test_30_invalid_stack_type_normalised_to_deepsky_before_device(
+    monkeypatch, front_sim_bridge
+):
     """A bogus stackType value must be normalised to DeepSky before reaching the device."""
     captured = {}
     original_action = front_app.do_action_device
@@ -912,6 +923,7 @@ def test_30_invalid_stack_type_normalised_to_deepsky_before_device(monkeypatch, 
     monkeypatch.setattr(front_app, "do_action_device", capturing_do_action)
 
     import falcon
+
     app = falcon.App()
     app.add_route("/{telescope_id:int}/image", front_app.ImageResource())
     client = testing.TestClient(app)
@@ -938,12 +950,15 @@ def test_31_set_stack_type_tcp_round_trip_all_types(simulator_server):
 
     for stack_type in ("DeepSky", "SolarSystem", "MilkyWay"):
         set_resp = _send_tcp_command(
-            host, port,
+            host,
+            port,
             {"id": 3100, "method": "set_stack_type", "params": {"type": stack_type}},
         )
         assert set_resp.get("result") == 0, f"set_stack_type failed for {stack_type}"
 
-        state_resp = _send_tcp_command(host, port, {"id": 3101, "method": "get_device_state"})
+        state_resp = _send_tcp_command(
+            host, port, {"id": 3101, "method": "get_device_state"}
+        )
         assert state_resp["result"]["stack_type"] == stack_type
 
 
@@ -970,7 +985,9 @@ def test_33_wide_cam_settings_absent_for_s50_model(monkeypatch, front_sim_bridge
     assert "Wide Camera 4K Mode" not in resp.text
 
 
-def test_34_wide_cam_settings_absent_when_experimental_off(monkeypatch, front_sim_bridge):
+def test_34_wide_cam_settings_absent_when_experimental_off(
+    monkeypatch, front_sim_bridge
+):
     """Even for S30, wide cam settings must not render when experimental is disabled."""
     monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30")
     monkeypatch.setattr(Config, "experimental", False)

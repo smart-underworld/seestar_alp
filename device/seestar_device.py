@@ -242,7 +242,9 @@ class Seestar:
             # sanity check
             try:
                 verified = self.send_message_param_sync({"method": "pi_is_verified"})
-                result_val = verified.get("result") if isinstance(verified, dict) else None
+                result_val = (
+                    verified.get("result") if isinstance(verified, dict) else None
+                )
                 # Firmware returns result: True (boolean) directly, not {"is_verified": true}
                 if isinstance(result_val, bool):
                     is_verified = result_val
@@ -1858,7 +1860,9 @@ class Seestar:
                     # be sure we are using the right target name before we stack
                     self.set_target_name(save_target_name)
 
-                    if not self.start_stack({"gain": gain, "restart": True, "stack_type": stack_type}):
+                    if not self.start_stack(
+                        {"gain": gain, "restart": True, "stack_type": stack_type}
+                    ):
                         msg = "Failed to start stacking."
                         self.logger.warning(msg)
                         self.event_state["scheduler"]["cur_scheduler_item"][

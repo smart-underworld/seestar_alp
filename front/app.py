@@ -254,9 +254,7 @@ def _get_context_real(telescope_id, req):
                 else:  # in case we are dealing with federation with device id 0
                     current_exp = 0
 
-    needs_auth_warning = (
-        online and telescope_id > 0 and check_needs_auth(telescope_id)
-    )
+    needs_auth_warning = online and telescope_id > 0 and check_needs_auth(telescope_id)
 
     return {
         "telescope": telescope,
@@ -3530,7 +3528,9 @@ class LiveWideCamResource:
         )
         wide_cam = bool(pydash.get(output, "Value.result.wide_cam", False))
         render_fragment(
-            req, resp, "partials/live_controls_wide_cam.html",
+            req,
+            resp,
+            "partials/live_controls_wide_cam.html",
             wide_cam=wide_cam,
             root=f"/{telescope_id}",
         )
@@ -3543,7 +3543,9 @@ class LiveWideCamResource:
             {"method": "set_setting", "params": {"wide_cam": wide_cam}},
         )
         render_fragment(
-            req, resp, "partials/live_controls_wide_cam.html",
+            req,
+            resp,
+            "partials/live_controls_wide_cam.html",
             wide_cam=wide_cam,
             root=f"/{telescope_id}",
         )
@@ -3785,7 +3787,9 @@ class SettingsResource(BaseResource):
                 }
 
         if fw >= 2775 and "auto_lenhance" in PostedSettings:
-            FormattedNewSettings["auto_lenhance"] = str2bool(PostedSettings["auto_lenhance"])
+            FormattedNewSettings["auto_lenhance"] = str2bool(
+                PostedSettings["auto_lenhance"]
+            )
 
         if "S30" in (model or ""):
             for key, converter in (

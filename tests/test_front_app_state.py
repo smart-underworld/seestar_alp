@@ -763,7 +763,11 @@ def test_settings_post_auto_lenhance_sent_on_fw_2775(monkeypatch):
             return {"ErrorNumber": 0, "Value": {"code": 0}}
         method = parameters.get("method")
         params = parameters.get("params", {})
-        if action == "method_sync" and method == "set_setting" and "auto_lenhance" in params:
+        if (
+            action == "method_sync"
+            and method == "set_setting"
+            and "auto_lenhance" in params
+        ):
             captured["main_set_setting_params"] = params
         return {"ErrorNumber": 0, "Value": {"code": 0}}
 
@@ -1084,28 +1088,36 @@ def test_check_needs_auth_true_when_method_sync_returns_none(monkeypatch):
     # method_sync returns None.  This is the auth gap: ALPACA says connected but
     # firmware won't talk to us.
     monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
-    monkeypatch.setattr(front_app, "method_sync", lambda method, telescope_id=1, **kw: None)
+    monkeypatch.setattr(
+        front_app, "method_sync", lambda method, telescope_id=1, **kw: None
+    )
     assert front_app.check_needs_auth(1) is True
 
 
 def test_check_needs_auth_false_when_method_sync_returns_offline(monkeypatch):
     # "Offline" string means the device layer explicitly says the device is offline.
     monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
-    monkeypatch.setattr(front_app, "method_sync", lambda method, telescope_id=1, **kw: "Offline")
+    monkeypatch.setattr(
+        front_app, "method_sync", lambda method, telescope_id=1, **kw: "Offline"
+    )
     assert front_app.check_needs_auth(1) is False
 
 
 def test_check_needs_auth_false_when_firmware_returns_bool_true(monkeypatch):
     # Firmware 7.32+ returns result: True (boolean) → method_sync returns True directly
     monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
-    monkeypatch.setattr(front_app, "method_sync", lambda method, telescope_id=1, **kw: True)
+    monkeypatch.setattr(
+        front_app, "method_sync", lambda method, telescope_id=1, **kw: True
+    )
     assert front_app.check_needs_auth(1) is False
 
 
 def test_check_needs_auth_true_when_firmware_returns_bool_false(monkeypatch):
     # Bare False boolean (also valid — treated as not-verified)
     monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
-    monkeypatch.setattr(front_app, "method_sync", lambda method, telescope_id=1, **kw: False)
+    monkeypatch.setattr(
+        front_app, "method_sync", lambda method, telescope_id=1, **kw: False
+    )
     assert front_app.check_needs_auth(1) is True
 
 
@@ -1163,6 +1175,7 @@ def test_auth_warning_absent_when_not_needed(monkeypatch):
 # ---------------------------------------------------------------------------
 # Wide angle camera settings – GET (get_device_settings)
 # ---------------------------------------------------------------------------
+
 
 def _s30_get_setting_response():
     return {
@@ -1325,6 +1338,7 @@ def test_get_device_settings_wide_denoise_sourced_from_stack_settings(monkeypatc
 # Wide angle camera settings – POST (SettingsResource.on_post)
 # ---------------------------------------------------------------------------
 
+
 def _base_settings_form():
     """Minimal valid settings POST payload (no wide cam fields)."""
     return {
@@ -1392,7 +1406,10 @@ def test_settings_post_wide_cam_fields_sent_for_s30(monkeypatch):
     # Gather the flat set_setting params that were sent
     merged = {}
     for action, params in calls:
-        if action in ("method_sync", "method_async") and params.get("method") == "set_setting":
+        if (
+            action in ("method_sync", "method_async")
+            and params.get("method") == "set_setting"
+        ):
             p = params.get("params", {})
             if isinstance(p, dict):
                 merged.update(p)
@@ -1418,7 +1435,10 @@ def test_settings_post_wide_cam_not_sent_for_s50(monkeypatch):
     assert output == "Successfully Updated Settings."
     merged = {}
     for action, params in calls:
-        if action in ("method_sync", "method_async") and params.get("method") == "set_setting":
+        if (
+            action in ("method_sync", "method_async")
+            and params.get("method") == "set_setting"
+        ):
             p = params.get("params", {})
             if isinstance(p, dict):
                 merged.update(p)
@@ -1440,7 +1460,10 @@ def test_settings_post_wide_cam_absent_fields_not_sent(monkeypatch):
     assert output == "Successfully Updated Settings."
     merged = {}
     for action, params in calls:
-        if action in ("method_sync", "method_async") and params.get("method") == "set_setting":
+        if (
+            action in ("method_sync", "method_async")
+            and params.get("method") == "set_setting"
+        ):
             p = params.get("params", {})
             if isinstance(p, dict):
                 merged.update(p)
@@ -1460,7 +1483,10 @@ def test_settings_post_wide_focal_pos_bad_value_coerced_to_zero(monkeypatch):
     assert output == "Successfully Updated Settings."
     merged = {}
     for action, params in calls:
-        if action in ("method_sync", "method_async") and params.get("method") == "set_setting":
+        if (
+            action in ("method_sync", "method_async")
+            and params.get("method") == "set_setting"
+        ):
             p = params.get("params", {})
             if isinstance(p, dict):
                 merged.update(p)
@@ -1471,6 +1497,7 @@ def test_settings_post_wide_focal_pos_bad_value_coerced_to_zero(monkeypatch):
 # ---------------------------------------------------------------------------
 # Stack type – form extraction (do_create_image / do_create_mosaic)
 # ---------------------------------------------------------------------------
+
 
 def _make_image_form(extra=None):
     base = {
@@ -1520,7 +1547,7 @@ class _FormReq:
         ("MilkyWay", "MilkyWay"),
         ("invalid_type", "DeepSky"),
         ("", "DeepSky"),
-        ("solarsystem", "DeepSky"),   # case-sensitive; wrong case falls back
+        ("solarsystem", "DeepSky"),  # case-sensitive; wrong case falls back
     ],
 )
 def test_do_create_image_stack_type_extraction(monkeypatch, stack_type_input, expected):
@@ -1532,7 +1559,9 @@ def test_do_create_image_stack_type_extraction(monkeypatch, stack_type_input, ex
 
     monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
 
-    form = _make_image_form({"stackType": stack_type_input} if stack_type_input is not None else {})
+    form = _make_image_form(
+        {"stackType": stack_type_input} if stack_type_input is not None else {}
+    )
     req = _FormReq(form)
     resp = DummyResp()
 
@@ -1551,7 +1580,9 @@ def test_do_create_image_stack_type_extraction(monkeypatch, stack_type_input, ex
         ("bogus", "DeepSky"),
     ],
 )
-def test_do_create_mosaic_stack_type_extraction(monkeypatch, stack_type_input, expected):
+def test_do_create_mosaic_stack_type_extraction(
+    monkeypatch, stack_type_input, expected
+):
     captured = {}
 
     def fake_do_action_device(action, dev_num, params, is_schedule=False):
@@ -1560,7 +1591,9 @@ def test_do_create_mosaic_stack_type_extraction(monkeypatch, stack_type_input, e
 
     monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
 
-    form = _make_mosaic_form({"stackType": stack_type_input} if stack_type_input is not None else {})
+    form = _make_mosaic_form(
+        {"stackType": stack_type_input} if stack_type_input is not None else {}
+    )
     req = _FormReq(form)
     resp = DummyResp()
 
@@ -1590,7 +1623,9 @@ def test_do_create_image_stack_type_included_in_start_mosaic_params(monkeypatch)
     assert captured.get("start_mosaic_params", {}).get("stack_type") == "SolarSystem"
 
 
-def test_do_create_image_invalid_ra_does_not_propagate_stack_type_to_device(monkeypatch):
+def test_do_create_image_invalid_ra_does_not_propagate_stack_type_to_device(
+    monkeypatch,
+):
     """Coordinate validation errors should abort before the device call."""
     called = {"device": False}
 
@@ -1614,6 +1649,7 @@ def test_do_create_image_invalid_ra_does_not_propagate_stack_type_to_device(monk
 # Settings page template – wide cam fields rendered / hidden
 # ---------------------------------------------------------------------------
 
+
 def test_settings_template_renders_wide_cam_fields_for_s30(monkeypatch):
     """Wide cam rows appear in the settings page when model is S30 and experimental."""
     context = _minimal_context("settings")
@@ -1629,9 +1665,7 @@ def test_settings_template_renders_wide_cam_fields_for_s30(monkeypatch):
         "stack_lenhance": False,
         "dark_mode": False,
     }
-    context["settings_friendly_names"] = {
-        k: k for k in context["settings"]
-    }
+    context["settings_friendly_names"] = {k: k for k in context["settings"]}
     context["settings_helper_text"] = {k: "" for k in context["settings"]}
     context["output"] = None
     context["action"] = "/1/settings"
@@ -1655,7 +1689,10 @@ def test_settings_template_groups_wide_fields_under_imaging(monkeypatch):
         "wide_cam": True,
         "wide_4k": False,
     }
-    context["settings_friendly_names"] = {"wide_cam": "Wide Angle Camera", "wide_4k": "Wide 4K"}
+    context["settings_friendly_names"] = {
+        "wide_cam": "Wide Angle Camera",
+        "wide_4k": "Wide 4K",
+    }
     context["settings_helper_text"] = {"wide_cam": "", "wide_4k": ""}
     context["output"] = None
     context["action"] = "/1/settings"
@@ -1679,6 +1716,7 @@ def test_settings_template_groups_wide_fields_under_imaging(monkeypatch):
 # ---------------------------------------------------------------------------
 # LiveWideCamResource – wide cam toggle in live view
 # ---------------------------------------------------------------------------
+
 
 def _live_wide_cam_app():
     app = falcon.App()
@@ -1707,7 +1745,8 @@ def test_live_wide_cam_get_returns_toggle_for_s30(monkeypatch):
     monkeypatch.setattr(front_app.Config, "experimental", True)
     monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30")
     monkeypatch.setattr(
-        front_app, "do_action_device",
+        front_app,
+        "do_action_device",
         lambda *a, **kw: {"Value": {"result": {"wide_cam": False}}},
     )
     client = testing.TestClient(_live_wide_cam_app())
@@ -1721,7 +1760,8 @@ def test_live_wide_cam_get_shows_checked_when_enabled(monkeypatch):
     monkeypatch.setattr(front_app.Config, "experimental", True)
     monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30 Pro")
     monkeypatch.setattr(
-        front_app, "do_action_device",
+        front_app,
+        "do_action_device",
         lambda *a, **kw: {"Value": {"result": {"wide_cam": True}}},
     )
     client = testing.TestClient(_live_wide_cam_app())
@@ -1736,7 +1776,8 @@ def test_live_wide_cam_post_sets_true(monkeypatch):
     monkeypatch.setattr(front_app.Config, "experimental", True)
     calls = []
     monkeypatch.setattr(
-        front_app, "do_action_device",
+        front_app,
+        "do_action_device",
         lambda action, tid, params, **kw: calls.append(params) or {},
     )
     client = testing.TestClient(_live_wide_cam_app())
@@ -1754,7 +1795,8 @@ def test_live_wide_cam_post_sets_false(monkeypatch):
     monkeypatch.setattr(front_app.Config, "experimental", True)
     calls = []
     monkeypatch.setattr(
-        front_app, "do_action_device",
+        front_app,
+        "do_action_device",
         lambda action, tid, params, **kw: calls.append(params) or {},
     )
     client = testing.TestClient(_live_wide_cam_app())

@@ -1773,7 +1773,10 @@ def test_get_events_focus_empty_queue_and_watch_firmware_init(monkeypatch, seest
 # start_stack – stack_type / set_stack_type
 # ---------------------------------------------------------------------------
 
-def test_start_stack_sends_set_stack_type_before_iscope_start_stack(monkeypatch, seestar):
+
+def test_start_stack_sends_set_stack_type_before_iscope_start_stack(
+    monkeypatch, seestar
+):
     """set_stack_type must be called before iscope_start_stack when stack_type provided."""
     calls = []
 
@@ -1863,7 +1866,7 @@ def test_start_stack_retries_iscope_start_stack_on_error(monkeypatch, seestar):
 
     assert result is True
     assert call_counts["iscope_start_stack"] == 2  # retried once
-    assert call_counts["set_stack_type"] == 1       # not re-sent on retry
+    assert call_counts["set_stack_type"] == 1  # not re-sent on retry
 
 
 def test_start_stack_returns_false_when_both_attempts_fail(monkeypatch, seestar):
