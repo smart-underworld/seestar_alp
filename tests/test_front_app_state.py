@@ -729,6 +729,103 @@ def test_settings_post_missing_light_duration_min_does_not_raise(monkeypatch):
     assert captured["stack_payload"]["light_duration_min"] == -1
 
 
+def test_settings_post_auto_lenhance_sent_on_fw_2775(monkeypatch):
+    class DummyReq:
+        def __init__(self):
+            self.media = {
+                "stack_lenhance": "false",
+                "auto_lenhance": "true",
+                "stack_dither_pix": "10",
+                "stack_dither_interval": "2",
+                "stack_dither_enable": "true",
+                "exp_ms_stack_l": "10000",
+                "exp_ms_continuous": "500",
+                "focal_pos": "1500",
+                "auto_power_off": "false",
+                "auto_3ppa_calib": "true",
+                "frame_calib": "true",
+                "plan_target_af": "false",
+                "viewplan_gohome": "false",
+                "expert_mode": "false",
+                "heater_enable": "false",
+                "dark_mode": "false",
+                "stack_cont_capt": "false",
+                "stack_drizzle2x": "false",
+            }
+
+    captured = {"main_set_setting_params": None}
+
+    def fake_do_action_device(action, dev_num, parameters, is_schedule=False):
+        if action == "method_async":
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+        method = parameters.get("method")
+        params = parameters.get("params", {})
+        if action == "method_sync" and method == "set_setting" and "auto_lenhance" in params:
+            captured["main_set_setting_params"] = params
+        return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2775)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+    monkeypatch.setattr(
+        front_app.SettingsResource,
+        "render_settings",
+        staticmethod(lambda _req, _resp, _tid, _output: None),
+    )
+
+    front_app.SettingsResource().on_post(DummyReq(), object(), 1)
+
+    assert captured["main_set_setting_params"] is not None
+    assert captured["main_set_setting_params"]["auto_lenhance"] is True
+
+
+def test_settings_post_auto_lenhance_not_sent_on_older_fw(monkeypatch):
+    class DummyReq:
+        def __init__(self):
+            self.media = {
+                "stack_lenhance": "false",
+                "stack_dither_pix": "10",
+                "stack_dither_interval": "2",
+                "stack_dither_enable": "true",
+                "exp_ms_stack_l": "10000",
+                "exp_ms_continuous": "500",
+                "focal_pos": "1500",
+                "auto_power_off": "false",
+                "auto_3ppa_calib": "true",
+                "frame_calib": "true",
+                "plan_target_af": "false",
+                "viewplan_gohome": "false",
+                "expert_mode": "false",
+                "heater_enable": "false",
+                "dark_mode": "false",
+                "stack_cont_capt": "false",
+                "stack_drizzle2x": "false",
+            }
+
+    captured = {"saw_auto_lenhance": False}
+
+    def fake_do_action_device(action, dev_num, parameters, is_schedule=False):
+        if action == "method_async":
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+        params = parameters.get("params", {})
+        if "auto_lenhance" in params:
+            captured["saw_auto_lenhance"] = True
+        return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2670)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+    monkeypatch.setattr(
+        front_app.SettingsResource,
+        "render_settings",
+        staticmethod(lambda _req, _resp, _tid, _output: None),
+    )
+
+    front_app.SettingsResource().on_post(DummyReq(), object(), 1)
+
+    assert captured["saw_auto_lenhance"] is False
+
+
 def test_home_content_endpoint_returns_non_empty_html(monkeypatch):
     monkeypatch.setattr(
         front_app,

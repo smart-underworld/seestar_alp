@@ -55,6 +55,7 @@ class SeestarSimulator:
                 "lang": "en",
                 "center_xy": [540, 960],
                 "stack_lenhance": False,
+                "auto_lenhance": False,
                 "heater_enable": False,
                 "heater": {"state": False, "value": 0},
                 "expt_heater_enable": False,

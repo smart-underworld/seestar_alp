@@ -964,6 +964,7 @@ def get_device_settings(telescope_id):
             "heater_enable": pydash.get(settings_result, "heater_enable"),
             "auto_power_off": pydash.get(settings_result, "auto_power_off"),
             "stack_lenhance": pydash.get(settings_result, "stack_lenhance"),
+            "auto_lenhance": pydash.get(settings_result, "auto_lenhance"),
             "dark_mode": pydash.get(settings_result, "dark_mode"),
             "stack_cont_capt": stack_cont_capt,
             "stack_drizzle2x": pydash.get(settings_result, "stack.drizzle2x"),
@@ -3681,6 +3682,9 @@ class SettingsResource(BaseResource):
                     "af_before_stack": str2bool(PostedSettings["af_before_stack"])
                 }
 
+        if fw >= 2775 and "auto_lenhance" in PostedSettings:
+            FormattedNewSettings["auto_lenhance"] = str2bool(PostedSettings["auto_lenhance"])
+
         FormattedNewStackSettings = {}
         has_stack_settings_input = any(
             key in PostedSettings
@@ -3897,6 +3901,7 @@ class SettingsResource(BaseResource):
             "heater_enable": 0,
             "auto_power_off": 0,
             "stack_lenhance": 0,
+            "auto_lenhance": 2775,
             "dark_mode": 0,
             "stack_cont_capt": 0,
             "stack_drizzle2x": 0,
@@ -3954,6 +3959,7 @@ class SettingsResource(BaseResource):
             "heater_enable": "Dew Heater",
             "auto_power_off": "Auto Power Off",
             "stack_lenhance": "Light Pollution (LP) Filter",
+            "auto_lenhance": "Auto DSO Enhancement",
             "dark_mode": "Dark Mode",
             "stack_cont_capt": "Continuous Capture Mode",
             "stack_drizzle2x": "4k Live Stack Mode (2x Drizzle)",
@@ -3992,6 +3998,7 @@ class SettingsResource(BaseResource):
             "heater_enable": "Enable or disable dew heater.",
             "auto_power_off": "Enable or disable auto power off",
             "stack_lenhance": "Enable or disable light pollution (LP) Filter.",
+            "auto_lenhance": "Enable automatic DSO image enhancement during stacking (firmware 7.75+).",
             "dark_mode": "Enable or disable LEDs while imaging.",
             "stack_cont_capt": "Enabling continuous capture mode disables live stacking",
             "stack_drizzle2x": "Enables 2x drizzle on Live Stack for 4k Mode",
