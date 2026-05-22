@@ -1010,7 +1010,7 @@ def get_device_settings(telescope_id):
             "heater_enable": pydash.get(settings_result, "heater_enable"),
             "auto_power_off": pydash.get(settings_result, "auto_power_off"),
             "stack_lenhance": pydash.get(settings_result, "stack_lenhance"),
-            "auto_lenhance": pydash.get(settings_result, "auto_lenhance"),
+            "auto_lenhance": pydash.get(settings_result, "auto_lenhance", False),
             "dark_mode": pydash.get(settings_result, "dark_mode"),
             "stack_cont_capt": stack_cont_capt,
             "stack_drizzle2x": pydash.get(settings_result, "stack.drizzle2x"),

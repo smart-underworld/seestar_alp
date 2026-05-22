@@ -833,6 +833,29 @@ def test_settings_post_auto_lenhance_not_sent_on_older_fw(monkeypatch):
     assert captured["saw_auto_lenhance"] is False
 
 
+def test_auto_lenhance_defaults_to_false_when_absent_from_firmware(monkeypatch):
+    # Firmware may not include auto_lenhance in get_setting response even on 7.75+.
+    # Defaulting to False ensures the setting renders as a boolean toggle, not "None".
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+    monkeypatch.setattr(
+        front_app,
+        "do_action_device",
+        lambda action, tid, params, **kw: {
+            "Value": {
+                "result": {
+                    "exp_ms": {"stack_l": 10000, "continuous": 500},
+                    "stack_dither": {"pix": 10, "interval": 2, "enable": True},
+                    "stack_lenhance": False,
+                    # auto_lenhance intentionally absent
+                }
+            }
+        },
+    )
+    settings = front_app.get_device_settings(1)
+    assert settings["auto_lenhance"] is False
+
+
 def test_home_content_endpoint_returns_non_empty_html(monkeypatch):
     monkeypatch.setattr(
         front_app,
