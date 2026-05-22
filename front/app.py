@@ -4243,6 +4243,15 @@ class GuestModeResource:
         self.on_get(req, resp, telescope_id)
 
 
+class AuthStatusResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        needs_auth = telescope_id > 0 and check_needs_auth(telescope_id)
+        render_fragment(
+            req, resp, "partials/auth_warning.html", needs_auth_warning=needs_auth
+        )
+
+
 class GuestModeContentResource:
     _last_render_by_key = {}
     _lock = threading.Lock()
@@ -5268,6 +5277,7 @@ class FrontMain:
         app.add_route(
             "/{telescope_id:int}/guestmode-content", GuestModeContentResource()
         )
+        app.add_route("/{telescope_id:int}/auth-status", AuthStatusResource())
         app.add_route("/{telescope_id:int}/guestmode", GuestModeResource())
         app.add_route("/{telescope_id:int}/support", SupportResource())
         app.add_route("/{telescope_id:int}/system", SystemResource())

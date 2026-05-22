@@ -87,6 +87,7 @@ def _build_front_test_app():
         "/{telescope_id:int}/schedule/state", front_app.ScheduleToggleResource()
     )
     app.add_route("/{telescope_id:int}/startup", front_app.StartupResource())
+    app.add_route("/{telescope_id:int}/auth-status", front_app.AuthStatusResource())
     return app
 
 
