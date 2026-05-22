@@ -841,3 +841,167 @@ def test_27_federation_home_lists_both_devices(two_device_federation):
     assert resp.status_code == 200
     assert "Seestar Alpha" in resp.text
     assert "Seestar Beta" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Tests 28-35: Stack type and wide angle camera (added with firmware 3.2.0)
+# ---------------------------------------------------------------------------
+
+
+def test_28_simulator_handles_set_stack_type(simulator_server):
+    """Simulator accepts set_stack_type and persists the value in state."""
+    host = simulator_server["host"]
+    port = simulator_server["tcp_port"]
+
+    for stack_type in ("SolarSystem", "MilkyWay", "DeepSky"):
+        _send_tcp_command(host, port, {"id": 2800, "method": "set_stack_type", "params": {"type": stack_type}})
+        state = _send_tcp_command(host, port, {"id": 2801, "method": "get_device_state"})
+        assert state["result"]["stack_type"] == stack_type, (
+            f"Expected stack_type={stack_type!r} in device state"
+        )
+
+
+def test_29_stack_type_in_image_form_reaches_device_layer(monkeypatch, front_sim_bridge):
+    """stackType from an image POST is included in the start_mosaic payload."""
+    captured = {}
+
+    # Extend the bridge to capture start_mosaic params
+    original_action = front_app.do_action_device
+
+    def capturing_do_action(action, dev_num, params, is_schedule=False):
+        if action == "start_mosaic":
+            captured["start_mosaic_params"] = params
+            return {"ErrorNumber": 0, "Value": {}}
+        return original_action(action, dev_num, params, is_schedule)
+
+    monkeypatch.setattr(front_app, "do_action_device", capturing_do_action)
+
+    # Add the image route to the test app so we can POST to it
+    import falcon
+    app = falcon.App()
+    app.add_route("/{telescope_id:int}/image", front_app.ImageResource())
+    client = testing.TestClient(app)
+
+    form = {
+        "targetName": "Mars",
+        "ra": "1.5",
+        "dec": "10.0",
+        "panelTime": "600",
+        "gain": "80",
+        "num_tries": "1",
+        "retry_wait_s": "300",
+        "stackType": "SolarSystem",
+    }
+    resp = client.simulate_post("/1/image", json=form)
+    assert resp.status_code == 200
+    assert captured.get("start_mosaic_params", {}).get("stack_type") == "SolarSystem"
+
+
+def test_30_invalid_stack_type_normalised_to_deepsky_before_device(monkeypatch, front_sim_bridge):
+    """A bogus stackType value must be normalised to DeepSky before reaching the device."""
+    captured = {}
+    original_action = front_app.do_action_device
+
+    def capturing_do_action(action, dev_num, params, is_schedule=False):
+        if action == "start_mosaic":
+            captured["stack_type"] = params.get("stack_type")
+            return {"ErrorNumber": 0, "Value": {}}
+        return original_action(action, dev_num, params, is_schedule)
+
+    monkeypatch.setattr(front_app, "do_action_device", capturing_do_action)
+
+    import falcon
+    app = falcon.App()
+    app.add_route("/{telescope_id:int}/image", front_app.ImageResource())
+    client = testing.TestClient(app)
+
+    form = {
+        "targetName": "Test",
+        "ra": "1.5",
+        "dec": "10.0",
+        "panelTime": "600",
+        "gain": "80",
+        "num_tries": "1",
+        "retry_wait_s": "300",
+        "stackType": "HACK_INJECTION; rm -rf /",
+    }
+    resp = client.simulate_post("/1/image", json=form)
+    assert resp.status_code == 200
+    assert captured.get("stack_type") == "DeepSky"
+
+
+def test_31_set_stack_type_tcp_round_trip_all_types(simulator_server):
+    """All three valid stack types survive a TCP round-trip through the simulator."""
+    host = simulator_server["host"]
+    port = simulator_server["tcp_port"]
+
+    for stack_type in ("DeepSky", "SolarSystem", "MilkyWay"):
+        set_resp = _send_tcp_command(
+            host, port,
+            {"id": 3100, "method": "set_stack_type", "params": {"type": stack_type}},
+        )
+        assert set_resp.get("result") == 0, f"set_stack_type failed for {stack_type}"
+
+        state_resp = _send_tcp_command(host, port, {"id": 3101, "method": "get_device_state"})
+        assert state_resp["result"]["stack_type"] == stack_type
+
+
+def test_32_wide_cam_settings_shown_for_s30_model(monkeypatch, front_sim_bridge):
+    """GET /settings for an S30 device (experimental on) renders wide cam fields."""
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30")
+    # Config.experimental is already True from the bridge fixture
+
+    resp = front_sim_bridge["client"].simulate_get("/1/settings")
+    assert resp.status_code == 200
+    assert "Wide Angle Camera" in resp.text
+    assert "Wide Camera 4K Mode" in resp.text
+    assert "Wide Camera Denoise" in resp.text
+    assert "Wide Camera Focal Position" in resp.text
+
+
+def test_33_wide_cam_settings_absent_for_s50_model(monkeypatch, front_sim_bridge):
+    """GET /settings for an S50 device must NOT include wide cam fields."""
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+
+    resp = front_sim_bridge["client"].simulate_get("/1/settings")
+    assert resp.status_code == 200
+    assert "Wide Angle Camera" not in resp.text
+    assert "Wide Camera 4K Mode" not in resp.text
+
+
+def test_34_wide_cam_settings_absent_when_experimental_off(monkeypatch, front_sim_bridge):
+    """Even for S30, wide cam settings must not render when experimental is disabled."""
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30")
+    monkeypatch.setattr(Config, "experimental", False)
+
+    resp = front_sim_bridge["client"].simulate_get("/1/settings")
+    assert resp.status_code == 200
+    assert "Wide Angle Camera" not in resp.text
+
+
+def test_35_wide_cam_settings_round_trip_via_simulator(monkeypatch, front_sim_bridge):
+    """POST wide cam settings for S30 → verify the simulator received them."""
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30")
+
+    payload = {
+        **_settings_payload(),
+        "wide_cam": "true",
+        "wide_4k": "false",
+        "wide_denoise": "true",
+        "wide_focal_pos": "1600",
+    }
+
+    post_resp = front_sim_bridge["client"].simulate_post("/1/settings", json=payload)
+    assert post_resp.status_code == 200
+    assert "Successfully Updated Settings." in post_resp.text
+
+    # Confirm the simulator absorbed the wide cam values via get_setting
+    state = _send_tcp_command(
+        front_sim_bridge["host"],
+        front_sim_bridge["tcp_port"],
+        {"id": 3500, "method": "get_setting"},
+    )
+    setting = state.get("result", {})
+    assert setting.get("wide_cam") is True
+    assert setting.get("wide_4k") is False
+    assert setting.get("wide_focal_pos") == 1600

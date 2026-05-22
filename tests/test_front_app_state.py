@@ -1087,3 +1087,519 @@ def test_auth_warning_absent_when_not_needed(monkeypatch):
     template = front_app.fetch_template("base.html")
     html = template.render(**context)
     assert "Authentication required" not in html
+
+
+# ---------------------------------------------------------------------------
+# Wide angle camera settings – GET (get_device_settings)
+# ---------------------------------------------------------------------------
+
+def _s30_get_setting_response():
+    return {
+        "stack_dither": {"pix": 10, "interval": 2, "enable": True},
+        "exp_ms": {"stack_l": 10000, "continuous": 500},
+        "auto_3ppa_calib": True,
+        "frame_calib": True,
+        "focal_pos": 1500,
+        "heater_enable": False,
+        "auto_power_off": False,
+        "stack_lenhance": False,
+        "dark_mode": False,
+        "stack_cont_capt": False,
+        "stack": {"drizzle2x": False},
+        "wide_cam": True,
+        "wide_4k": False,
+        "wide_focal_pos": 1500,
+    }
+
+
+def test_get_device_settings_wide_cam_shown_for_s30_with_experimental(monkeypatch):
+    monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2775)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30")
+    monkeypatch.setattr(Config, "experimental", True)
+
+    def fake_method_sync(method, telescope_id=1, **kwargs):
+        if method == "get_setting":
+            return _s30_get_setting_response()
+        if method == "get_stack_setting":
+            return {"wide_denoise": True}
+        raise AssertionError(f"Unexpected: {method}")
+
+    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
+
+    settings = front_app.get_device_settings(1)
+
+    assert settings["wide_cam"] is True
+    assert settings["wide_4k"] is False
+    assert settings["wide_focal_pos"] == 1500
+    assert settings["wide_denoise"] is True
+
+
+def test_get_device_settings_wide_cam_shown_for_s30_pro_with_experimental(monkeypatch):
+    monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2775)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30 Pro")
+    monkeypatch.setattr(Config, "experimental", True)
+
+    def fake_method_sync(method, telescope_id=1, **kwargs):
+        if method == "get_setting":
+            return _s30_get_setting_response()
+        if method == "get_stack_setting":
+            return {}
+        raise AssertionError(f"Unexpected: {method}")
+
+    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
+
+    settings = front_app.get_device_settings(1)
+
+    assert "wide_cam" in settings
+    assert "wide_4k" in settings
+
+
+def test_get_device_settings_wide_cam_absent_for_s50(monkeypatch):
+    monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2775)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+    monkeypatch.setattr(Config, "experimental", True)
+
+    def fake_method_sync(method, telescope_id=1, **kwargs):
+        if method == "get_setting":
+            return _s30_get_setting_response()
+        if method == "get_stack_setting":
+            return {}
+        raise AssertionError(f"Unexpected: {method}")
+
+    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
+
+    settings = front_app.get_device_settings(1)
+
+    assert "wide_cam" not in settings
+    assert "wide_4k" not in settings
+    assert "wide_denoise" not in settings
+    assert "wide_focal_pos" not in settings
+
+
+def test_get_device_settings_wide_cam_absent_when_experimental_off(monkeypatch):
+    monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2775)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30")
+    monkeypatch.setattr(Config, "experimental", False)
+
+    def fake_method_sync(method, telescope_id=1, **kwargs):
+        if method == "get_setting":
+            return _s30_get_setting_response()
+        if method == "get_stack_setting":
+            return {}
+        raise AssertionError(f"Unexpected: {method}")
+
+    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
+
+    settings = front_app.get_device_settings(1)
+
+    assert "wide_cam" not in settings
+    assert "wide_4k" not in settings
+
+
+def test_get_device_settings_wide_cam_omits_none_fields(monkeypatch):
+    """Fields the firmware doesn't return should be absent, not present as None."""
+    monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2775)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30")
+    monkeypatch.setattr(Config, "experimental", True)
+
+    def fake_method_sync(method, telescope_id=1, **kwargs):
+        if method == "get_setting":
+            # wide_focal_pos and wide_4k absent from firmware response
+            resp = _s30_get_setting_response()
+            del resp["wide_focal_pos"]
+            resp["wide_4k"] = None
+            return resp
+        if method == "get_stack_setting":
+            return {}
+        raise AssertionError(f"Unexpected: {method}")
+
+    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
+
+    settings = front_app.get_device_settings(1)
+
+    assert settings["wide_cam"] is True
+    assert "wide_focal_pos" not in settings
+    assert "wide_4k" not in settings
+
+
+def test_get_device_settings_wide_denoise_sourced_from_stack_settings(monkeypatch):
+    """wide_denoise is returned by get_stack_setting, not get_setting."""
+    monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2775)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30")
+    monkeypatch.setattr(Config, "experimental", True)
+
+    def fake_method_sync(method, telescope_id=1, **kwargs):
+        if method == "get_setting":
+            resp = _s30_get_setting_response()
+            # wide_denoise NOT in get_setting response
+            return resp
+        if method == "get_stack_setting":
+            return {"wide_denoise": True, "save_discrete_frame": False}
+        raise AssertionError(f"Unexpected: {method}")
+
+    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
+
+    settings = front_app.get_device_settings(1)
+
+    assert settings["wide_denoise"] is True
+
+
+# ---------------------------------------------------------------------------
+# Wide angle camera settings – POST (SettingsResource.on_post)
+# ---------------------------------------------------------------------------
+
+def _base_settings_form():
+    """Minimal valid settings POST payload (no wide cam fields)."""
+    return {
+        "stack_lenhance": "false",
+        "stack_dither_pix": "10",
+        "stack_dither_interval": "2",
+        "stack_dither_enable": "true",
+        "exp_ms_stack_l": "10000",
+        "exp_ms_continuous": "500",
+        "focal_pos": "1500",
+        "auto_power_off": "false",
+        "auto_3ppa_calib": "true",
+        "frame_calib": "true",
+        "plan_target_af": "false",
+        "viewplan_gohome": "false",
+        "expert_mode": "false",
+        "heater_enable": "false",
+        "dark_mode": "false",
+        "stack_cont_capt": "false",
+        "stack_drizzle2x": "false",
+    }
+
+
+def _run_settings_post(monkeypatch, model, form_extra=None, fw=2775):
+    """Helper: POST to SettingsResource and return (output, captured_calls)."""
+
+    class FormReq:
+        def __init__(self):
+            self.media = {**_base_settings_form(), **(form_extra or {})}
+
+    captured = {"output": None, "calls": []}
+
+    def fake_do_action_device(action, dev_num, parameters, is_schedule=False):
+        captured["calls"].append((action, parameters))
+        return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: fw)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: model)
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+    monkeypatch.setattr(
+        front_app.SettingsResource,
+        "render_settings",
+        staticmethod(
+            lambda _req, _resp, _tid, output: captured.__setitem__("output", output)
+        ),
+    )
+
+    front_app.SettingsResource().on_post(FormReq(), object(), 1)
+    return captured["output"], captured["calls"]
+
+
+def test_settings_post_wide_cam_fields_sent_for_s30(monkeypatch):
+    output, calls = _run_settings_post(
+        monkeypatch,
+        model="Seestar S30",
+        form_extra={
+            "wide_cam": "true",
+            "wide_4k": "false",
+            "wide_denoise": "true",
+            "wide_focal_pos": "1600",
+        },
+    )
+
+    assert output == "Successfully Updated Settings."
+    # Gather the flat set_setting params that were sent
+    merged = {}
+    for action, params in calls:
+        if action in ("method_sync", "method_async") and params.get("method") == "set_setting":
+            p = params.get("params", {})
+            if isinstance(p, dict):
+                merged.update(p)
+
+    assert merged.get("wide_cam") is True
+    assert merged.get("wide_4k") is False
+    assert merged.get("wide_denoise") is True
+    assert merged.get("wide_focal_pos") == 1600
+
+
+def test_settings_post_wide_cam_not_sent_for_s50(monkeypatch):
+    output, calls = _run_settings_post(
+        monkeypatch,
+        model="Seestar S50",
+        form_extra={
+            "wide_cam": "true",
+            "wide_4k": "true",
+            "wide_denoise": "true",
+            "wide_focal_pos": "1600",
+        },
+    )
+
+    assert output == "Successfully Updated Settings."
+    merged = {}
+    for action, params in calls:
+        if action in ("method_sync", "method_async") and params.get("method") == "set_setting":
+            p = params.get("params", {})
+            if isinstance(p, dict):
+                merged.update(p)
+
+    assert "wide_cam" not in merged
+    assert "wide_4k" not in merged
+    assert "wide_denoise" not in merged
+    assert "wide_focal_pos" not in merged
+
+
+def test_settings_post_wide_cam_absent_fields_not_sent(monkeypatch):
+    """S30 form without wide cam fields should not error and should not send them."""
+    output, calls = _run_settings_post(
+        monkeypatch,
+        model="Seestar S30",
+        form_extra={},  # no wide cam keys
+    )
+
+    assert output == "Successfully Updated Settings."
+    merged = {}
+    for action, params in calls:
+        if action in ("method_sync", "method_async") and params.get("method") == "set_setting":
+            p = params.get("params", {})
+            if isinstance(p, dict):
+                merged.update(p)
+
+    assert "wide_cam" not in merged
+    assert "wide_focal_pos" not in merged
+
+
+def test_settings_post_wide_focal_pos_bad_value_coerced_to_zero(monkeypatch):
+    """Non-numeric wide_focal_pos is safely coerced to 0."""
+    output, calls = _run_settings_post(
+        monkeypatch,
+        model="Seestar S30",
+        form_extra={"wide_focal_pos": "not_a_number"},
+    )
+
+    assert output == "Successfully Updated Settings."
+    merged = {}
+    for action, params in calls:
+        if action in ("method_sync", "method_async") and params.get("method") == "set_setting":
+            p = params.get("params", {})
+            if isinstance(p, dict):
+                merged.update(p)
+
+    assert merged.get("wide_focal_pos") == 0
+
+
+# ---------------------------------------------------------------------------
+# Stack type – form extraction (do_create_image / do_create_mosaic)
+# ---------------------------------------------------------------------------
+
+def _make_image_form(extra=None):
+    base = {
+        "targetName": "Test Target",
+        "ra": "10.5",
+        "dec": "-5.0",
+        "panelTime": "3600",
+        "gain": "80",
+        "num_tries": "1",
+        "retry_wait_s": "300",
+    }
+    if extra:
+        base.update(extra)
+    return base
+
+
+def _make_mosaic_form(extra=None):
+    base = {
+        "targetName": "Test Target",
+        "ra": "10.5",
+        "raPanels": "1",
+        "dec": "-5.0",
+        "decPanels": "1",
+        "panelOverlap": "10",
+        "panelSelect": "",
+        "panelTime": "3600",
+        "gain": "80",
+        "num_tries": "1",
+        "retry_wait_s": "300",
+    }
+    if extra:
+        base.update(extra)
+    return base
+
+
+class _FormReq:
+    def __init__(self, data):
+        self.media = data
+
+
+@pytest.mark.parametrize(
+    "stack_type_input,expected",
+    [
+        (None, "DeepSky"),
+        ("DeepSky", "DeepSky"),
+        ("SolarSystem", "SolarSystem"),
+        ("MilkyWay", "MilkyWay"),
+        ("invalid_type", "DeepSky"),
+        ("", "DeepSky"),
+        ("solarsystem", "DeepSky"),   # case-sensitive; wrong case falls back
+    ],
+)
+def test_do_create_image_stack_type_extraction(monkeypatch, stack_type_input, expected):
+    captured = {}
+
+    def fake_do_action_device(action, dev_num, params, is_schedule=False):
+        captured["params"] = params
+        return {"ErrorNumber": 0, "Value": {}}
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    form = _make_image_form({"stackType": stack_type_input} if stack_type_input is not None else {})
+    req = _FormReq(form)
+    resp = DummyResp()
+
+    values, errors = front_app.do_create_image(req, resp, False, 1)
+
+    assert not errors
+    assert values["stack_type"] == expected
+
+
+@pytest.mark.parametrize(
+    "stack_type_input,expected",
+    [
+        (None, "DeepSky"),
+        ("SolarSystem", "SolarSystem"),
+        ("MilkyWay", "MilkyWay"),
+        ("bogus", "DeepSky"),
+    ],
+)
+def test_do_create_mosaic_stack_type_extraction(monkeypatch, stack_type_input, expected):
+    captured = {}
+
+    def fake_do_action_device(action, dev_num, params, is_schedule=False):
+        captured["params"] = params
+        return {"ErrorNumber": 0, "Value": {}}
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    form = _make_mosaic_form({"stackType": stack_type_input} if stack_type_input is not None else {})
+    req = _FormReq(form)
+    resp = DummyResp()
+
+    values, errors = front_app.do_create_mosaic(req, resp, False, 1)
+
+    assert not errors
+    assert values["stack_type"] == expected
+
+
+def test_do_create_image_stack_type_included_in_start_mosaic_params(monkeypatch):
+    """stack_type must reach the start_mosaic payload sent to the device layer."""
+    captured = {}
+
+    def fake_do_action_device(action, dev_num, params, is_schedule=False):
+        if action == "start_mosaic":
+            captured["start_mosaic_params"] = params
+        return {"ErrorNumber": 0, "Value": {}}
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    form = _make_image_form({"stackType": "SolarSystem"})
+    req = _FormReq(form)
+    resp = DummyResp()
+
+    front_app.do_create_image(req, resp, False, 1)
+
+    assert captured.get("start_mosaic_params", {}).get("stack_type") == "SolarSystem"
+
+
+def test_do_create_image_invalid_ra_does_not_propagate_stack_type_to_device(monkeypatch):
+    """Coordinate validation errors should abort before the device call."""
+    called = {"device": False}
+
+    def fake_do_action_device(action, dev_num, params, is_schedule=False):
+        called["device"] = True
+        return {"ErrorNumber": 0, "Value": {}}
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    form = _make_image_form({"ra": "not_valid", "stackType": "SolarSystem"})
+    req = _FormReq(form)
+    resp = DummyResp()
+
+    values, errors = front_app.do_create_image(req, resp, False, 1)
+
+    assert "ra" in errors
+    assert not called["device"]
+
+
+# ---------------------------------------------------------------------------
+# Settings page template – wide cam fields rendered / hidden
+# ---------------------------------------------------------------------------
+
+def test_settings_template_renders_wide_cam_fields_for_s30(monkeypatch):
+    """Wide cam rows appear in the settings page when model is S30 and experimental."""
+    context = _minimal_context("settings")
+    context["experimental"] = True
+    context["settings"] = {
+        "wide_cam": True,
+        "wide_4k": False,
+        "wide_denoise": True,
+        "wide_focal_pos": 1500,
+        "focal_pos": 1500,
+        "heater_enable": False,
+        "auto_power_off": False,
+        "stack_lenhance": False,
+        "dark_mode": False,
+    }
+    context["settings_friendly_names"] = {
+        k: k for k in context["settings"]
+    }
+    context["settings_helper_text"] = {k: "" for k in context["settings"]}
+    context["output"] = None
+    context["action"] = "/1/settings"
+    context["firmware_ver_int"] = 2775
+    context["version"] = "test"
+
+    template = front_app.fetch_template("settings.html")
+    html = template.render(**context)
+
+    assert "wide_cam" in html
+    assert "wide_4k" in html
+    assert "wide_denoise" in html
+    assert "wide_focal_pos" in html
+
+
+def test_settings_template_groups_wide_fields_under_imaging(monkeypatch):
+    """wide_* settings should land in the Imaging group, not General."""
+    context = _minimal_context("settings")
+    context["experimental"] = True
+    context["settings"] = {
+        "wide_cam": True,
+        "wide_4k": False,
+    }
+    context["settings_friendly_names"] = {"wide_cam": "Wide Angle Camera", "wide_4k": "Wide 4K"}
+    context["settings_helper_text"] = {"wide_cam": "", "wide_4k": ""}
+    context["output"] = None
+    context["action"] = "/1/settings"
+    context["firmware_ver_int"] = 2775
+    context["version"] = "test"
+
+    template = front_app.fetch_template("settings.html")
+    html = template.render(**context)
+
+    imaging_pos = html.find("Imaging")
+    general_pos = html.find("General")
+    wide_cam_pos = html.find("wide_cam")
+
+    # wide_cam should appear after the Imaging header and before (or without) General
+    assert imaging_pos != -1
+    assert wide_cam_pos > imaging_pos
+    if general_pos != -1:
+        assert wide_cam_pos < general_pos or general_pos < imaging_pos
