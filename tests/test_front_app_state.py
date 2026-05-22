@@ -1078,8 +1078,18 @@ def test_check_needs_auth_false_on_exception(monkeypatch):
     assert front_app.check_needs_auth(1) is False
 
 
+def test_check_needs_auth_true_when_method_sync_returns_none(monkeypatch):
+    # Firmware 7.32+ without auth silently ignores all commands.
+    # The front-layer HTTP request times out → do_action_device returns None →
+    # method_sync returns None.  This is the auth gap: ALPACA says connected but
+    # firmware won't talk to us.
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
+    monkeypatch.setattr(front_app, "method_sync", lambda method, telescope_id=1, **kw: None)
+    assert front_app.check_needs_auth(1) is True
+
+
 def test_check_needs_auth_false_when_method_sync_returns_offline(monkeypatch):
-    # method_sync returns "Offline" string when device is unreachable at RPC level
+    # "Offline" string means the device layer explicitly says the device is offline.
     monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
     monkeypatch.setattr(front_app, "method_sync", lambda method, telescope_id=1, **kw: "Offline")
     assert front_app.check_needs_auth(1) is False

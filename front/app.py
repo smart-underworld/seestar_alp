@@ -750,13 +750,11 @@ def check_needs_auth(telescope_id):
         return False
     try:
         result = method_sync("pi_is_verified", telescope_id)
-        logger.info(f"check_needs_auth: pi_is_verified raw result: {result!r}")
         # Authenticated: firmware returns result: True (bare boolean from method_sync)
         if isinstance(result, bool):
             return not result
-        # Not authenticated: firmware returns result: False, but method_sync wraps it
-        # as {"status": "success", "result": False} because False == 0 in Python
-        # triggers the "== 0" branch at line 710 in method_sync.
+        # Not authenticated: firmware returns result: False, wrapped as a dict
+        # by method_sync because False == 0 in Python triggers its == 0 branch.
         if isinstance(result, dict):
             if result.get("status") == "success":
                 res_val = result.get("result")
@@ -764,14 +762,18 @@ def check_needs_auth(telescope_id):
                     return not res_val
                 if isinstance(res_val, dict):
                     return not res_val.get("is_verified", False)
-            # Error response (method not found on old firmware, auth error, etc.)
-            logger.info(f"check_needs_auth: non-success dict, treating as no-auth-needed: {result!r}")
+            # Error dict (method not found on old firmware) → no warning needed.
             return False
-        # "Offline", timeout error string, or other unexpected type
-        logger.info(f"check_needs_auth: unexpected result type {type(result).__name__!r}, value: {result!r}")
+        # None: the front-layer HTTP request timed out (5s) before the device layer
+        # got any response from the firmware.  Firmware 7.32+ without authentication
+        # silently ignores ALL commands on the control port — it never replies to
+        # pi_is_verified.  If check_api_state says we're connected but the firmware
+        # won't talk to us, that is the auth gap.
+        if result is None:
+            return True
+        # "Offline" string → device layer explicitly says offline.
         return False
-    except Exception as e:
-        logger.info(f"check_needs_auth: exception: {e!r}")
+    except Exception:
         return False
 
 
