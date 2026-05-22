@@ -1094,6 +1094,7 @@
             <div class="alert alert-primary" role="alert">{{ message }}</div>
         {% endfor %}
         <div id="auth-warning-container"
+             class="no-htmx-fx"
              hx-get="{{ root }}/auth-status"
              hx-trigger="every 15s"
              hx-swap="innerHTML">
