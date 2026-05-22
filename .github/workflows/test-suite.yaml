@@ -54,3 +54,23 @@ jobs:
       - name: Run frontend tests
         run: npm test
         working-directory: front
+
+  test-cli:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.13
+
+      - name: Install cli package and test dependencies
+        run: pip install -e "." pytest pytest-cov pytest-asyncio pytest-httpx
+        working-directory: cli
+
+      - name: Run cli tests with coverage gate
+        run: pytest --cov --cov-fail-under=75 -q
+        working-directory: cli
