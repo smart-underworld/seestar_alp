@@ -242,11 +242,14 @@ class Seestar:
             # sanity check
             try:
                 verified = self.send_message_param_sync({"method": "pi_is_verified"})
-                is_verified = (
-                    verified.get("result", {}).get("is_verified", False)
-                    if isinstance(verified, dict)
-                    else False
-                )
+                result_val = verified.get("result") if isinstance(verified, dict) else None
+                # Firmware returns result: True (boolean) directly, not {"is_verified": true}
+                if isinstance(result_val, bool):
+                    is_verified = result_val
+                elif isinstance(result_val, dict):
+                    is_verified = result_val.get("is_verified", False)
+                else:
+                    is_verified = False
                 if not is_verified:
                     self.logger.warning(
                         f"Device did not report verified after verify_client: {verified}"

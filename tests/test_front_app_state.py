@@ -1063,6 +1063,22 @@ def test_check_needs_auth_false_on_exception(monkeypatch):
     assert front_app.check_needs_auth(1) is False
 
 
+def test_check_needs_auth_false_when_firmware_returns_bool_true(monkeypatch):
+    # Firmware 7.32+ returns result: True (boolean), not {"is_verified": true}
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
+    monkeypatch.setattr(front_app, "method_sync", lambda method, telescope_id=1, **kw: True)
+    assert front_app.check_needs_auth(1) is False
+
+
+def test_check_needs_auth_true_when_firmware_returns_bool_false(monkeypatch):
+    # If firmware returns result: False, device is not verified → show warning
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
+    monkeypatch.setattr(front_app, "method_sync", lambda method, telescope_id=1, **kw: False)
+    assert front_app.check_needs_auth(1) is True
+
+
 def test_auth_warning_rendered_in_base_template(monkeypatch):
     context = _minimal_context("stats")
     context["needs_auth_warning"] = True

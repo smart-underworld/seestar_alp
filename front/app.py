@@ -751,6 +751,9 @@ def check_needs_auth(telescope_id):
         return False
     try:
         result = method_sync("pi_is_verified", telescope_id)
+        # Firmware returns result: True (boolean) directly, not {"is_verified": true}
+        if isinstance(result, bool):
+            return not result
         return not pydash.get(result, "is_verified", False)
     except Exception:
         return False
