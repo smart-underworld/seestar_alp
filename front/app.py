@@ -739,22 +739,34 @@ _FW_AUTH_REQUIRED = 2732
 
 
 def check_needs_auth(telescope_id):
-    """Return True if firmware requires authentication but the device is not authenticated.
+    """Return True if the device requires auth but is not authenticated.
 
-    Firmware 7.32+ mandates authentication (via seestar-proxy or interop PEM).
-    We query pi_is_verified — safe to call unauthenticated — to detect the gap.
+    Calls pi_is_verified directly — this is safe without auth on firmware 7.32+.
+    Skips get_firmware_ver_int because that call itself requires auth, so it
+    returns 0 (< threshold) when unauthenticated, producing a false negative.
+    On older firmware pi_is_verified will error → we return False (no warning).
     """
     if not check_api_state(telescope_id):
         return False
-    fw = get_firmware_ver_int(telescope_id)
-    if fw < _FW_AUTH_REQUIRED:
-        return False
     try:
         result = method_sync("pi_is_verified", telescope_id)
-        # Firmware returns result: True (boolean) directly, not {"is_verified": true}
+        # Authenticated: firmware returns result: True (bare boolean from method_sync)
         if isinstance(result, bool):
             return not result
-        return not pydash.get(result, "is_verified", False)
+        # Not authenticated: firmware returns result: False, but method_sync wraps it
+        # as {"status": "success", "result": False} because False == 0 in Python
+        # triggers the "== 0" branch at line 710 in method_sync.
+        if isinstance(result, dict):
+            if result.get("status") == "success":
+                res_val = result.get("result")
+                if isinstance(res_val, bool):
+                    return not res_val
+                if isinstance(res_val, dict):
+                    return not res_val.get("is_verified", False)
+            # Error response (method not found on old firmware, auth error, etc.)
+            return False
+        # "Offline" or other unexpected type
+        return False
     except Exception:
         return False
 

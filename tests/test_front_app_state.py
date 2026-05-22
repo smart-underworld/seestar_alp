@@ -1027,36 +1027,49 @@ def test_check_needs_auth_false_when_offline(monkeypatch):
 
 
 def test_check_needs_auth_false_for_old_firmware(monkeypatch):
+    # Old firmware has no pi_is_verified → method_sync returns error dict → no warning
     monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
-    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2718)
+    monkeypatch.setattr(
+        front_app,
+        "method_sync",
+        lambda method, telescope_id=1, **kw: {
+            "command": "pi_is_verified",
+            "status": "error",
+            "result": {"code": -32601, "message": "Method not found"},
+        },
+    )
     assert front_app.check_needs_auth(1) is False
 
 
 def test_check_needs_auth_true_when_unverified(monkeypatch):
+    # method_sync wraps result:False as {"status":"success","result":False}
+    # because False==0 in Python triggers the == 0 branch in method_sync.
     monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
-    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
     monkeypatch.setattr(
         front_app,
         "method_sync",
-        lambda method, telescope_id=1, **kw: {"is_verified": False},
+        lambda method, telescope_id=1, **kw: {
+            "command": "pi_is_verified",
+            "status": "success",
+            "result": False,
+        },
     )
     assert front_app.check_needs_auth(1) is True
 
 
 def test_check_needs_auth_false_when_verified(monkeypatch):
+    # method_sync returns True directly when firmware returns result:True
     monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
-    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
     monkeypatch.setattr(
         front_app,
         "method_sync",
-        lambda method, telescope_id=1, **kw: {"is_verified": True},
+        lambda method, telescope_id=1, **kw: True,
     )
     assert front_app.check_needs_auth(1) is False
 
 
 def test_check_needs_auth_false_on_exception(monkeypatch):
     monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
-    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
 
     def raise_error(method, telescope_id=1, **kw):
         raise RuntimeError("connection failed")
@@ -1065,18 +1078,23 @@ def test_check_needs_auth_false_on_exception(monkeypatch):
     assert front_app.check_needs_auth(1) is False
 
 
-def test_check_needs_auth_false_when_firmware_returns_bool_true(monkeypatch):
-    # Firmware 7.32+ returns result: True (boolean), not {"is_verified": true}
+def test_check_needs_auth_false_when_method_sync_returns_offline(monkeypatch):
+    # method_sync returns "Offline" string when device is unreachable at RPC level
     monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
-    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
+    monkeypatch.setattr(front_app, "method_sync", lambda method, telescope_id=1, **kw: "Offline")
+    assert front_app.check_needs_auth(1) is False
+
+
+def test_check_needs_auth_false_when_firmware_returns_bool_true(monkeypatch):
+    # Firmware 7.32+ returns result: True (boolean) → method_sync returns True directly
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
     monkeypatch.setattr(front_app, "method_sync", lambda method, telescope_id=1, **kw: True)
     assert front_app.check_needs_auth(1) is False
 
 
 def test_check_needs_auth_true_when_firmware_returns_bool_false(monkeypatch):
-    # If firmware returns result: False, device is not verified → show warning
+    # Bare False boolean (also valid — treated as not-verified)
     monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
-    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
     monkeypatch.setattr(front_app, "method_sync", lambda method, telescope_id=1, **kw: False)
     assert front_app.check_needs_auth(1) is True
 
