@@ -69,6 +69,8 @@ class SeestarSimulator:
                 "frame_calib": True,
                 "calib_location": 2,
                 "wide_cam": False,
+                "wide_4k": False,
+                "wide_focal_pos": 1500,
                 "stack_after_goto": False,
                 "guest_mode": False,
                 "user_stack_sim": False,
@@ -159,6 +161,7 @@ class SeestarSimulator:
             "save_discrete_frame": True,
             "save_discrete_ok_frame": True,
             "light_duration_min": 10,
+            "wide_denoise": False,
         }
         self.filter_wheel = {
             "state": "idle",

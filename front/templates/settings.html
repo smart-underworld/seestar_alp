@@ -18,7 +18,7 @@
 {% block content %}
     {%- macro group_for_key(key) -%}
         {%- set key_l = key|lower -%}
-        {%- if "gain" in key_l or "exp" in key_l or "stack" in key_l or "frame" in key_l or "light" in key_l or "lenhance" in key_l -%}
+        {%- if "gain" in key_l or "exp" in key_l or "stack" in key_l or "frame" in key_l or "light" in key_l or "lenhance" in key_l or "wide" in key_l -%}
             Imaging
         {%- elif "temp" in key_l or "heater" in key_l or "dew" in key_l -%}
             Environment

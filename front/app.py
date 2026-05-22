@@ -1057,6 +1057,17 @@ def get_device_settings(telescope_id):
                     ),
                 }
 
+        # Wide angle camera settings (S30 and S30P only, experimental)
+        if Config.experimental and "S30" in (model or ""):
+            for key, val in {
+                "wide_cam": pydash.get(settings_result, "wide_cam"),
+                "wide_4k": pydash.get(settings_result, "wide_4k"),
+                "wide_denoise": pydash.get(merged_stack_settings, "wide_denoise"),
+                "wide_focal_pos": pydash.get(settings_result, "wide_focal_pos"),
+            }.items():
+                if val is not None:
+                    settings[key] = val
+
         # If either endpoint reports these stack-save fields, expose them.
         for key, value in (
             (
@@ -3712,6 +3723,19 @@ class SettingsResource(BaseResource):
         if fw >= 2775 and "auto_lenhance" in PostedSettings:
             FormattedNewSettings["auto_lenhance"] = str2bool(PostedSettings["auto_lenhance"])
 
+        if "S30" in (model or ""):
+            for key, converter in (
+                ("wide_cam", str2bool),
+                ("wide_4k", str2bool),
+                ("wide_denoise", str2bool),
+            ):
+                if key in PostedSettings:
+                    FormattedNewSettings[key] = converter(PostedSettings[key])
+            if "wide_focal_pos" in PostedSettings:
+                FormattedNewSettings["wide_focal_pos"] = _safe_int(
+                    PostedSettings["wide_focal_pos"], 0
+                )
+
         FormattedNewStackSettings = {}
         has_stack_settings_input = any(
             key in PostedSettings
@@ -3946,6 +3970,10 @@ class SettingsResource(BaseResource):
             "expert_mode": 2670,
             "af_before_stack": 0,
             "stack_star_trails": 0,
+            "wide_cam": 0,
+            "wide_4k": 0,
+            "wide_denoise": 0,
+            "wide_focal_pos": 0,
         }
         settings = {
             key: value
@@ -3979,7 +4007,10 @@ class SettingsResource(BaseResource):
             "rec_stablzn": "Record Stabilization",
             "isp_exp_ms": "isp_exp_ms",
             "calib_location": "calib_location",
-            "wide_cam": "Wide Cam",
+            "wide_cam": "Wide Angle Camera",
+            "wide_4k": "Wide Camera 4K Mode",
+            "wide_denoise": "Wide Camera Denoise",
+            "wide_focal_pos": "Wide Camera Focal Position",
             "temp_unit": "Temperature Unit",
             "focal_pos": "Focal Position - User Defined",
             "factory_focal_pos": "Default Focal Position",
@@ -4018,7 +4049,10 @@ class SettingsResource(BaseResource):
             "rec_stablzn": "Record Stabilization",
             "isp_exp_ms": "isp_exp_ms",
             "calib_location": "calib_location",
-            "wide_cam": "Wide Cam",
+            "wide_cam": "Enable or disable the wide angle camera (S30/S30P only).",
+            "wide_4k": "Enable 4K resolution mode for the wide angle camera.",
+            "wide_denoise": "Enable noise reduction for wide angle camera images.",
+            "wide_focal_pos": "User-defined focal position for the wide angle camera.",
             "temp_unit": "Temperature Unit",
             "focal_pos": "Focal Position - User Defined",
             "factory_focal_pos": "Default focal position on startup.",
