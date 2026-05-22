@@ -1304,6 +1304,9 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
     gain = form["gain"]
     num_tries = form.get("num_tries")
     retry_wait_s = form.get("retry_wait_s")
+    stack_type = form.get("stackType", "DeepSky")
+    if stack_type not in ("DeepSky", "SolarSystem", "MilkyWay"):
+        stack_type = "DeepSky"
     action = form.get("action", "")
     selected_items = form.get("selected_items", "")
     errors = {}
@@ -1322,6 +1325,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
         "is_use_autofocus": useAutoFocus,
         "num_tries": int(num_tries) if num_tries else 1,
         "retry_wait_s": int(retry_wait_s) if retry_wait_s else 300,
+        "stack_type": stack_type,
     }
 
     if telescope_id == 0:
@@ -1374,6 +1378,9 @@ def do_create_image(req, resp, schedule, telescope_id):
     gain = form["gain"]
     num_tries = form.get("num_tries")
     retry_wait_s = form.get("retry_wait_s")
+    stack_type = form.get("stackType", "DeepSky")
+    if stack_type not in ("DeepSky", "SolarSystem", "MilkyWay"):
+        stack_type = "DeepSky"
     action = form.get("action", "")
     selected_items = form.get("selected_items", "")
     errors = {}
@@ -1392,6 +1399,7 @@ def do_create_image(req, resp, schedule, telescope_id):
         "is_use_autofocus": useAutoFocus,
         "num_tries": int(num_tries) if num_tries else 1,
         "retry_wait_s": int(retry_wait_s) if retry_wait_s else 300,
+        "stack_type": stack_type,
     }
 
     if telescope_id == 0:

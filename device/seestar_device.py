@@ -1088,6 +1088,12 @@ class Seestar:
     def start_stack(self, params=None):
         if params is None:
             params = {"gain": Config.init_gain, "restart": True}
+        stack_type = params.get("stack_type")
+        if stack_type:
+            self.logger.info("Setting stack type: %s", stack_type)
+            self.send_message_param_sync(
+                {"method": "set_stack_type", "params": {"type": stack_type}}
+            )
         result = self.send_message_param_sync(
             {"method": "iscope_start_stack", "params": {"restart": params["restart"]}}
         )
@@ -1703,6 +1709,7 @@ class Seestar:
         selected_panels,
         num_tries,
         retry_wait_s,
+        stack_type="DeepSky",
     ):
         try:
             spacing_result = Util.mosaic_next_center_spacing(
@@ -1848,7 +1855,7 @@ class Seestar:
                     # be sure we are using the right target name before we stack
                     self.set_target_name(save_target_name)
 
-                    if not self.start_stack({"gain": gain, "restart": True}):
+                    if not self.start_stack({"gain": gain, "restart": True, "stack_type": stack_type}):
                         msg = "Failed to start stacking."
                         self.logger.warning(msg)
                         self.event_state["scheduler"]["cur_scheduler_item"][
@@ -1938,6 +1945,7 @@ class Seestar:
         selected_panels = params.get("selected_panels", "")
         num_tries = params.get("num_tries", 1)
         retry_wait_s = params.get("retry_wait_s", 300)
+        stack_type = params.get("stack_type", "DeepSky")
 
         # verify mosaic pattern
         if nRA < 1 or nDec < 0:
@@ -2004,6 +2012,7 @@ class Seestar:
                 selected_panels,
                 num_tries,
                 retry_wait_s,
+                stack_type,
             )
         )
         self.mosaic_thread.name = f"MosaicThread:{self.device_name}"

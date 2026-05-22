@@ -119,6 +119,23 @@
 	</div>
     {% endif %}
 
+    {% if experimental %}
+    <h5 class="card-title mb-2">Stack Mode <span class="badge text-bg-warning">Experimental</span></h5>
+    <div class="card border-primary mb-3">
+        <div class="card-body">
+            <div class="mb-3">
+                <label for="stackType" class="form-label">Stack Mode</label>
+                <select class="form-select" id="stackType" name="stackType">
+                    <option value="DeepSky" {% if values.stack_type == "DeepSky" or not values.stack_type %}selected{% endif %}>Deep Sky (default)</option>
+                    <option value="SolarSystem" {% if values.stack_type == "SolarSystem" %}selected{% endif %}>Planetary (Solar System)</option>
+                    <option value="MilkyWay" {% if values.stack_type == "MilkyWay" %}selected{% endif %}>Milky Way / Wide Angle (S30/S30P only)</option>
+                </select>
+                <div class="form-text">Deep Sky is standard DSO stacking. Planetary uses lucky-imaging stacking. Milky Way uses the wide angle camera (S30/S30P only).</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <h5 class="card-title mb-2">Exposure Settings</h5>
     <div class="card border-primary mb-3">
         <div class="card-body">

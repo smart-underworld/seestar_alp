@@ -163,6 +163,7 @@ class SeestarSimulator:
             "light_duration_min": 10,
             "wide_denoise": False,
         }
+        self.state["stack_type"] = "DeepSky"
         self.filter_wheel = {
             "state": "idle",
             "position": 0,
@@ -245,6 +246,15 @@ class SeestarSimulator:
                 "method": "pi_station_state",
                 "result": self.state["station"],
                 "code": 0,
+                "id": cur_cmdid,
+            }
+        elif method == "set_stack_type":
+            self.state["stack_type"] = data.get("params", {}).get("type", "DeepSky")
+            return {
+                "jsonrpc": "2.0",
+                "Timestamp": timestamp,
+                "method": "set_stack_type",
+                "result": 0,
                 "id": cur_cmdid,
             }
         elif method == "set_setting":
