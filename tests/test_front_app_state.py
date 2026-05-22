@@ -1674,3 +1674,95 @@ def test_settings_template_groups_wide_fields_under_imaging(monkeypatch):
     assert wide_cam_pos > imaging_pos
     if general_pos != -1:
         assert wide_cam_pos < general_pos or general_pos < imaging_pos
+
+
+# ---------------------------------------------------------------------------
+# LiveWideCamResource – wide cam toggle in live view
+# ---------------------------------------------------------------------------
+
+def _live_wide_cam_app():
+    app = falcon.App()
+    app.add_route("/{telescope_id:int}/live/wide-cam", front_app.LiveWideCamResource())
+    return app
+
+
+def test_live_wide_cam_get_returns_204_for_non_s30(monkeypatch):
+    monkeypatch.setattr(front_app.Config, "experimental", True)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+    client = testing.TestClient(_live_wide_cam_app())
+    resp = client.simulate_get("/1/live/wide-cam")
+    assert resp.status_code == 204
+    assert resp.headers.get("hx-reswap") == "none"
+
+
+def test_live_wide_cam_get_returns_204_when_experimental_off(monkeypatch):
+    monkeypatch.setattr(front_app.Config, "experimental", False)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30")
+    client = testing.TestClient(_live_wide_cam_app())
+    resp = client.simulate_get("/1/live/wide-cam")
+    assert resp.status_code == 204
+
+
+def test_live_wide_cam_get_returns_toggle_for_s30(monkeypatch):
+    monkeypatch.setattr(front_app.Config, "experimental", True)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30")
+    monkeypatch.setattr(
+        front_app, "do_action_device",
+        lambda *a, **kw: {"Value": {"result": {"wide_cam": False}}},
+    )
+    client = testing.TestClient(_live_wide_cam_app())
+    resp = client.simulate_get("/1/live/wide-cam")
+    assert resp.status_code == 200
+    assert "wide-cam-toggle" in resp.text
+    assert "Wide Camera" in resp.text
+
+
+def test_live_wide_cam_get_shows_checked_when_enabled(monkeypatch):
+    monkeypatch.setattr(front_app.Config, "experimental", True)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30 Pro")
+    monkeypatch.setattr(
+        front_app, "do_action_device",
+        lambda *a, **kw: {"Value": {"result": {"wide_cam": True}}},
+    )
+    client = testing.TestClient(_live_wide_cam_app())
+    resp = client.simulate_get("/1/live/wide-cam")
+    assert resp.status_code == 200
+    # The checkbox attribute "checked" appears as a standalone HTML attribute
+    # when enabled; hx-vals always contains "checked.toString()" regardless.
+    assert resp.text.count("checked") >= 2
+
+
+def test_live_wide_cam_post_sets_true(monkeypatch):
+    monkeypatch.setattr(front_app.Config, "experimental", True)
+    calls = []
+    monkeypatch.setattr(
+        front_app, "do_action_device",
+        lambda action, tid, params, **kw: calls.append(params) or {},
+    )
+    client = testing.TestClient(_live_wide_cam_app())
+    resp = client.simulate_post("/1/live/wide-cam", json={"wide_cam": "true"})
+    assert resp.status_code == 200
+    assert any(
+        p.get("params", {}).get("wide_cam") is True
+        for p in calls
+        if isinstance(p, dict) and "params" in p
+    )
+    assert resp.text.count("checked") >= 2  # attribute + hx-vals JS
+
+
+def test_live_wide_cam_post_sets_false(monkeypatch):
+    monkeypatch.setattr(front_app.Config, "experimental", True)
+    calls = []
+    monkeypatch.setattr(
+        front_app, "do_action_device",
+        lambda action, tid, params, **kw: calls.append(params) or {},
+    )
+    client = testing.TestClient(_live_wide_cam_app())
+    resp = client.simulate_post("/1/live/wide-cam", json={"wide_cam": "false"})
+    assert resp.status_code == 200
+    assert any(
+        p.get("params", {}).get("wide_cam") is False
+        for p in calls
+        if isinstance(p, dict) and "params" in p
+    )
+    assert resp.text.count("checked") == 1  # only the hx-vals JS, not the attribute

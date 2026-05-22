@@ -1,0 +1,13 @@
+<div class="form-check form-switch py-1">
+  <input class="form-check-input" type="checkbox" role="switch"
+         id="wide-cam-toggle"
+         {% if wide_cam %}checked{% endif %}
+         hx-post="{{ root }}/live/wide-cam"
+         hx-trigger="change"
+         hx-target="#wide-cam-control"
+         hx-swap="innerHTML"
+         hx-vals='js:{"wide_cam": document.getElementById("wide-cam-toggle").checked.toString()}'>
+  <label class="form-check-label" for="wide-cam-toggle">
+    Wide Camera <span class="badge text-bg-warning">Experimental</span>
+  </label>
+</div>

@@ -3514,6 +3514,41 @@ class LiveVideoResource(BaseResource):
         )
 
 
+class LiveWideCamResource:
+    def on_get(self, req, resp, telescope_id: int = 1):
+        if not Config.experimental:
+            resp.set_header("HX-Reswap", "none")
+            resp.status = falcon.HTTP_204
+            return
+        model = get_device_model(telescope_id)
+        if not model or "S30" not in str(model):
+            resp.set_header("HX-Reswap", "none")
+            resp.status = falcon.HTTP_204
+            return
+        output = do_action_device(
+            "method_sync", telescope_id, {"method": "get_setting"}
+        )
+        wide_cam = bool(pydash.get(output, "Value.result.wide_cam", False))
+        render_fragment(
+            req, resp, "partials/live_controls_wide_cam.html",
+            wide_cam=wide_cam,
+            root=f"/{telescope_id}",
+        )
+
+    def on_post(self, req, resp, telescope_id: int = 1):
+        wide_cam = req.media.get("wide_cam") == "true"
+        do_action_device(
+            "method_sync",
+            telescope_id,
+            {"method": "set_setting", "params": {"wide_cam": wide_cam}},
+        )
+        render_fragment(
+            req, resp, "partials/live_controls_wide_cam.html",
+            wide_cam=wide_cam,
+            root=f"/{telescope_id}",
+        )
+
+
 class LiveFocusResource(BaseResource):
     def __init__(self):
         self.focus = {}
@@ -5254,6 +5289,7 @@ class FrontMain:
         )
         app.add_route("/{telescope_id:int}/live/focus", LiveFocusResource())
         app.add_route("/{telescope_id:int}/live/gain", LiveGainResource())
+        app.add_route("/{telescope_id:int}/live/wide-cam", LiveWideCamResource())
         app.add_route("/{telescope_id:int}/live/{mode}", LivePage())
         app.add_route("/{telescope_id:int}/mosaic", MosaicResource())
         app.add_route("/{telescope_id:int}/planning", PlanningResource())

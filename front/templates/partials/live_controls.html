@@ -11,4 +11,13 @@
   <div class="d-flex flex-wrap">
     {% include 'partials/live_controls_exposure.html' with context %}
   </div>
+
+  {% if experimental %}
+  <div id="wide-cam-control"
+       class="no-htmx-fx"
+       hx-get="{{ root }}/live/wide-cam"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+  </div>
+  {% endif %}
 </div>
