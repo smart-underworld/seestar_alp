@@ -4250,6 +4250,10 @@ class AuthStatusResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
         needs_auth = telescope_id > 0 and check_needs_auth(telescope_id)
+        if not needs_auth:
+            resp.set_header("HX-Reswap", "none")
+            resp.status = falcon.HTTP_204
+            return
         render_fragment(
             req, resp, "partials/auth_warning.html", needs_auth_warning=needs_auth
         )

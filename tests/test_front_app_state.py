@@ -1,7 +1,9 @@
 import json
 import pytest
+import falcon
 import front.app as front_app
 from device.config import Config
+from falcon import testing
 
 
 class DummyReq:
@@ -1077,6 +1079,31 @@ def test_check_needs_auth_true_when_firmware_returns_bool_false(monkeypatch):
     monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
     monkeypatch.setattr(front_app, "method_sync", lambda method, telescope_id=1, **kw: False)
     assert front_app.check_needs_auth(1) is True
+
+
+def _auth_status_app():
+    app = falcon.App()
+    app.add_route("/{telescope_id:int}/auth-status", front_app.AuthStatusResource())
+    return app
+
+
+def test_auth_status_returns_204_no_swap_when_no_warning(monkeypatch):
+    # When no auth warning is needed, endpoint should return 204 + HX-Reswap: none
+    # so HTMX skips the DOM update entirely (no flash).
+    monkeypatch.setattr(front_app, "check_needs_auth", lambda _tid: False)
+    client = testing.TestClient(_auth_status_app())
+    resp = client.simulate_get("/1/auth-status")
+    assert resp.status_code == 204
+    assert resp.headers.get("hx-reswap") == "none"
+
+
+def test_auth_status_returns_warning_html_when_needed(monkeypatch):
+    monkeypatch.setattr(front_app, "check_needs_auth", lambda _tid: True)
+    client = testing.TestClient(_auth_status_app())
+    resp = client.simulate_get("/1/auth-status")
+    assert resp.status_code == 200
+    assert "Authentication required" in resp.text
+    assert resp.headers.get("hx-reswap") is None
 
 
 def test_auth_warning_rendered_in_base_template(monkeypatch):
