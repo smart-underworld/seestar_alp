@@ -750,6 +750,7 @@ def check_needs_auth(telescope_id):
         return False
     try:
         result = method_sync("pi_is_verified", telescope_id)
+        logger.info(f"check_needs_auth: pi_is_verified raw result: {result!r}")
         # Authenticated: firmware returns result: True (bare boolean from method_sync)
         if isinstance(result, bool):
             return not result
@@ -764,10 +765,13 @@ def check_needs_auth(telescope_id):
                 if isinstance(res_val, dict):
                     return not res_val.get("is_verified", False)
             # Error response (method not found on old firmware, auth error, etc.)
+            logger.info(f"check_needs_auth: non-success dict, treating as no-auth-needed: {result!r}")
             return False
-        # "Offline" or other unexpected type
+        # "Offline", timeout error string, or other unexpected type
+        logger.info(f"check_needs_auth: unexpected result type {type(result).__name__!r}, value: {result!r}")
         return False
-    except Exception:
+    except Exception as e:
+        logger.info(f"check_needs_auth: exception: {e!r}")
         return False
 
 
