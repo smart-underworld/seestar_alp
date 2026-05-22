@@ -1,0 +1,23 @@
+meta {
+  name: action-insert_schedule_item_before
+  type: http
+  seq: 99
+}
+
+put {
+  url: {{base_url}}/api/v1/telescope/{{dev_num}}/action
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+  Accept: application/json
+}
+
+body:form-urlencoded {
+  Action: insert_schedule_item_before
+  Parameters: {"before_id": "some-schedule-item-id", "action": "auto_focus", "params": {"try_count": 2}}
+  ClientID: 1
+  ClientTransactionID: 999
+}

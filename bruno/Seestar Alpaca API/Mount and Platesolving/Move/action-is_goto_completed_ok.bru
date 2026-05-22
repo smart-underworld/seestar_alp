@@ -1,0 +1,23 @@
+meta {
+  name: action-is_goto_completed_ok
+  type: http
+  seq: 99
+}
+
+put {
+  url: {{base_url}}/api/v1/telescope/{{dev_num}}/action
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+  Accept: application/json
+}
+
+body:form-urlencoded {
+  Action: is_goto_completed_ok
+  Parameters: {}
+  ClientID: 1
+  ClientTransactionID: 999
+}
