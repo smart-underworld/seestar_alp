@@ -1946,3 +1946,26 @@ def test_start_mosaic_item_defaults_stack_type_to_deepsky(monkeypatch, seestar):
     received = _setup_mosaic_item_test(monkeypatch, seestar)
     seestar.start_mosaic_item(_mosaic_item_params())  # no stack_type key
     assert received.get("stack_type") == "DeepSky"
+
+
+def test_start_stack_set_stack_type_failure_is_non_fatal(monkeypatch, seestar):
+    """If set_stack_type returns an error, iscope_start_stack is still called."""
+    import time as _time
+
+    calls = []
+
+    def fake_send(payload):
+        method = payload["method"]
+        calls.append(method)
+        if method == "set_stack_type":
+            return {"error": "method not supported"}
+        return {"result": 0}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_send)
+    monkeypatch.setattr(_time, "sleep", lambda _: None)
+
+    result = seestar.start_stack({"restart": True, "stack_type": "SolarSystem"})
+
+    assert "set_stack_type" in calls
+    assert "iscope_start_stack" in calls
+    assert result is True

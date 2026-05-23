@@ -735,6 +735,10 @@ def get_firmware_ver_int(telescope_id):
 # Firmware 7.32 (int 2732) made authentication mandatory.
 _FW_AUTH_REQUIRED = 2732
 
+# Cache check_needs_auth results so every page render doesn't block on a TCP call.
+_auth_needs_cache: dict[int, tuple[bool, float]] = {}
+_AUTH_CACHE_TTL = 10.0  # seconds
+
 
 def check_needs_auth(telescope_id):
     """Return True if the device requires auth but is not authenticated.
@@ -743,7 +747,23 @@ def check_needs_auth(telescope_id):
     Skips get_firmware_ver_int because that call itself requires auth, so it
     returns 0 (< threshold) when unauthenticated, producing a false negative.
     On older firmware pi_is_verified will error → we return False (no warning).
+
+    Results are cached for _AUTH_CACHE_TTL seconds to avoid a blocking TCP call
+    on every page render.
     """
+    now = time.monotonic()
+    cached = _auth_needs_cache.get(telescope_id)
+    if cached is not None:
+        val, expiry = cached
+        if now < expiry:
+            return val
+
+    result_val = _check_needs_auth_uncached(telescope_id)
+    _auth_needs_cache[telescope_id] = (result_val, now + _AUTH_CACHE_TTL)
+    return result_val
+
+
+def _check_needs_auth_uncached(telescope_id):
     if not check_api_state(telescope_id):
         return False
     try:
@@ -1309,6 +1329,14 @@ def get_nearest_csc():
     return dict(closest_site)
 
 
+_VALID_STACK_TYPES = frozenset(("DeepSky", "SolarSystem", "MilkyWay"))
+
+
+def _parse_stack_type(form):
+    st = form.get("stackType", "DeepSky")
+    return st if st in _VALID_STACK_TYPES else "DeepSky"
+
+
 def do_create_mosaic(req, resp, schedule, telescope_id):
     form = req.media
     targetName = form["targetName"]
@@ -1323,9 +1351,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
     gain = form["gain"]
     num_tries = form.get("num_tries")
     retry_wait_s = form.get("retry_wait_s")
-    stack_type = form.get("stackType", "DeepSky")
-    if stack_type not in ("DeepSky", "SolarSystem", "MilkyWay"):
-        stack_type = "DeepSky"
+    stack_type = _parse_stack_type(form)
     action = form.get("action", "")
     selected_items = form.get("selected_items", "")
     errors = {}
@@ -1397,9 +1423,7 @@ def do_create_image(req, resp, schedule, telescope_id):
     gain = form["gain"]
     num_tries = form.get("num_tries")
     retry_wait_s = form.get("retry_wait_s")
-    stack_type = form.get("stackType", "DeepSky")
-    if stack_type not in ("DeepSky", "SolarSystem", "MilkyWay"):
-        stack_type = "DeepSky"
+    stack_type = _parse_stack_type(form)
     action = form.get("action", "")
     selected_items = form.get("selected_items", "")
     errors = {}
@@ -3536,6 +3560,15 @@ class LiveWideCamResource:
         )
 
     def on_post(self, req, resp, telescope_id: int = 1):
+        if not Config.experimental:
+            resp.set_header("HX-Reswap", "none")
+            resp.status = falcon.HTTP_204
+            return
+        model = get_device_model(telescope_id)
+        if not model or "S30" not in str(model):
+            resp.set_header("HX-Reswap", "none")
+            resp.status = falcon.HTTP_204
+            return
         wide_cam = req.media.get("wide_cam") == "true"
         do_action_device(
             "method_sync",

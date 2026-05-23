@@ -886,8 +886,6 @@ def test_29_stack_type_in_image_form_reaches_device_layer(
     monkeypatch.setattr(front_app, "do_action_device", capturing_do_action)
 
     # Add the image route to the test app so we can POST to it
-    import falcon
-
     app = falcon.App()
     app.add_route("/{telescope_id:int}/image", front_app.ImageResource())
     client = testing.TestClient(app)
@@ -921,8 +919,6 @@ def test_30_invalid_stack_type_normalised_to_deepsky_before_device(
         return original_action(action, dev_num, params, is_schedule)
 
     monkeypatch.setattr(front_app, "do_action_device", capturing_do_action)
-
-    import falcon
 
     app = falcon.App()
     app.add_route("/{telescope_id:int}/image", front_app.ImageResource())

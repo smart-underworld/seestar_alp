@@ -6,6 +6,13 @@ from device.config import Config
 from falcon import testing
 
 
+@pytest.fixture(autouse=True)
+def _clear_auth_cache():
+    front_app._auth_needs_cache.clear()
+    yield
+    front_app._auth_needs_cache.clear()
+
+
 class DummyReq:
     def __init__(self, host="localhost:5432", scheme="http"):
         self.host = host
@@ -1797,6 +1804,7 @@ def test_live_wide_cam_get_shows_checked_when_enabled(monkeypatch):
 
 def test_live_wide_cam_post_sets_true(monkeypatch):
     monkeypatch.setattr(front_app.Config, "experimental", True)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30")
     calls = []
     monkeypatch.setattr(
         front_app,
@@ -1816,6 +1824,7 @@ def test_live_wide_cam_post_sets_true(monkeypatch):
 
 def test_live_wide_cam_post_sets_false(monkeypatch):
     monkeypatch.setattr(front_app.Config, "experimental", True)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S30")
     calls = []
     monkeypatch.setattr(
         front_app,
@@ -1831,3 +1840,34 @@ def test_live_wide_cam_post_sets_false(monkeypatch):
         if isinstance(p, dict) and "params" in p
     )
     assert resp.text.count("checked") == 1  # only the hx-vals JS, not the attribute
+
+
+def test_live_wide_cam_post_returns_204_when_experimental_off(monkeypatch):
+    monkeypatch.setattr(front_app.Config, "experimental", False)
+    calls = []
+    monkeypatch.setattr(
+        front_app,
+        "do_action_device",
+        lambda *a, **kw: calls.append(a),
+    )
+    client = testing.TestClient(_live_wide_cam_app())
+    resp = client.simulate_post("/1/live/wide-cam", json={"wide_cam": "true"})
+    assert resp.status_code == 204
+    assert resp.headers.get("hx-reswap") == "none"
+    assert calls == []
+
+
+def test_live_wide_cam_post_returns_204_for_non_s30(monkeypatch):
+    monkeypatch.setattr(front_app.Config, "experimental", True)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+    calls = []
+    monkeypatch.setattr(
+        front_app,
+        "do_action_device",
+        lambda *a, **kw: calls.append(a),
+    )
+    client = testing.TestClient(_live_wide_cam_app())
+    resp = client.simulate_post("/1/live/wide-cam", json={"wide_cam": "true"})
+    assert resp.status_code == 204
+    assert resp.headers.get("hx-reswap") == "none"
+    assert calls == []
