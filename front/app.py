@@ -254,6 +254,8 @@ def _get_context_real(telescope_id, req):
                 else:  # in case we are dealing with federation with device id 0
                     current_exp = 0
 
+    needs_auth_warning = online and telescope_id > 0 and check_needs_auth(telescope_id)
+
     return {
         "telescope": telescope,
         "telescopes": telescopes,
@@ -275,6 +277,7 @@ def _get_context_real(telescope_id, req):
         "platform": os_platform,
         "defgain": defgain,
         "current_exp": current_exp,
+        "needs_auth_warning": needs_auth_warning,
     }
 
 
@@ -729,6 +732,69 @@ def get_firmware_ver_int(telescope_id):
     return 0
 
 
+# Firmware 7.32 (int 2732) made authentication mandatory.
+_FW_AUTH_REQUIRED = 2732
+
+# Cache check_needs_auth results so every page render doesn't block on a TCP call.
+_auth_needs_cache: dict[int, tuple[bool, float]] = {}
+_AUTH_CACHE_TTL = 10.0  # seconds
+
+
+def check_needs_auth(telescope_id):
+    """Return True if the device requires auth but is not authenticated.
+
+    Calls pi_is_verified directly — this is safe without auth on firmware 7.32+.
+    Skips get_firmware_ver_int because that call itself requires auth, so it
+    returns 0 (< threshold) when unauthenticated, producing a false negative.
+    On older firmware pi_is_verified will error → we return False (no warning).
+
+    Results are cached for _AUTH_CACHE_TTL seconds to avoid a blocking TCP call
+    on every page render.
+    """
+    now = time.monotonic()
+    cached = _auth_needs_cache.get(telescope_id)
+    if cached is not None:
+        val, expiry = cached
+        if now < expiry:
+            return val
+
+    result_val = _check_needs_auth_uncached(telescope_id)
+    _auth_needs_cache[telescope_id] = (result_val, now + _AUTH_CACHE_TTL)
+    return result_val
+
+
+def _check_needs_auth_uncached(telescope_id):
+    if not check_api_state(telescope_id):
+        return False
+    try:
+        result = method_sync("pi_is_verified", telescope_id)
+        # Authenticated: firmware returns result: True (bare boolean from method_sync)
+        if isinstance(result, bool):
+            return not result
+        # Not authenticated: firmware returns result: False, wrapped as a dict
+        # by method_sync because False == 0 in Python triggers its == 0 branch.
+        if isinstance(result, dict):
+            if result.get("status") == "success":
+                res_val = result.get("result")
+                if isinstance(res_val, bool):
+                    return not res_val
+                if isinstance(res_val, dict):
+                    return not res_val.get("is_verified", False)
+            # Error dict (method not found on old firmware) → no warning needed.
+            return False
+        # None: the front-layer HTTP request timed out (5s) before the device layer
+        # got any response from the firmware.  Firmware 7.32+ without authentication
+        # silently ignores ALL commands on the control port — it never replies to
+        # pi_is_verified.  If check_api_state says we're connected but the firmware
+        # won't talk to us, that is the auth gap.
+        if result is None:
+            return True
+        # "Offline" string → device layer explicitly says offline.
+        return False
+    except Exception:
+        return False
+
+
 def get_device_model(telescope_id):
     if check_api_state(telescope_id):
         state = method_sync("get_device_state", telescope_id)
@@ -964,6 +1030,7 @@ def get_device_settings(telescope_id):
             "heater_enable": pydash.get(settings_result, "heater_enable"),
             "auto_power_off": pydash.get(settings_result, "auto_power_off"),
             "stack_lenhance": pydash.get(settings_result, "stack_lenhance"),
+            "auto_lenhance": pydash.get(settings_result, "auto_lenhance", False),
             "dark_mode": pydash.get(settings_result, "dark_mode"),
             "stack_cont_capt": stack_cont_capt,
             "stack_drizzle2x": pydash.get(settings_result, "stack.drizzle2x"),
@@ -1028,6 +1095,17 @@ def get_device_settings(telescope_id):
                         settings_result, "stack.star_trails", False
                     ),
                 }
+
+        # Wide angle camera settings (S30 and S30P only, experimental)
+        if Config.experimental and "S30" in (model or ""):
+            for key, val in {
+                "wide_cam": pydash.get(settings_result, "wide_cam"),
+                "wide_4k": pydash.get(settings_result, "wide_4k"),
+                "wide_denoise": pydash.get(merged_stack_settings, "wide_denoise"),
+                "wide_focal_pos": pydash.get(settings_result, "wide_focal_pos"),
+            }.items():
+                if val is not None:
+                    settings[key] = val
 
         # If either endpoint reports these stack-save fields, expose them.
         for key, value in (
@@ -1251,6 +1329,14 @@ def get_nearest_csc():
     return dict(closest_site)
 
 
+_VALID_STACK_TYPES = frozenset(("DeepSky", "SolarSystem", "MilkyWay"))
+
+
+def _parse_stack_type(form):
+    st = form.get("stackType", "DeepSky")
+    return st if st in _VALID_STACK_TYPES else "DeepSky"
+
+
 def do_create_mosaic(req, resp, schedule, telescope_id):
     form = req.media
     targetName = form["targetName"]
@@ -1265,6 +1351,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
     gain = form["gain"]
     num_tries = form.get("num_tries")
     retry_wait_s = form.get("retry_wait_s")
+    stack_type = _parse_stack_type(form)
     action = form.get("action", "")
     selected_items = form.get("selected_items", "")
     errors = {}
@@ -1283,6 +1370,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
         "is_use_autofocus": useAutoFocus,
         "num_tries": int(num_tries) if num_tries else 1,
         "retry_wait_s": int(retry_wait_s) if retry_wait_s else 300,
+        "stack_type": stack_type,
     }
 
     if telescope_id == 0:
@@ -1335,6 +1423,7 @@ def do_create_image(req, resp, schedule, telescope_id):
     gain = form["gain"]
     num_tries = form.get("num_tries")
     retry_wait_s = form.get("retry_wait_s")
+    stack_type = _parse_stack_type(form)
     action = form.get("action", "")
     selected_items = form.get("selected_items", "")
     errors = {}
@@ -1353,6 +1442,7 @@ def do_create_image(req, resp, schedule, telescope_id):
         "is_use_autofocus": useAutoFocus,
         "num_tries": int(num_tries) if num_tries else 1,
         "retry_wait_s": int(retry_wait_s) if retry_wait_s else 300,
+        "stack_type": stack_type,
     }
 
     if telescope_id == 0:
@@ -3446,6 +3536,54 @@ class LiveVideoResource(BaseResource):
         )
 
 
+class LiveWideCamResource:
+    def on_get(self, req, resp, telescope_id: int = 1):
+        if not Config.experimental:
+            resp.set_header("HX-Reswap", "none")
+            resp.status = falcon.HTTP_204
+            return
+        model = get_device_model(telescope_id)
+        if not model or "S30" not in str(model):
+            resp.set_header("HX-Reswap", "none")
+            resp.status = falcon.HTTP_204
+            return
+        output = do_action_device(
+            "method_sync", telescope_id, {"method": "get_setting"}
+        )
+        wide_cam = bool(pydash.get(output, "Value.result.wide_cam", False))
+        render_fragment(
+            req,
+            resp,
+            "partials/live_controls_wide_cam.html",
+            wide_cam=wide_cam,
+            root=f"/{telescope_id}",
+        )
+
+    def on_post(self, req, resp, telescope_id: int = 1):
+        if not Config.experimental:
+            resp.set_header("HX-Reswap", "none")
+            resp.status = falcon.HTTP_204
+            return
+        model = get_device_model(telescope_id)
+        if not model or "S30" not in str(model):
+            resp.set_header("HX-Reswap", "none")
+            resp.status = falcon.HTTP_204
+            return
+        wide_cam = req.media.get("wide_cam") == "true"
+        do_action_device(
+            "method_sync",
+            telescope_id,
+            {"method": "set_setting", "params": {"wide_cam": wide_cam}},
+        )
+        render_fragment(
+            req,
+            resp,
+            "partials/live_controls_wide_cam.html",
+            wide_cam=wide_cam,
+            root=f"/{telescope_id}",
+        )
+
+
 class LiveFocusResource(BaseResource):
     def __init__(self):
         self.focus = {}
@@ -3681,6 +3819,24 @@ class SettingsResource(BaseResource):
                     "af_before_stack": str2bool(PostedSettings["af_before_stack"])
                 }
 
+        if fw >= 2775 and "auto_lenhance" in PostedSettings:
+            FormattedNewSettings["auto_lenhance"] = str2bool(
+                PostedSettings["auto_lenhance"]
+            )
+
+        if "S30" in (model or ""):
+            for key, converter in (
+                ("wide_cam", str2bool),
+                ("wide_4k", str2bool),
+                ("wide_denoise", str2bool),
+            ):
+                if key in PostedSettings:
+                    FormattedNewSettings[key] = converter(PostedSettings[key])
+            if "wide_focal_pos" in PostedSettings:
+                FormattedNewSettings["wide_focal_pos"] = _safe_int(
+                    PostedSettings["wide_focal_pos"], 0
+                )
+
         FormattedNewStackSettings = {}
         has_stack_settings_input = any(
             key in PostedSettings
@@ -3897,6 +4053,7 @@ class SettingsResource(BaseResource):
             "heater_enable": 0,
             "auto_power_off": 0,
             "stack_lenhance": 0,
+            "auto_lenhance": 2775,
             "dark_mode": 0,
             "stack_cont_capt": 0,
             "stack_drizzle2x": 0,
@@ -3914,6 +4071,10 @@ class SettingsResource(BaseResource):
             "expert_mode": 2670,
             "af_before_stack": 0,
             "stack_star_trails": 0,
+            "wide_cam": 0,
+            "wide_4k": 0,
+            "wide_denoise": 0,
+            "wide_focal_pos": 0,
         }
         settings = {
             key: value
@@ -3947,13 +4108,17 @@ class SettingsResource(BaseResource):
             "rec_stablzn": "Record Stabilization",
             "isp_exp_ms": "isp_exp_ms",
             "calib_location": "calib_location",
-            "wide_cam": "Wide Cam",
+            "wide_cam": "Wide Angle Camera",
+            "wide_4k": "Wide Camera 4K Mode",
+            "wide_denoise": "Wide Camera Denoise",
+            "wide_focal_pos": "Wide Camera Focal Position",
             "temp_unit": "Temperature Unit",
             "focal_pos": "Focal Position - User Defined",
             "factory_focal_pos": "Default Focal Position",
             "heater_enable": "Dew Heater",
             "auto_power_off": "Auto Power Off",
             "stack_lenhance": "Light Pollution (LP) Filter",
+            "auto_lenhance": "Auto DSO Enhancement",
             "dark_mode": "Dark Mode",
             "stack_cont_capt": "Continuous Capture Mode",
             "stack_drizzle2x": "4k Live Stack Mode (2x Drizzle)",
@@ -3985,13 +4150,17 @@ class SettingsResource(BaseResource):
             "rec_stablzn": "Record Stabilization",
             "isp_exp_ms": "isp_exp_ms",
             "calib_location": "calib_location",
-            "wide_cam": "Wide Cam",
+            "wide_cam": "Enable or disable the wide angle camera (S30/S30P only).",
+            "wide_4k": "Enable 4K resolution mode for the wide angle camera.",
+            "wide_denoise": "Enable noise reduction for wide angle camera images.",
+            "wide_focal_pos": "User-defined focal position for the wide angle camera.",
             "temp_unit": "Temperature Unit",
             "focal_pos": "Focal Position - User Defined",
             "factory_focal_pos": "Default focal position on startup.",
             "heater_enable": "Enable or disable dew heater.",
             "auto_power_off": "Enable or disable auto power off",
             "stack_lenhance": "Enable or disable light pollution (LP) Filter.",
+            "auto_lenhance": "Enable automatic DSO image enhancement during stacking (firmware 7.75+).",
             "dark_mode": "Enable or disable LEDs while imaging.",
             "stack_cont_capt": "Enabling continuous capture mode disables live stacking",
             "stack_drizzle2x": "Enables 2x drizzle on Live Stack for 4k Mode",
@@ -4165,6 +4334,19 @@ class GuestModeResource:
     def on_post(self, req, resp, telescope_id=0):
         do_command(req, resp, telescope_id)
         self.on_get(req, resp, telescope_id)
+
+
+class AuthStatusResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        needs_auth = telescope_id > 0 and check_needs_auth(telescope_id)
+        if not needs_auth:
+            resp.set_header("HX-Reswap", "none")
+            resp.status = falcon.HTTP_204
+            return
+        render_fragment(
+            req, resp, "partials/auth_warning.html", needs_auth_warning=needs_auth
+        )
 
 
 class GuestModeContentResource:
@@ -5144,6 +5326,7 @@ class FrontMain:
         )
         app.add_route("/{telescope_id:int}/live/focus", LiveFocusResource())
         app.add_route("/{telescope_id:int}/live/gain", LiveGainResource())
+        app.add_route("/{telescope_id:int}/live/wide-cam", LiveWideCamResource())
         app.add_route("/{telescope_id:int}/live/{mode}", LivePage())
         app.add_route("/{telescope_id:int}/mosaic", MosaicResource())
         app.add_route("/{telescope_id:int}/planning", PlanningResource())
@@ -5192,6 +5375,7 @@ class FrontMain:
         app.add_route(
             "/{telescope_id:int}/guestmode-content", GuestModeContentResource()
         )
+        app.add_route("/{telescope_id:int}/auth-status", AuthStatusResource())
         app.add_route("/{telescope_id:int}/guestmode", GuestModeResource())
         app.add_route("/{telescope_id:int}/support", SupportResource())
         app.add_route("/{telescope_id:int}/system", SystemResource())

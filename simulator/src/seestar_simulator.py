@@ -55,6 +55,7 @@ class SeestarSimulator:
                 "lang": "en",
                 "center_xy": [540, 960],
                 "stack_lenhance": False,
+                "auto_lenhance": False,
                 "heater_enable": False,
                 "heater": {"state": False, "value": 0},
                 "expt_heater_enable": False,
@@ -68,6 +69,8 @@ class SeestarSimulator:
                 "frame_calib": True,
                 "calib_location": 2,
                 "wide_cam": False,
+                "wide_4k": False,
+                "wide_focal_pos": 1500,
                 "stack_after_goto": False,
                 "guest_mode": False,
                 "user_stack_sim": False,
@@ -158,7 +161,9 @@ class SeestarSimulator:
             "save_discrete_frame": True,
             "save_discrete_ok_frame": True,
             "light_duration_min": 10,
+            "wide_denoise": False,
         }
+        self.state["stack_type"] = "DeepSky"
         self.filter_wheel = {
             "state": "idle",
             "position": 0,
@@ -241,6 +246,15 @@ class SeestarSimulator:
                 "method": "pi_station_state",
                 "result": self.state["station"],
                 "code": 0,
+                "id": cur_cmdid,
+            }
+        elif method == "set_stack_type":
+            self.state["stack_type"] = data.get("params", {}).get("type", "DeepSky")
+            return {
+                "jsonrpc": "2.0",
+                "Timestamp": timestamp,
+                "method": "set_stack_type",
+                "result": 0,
                 "id": cur_cmdid,
             }
         elif method == "set_setting":

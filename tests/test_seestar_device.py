@@ -1767,3 +1767,205 @@ def test_get_events_focus_empty_queue_and_watch_firmware_init(monkeypatch, seest
     )
     seestar.start_watch_thread()
     assert seestar.firmware_ver_int == 2600
+
+
+# ---------------------------------------------------------------------------
+# start_stack – stack_type / set_stack_type
+# ---------------------------------------------------------------------------
+
+
+def test_start_stack_sends_set_stack_type_before_iscope_start_stack(
+    monkeypatch, seestar
+):
+    """set_stack_type must be called before iscope_start_stack when stack_type provided."""
+    calls = []
+
+    def fake_send(payload):
+        calls.append(payload["method"])
+        return {"result": 0}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_send)
+
+    result = seestar.start_stack({"restart": True, "stack_type": "SolarSystem"})
+
+    assert result is True
+    assert "set_stack_type" in calls
+    assert "iscope_start_stack" in calls
+    assert calls.index("set_stack_type") < calls.index("iscope_start_stack")
+
+
+def test_start_stack_set_stack_type_carries_correct_type_value(monkeypatch, seestar):
+    sent_params = {}
+
+    def fake_send(payload):
+        if payload["method"] == "set_stack_type":
+            sent_params.update(payload.get("params", {}))
+        return {"result": 0}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_send)
+
+    seestar.start_stack({"restart": False, "stack_type": "MilkyWay"})
+
+    assert sent_params.get("type") == "MilkyWay"
+
+
+def test_start_stack_skips_set_stack_type_when_not_provided(monkeypatch, seestar):
+    calls = []
+
+    def fake_send(payload):
+        calls.append(payload["method"])
+        return {"result": 0}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_send)
+
+    seestar.start_stack({"restart": True})
+
+    assert "set_stack_type" not in calls
+    assert "iscope_start_stack" in calls
+
+
+def test_start_stack_skips_set_stack_type_with_default_params(monkeypatch, seestar):
+    """Calling start_stack() with no args (uses Config defaults) must not call set_stack_type."""
+    calls = []
+
+    def fake_send(payload):
+        calls.append(payload["method"])
+        return {"result": 0, "code": 0}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_send)
+
+    seestar.start_stack()
+
+    assert "set_stack_type" not in calls
+
+
+def test_start_stack_retries_iscope_start_stack_on_error(monkeypatch, seestar):
+    """start_stack retries iscope_start_stack once on error; set_stack_type only sent once."""
+    import time as _time
+
+    call_counts = {"set_stack_type": 0, "iscope_start_stack": 0}
+    attempt = {"n": 0}
+
+    def fake_send(payload):
+        method = payload["method"]
+        if method == "set_stack_type":
+            call_counts["set_stack_type"] += 1
+            return {"result": 0}
+        if method == "iscope_start_stack":
+            call_counts["iscope_start_stack"] += 1
+            attempt["n"] += 1
+            if attempt["n"] == 1:
+                return {"error": "busy"}  # first attempt fails
+            return {"result": 0}
+        return {"result": 0}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_send)
+    monkeypatch.setattr(_time, "sleep", lambda _: None)
+
+    result = seestar.start_stack({"restart": True, "stack_type": "DeepSky"})
+
+    assert result is True
+    assert call_counts["iscope_start_stack"] == 2  # retried once
+    assert call_counts["set_stack_type"] == 1  # not re-sent on retry
+
+
+def test_start_stack_returns_false_when_both_attempts_fail(monkeypatch, seestar):
+    import time as _time
+
+    monkeypatch.setattr(
+        seestar, "send_message_param_sync", lambda _p: {"error": "unavailable"}
+    )
+    monkeypatch.setattr(_time, "sleep", lambda _: None)
+
+    result = seestar.start_stack({"restart": True, "stack_type": "SolarSystem"})
+
+    assert result is False
+
+
+def _mosaic_item_params(stack_type=None):
+    p = {
+        "target_name": "M31",
+        "ra": "0.7122",
+        "dec": "41.269",
+        "is_j2000": False,
+        "is_use_lp_filter": False,
+        "panel_time_sec": 60,
+        "ra_num": 1,
+        "dec_num": 1,
+        "panel_overlap_percent": 10,
+        "gain": 80,
+        "is_use_autofocus": False,
+        "selected_panels": "",
+        "num_tries": 1,
+        "retry_wait_s": 300,
+    }
+    if stack_type is not None:
+        p["stack_type"] = stack_type
+    return p
+
+
+def _setup_mosaic_item_test(monkeypatch, seestar):
+    """Shared setup: stub out get_setting call and thread spawning."""
+    received = {}
+
+    # start_mosaic_item calls send_message_param_sync("get_setting") before spawning thread
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda _p: {"result": {"exp_ms": {}, "stack_dither": {}}},
+    )
+
+    def fake_mosaic_thread_fn(*args, **kwargs):
+        # stack_type is the last positional arg passed by the lambda in start_mosaic_item
+        received["stack_type"] = args[-1] if args else kwargs.get("stack_type")
+
+    class FakeThread:
+        def __init__(self, target=None):
+            self.target = target
+            self.name = ""
+
+        def start(self):
+            self.target()
+
+    monkeypatch.setattr("device.seestar_device.threading.Thread", FakeThread)
+    monkeypatch.setattr(seestar, "mosaic_thread_fn", fake_mosaic_thread_fn)
+    seestar.schedule["state"] = "working"
+
+    return received
+
+
+def test_start_mosaic_item_extracts_stack_type_from_params(monkeypatch, seestar):
+    """start_mosaic_item must pass stack_type down to mosaic_thread_fn."""
+    received = _setup_mosaic_item_test(monkeypatch, seestar)
+    seestar.start_mosaic_item(_mosaic_item_params(stack_type="SolarSystem"))
+    assert received.get("stack_type") == "SolarSystem"
+
+
+def test_start_mosaic_item_defaults_stack_type_to_deepsky(monkeypatch, seestar):
+    """stack_type absent from params → mosaic_thread_fn receives 'DeepSky'."""
+    received = _setup_mosaic_item_test(monkeypatch, seestar)
+    seestar.start_mosaic_item(_mosaic_item_params())  # no stack_type key
+    assert received.get("stack_type") == "DeepSky"
+
+
+def test_start_stack_set_stack_type_failure_is_non_fatal(monkeypatch, seestar):
+    """If set_stack_type returns an error, iscope_start_stack is still called."""
+    import time as _time
+
+    calls = []
+
+    def fake_send(payload):
+        method = payload["method"]
+        calls.append(method)
+        if method == "set_stack_type":
+            return {"error": "method not supported"}
+        return {"result": 0}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_send)
+    monkeypatch.setattr(_time, "sleep", lambda _: None)
+
+    result = seestar.start_stack({"restart": True, "stack_type": "SolarSystem"})
+
+    assert "set_stack_type" in calls
+    assert "iscope_start_stack" in calls
+    assert result is True

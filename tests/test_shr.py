@@ -121,3 +121,34 @@ def test_transaction_id_monotonic():
     first = shr.getNextTransId()
     second = shr.getNextTransId()
     assert second > first
+
+
+def test_property_response_error_message_from_args_when_no_message_attr():
+    req = DummyReq(method="GET", params={"ClientTransactionID": "4"})
+    err = type("Err", (), {})()
+    err.number = 2
+    err.args = ("error from args",)
+    rsp = shr.PropertyResponse("ignored", req, err)
+    payload = json.loads(rsp.json)
+    assert payload["ErrorMessage"] == "error from args"
+
+
+def test_property_response_error_message_empty_when_no_message_and_no_args():
+    req = DummyReq(method="GET", params={"ClientTransactionID": "5"})
+    err = type("Err", (), {})()
+    err.number = 3
+    err.args = ()
+    rsp = shr.PropertyResponse("ignored", req, err)
+    payload = json.loads(rsp.json)
+    assert payload["ErrorMessage"] == ""
+
+
+def test_property_response_error_message_prefers_message_attr_over_args():
+    req = DummyReq(method="GET", params={"ClientTransactionID": "6"})
+    err = type("Err", (), {})()
+    err.number = 4
+    err.message = "from message attr"
+    err.args = ("from args",)
+    rsp = shr.PropertyResponse("ignored", req, err)
+    payload = json.loads(rsp.json)
+    assert payload["ErrorMessage"] == "from message attr"

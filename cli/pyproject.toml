@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ssalp-api-client"
+version = "0.1.0"
+description = "Programmatic control library and CLI for seestar_alp"
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.27",
+    "click>=8.1",
+    "pydantic>=2.0",
+]
+
+[project.scripts]
+ssalp = "ssalp_api_client.cli.main:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ssalp_api_client"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["ssalp_api_client"]
+omit = ["*/tests/*", "*/tools/*"]
+
+[tool.coverage.report]
+fail_under = 75
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-cov>=6.1.1",
+    "pytest-asyncio>=0.24",
+    "pytest-httpx>=0.30",
+]
