@@ -13,13 +13,13 @@ Requires Python 3.13+.
 **Recommended — install the CLI with pipx:**
 
 ```bash
-pipx install "git+https://github.com/your-org/seestar_alp.git#subdirectory=cli"
+pipx install "git+https://github.com/smart-underworld/seestar_alp.git#subdirectory=cli"
 ```
 
 **As a library in a project:**
 
 ```bash
-pip install "git+https://github.com/your-org/seestar_alp.git#subdirectory=cli"
+pip install "git+https://github.com/smart-underworld/seestar_alp.git#subdirectory=cli"
 ```
 
 **Development (from repo root):**

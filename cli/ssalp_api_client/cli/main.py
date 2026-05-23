@@ -77,7 +77,7 @@ def _run(ctx: click.Context, coro: Any) -> None:
     type=click.Path(exists=True),
     help="Config file path (overrides search path).",
 )
-@click.option("--profile", default="default", help="Config file profile name.")
+@click.option("--profile", default="default", envvar="SSALP_PROFILE", help="Config file profile name.")
 @click.option(
     "--env",
     "bru_env_file",
