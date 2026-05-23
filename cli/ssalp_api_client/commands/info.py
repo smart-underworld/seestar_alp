@@ -64,7 +64,9 @@ class InfoMixin:
 
     async def set_user_location(self, lat: float, lon: float, alt: float = 0.0) -> dict:
         logger.info("set_user_location lat=%s lon=%s alt=%s", lat, lon, alt)
-        return await self.method_sync("set_user_location", {"lat": lat, "lon": lon, "alt": alt})
+        return await self.method_sync(
+            "set_user_location", {"lat": lat, "lon": lon, "alt": alt}
+        )
 
     async def get_app_setting(self) -> dict:
         logger.info("get_app_setting")

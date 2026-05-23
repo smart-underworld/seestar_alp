@@ -45,6 +45,7 @@ def _mock_client(return_value=None):
 
 # ── connection and global flags ────────────────────────────────────────────
 
+
 class TestGlobalFlags:
     def test_help_exits_zero(self, runner):
         result = runner.invoke(cli, ["--help"])
@@ -62,7 +63,9 @@ class TestGlobalFlags:
     def test_log_level_debug_accepted(self, runner):
         with patch("ssalp_api_client.cli.main.SSAlpApiClient") as MockClient:
             MockClient.return_value = _mock_client({"result": "ok"})
-            result = runner.invoke(cli, ["--log-level", "DEBUG", "info", "test-connection"])
+            result = runner.invoke(
+                cli, ["--log-level", "DEBUG", "info", "test-connection"]
+            )
         assert result.exit_code == 0
 
     def test_invalid_log_level_rejected(self, runner):
@@ -80,18 +83,23 @@ class TestGlobalFlags:
     def test_output_pretty_flag(self, runner):
         with patch("ssalp_api_client.cli.main.SSAlpApiClient") as MockClient:
             MockClient.return_value = _mock_client({"key": "val"})
-            result = runner.invoke(cli, ["--output", "pretty", "info", "test-connection"])
+            result = runner.invoke(
+                cli, ["--output", "pretty", "info", "test-connection"]
+            )
         assert result.exit_code == 0
         assert "key" in result.output
 
     def test_output_table_flag(self, runner):
         with patch("ssalp_api_client.cli.main.SSAlpApiClient") as MockClient:
             MockClient.return_value = _mock_client({"key": "val"})
-            result = runner.invoke(cli, ["--output", "table", "info", "test-connection"])
+            result = runner.invoke(
+                cli, ["--output", "table", "info", "test-connection"]
+            )
         assert result.exit_code == 0
 
 
 # ── error handling ─────────────────────────────────────────────────────────
+
 
 class TestErrorHandling:
     def test_ssalp_error_exits_nonzero(self, runner):
@@ -102,28 +110,29 @@ class TestErrorHandling:
         with patch("ssalp_api_client.cli.main.SSAlpApiClient", return_value=client):
             result = runner.invoke(cli, ["info", "test-connection"])
         assert result.exit_code == 1
-        assert "1025" in result.output or "1025" in (result.stderr if hasattr(result, 'stderr') else "")
+        assert "1025" in result.output or "1025" in (
+            result.stderr if hasattr(result, "stderr") else ""
+        )
 
     def test_connection_error_exits_nonzero(self, runner):
         client = _mock_client()
-        client.test_connection = AsyncMock(
-            side_effect=SSAlpConnectionError("refused")
-        )
+        client.test_connection = AsyncMock(side_effect=SSAlpConnectionError("refused"))
         with patch("ssalp_api_client.cli.main.SSAlpApiClient", return_value=client):
             result = runner.invoke(cli, ["info", "test-connection"])
         assert result.exit_code == 1
 
     def test_connection_error_prints_hint(self, runner):
         client = _mock_client()
-        client.test_connection = AsyncMock(
-            side_effect=SSAlpConnectionError("refused")
-        )
+        client.test_connection = AsyncMock(side_effect=SSAlpConnectionError("refused"))
         with patch("ssalp_api_client.cli.main.SSAlpApiClient", return_value=client):
-            result = runner.invoke(cli, ["info", "test-connection"], catch_exceptions=False)
+            result = runner.invoke(
+                cli, ["info", "test-connection"], catch_exceptions=False
+            )
         assert result.exit_code == 1
 
 
 # ── info subcommands ───────────────────────────────────────────────────────
+
 
 class TestInfoCommands:
     def _run(self, runner, args, return_value=None):
@@ -141,6 +150,7 @@ class TestInfoCommands:
 
 
 # ── mount subcommands ──────────────────────────────────────────────────────
+
 
 class TestMountCommands:
     def test_goto_requires_ra_and_dec(self, runner):
@@ -166,6 +176,7 @@ class TestMountCommands:
 
 # ── camera subcommands ─────────────────────────────────────────────────────
 
+
 class TestCameraCommands:
     def test_set_gain_requires_argument(self, runner):
         with patch("ssalp_api_client.cli.main.SSAlpApiClient") as MockClient:
@@ -188,6 +199,7 @@ class TestCameraCommands:
 
 # ── schedule subcommands ───────────────────────────────────────────────────
 
+
 class TestScheduleCommands:
     def test_start(self, runner):
         with patch("ssalp_api_client.cli.main.SSAlpApiClient") as MockClient:
@@ -204,18 +216,21 @@ class TestScheduleCommands:
 
 # ── env file loading ───────────────────────────────────────────────────────
 
+
 class TestEnvFileLoading:
     def test_valid_bru_env_used(self, runner, tmp_path):
         bru = tmp_path / "env.bru"
         bru.write_text("vars {\n  base_url: http://10.0.0.1:5555\n  dev_num: 2\n}\n")
         with patch("ssalp_api_client.cli.main.SSAlpApiClient") as MockClient:
             MockClient.return_value = _mock_client({"ok": True})
-            result = runner.invoke(
-                cli, ["--env", str(bru), "info", "test-connection"]
-            )
+            result = runner.invoke(cli, ["--env", str(bru), "info", "test-connection"])
         assert result.exit_code == 0
         call_kwargs = MockClient.call_args
-        cfg = call_kwargs.kwargs.get("config") or call_kwargs.args[0] if call_kwargs.args else None
+        cfg = (
+            call_kwargs.kwargs.get("config") or call_kwargs.args[0]
+            if call_kwargs.args
+            else None
+        )
         if cfg:
             assert cfg.host == "10.0.0.1"
             assert cfg.device == 2
@@ -236,12 +251,15 @@ class TestEnvFileLoading:
                 ["--env", str(bru), "--host", "192.168.1.5", "info", "test-connection"],
             )
         call_kwargs = MockClient.call_args
-        cfg = call_kwargs.kwargs.get("config") or (call_kwargs.args[0] if call_kwargs.args else None)
+        cfg = call_kwargs.kwargs.get("config") or (
+            call_kwargs.args[0] if call_kwargs.args else None
+        )
         if cfg:
             assert cfg.host == "192.168.1.5"
 
 
 # ── system subcommands ─────────────────────────────────────────────────────
+
 
 class TestSystemCommands:
     def test_heater_on(self, runner):

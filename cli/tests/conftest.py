@@ -23,7 +23,9 @@ def action_url() -> str:
     return "http://localhost:5555/api/v1/telescope/1/action"
 
 
-def make_alpaca_response(value=None, error_number: int = 0, error_message: str = "") -> dict:
+def make_alpaca_response(
+    value=None, error_number: int = 0, error_message: str = ""
+) -> dict:
     """Build a minimal Alpaca response envelope."""
     return {
         "ClientTransactionID": 1,

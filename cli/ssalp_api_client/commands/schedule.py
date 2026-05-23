@@ -67,7 +67,9 @@ class ScheduleMixin:
     async def insert_schedule_item_before(
         self, before_id: str, action: str, params: dict | None = None
     ) -> dict:
-        logger.info("insert_schedule_item_before before_id=%s action=%s", before_id, action)
+        logger.info(
+            "insert_schedule_item_before before_id=%s action=%s", before_id, action
+        )
         payload: dict = {"before_id": before_id, "action": action}
         if params is not None:
             payload["params"] = params
@@ -179,9 +181,7 @@ class ScheduleMixin:
         logger.info("schedule_shutdown")
         return await self.add_schedule_item("shutdown")
 
-    async def schedule_set_exposure(
-        self, stack_l_ms: int, continuous_ms: int
-    ) -> dict:
+    async def schedule_set_exposure(self, stack_l_ms: int, continuous_ms: int) -> dict:
         """Add an exposure-settings item to the schedule."""
         if stack_l_ms <= 0 or continuous_ms <= 0:
             raise ValueError("Exposure times must be positive")

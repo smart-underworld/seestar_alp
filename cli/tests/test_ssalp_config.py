@@ -11,6 +11,7 @@ from ssalp_api_client.config import Config, load_config
 
 # ── Config model validation ───────────────────────────────────────────────
 
+
 class TestConfigValidation:
     def test_defaults(self):
         c = Config()
@@ -72,6 +73,7 @@ class TestConfigValidation:
 
 
 # ── load_config precedence ────────────────────────────────────────────────
+
 
 class TestLoadConfigDefaults:
     def test_no_file_no_env_returns_defaults(self, tmp_path, monkeypatch):
@@ -158,6 +160,7 @@ class TestLoadConfigFromFile:
         # No local ssalp.toml, no explicit path — patch Path.home()
         monkeypatch.chdir(tmp_path)
         import ssalp_api_client.config as cfg_mod
+
         original_home = cfg_mod.Path.home
         monkeypatch.setattr(cfg_mod.Path, "home", staticmethod(lambda: tmp_path))
         config = load_config()

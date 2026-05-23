@@ -128,9 +128,7 @@ class SSAlpApiClient(
             "ClientTransactionID": str(txn_id),
         }
 
-        logger.debug(
-            "→ action=%s params=%s txn_id=%d", action, params_json, txn_id
-        )
+        logger.debug("→ action=%s params=%s txn_id=%d", action, params_json, txn_id)
 
         start = time.monotonic()
         try:
@@ -168,7 +166,10 @@ class SSAlpApiClient(
 
         if error_number != 0:
             logger.warning(
-                "action=%s error_number=%d message=%s", action, error_number, error_message
+                "action=%s error_number=%d message=%s",
+                action,
+                error_number,
+                error_message,
             )
             raise SSAlpError(
                 error_message or f"ErrorNumber={error_number}", error_number

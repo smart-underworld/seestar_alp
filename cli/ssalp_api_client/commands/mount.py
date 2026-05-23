@@ -19,7 +19,9 @@ class MountMixin:
         is_j2000: bool = True,
     ) -> dict:
         """Slew to a named target. RA/Dec may be decimal or sexagesimal strings."""
-        logger.info("goto_target name=%s ra=%s dec=%s j2000=%s", target_name, ra, dec, is_j2000)
+        logger.info(
+            "goto_target name=%s ra=%s dec=%s j2000=%s", target_name, ra, dec, is_j2000
+        )
         return await self.action(
             "goto_target",
             {"target_name": target_name, "ra": ra, "dec": dec, "is_j2000": is_j2000},
@@ -61,7 +63,9 @@ class MountMixin:
             angle: Direction angle in degrees.
             dur_sec: Duration in seconds.
         """
-        logger.info("scope_speed_move speed=%s angle=%s dur_sec=%s", speed, angle, dur_sec)
+        logger.info(
+            "scope_speed_move speed=%s angle=%s dur_sec=%s", speed, angle, dur_sec
+        )
         return await self.method_sync(
             "scope_speed_move", {"speed": speed, "angle": angle, "dur_sec": dur_sec}
         )
@@ -98,7 +102,9 @@ class MountMixin:
     async def adjust_mag_declination(
         self, adjust: bool = True, fudge_angle: float = 0.0
     ) -> dict:
-        logger.info("adjust_mag_declination adjust=%s fudge_angle=%s", adjust, fudge_angle)
+        logger.info(
+            "adjust_mag_declination adjust=%s fudge_angle=%s", adjust, fudge_angle
+        )
         return await self.action(
             "adjust_mag_declination",
             {"adjust_mag_dec": adjust, "fudge_angle": fudge_angle},

@@ -57,7 +57,9 @@ class FilesMixin:
 
     async def set_sequence_group_name(self, group_name: str) -> dict:
         logger.info("set_sequence_group_name name=%s", group_name)
-        return await self.method_sync("set_sequence_setting", [{"group_name": group_name}])
+        return await self.method_sync(
+            "set_sequence_setting", [{"group_name": group_name}]
+        )
 
     async def download_image(self, url: str) -> bytes:
         """Download a raw image from the device by URL.

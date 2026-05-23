@@ -11,6 +11,7 @@ from tools.bru_parser import _parse_vars_block, load_env
 
 # ── _parse_vars_block (unit) ──────────────────────────────────────────────
 
+
 class TestParseVarsBlock:
     def test_parses_base_url_and_dev_num(self):
         text = "vars {\n  base_url: http://localhost:5555\n  dev_num: 1\n}\n"
@@ -56,6 +57,7 @@ class TestParseVarsBlock:
 
 
 # ── load_env (integration) ────────────────────────────────────────────────
+
 
 class TestLoadEnv:
     def _write_bru(self, tmp_path: Path, content: str) -> Path:

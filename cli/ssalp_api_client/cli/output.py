@@ -18,6 +18,7 @@ def print_result(result: Any, fmt: str = "pretty") -> None:
 
 # ── pretty ────────────────────────────────────────────────────────────────
 
+
 def _print_pretty(value: Any, indent: int = 0) -> None:
     pad = "  " * indent
     if isinstance(value, dict):
@@ -42,6 +43,7 @@ def _print_pretty(value: Any, indent: int = 0) -> None:
 
 # ── table ─────────────────────────────────────────────────────────────────
 
+
 def _print_table(value: Any) -> None:
     if isinstance(value, dict):
         _table_dict(value)
@@ -64,7 +66,9 @@ def _table_dict(d: dict) -> None:
 
 def _table_list_of_dicts(rows: list[dict]) -> None:
     keys = list(rows[0].keys())
-    widths = {k: max(len(str(k)), max(len(str(r.get(k, ""))) for r in rows)) for k in keys}
+    widths = {
+        k: max(len(str(k)), max(len(str(r.get(k, ""))) for r in rows)) for k in keys
+    }
     header = "  ".join(f"{k:<{widths[k]}}" for k in keys)
     sep = "  ".join("-" * widths[k] for k in keys)
     click.echo(header)

@@ -51,6 +51,7 @@ def _run(ctx: click.Context, coro: Any) -> None:
 
 # ── root group ────────────────────────────────────────────────────────────
 
+
 @click.group()
 @click.option("--host", "-H", default=None, help="Device host.")
 @click.option("--port", "-p", default=None, type=int, help="Device port.")
@@ -77,7 +78,12 @@ def _run(ctx: click.Context, coro: Any) -> None:
     type=click.Path(exists=True),
     help="Config file path (overrides search path).",
 )
-@click.option("--profile", default="default", envvar="SSALP_PROFILE", help="Config file profile name.")
+@click.option(
+    "--profile",
+    default="default",
+    envvar="SSALP_PROFILE",
+    help="Config file profile name.",
+)
 @click.option(
     "--env",
     "bru_env_file",
@@ -188,6 +194,7 @@ def cli(
 
 
 # ── info ──────────────────────────────────────────────────────────────────
+
 
 @cli.group()
 def info() -> None:
@@ -329,6 +336,7 @@ def info_sequence_setting(ctx: click.Context) -> None:
 
 # ── mount ─────────────────────────────────────────────────────────────────
 
+
 @cli.group()
 def mount() -> None:
     """Mount control: slew, park, solve, track."""
@@ -346,14 +354,19 @@ def mount_goto(ctx: click.Context, ra: float, dec: float) -> None:
 @mount.command("goto-target")
 @click.option("--name", required=True, help="Target name.")
 @click.option("--ra", required=True, help="RA (decimal hours or sexagesimal string).")
-@click.option("--dec", required=True, help="Dec (decimal degrees or sexagesimal string).")
+@click.option(
+    "--dec", required=True, help="Dec (decimal degrees or sexagesimal string)."
+)
 @click.option("--j2000/--no-j2000", default=True, help="Treat coordinates as J2000.")
 @click.pass_context
 def mount_goto_target(
     ctx: click.Context, name: str, ra: str, dec: str, j2000: bool
 ) -> None:
     """Slew to a named target."""
-    _run(ctx, ctx.obj["client"].goto_target(target_name=name, ra=ra, dec=dec, is_j2000=j2000))
+    _run(
+        ctx,
+        ctx.obj["client"].goto_target(target_name=name, ra=ra, dec=dec, is_j2000=j2000),
+    )
 
 
 @mount.command("park")
@@ -482,7 +495,9 @@ def mount_stop_goto(ctx: click.Context) -> None:
 @click.option("--fudge", default=0.0, type=float)
 @click.pass_context
 def mount_adjust_dec(ctx: click.Context, adjust: bool, fudge: float) -> None:
-    _run(ctx, ctx.obj["client"].adjust_mag_declination(adjust=adjust, fudge_angle=fudge))
+    _run(
+        ctx, ctx.obj["client"].adjust_mag_declination(adjust=adjust, fudge_angle=fudge)
+    )
 
 
 @mount.command("set-horizon-offset")
@@ -510,6 +525,7 @@ def mount_set_3ppa(ctx: click.Context, enable: bool) -> None:
 
 
 # ── camera ────────────────────────────────────────────────────────────────
+
 
 @cli.group()
 def camera() -> None:
@@ -562,7 +578,10 @@ def camera_set_gain(ctx: click.Context, gain: int) -> None:
 @click.option("--continuous", required=True, type=int, help="Live view exposure (ms).")
 @click.pass_context
 def camera_set_exposure(ctx: click.Context, stack_l: int, continuous: int) -> None:
-    _run(ctx, ctx.obj["client"].set_exposure(stack_l_ms=stack_l, continuous_ms=continuous))
+    _run(
+        ctx,
+        ctx.obj["client"].set_exposure(stack_l_ms=stack_l, continuous_ms=continuous),
+    )
 
 
 @camera.command("set-brightness")
@@ -582,6 +601,7 @@ def camera_dark_frame(ctx: click.Context) -> None:
 
 # ── focuser ───────────────────────────────────────────────────────────────
 
+
 @cli.group()
 def focuser() -> None:
     """Focuser control."""
@@ -595,7 +615,9 @@ def focuser_position(ctx: click.Context, ret_obj: bool) -> None:
 
 
 @focuser.command("set")
-@click.option("--steps", required=True, type=int, help="Relative steps (positive or negative).")
+@click.option(
+    "--steps", required=True, type=int, help="Relative steps (positive or negative)."
+)
 @click.pass_context
 def focuser_set(ctx: click.Context, steps: int) -> None:
     _run(ctx, ctx.obj["client"].adjust_focus(steps=steps))
@@ -614,6 +636,7 @@ def focuser_stop_auto_focus(ctx: click.Context) -> None:
 
 
 # ── filter ────────────────────────────────────────────────────────────────
+
 
 @cli.group()
 def filter() -> None:
@@ -655,6 +678,7 @@ def filter_lp(ctx: click.Context, enabled: bool) -> None:
 
 
 # ── schedule ──────────────────────────────────────────────────────────────
+
 
 @cli.group()
 def schedule() -> None:
@@ -720,7 +744,9 @@ def schedule_remove(ctx: click.Context, item_id: str) -> None:
 @click.option("--target", required=True)
 @click.option("--ra", required=True)
 @click.option("--dec", required=True)
-@click.option("--time", "session_time_sec", required=True, type=int, help="Session time (s).")
+@click.option(
+    "--time", "session_time_sec", required=True, type=int, help="Session time (s)."
+)
 @click.option("--panels-ra", default=1, type=int)
 @click.option("--panels-dec", default=1, type=int)
 @click.option("--overlap", default=20, type=int, help="Panel overlap %.")
@@ -821,10 +847,13 @@ def schedule_export(ctx: click.Context, path: str) -> None:
 @click.option("--retain-state/--no-retain-state", default=False)
 @click.pass_context
 def schedule_import(ctx: click.Context, path: str, retain_state: bool) -> None:
-    _run(ctx, ctx.obj["client"].import_schedule(filepath=path, retain_state=retain_state))
+    _run(
+        ctx, ctx.obj["client"].import_schedule(filepath=path, retain_state=retain_state)
+    )
 
 
 # ── mosaic ────────────────────────────────────────────────────────────────
+
 
 @cli.group()
 def mosaic() -> None:
@@ -912,6 +941,7 @@ def mosaic_spectra(
 
 
 # ── files ─────────────────────────────────────────────────────────────────
+
 
 @cli.group()
 def files() -> None:
@@ -1003,6 +1033,7 @@ def files_download(ctx: click.Context, url: str, out: str) -> None:
 
 
 # ── system ────────────────────────────────────────────────────────────────
+
 
 @cli.group()
 def system() -> None:

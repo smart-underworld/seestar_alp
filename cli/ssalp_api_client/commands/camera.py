@@ -6,7 +6,9 @@ logger = logging.getLogger("ssalp_api_client.commands.camera")
 
 
 class CameraMixin:
-    async def start_exposure(self, exp_type: str = "light", stack: bool = False) -> dict:
+    async def start_exposure(
+        self, exp_type: str = "light", stack: bool = False
+    ) -> dict:
         """Begin an exposure.
 
         Args:
@@ -59,9 +61,12 @@ class CameraMixin:
         """
         if stack_l_ms <= 0 or continuous_ms <= 0:
             raise ValueError("Exposure times must be positive")
-        logger.info("set_exposure stack_l_ms=%s continuous_ms=%s", stack_l_ms, continuous_ms)
+        logger.info(
+            "set_exposure stack_l_ms=%s continuous_ms=%s", stack_l_ms, continuous_ms
+        )
         return await self.method_sync(
-            "set_setting", {"exp_ms": {"stack_l": stack_l_ms, "continuous": continuous_ms}}
+            "set_setting",
+            {"exp_ms": {"stack_l": stack_l_ms, "continuous": continuous_ms}},
         )
 
     async def set_brightness(self, percent: int) -> dict:

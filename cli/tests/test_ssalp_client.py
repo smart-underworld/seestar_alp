@@ -29,16 +29,23 @@ def client(cfg: Config) -> SSAlpApiClient:
 
 # ── helpers ────────────────────────────────────────────────────────────────
 
-def _stub(httpx_mock: pytest_httpx.HTTPXMock, value=None, error_number: int = 0) -> None:
+
+def _stub(
+    httpx_mock: pytest_httpx.HTTPXMock, value=None, error_number: int = 0
+) -> None:
     httpx_mock.add_response(
         method="PUT",
         url=ACTION_URL,
-        json=make_alpaca_response(value=value, error_number=error_number,
-                                   error_message="" if error_number == 0 else "device error"),
+        json=make_alpaca_response(
+            value=value,
+            error_number=error_number,
+            error_message="" if error_number == 0 else "device error",
+        ),
     )
 
 
 # ── constructor ────────────────────────────────────────────────────────────
+
 
 class TestConstructor:
     def test_explicit_base_url(self):
@@ -70,6 +77,7 @@ class TestConstructor:
 
 
 # ── action() ──────────────────────────────────────────────────────────────
+
 
 class TestAction:
     async def test_happy_path_returns_value(self, client, httpx_mock):
@@ -136,12 +144,14 @@ class TestAction:
 
     async def test_connection_refused_raises_connection_error(self, client, httpx_mock):
         import httpx as _httpx
+
         httpx_mock.add_exception(_httpx.ConnectError("refused"))
         with pytest.raises(SSAlpConnectionError, match="Connection failed"):
             await client.action("x")
 
     async def test_timeout_raises_connection_error(self, client, httpx_mock):
         import httpx as _httpx
+
         httpx_mock.add_exception(_httpx.TimeoutException("timed out"))
         with pytest.raises(SSAlpConnectionError, match="timed out"):
             await client.action("x")
@@ -153,6 +163,7 @@ class TestAction:
 
 
 # ── method_async() ────────────────────────────────────────────────────────
+
 
 class TestMethodAsync:
     async def test_wraps_method_async_action(self, client, httpx_mock):
@@ -171,6 +182,7 @@ class TestMethodAsync:
 
 
 # ── method_sync() ─────────────────────────────────────────────────────────
+
 
 class TestMethodSync:
     async def test_wraps_method_sync_action(self, client, httpx_mock):
@@ -192,6 +204,7 @@ class TestMethodSync:
 
 # ── get_bytes() ───────────────────────────────────────────────────────────
 
+
 class TestGetBytes:
     async def test_downloads_bytes(self, client, httpx_mock):
         httpx_mock.add_response(
@@ -204,12 +217,14 @@ class TestGetBytes:
 
     async def test_connect_error_raises(self, client, httpx_mock):
         import httpx as _httpx
+
         httpx_mock.add_exception(_httpx.ConnectError("no route"))
         with pytest.raises(SSAlpConnectionError):
             await client.get_bytes("http://localhost:5555/images/x.jpg")
 
 
 # ── sync wrappers ─────────────────────────────────────────────────────────
+
 
 class TestSyncWrappers:
     def test_sync_wrapper_generated(self):
@@ -226,6 +241,7 @@ class TestSyncWrappers:
 
 
 # ── command layer smoke tests ─────────────────────────────────────────────
+
 
 class TestCommandSmoke:
     """Verify that command methods send the correct action/method to the wire."""
@@ -244,10 +260,14 @@ class TestCommandSmoke:
         assert expected_method in body
 
     async def test_test_connection(self, client, httpx_mock):
-        await self._assert_method(httpx_mock, client.test_connection(), "test_connection")
+        await self._assert_method(
+            httpx_mock, client.test_connection(), "test_connection"
+        )
 
     async def test_get_device_state(self, client, httpx_mock):
-        await self._assert_method(httpx_mock, client.get_device_state(), "get_device_state")
+        await self._assert_method(
+            httpx_mock, client.get_device_state(), "get_device_state"
+        )
 
     async def test_scope_goto(self, client, httpx_mock):
         await self._assert_method(httpx_mock, client.scope_goto(1.0, 2.0), "scope_goto")
@@ -272,11 +292,14 @@ class TestCommandSmoke:
 
     async def test_startup_sequence(self, client, httpx_mock):
         await self._assert_action(
-            httpx_mock, client.startup_sequence(lat=0.0, lon=0.0), "action_start_up_sequence"
+            httpx_mock,
+            client.startup_sequence(lat=0.0, lon=0.0),
+            "action_start_up_sequence",
         )
 
 
 # ── input validation ──────────────────────────────────────────────────────
+
 
 class TestInputValidation:
     async def test_set_gain_negative_rejected(self, client):
