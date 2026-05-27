@@ -1115,13 +1115,44 @@ def test_check_needs_auth_false_on_exception(monkeypatch):
 def test_check_needs_auth_true_when_method_sync_returns_none(monkeypatch):
     # Firmware 7.32+ without auth silently ignores all commands.
     # The front-layer HTTP request times out → do_action_device returns None →
-    # method_sync returns None.  This is the auth gap: ALPACA says connected but
-    # firmware won't talk to us.
+    # method_sync returns None.  With no prior confirmed-auth cache, this looks
+    # like the auth gap (ALPACA says connected but firmware won't talk to us).
+    front_app._auth_needs_cache.pop(99, None)
     monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
     monkeypatch.setattr(
         front_app, "method_sync", lambda method, telescope_id=1, **kw: None
     )
-    assert front_app.check_needs_auth(1) is True
+    assert front_app.check_needs_auth(99) is True
+
+
+def test_check_needs_auth_timeout_preserved_false_when_previously_authenticated(
+    monkeypatch,
+):
+    # Device was confirmed authenticated (cached False), then pi_is_verified times
+    # out — device is busy during imaging.  The warning must NOT reappear.
+    front_app._auth_needs_cache[88] = (False, 0.0)  # expired entry, was authenticated
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
+    monkeypatch.setattr(
+        front_app, "method_sync", lambda method, telescope_id=1, **kw: None
+    )
+    try:
+        assert front_app.check_needs_auth(88) is False
+    finally:
+        front_app._auth_needs_cache.pop(88, None)
+
+
+def test_check_needs_auth_timeout_stays_true_when_previously_needed_auth(monkeypatch):
+    # Device previously needed auth (cached True), then times out again.
+    # Warning must stay visible — don't suppress it.
+    front_app._auth_needs_cache[77] = (True, 0.0)  # expired entry, was needing auth
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
+    monkeypatch.setattr(
+        front_app, "method_sync", lambda method, telescope_id=1, **kw: None
+    )
+    try:
+        assert front_app.check_needs_auth(77) is True
+    finally:
+        front_app._auth_needs_cache.pop(77, None)
 
 
 def test_check_needs_auth_false_when_method_sync_returns_offline(monkeypatch):

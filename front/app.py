@@ -736,7 +736,7 @@ def get_firmware_ver_int(telescope_id):
 _FW_AUTH_REQUIRED = 2732
 
 # Cache check_needs_auth results so every page render doesn't block on a TCP call.
-_auth_needs_cache: dict[int, tuple[bool, float]] = {}
+_auth_needs_cache: dict[int, tuple[bool, float]] = {}  # stores confirmed (needs_auth, expiry) pairs
 _AUTH_CACHE_TTL = 10.0  # seconds
 
 
@@ -759,6 +759,17 @@ def check_needs_auth(telescope_id):
             return val
 
     result_val = _check_needs_auth_uncached(telescope_id)
+    if result_val is None:
+        # Timeout — the device may be busy during an imaging session, which is
+        # indistinguishable from firmware 7.32+ silently ignoring an unauthenticated
+        # connection.  Preserve the last *confirmed-authenticated* state so a transient
+        # timeout doesn't re-raise the dialog mid-session.  If we have no prior
+        # history, or the prior result was "needs auth", keep returning True so the
+        # warning still appears on cold-start and stays until auth is confirmed.
+        if cached is not None and cached[0] is False:
+            _auth_needs_cache[telescope_id] = (False, now + _AUTH_CACHE_TTL)
+            return False
+        return True
     _auth_needs_cache[telescope_id] = (result_val, now + _AUTH_CACHE_TTL)
     return result_val
 
@@ -785,10 +796,10 @@ def _check_needs_auth_uncached(telescope_id):
         # None: the front-layer HTTP request timed out (5s) before the device layer
         # got any response from the firmware.  Firmware 7.32+ without authentication
         # silently ignores ALL commands on the control port — it never replies to
-        # pi_is_verified.  If check_api_state says we're connected but the firmware
-        # won't talk to us, that is the auth gap.
+        # pi_is_verified.  Return None so check_needs_auth can fall back to the last
+        # confirmed state rather than treating a busy-device timeout as auth failure.
         if result is None:
-            return True
+            return None
         # "Offline" string → device layer explicitly says offline.
         return False
     except Exception:
