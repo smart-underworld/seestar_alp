@@ -736,7 +736,9 @@ def get_firmware_ver_int(telescope_id):
 _FW_AUTH_REQUIRED = 2732
 
 # Cache check_needs_auth results so every page render doesn't block on a TCP call.
-_auth_needs_cache: dict[int, tuple[bool, float]] = {}  # stores confirmed (needs_auth, expiry) pairs
+_auth_needs_cache: dict[
+    int, tuple[bool, float]
+] = {}  # stores confirmed (needs_auth, expiry) pairs
 _AUTH_CACHE_TTL = 10.0  # seconds
 
 
