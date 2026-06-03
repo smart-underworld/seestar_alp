@@ -40,6 +40,11 @@ dependencies = [
     "watchdog==5.0.2",
 ]
 
+[tool.setuptools.packages.find]
+# Restrict auto-discovery to actual Python packages; excludes non-package
+# top-level dirs (mac, linux, docker, simulator, etc.) that confuse setuptools.
+include = ["front_v2*", "imaging*", "lib*", "schedule*"]
+
 [tool.uv.sources]
 pyindi = { git = "https://github.com/MMTObservatory/pyINDI.git", rev = "c12590fbe310c34cadb03713051789a4d76d80c7" }
 
@@ -57,13 +62,22 @@ exclude = [
     "scripts/*",
     "indi/*",
     "device/rotator.py",
+    "front_v2/ui/*",
 ]
 
 [tool.ruff.format]
 exclude = [
     "templates/*",
     "scripts/*",
-    "indi/*"
+    "indi/*",
+    "front_v2/ui/*",
+]
+
+[project.optional-dependencies]
+v2 = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+    "websockets>=12",
 ]
 
 [dependency-groups]

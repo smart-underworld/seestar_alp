@@ -22,6 +22,9 @@ docker/getopts_long
 front/twilight_times.json
 front/planning.json
 front/node_modules/
+front_v2/ui/node_modules/
+front_v2/ui/dist/
+seestar_alp_upstream.egg-info/
 
 Seestar Alpaca API.json:Zone.Identifier
 CometEls.txt

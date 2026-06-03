@@ -1,24 +1,37 @@
 #
 # Start frontend and pass in ALP for it to manage
 #
-from flask import Flask, Response
-from flask_cors import CORS, cross_origin
+import os
 import threading
 import time
-import waitress
-import sdnotify
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+import warnings
 
-from front.app import FrontMain, get_live_status
+import sdnotify
+import waitress
+from flask import Flask, Response
+from flask_cors import CORS, cross_origin
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 from device.app import DeviceMain  # type: ignore
 from device.config import Config  # type: ignore
 from device import log  # type: ignore
 from device import telescope  # type: ignore
 
-
-import os
+_frontend = getattr(Config, "frontend", "classic")
+if _frontend == "v2":
+    try:
+        from front_v2.app import FrontMainV2 as FrontMain
+        from front.app import get_live_status
+    except ImportError as _e:
+        warnings.warn(
+            f"frontend = 'v2' selected but v2 deps not installed ({_e}). "
+            "Falling back to classic. Run: pip install -e '.[v2]'",
+            stacklevel=1,
+        )
+        from front.app import FrontMain, get_live_status  # type: ignore[assignment]
+else:
+    from front.app import FrontMain, get_live_status  # type: ignore[assignment]
 
 
 class AppRunner:

@@ -136,6 +136,7 @@ class _Config:
         self.webui_accent_color: str = self.get_toml(
             "webui_settings", "accent_color", ""
         )
+        self.frontend: str = self.get_toml("webui_settings", "frontend", "classic")
 
         # Fixup bad configs
         if f"{self.save_frames_dir}" == "True" or f"{self.save_frames_dir}" == "False":
