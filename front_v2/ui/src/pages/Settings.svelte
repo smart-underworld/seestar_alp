@@ -62,14 +62,9 @@
     stack_drizzle2x:         "4K live stack with 2× drizzle.",
   };
 
-  function groupFor(key: string): string {
-    const k = key.toLowerCase();
-    if (/gain|exp|stack|frame|light|lenhance|wide/.test(k)) return "Imaging";
-    if (/temp|heater|dew/.test(k))                           return "Environment";
-    if (/dither|focus|track|mount|calib/.test(k))            return "Mount & Focus";
-    return "General";
-  }
+  import { settingGroupFor } from "../lib/utils";
 
+  const groupFor = settingGroupFor;
   const GROUP_ORDER = ["Imaging", "Environment", "Mount & Focus", "General"];
 
   let merged: Record<string, unknown> = {};

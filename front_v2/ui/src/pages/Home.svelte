@@ -1,31 +1,6 @@
 <script lang="ts">
   import { activeDeviceStatus, isConnected, activeDevNum, deviceList } from "../lib/stores/deviceStore";
-
-  function batteryColor(pct: number | null): string {
-    if (pct == null) return "primary";
-    if (pct <= 10) return "danger";
-    if (pct <= 20) return "warning";
-    return "success";
-  }
-
-  function storageFreeGB(raw: string): number {
-    const m = raw?.match(/^([\d.]+)/);
-    return m ? parseFloat(m[1]) : 0;
-  }
-
-  function storagePct(raw: string): number {
-    // "X.Y GB / Z.W GB" — show free as fraction of total
-    const m = raw?.match(/^([\d.]+)\s*GB\s*\/\s*([\d.]+)/);
-    if (!m) return 0;
-    return Math.min(100, Math.round((parseFloat(m[1]) / parseFloat(m[2])) * 100));
-  }
-
-  function storageColor(raw: string): string {
-    const gb = storageFreeGB(raw);
-    if (gb <= 5) return "danger";
-    if (gb <= 10) return "warning";
-    return "success";
-  }
+  import { batteryColor, storagePct, storageColor } from "../lib/utils";
 
   $: s = $activeDeviceStatus;
   $: device = $deviceList.find((d) => d.device_num === $activeDevNum);

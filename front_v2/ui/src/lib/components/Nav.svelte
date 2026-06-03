@@ -1,6 +1,7 @@
 <script lang="ts">
   import { link, location } from "svelte-spa-router";
   import { deviceList, activeDevNum } from "../stores/deviceStore";
+  import { isNavActive } from "../utils";
 
   const navLinks = [
     { href: "/",         label: "Home"     },
@@ -11,11 +12,6 @@
     { href: "/settings", label: "Settings" },
     { href: "/command",  label: "Command"  },
   ];
-
-  function isActive(href: string, loc: string): boolean {
-    if (href === "/") return loc === "/" || loc === "";
-    return loc.startsWith(href);
-  }
 </script>
 
 <nav>
@@ -33,7 +29,7 @@
 
   <div class="links">
     {#each navLinks as { href, label }}
-      <a {href} use:link class:active={isActive(href, $location)}>{label}</a>
+      <a {href} use:link class:active={isNavActive(href, $location)}>{label}</a>
     {/each}
   </div>
 
