@@ -8,10 +8,12 @@
   let targetName = "";
   let status = "";
   let error = "";
+  let imaging = false;
 
   async function startImaging() {
     error = "";
-    status = "Starting…";
+    status = "";
+    imaging = true;
     try {
       await api.devices.image.start($activeDevNum, {
         exp_ms: expMs,
@@ -19,14 +21,16 @@
         count,
         target_name: targetName,
       });
-      status = "Imaging started.";
+      status = "Imaging session started.";
     } catch (e) {
       error = String(e);
-      status = "";
+    } finally {
+      imaging = false;
     }
   }
 
   async function stopImaging() {
+    error = "";
     try {
       await api.devices.image.stop($activeDevNum);
       status = "Imaging stopped.";
@@ -35,71 +39,152 @@
     }
   }
 
-  $: stacked = $activeDeviceStatus?.stacked;
-  $: failed = $activeDeviceStatus?.failed;
+  $: s = $activeDeviceStatus;
+  $: stacked = s?.stacked;
+  $: failed  = s?.failed;
+  $: isActive = stacked !== "" && stacked != null;
 </script>
 
-<h1>Image</h1>
+<div class="page-hero">
+  <p class="page-kicker">Capture</p>
+  <h1 class="page-title">Image</h1>
+  <p class="page-subtitle">Configure and start an imaging session.</p>
+</div>
 
 {#if !$isConnected}
-  <p class="offline">Device {$activeDevNum} is offline.</p>
+  <div class="panel-card offline-msg">
+    Device {$activeDevNum} is offline. Connect to start imaging.
+  </div>
 {:else}
-  {#if error}<p class="error">{error}</p>{/if}
-  {#if status}<p class="info">{status}</p>{/if}
+  <div class="image-layout">
 
-  {#if stacked !== ""}
-    <div class="progress">
-      <span>{stacked} stacked</span>
-      {#if failed !== ""}<span class="failed">{failed} failed</span>{/if}
-    </div>
-  {/if}
+    <!-- Progress / live status -->
+    {#if isActive}
+      <div class="panel-card progress-card">
+        <p class="panel-title">Session Progress</p>
+        <div class="progress-nums">
+          <div class="prog-val success">
+            {stacked}
+            <span class="prog-unit">stacked</span>
+          </div>
+          {#if failed !== "" && failed != null && +failed > 0}
+            <div class="prog-val danger">
+              {failed}
+              <span class="prog-unit">failed</span>
+            </div>
+          {/if}
+        </div>
+        {#if s?.target}
+          <div class="target-line">⌖ {s.target}</div>
+        {/if}
+      </div>
+    {/if}
 
-  <form on:submit|preventDefault={startImaging}>
-    <div class="field">
-      <label for="tname">Target name</label>
-      <input id="tname" bind:value={targetName} />
+    <!-- Controls -->
+    <div class="panel-card form-card">
+      {#if error}<div class="alert alert-error">{error}</div>{/if}
+      {#if status}<div class="alert alert-success">{status}</div>{/if}
+
+      <form on:submit|preventDefault={startImaging}>
+        <div class="form-field" style="margin-bottom:1rem">
+          <label class="form-label" for="iname">Target Name</label>
+          <input id="iname" class="form-input" bind:value={targetName} placeholder="e.g. M42, Orion Nebula" />
+        </div>
+
+        <div class="param-grid">
+          <div class="form-field">
+            <label class="form-label" for="iexp">Exposure (ms)</label>
+            <input id="iexp" type="number" class="form-input" bind:value={expMs} min="100" max="60000" step="100" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="igain">Gain</label>
+            <input id="igain" type="number" class="form-input" bind:value={gain} min="0" max="300" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="icount">Frame Count</label>
+            <input id="icount" type="number" class="form-input" bind:value={count} min="0" />
+            <span class="field-hint">0 = unlimited</span>
+          </div>
+        </div>
+
+        <div class="param-summary">
+          Exposure <strong>{expMs} ms</strong> · Gain <strong>{gain}</strong>
+          {#if count > 0} · <strong>{count}</strong> frames{:else} · Continuous{/if}
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" disabled={imaging}>
+            {imaging ? "Starting…" : "▶ Start"}
+          </button>
+          <button type="button" class="btn btn-danger" on:click={stopImaging}>
+            ⏹ Stop
+          </button>
+        </div>
+      </form>
     </div>
-    <div class="row">
-      <div class="field">
-        <label for="exp">Exposure (ms)</label>
-        <input id="exp" type="number" bind:value={expMs} min="100" max="60000" />
-      </div>
-      <div class="field">
-        <label for="gain">Gain</label>
-        <input id="gain" type="number" bind:value={gain} min="0" max="100" />
-      </div>
-      <div class="field">
-        <label for="count">Count (0=∞)</label>
-        <input id="count" type="number" bind:value={count} min="0" />
-      </div>
-    </div>
-    <div class="actions">
-      <button type="submit">Start</button>
-      <button type="button" class="secondary" on:click={stopImaging}>Stop</button>
-    </div>
-  </form>
+
+  </div>
 {/if}
 
 <style>
-  h1 { margin-top: 0; }
-  .offline, .error { color: #e94560; }
-  .info { color: #68d391; }
-  .progress { margin-bottom: 1rem; display: flex; gap: 1rem; font-size: 1.1rem; }
-  .failed { color: #e94560; }
-  form { display: flex; flex-direction: column; gap: 0.75rem; max-width: 480px; }
-  .row { display: flex; gap: 0.75rem; }
-  .row .field { flex: 1; }
-  .field { display: flex; flex-direction: column; gap: 0.2rem; }
-  label { font-size: 0.8rem; color: #a0aec0; }
-  input {
-    background: #16213e; border: 1px solid #0f3460;
-    color: #e0e0e0; padding: 0.4rem 0.6rem; border-radius: 4px; width: 100%;
-    box-sizing: border-box;
+  .offline-msg { color: var(--ui-muted); font-size: 0.9rem; }
+
+  .image-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: 600px;
   }
-  .actions { display: flex; gap: 0.75rem; }
-  button {
-    background: #e94560; color: white; border: none;
-    padding: 0.5rem 1.5rem; border-radius: 4px; cursor: pointer;
+
+  .progress-card {}
+  .progress-nums {
+    display: flex;
+    gap: 2rem;
+    margin: 0.25rem 0;
   }
-  button.secondary { background: #0f3460; }
+  .prog-val {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--ui-body);
+  }
+  .prog-val.success { color: var(--ui-success); }
+  .prog-val.danger  { color: var(--ui-danger); }
+  .prog-unit {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--ui-muted);
+    display: block;
+    margin-top: 0.2rem;
+  }
+  .target-line {
+    font-size: 0.82rem;
+    color: var(--ui-primary);
+    margin-top: 0.5rem;
+  }
+
+  .param-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .field-hint { font-size: 0.72rem; color: var(--ui-muted); margin-top: 0.15rem; }
+
+  .param-summary {
+    font-size: 0.8rem;
+    color: var(--ui-muted);
+    margin-bottom: 1rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255,255,255,0.03);
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .param-summary strong { color: var(--ui-body); }
+
+  .form-actions { display: flex; gap: 0.6rem; }
+
+  @media (max-width: 500px) {
+    .param-grid { grid-template-columns: 1fr; }
+  }
 </style>

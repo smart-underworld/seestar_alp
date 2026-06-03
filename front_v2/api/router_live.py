@@ -1,0 +1,101 @@
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from front_v2.device_client import check_api_state, do_action, method_sync
+
+router = APIRouter(prefix="/api/v1")
+
+
+class LiveModeRequest(BaseModel):
+    mode: str  # star | sun | moon | planet | scenery | none
+
+
+class FocusRequest(BaseModel):
+    inc: int  # relative step e.g. -50, -10, +10, +50
+
+
+class ExposureRequest(BaseModel):
+    exp_ms: int
+
+
+class GainRequest(BaseModel):
+    gain: int
+
+
+def _require_connected(dev_num: int):
+    if not check_api_state(dev_num):
+        raise HTTPException(status_code=503, detail="Device not connected")
+
+
+@router.post("/devices/{dev_num}/live/mode")
+def start_live_mode(dev_num: int, body: LiveModeRequest):
+    _require_connected(dev_num)
+    if body.mode == "none":
+        # stop view
+        do_action("method_async", dev_num, {"method": "iscope_stop_view"})
+        return {"status": "ok", "mode": "none"}
+    result = do_action(
+        "method_async",
+        dev_num,
+        {"method": "iscope_start_view", "params": {"mode": body.mode}},
+    )
+    return {"status": "ok", "mode": body.mode, "result": result}
+
+
+@router.delete("/devices/{dev_num}/live/mode")
+def stop_live_mode(dev_num: int):
+    _require_connected(dev_num)
+    do_action("method_async", dev_num, {"method": "iscope_stop_view"})
+    return {"status": "ok"}
+
+
+@router.get("/devices/{dev_num}/live/focus")
+def get_focus(dev_num: int):
+    _require_connected(dev_num)
+    pos = method_sync("get_focuser_position", dev_num)
+    return {"position": pos}
+
+
+@router.post("/devices/{dev_num}/live/focus")
+def move_focus(dev_num: int, body: FocusRequest):
+    _require_connected(dev_num)
+    current = method_sync("get_focuser_position", dev_num) or 0
+    new_pos = int(current) + body.inc
+    result = do_action(
+        "method_sync",
+        dev_num,
+        {"method": "move_focuser", "params": {"step": new_pos, "ret_step": True}},
+    )
+    import pydash
+    pos = pydash.get(result, "Value.result.step", new_pos)
+    return {"position": pos}
+
+
+@router.post("/devices/{dev_num}/live/auto-focus")
+def auto_focus(dev_num: int):
+    _require_connected(dev_num)
+    do_action("method_async", dev_num, {"method": "start_auto_focus"})
+    return {"status": "ok"}
+
+
+@router.get("/devices/{dev_num}/live/exposure")
+def get_exposure(dev_num: int):
+    _require_connected(dev_num)
+    result = method_sync("get_setting", dev_num) or {}
+    exp_ms = result.get("exp_ms_continuous") or result.get("exp_ms_stack_l") or 10000
+    gain = result.get("gain", 80)
+    return {"exp_ms": exp_ms, "gain": gain}
+
+
+@router.post("/devices/{dev_num}/live/exposure")
+def set_exposure(dev_num: int, body: ExposureRequest):
+    _require_connected(dev_num)
+    do_action("set_setting", dev_num, {"exp_ms_continuous": body.exp_ms})
+    return {"status": "ok", "exp_ms": body.exp_ms}
+
+
+@router.post("/devices/{dev_num}/live/gain")
+def set_gain(dev_num: int, body: GainRequest):
+    _require_connected(dev_num)
+    do_action("set_setting", dev_num, {"gain": body.gain})
+    return {"status": "ok", "gain": body.gain}

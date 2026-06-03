@@ -54,6 +54,11 @@ export interface DeviceStatus {
   schedule: unknown;
 }
 
+export interface LiveExposure {
+  exp_ms: number;
+  gain: number;
+}
+
 export const api = {
   devices: {
     list: () => get<DeviceInfo[]>("/api/v1/devices"),
@@ -72,6 +77,22 @@ export const api = {
         post(`/api/v1/devices/${devNum}/image/start`, body),
       stop: (devNum: number) => post(`/api/v1/devices/${devNum}/image/stop`),
       status: (devNum: number) => get(`/api/v1/devices/${devNum}/image/status`),
+    },
+    live: {
+      startMode: (devNum: number, mode: string) =>
+        post(`/api/v1/devices/${devNum}/live/mode`, { mode }),
+      stopMode: (devNum: number) => del(`/api/v1/devices/${devNum}/live/mode`),
+      getFocus: (devNum: number) =>
+        get<{ position: number }>(`/api/v1/devices/${devNum}/live/focus`),
+      moveFocus: (devNum: number, inc: number) =>
+        post<{ position: number }>(`/api/v1/devices/${devNum}/live/focus`, { inc }),
+      autoFocus: (devNum: number) => post(`/api/v1/devices/${devNum}/live/auto-focus`),
+      getExposure: (devNum: number) =>
+        get<LiveExposure>(`/api/v1/devices/${devNum}/live/exposure`),
+      setExposure: (devNum: number, exp_ms: number) =>
+        post(`/api/v1/devices/${devNum}/live/exposure`, { exp_ms }),
+      setGain: (devNum: number, gain: number) =>
+        post(`/api/v1/devices/${devNum}/live/gain`, { gain }),
     },
     schedule: {
       get: (devNum: number) => get(`/api/v1/devices/${devNum}/schedule`),

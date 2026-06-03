@@ -23,6 +23,7 @@ from front_v2.api.router_device import router as device_router
 from front_v2.api.router_settings import router as settings_router
 from front_v2.api.router_goto import router as goto_router
 from front_v2.api.router_image import router as image_router
+from front_v2.api.router_live import router as live_router
 from front_v2.api.router_schedule import router as schedule_router
 from front_v2.ws import bridge
 
@@ -50,6 +51,7 @@ def build_app() -> FastAPI:
     app.include_router(settings_router)
     app.include_router(goto_router)
     app.include_router(image_router)
+    app.include_router(live_router)
     app.include_router(schedule_router)
 
     @app.websocket("/ws/{dev_num}")

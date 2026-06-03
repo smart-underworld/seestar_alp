@@ -3,20 +3,95 @@
   import { activeDevNum, isConnected } from "../lib/stores/deviceStore";
   import { api } from "../lib/api";
 
-  let settings: Record<string, unknown> = {};
+  const FRIENDLY: Record<string, string> = {
+    stack_dither_pix:        "Stack Dither Pixels",
+    stack_dither_interval:   "Stack Dither Interval",
+    stack_dither_enable:     "Stack Dither",
+    exp_ms_stack_l:          "Stacking Exposure (ms)",
+    exp_ms_continuous:       "Preview Exposure (ms)",
+    save_discrete_ok_frame:  "Save Sub Frames",
+    save_discrete_frame:     "Save Failed Sub Frames",
+    light_duration_min:      "Light Duration Min",
+    stack_capt_type:         "Stack Capture Type",
+    stack_capt_num:          "Stack Capture Count",
+    stack_brightness:        "Stack Brightness",
+    stack_contrast:          "Stack Contrast",
+    stack_saturation:        "Stack Saturation",
+    stack_dbe_enable:        "Stack DBE",
+    plan_target_af:          "Plan Target AF",
+    viewplan_gohome:         "Viewplan Go Home",
+    expert_mode:             "Expert Mode",
+    af_before_stack:         "AF Before Stack",
+    stack_star_trails:       "Stack Star Trails",
+    auto_3ppa_calib:         "Horizontal Calibration",
+    frame_calib:             "Frame Calibration",
+    stack_masic:             "Stack Mosaic",
+    rec_stablzn:             "Record Stabilization",
+    wide_cam:                "Wide Angle Camera",
+    wide_4k:                 "Wide Camera 4K Mode",
+    wide_denoise:            "Wide Camera Denoise",
+    wide_focal_pos:          "Wide Camera Focal Position",
+    temp_unit:               "Temperature Unit",
+    focal_pos:               "Focal Position (User)",
+    factory_focal_pos:       "Default Focal Position",
+    heater_enable:           "Dew Heater",
+    auto_power_off:          "Auto Power Off",
+    stack_lenhance:          "Light Pollution Filter",
+    auto_lenhance:           "Auto DSO Enhancement",
+    dark_mode:               "Dark Mode",
+    stack_cont_capt:         "Continuous Capture Mode",
+    stack_drizzle2x:         "4K Live Stack (2× Drizzle)",
+  };
+
+  const HELPER: Record<string, string> = {
+    stack_dither_pix:        "Dither by N pixels. Resets on reboot.",
+    stack_dither_interval:   "Dither every N sub frames. Resets on reboot.",
+    stack_dither_enable:     "Enable or disable dithering.",
+    exp_ms_stack_l:          "Stacking sub-frame exposure length in milliseconds.",
+    exp_ms_continuous:       "Continuous preview exposure length in milliseconds.",
+    save_discrete_ok_frame:  "Save successful sub frames to storage.",
+    save_discrete_frame:     "Save failed sub frames (suffix '_failed').",
+    auto_3ppa_calib:         "In AltAz mode, auto-calibrate at session start.",
+    wide_cam:                "Enable the wide-angle camera (S30/S30P only).",
+    heater_enable:           "Enable or disable the dew heater.",
+    auto_power_off:          "Auto power-off when idle.",
+    stack_lenhance:          "Enable Light Pollution (LP) filter.",
+    auto_lenhance:           "Auto DSO enhancement during stacking (firmware 7.75+).",
+    dark_mode:               "Disable LEDs during imaging.",
+    stack_cont_capt:         "Continuous capture disables live stacking.",
+    stack_drizzle2x:         "4K live stack with 2× drizzle.",
+  };
+
+  function groupFor(key: string): string {
+    const k = key.toLowerCase();
+    if (/gain|exp|stack|frame|light|lenhance|wide/.test(k)) return "Imaging";
+    if (/temp|heater|dew/.test(k))                           return "Environment";
+    if (/dither|focus|track|mount|calib/.test(k))            return "Mount & Focus";
+    return "General";
+  }
+
+  const GROUP_ORDER = ["Imaging", "Environment", "Mount & Focus", "General"];
+
   let merged: Record<string, unknown> = {};
+  let baseline = "";
   let saving = false;
   let saved = false;
   let error = "";
+  let loading = true;
+
+  $: isDirty = JSON.stringify(merged) !== baseline;
 
   async function load() {
+    loading = true;
     error = "";
     try {
-      const result = await api.devices.settings.get($activeDevNum);
-      settings = result as Record<string, unknown>;
-      merged = (result as { merged?: Record<string, unknown> }).merged ?? {};
+      const result = await api.devices.settings.get($activeDevNum) as { merged?: Record<string, unknown> };
+      merged = result.merged ?? {};
+      baseline = JSON.stringify(merged);
     } catch (e) {
       error = String(e);
+    } finally {
+      loading = false;
     }
   }
 
@@ -25,8 +100,9 @@
     error = "";
     try {
       await api.devices.settings.save($activeDevNum, merged);
+      baseline = JSON.stringify(merged);
       saved = true;
-      setTimeout(() => (saved = false), 2000);
+      setTimeout(() => (saved = false), 2500);
     } catch (e) {
       error = String(e);
     } finally {
@@ -34,57 +110,207 @@
     }
   }
 
+  function reset() {
+    merged = JSON.parse(baseline);
+  }
+
+  function setVal(key: string, val: unknown) {
+    merged = { ...merged, [key]: val };
+  }
+
   onMount(load);
   $: if ($activeDevNum) load();
 </script>
 
-<h1>Settings</h1>
+<div class="page-hero">
+  <p class="page-kicker">Configuration</p>
+  <h1 class="page-title">Settings</h1>
+  <p class="page-subtitle">Device capture, processing, and behavior controls.</p>
+</div>
 
 {#if !$isConnected}
-  <p class="offline">Device {$activeDevNum} is offline.</p>
+  <div class="panel-card offline-msg">
+    Device {$activeDevNum} is offline. Connect to configure settings.
+  </div>
+{:else if loading}
+  <div class="loading">Loading settings…</div>
 {:else}
-  {#if error}<p class="error">{error}</p>{/if}
-  {#if saved}<p class="saved">Saved.</p>{/if}
 
-  <form on:submit|preventDefault={save}>
-    {#each Object.entries(merged) as [key, val]}
-      <div class="field">
-        <label for={key}>{key}</label>
-        <input
-          id={key}
-          value={val ?? ""}
-          on:input={(e) => { merged = { ...merged, [key]: e.currentTarget.value }; }}
-        />
+  {#if error}<div class="alert alert-error">{error}</div>{/if}
+
+  <div class="settings-header">
+    {#if isDirty}
+      <span class="unsaved-pill">● Unsaved Changes</span>
+    {/if}
+    <div class="header-actions">
+      {#if isDirty}
+        <button class="btn btn-secondary" on:click={reset}>Reset</button>
+      {/if}
+      <button class="btn btn-primary" on:click={save} disabled={saving || !isDirty}>
+        {saving ? "Saving…" : "Save Changes"}
+      </button>
+    </div>
+  </div>
+
+  {#if saved}<div class="alert alert-success">Settings saved successfully.</div>{/if}
+
+  {#each GROUP_ORDER as group}
+    {@const entries = Object.entries(merged).filter(([k]) => groupFor(k) === group)}
+    {#if entries.length > 0}
+      <div class="panel-card settings-group">
+        <p class="group-title">{group}</p>
+        <div class="settings-table">
+          {#each entries as [key, val]}
+            <div class="setting-row">
+              <div class="setting-meta">
+                <div class="setting-name">{FRIENDLY[key] ?? key}</div>
+                {#if HELPER[key]}
+                  <div class="setting-help">{HELPER[key]}</div>
+                {/if}
+              </div>
+              <div class="setting-control">
+                {#if val === true || val === false}
+                  <div class="radio-group">
+                    <label class="radio-label">
+                      <input type="radio" name={key} value="true"
+                        checked={val === true}
+                        on:change={() => setVal(key, true)} />
+                      Enable
+                    </label>
+                    <label class="radio-label">
+                      <input type="radio" name={key} value="false"
+                        checked={val === false}
+                        on:change={() => setVal(key, false)} />
+                      Disable
+                    </label>
+                  </div>
+                {:else if typeof val === "number"}
+                  <input
+                    type="number"
+                    class="form-input narrow"
+                    value={val}
+                    on:input={(e) => setVal(key, +e.currentTarget.value)}
+                  />
+                {:else}
+                  <input
+                    type="text"
+                    class="form-input narrow"
+                    value={String(val ?? "")}
+                    on:input={(e) => setVal(key, e.currentTarget.value)}
+                  />
+                {/if}
+              </div>
+            </div>
+          {/each}
+        </div>
       </div>
-    {/each}
+    {/if}
+  {/each}
 
-    <button type="submit" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
-  </form>
+  <div class="save-footer">
+    <button class="btn btn-primary" on:click={save} disabled={saving || !isDirty}>
+      {saving ? "Saving…" : "Save Changes"}
+    </button>
+    {#if isDirty}
+      <button class="btn btn-secondary" on:click={reset}>Reset</button>
+    {/if}
+  </div>
 {/if}
 
 <style>
-  h1 { margin-top: 0; }
-  .offline, .error { color: #e94560; }
-  .saved { color: #68d391; }
-  form { display: flex; flex-direction: column; gap: 0.5rem; max-width: 480px; }
-  .field { display: flex; flex-direction: column; gap: 0.2rem; }
-  label { font-size: 0.8rem; color: #a0aec0; }
-  input {
-    background: #16213e;
-    border: 1px solid #0f3460;
-    color: #e0e0e0;
-    padding: 0.4rem 0.6rem;
-    border-radius: 4px;
+  .offline-msg { color: var(--ui-muted); font-size: 0.9rem; }
+  .loading     { color: var(--ui-muted); font-size: 0.9rem; padding: 2rem 0; }
+
+  .settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
   }
-  button {
-    margin-top: 0.5rem;
-    background: #e94560;
-    color: white;
-    border: none;
-    padding: 0.5rem 1.5rem;
-    border-radius: 4px;
+  .header-actions { display: flex; gap: 0.5rem; }
+
+  .unsaved-pill {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--ui-warning);
+    background: rgba(246, 201, 14, 0.1);
+    border: 1px solid rgba(246, 201, 14, 0.25);
+    padding: 0.2rem 0.7rem;
+    border-radius: 99px;
+    margin-right: auto;
+  }
+
+  .settings-group { margin-bottom: 1rem; padding-bottom: 0.5rem; }
+
+  .group-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ui-primary);
+    margin: 0 0 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(44, 177, 255, 0.15);
+  }
+
+  .settings-table { display: flex; flex-direction: column; gap: 0; }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.65rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  }
+  .setting-row:last-child { border-bottom: none; }
+
+  .setting-meta { flex: 1; min-width: 0; }
+  .setting-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--ui-body);
+  }
+  .setting-help {
+    font-size: 0.75rem;
+    color: var(--ui-muted);
+    margin-top: 0.15rem;
+    line-height: 1.4;
+  }
+
+  .setting-control { flex-shrink: 0; }
+
+  .form-input.narrow {
+    width: 140px;
+    text-align: right;
+  }
+
+  .radio-group {
+    display: flex;
+    gap: 1rem;
+  }
+  .radio-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.83rem;
+    color: var(--ui-body);
     cursor: pointer;
-    align-self: flex-start;
   }
-  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .radio-label input[type="radio"] {
+    accent-color: var(--ui-primary);
+    cursor: pointer;
+  }
+
+  .save-footer {
+    display: flex;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+  }
+
+  @media (max-width: 600px) {
+    .setting-row { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+    .form-input.narrow { width: 100%; text-align: left; }
+  }
 </style>
