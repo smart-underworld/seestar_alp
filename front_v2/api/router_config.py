@@ -1,6 +1,7 @@
 import logging
+from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Body, HTTPException
 
 from device.config import Config  # type: ignore
 
@@ -71,3 +72,129 @@ def get_config():
             for s in (seestars if isinstance(seestars, list) else [])
         ],
     }
+
+
+@router.post("/config")
+def save_config(body: dict[str, Any] = Body(...)):
+    """Write editable config fields to config.toml."""
+    try:
+        net = body.get("networking", {})
+        if "ip_address" in net:
+            Config.set_toml("network", "ip_address", str(net["ip_address"]))
+        if "port" in net:
+            Config.set_toml("network", "port", int(net["port"]))
+        if "imgport" in net:
+            Config.set_toml("network", "imgport", int(net["imgport"]))
+        if "stport" in net:
+            Config.set_toml("network", "stport", int(net["stport"]))
+        if "sthost" in net:
+            Config.set_toml("network", "sthost", str(net["sthost"]))
+        if "timeout" in net:
+            Config.set_toml("network", "timeout", int(net["timeout"]))
+        if "rtsp_udp" in net:
+            Config.set_toml("network", "rtsp_udp", bool(net["rtsp_udp"]))
+
+        ui = body.get("webui", {})
+        if "uiport" in ui:
+            Config.set_toml("webui_settings", "uiport", int(ui["uiport"]))
+        if "ui_theme" in ui:
+            Config.set_toml("webui_settings", "uitheme", str(ui["ui_theme"]))
+        if "experimental" in ui:
+            Config.set_toml("webui_settings", "experimental", bool(ui["experimental"]))
+        if "confirm" in ui:
+            Config.set_toml("webui_settings", "confirm", bool(ui["confirm"]))
+        if "save_frames" in ui:
+            Config.set_toml("webui_settings", "save_frames", bool(ui["save_frames"]))
+        if "save_frames_dir" in ui:
+            Config.set_toml(
+                "webui_settings", "save_frames_dir", str(ui["save_frames_dir"])
+            )
+        if "frontend" in ui:
+            Config.set_toml("webui_settings", "frontend", str(ui["frontend"]))
+
+        log = body.get("logging", {})
+        if "log_level" in log:
+            Config.set_toml("logging", "log_level", str(log["log_level"]))
+        if "log_to_stdout" in log:
+            Config.set_toml("logging", "log_to_stdout", bool(log["log_to_stdout"]))
+        if "max_log_size_mb" in log:
+            Config.set_toml("logging", "max_size_mb", int(log["max_log_size_mb"]))
+        if "log_num_keep" in log:
+            Config.set_toml("logging", "num_keep_logs", int(log["log_num_keep"]))
+        if "log_prefix" in log:
+            Config.set_toml("logging", "log_prefix", str(log["log_prefix"]))
+
+        ini = body.get("init", {})
+        if "latitude" in ini:
+            Config.set_toml("seestar_initialization", "lat", float(ini["latitude"]))
+        if "longitude" in ini:
+            Config.set_toml("seestar_initialization", "long", float(ini["longitude"]))
+        if "gain" in ini:
+            Config.set_toml("seestar_initialization", "gain", int(ini["gain"]))
+        if "exp_ms_preview" in ini:
+            Config.set_toml(
+                "seestar_initialization",
+                "exposure_length_preview_ms",
+                int(ini["exp_ms_preview"]),
+            )
+        if "exp_ms_stack_l" in ini:
+            Config.set_toml(
+                "seestar_initialization",
+                "exposure_length_stack_ms",
+                int(ini["exp_ms_stack_l"]),
+            )
+        if "dither_enabled" in ini:
+            Config.set_toml(
+                "seestar_initialization", "dither_enabled", bool(ini["dither_enabled"])
+            )
+        if "dither_length_pixel" in ini:
+            Config.set_toml(
+                "seestar_initialization",
+                "dither_length_pixel",
+                int(ini["dither_length_pixel"]),
+            )
+        if "dither_frequency" in ini:
+            Config.set_toml(
+                "seestar_initialization",
+                "dither_frequency",
+                int(ini["dither_frequency"]),
+            )
+        if "lp_filter" in ini:
+            Config.set_toml(
+                "seestar_initialization", "activate_LP_filter", bool(ini["lp_filter"])
+            )
+        if "heater_power" in ini:
+            Config.set_toml(
+                "seestar_initialization", "dew_heater_power", int(ini["heater_power"])
+            )
+        if "save_good_frames" in ini:
+            Config.set_toml(
+                "seestar_initialization",
+                "save_good_frames",
+                bool(ini["save_good_frames"]),
+            )
+        if "save_all_frames" in ini:
+            Config.set_toml(
+                "seestar_initialization",
+                "save_all_frames",
+                bool(ini["save_all_frames"]),
+            )
+        if "dec_pos_index" in ini:
+            Config.set_toml(
+                "seestar_initialization", "dec_pos_index", int(ini["dec_pos_index"])
+            )
+        if "battery_low_limit" in ini:
+            Config.set_toml(
+                "seestar_initialization",
+                "battery_low_limit",
+                int(ini["battery_low_limit"]),
+            )
+        if "guest_mode" in ini:
+            Config.set_toml(
+                "seestar_initialization", "guest_mode_init", bool(ini["guest_mode"])
+            )
+
+        Config.save_toml()
+        return {"status": "ok"}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc

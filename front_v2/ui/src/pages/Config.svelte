@@ -10,11 +10,16 @@
   }
 
   let config: ConfigData | null = null;
+  let baseline = "";
   let loading = true;
+  let saving = false;
+  let saved = false;
   let error = "";
 
+  $: isDirty = config !== null && JSON.stringify(config) !== baseline;
+
   const NETWORKING_LABELS: Record<string, string> = {
-    ip_address: "IP Address",
+    ip_address: "Bind IP Address",
     port:       "Alpaca Port",
     imgport:    "Image Port",
     stport:     "Stellarium Port",
@@ -24,52 +29,73 @@
   };
 
   const WEBUI_LABELS: Record<string, string> = {
-    uiport:        "UI Port",
-    ui_theme:      "UI Theme",
-    experimental:  "Experimental Features",
-    confirm:       "Confirmation Dialog",
-    save_frames:   "Save Preview Frames",
+    uiport:          "UI Port",
+    ui_theme:        "UI Theme",
+    experimental:    "Experimental Features",
+    confirm:         "Confirmation Dialogs",
+    save_frames:     "Save Preview Frames",
     save_frames_dir: "Save Frames Directory",
-    frontend:      "Frontend Version",
+    frontend:        "Frontend",
   };
 
   const LOGGING_LABELS: Record<string, string> = {
-    log_level:      "Log Level",
-    log_to_stdout:  "Log to Stdout",
+    log_level:       "Log Level",
+    log_to_stdout:   "Log to Stdout",
     max_log_size_mb: "Max Log Size (MB)",
-    log_num_keep:   "Logs to Keep",
-    log_prefix:     "Log Prefix",
+    log_num_keep:    "Logs to Keep",
+    log_prefix:      "Log Prefix",
   };
 
   const INIT_LABELS: Record<string, string> = {
-    latitude:          "Latitude",
-    longitude:         "Longitude",
-    gain:              "Gain",
-    exp_ms_preview:    "Exposure Preview (ms)",
-    exp_ms_stack_l:    "Exposure Stack (ms)",
-    dither_enabled:    "Dither",
+    latitude:            "Latitude",
+    longitude:           "Longitude",
+    gain:                "Gain",
+    exp_ms_preview:      "Exposure Preview (ms)",
+    exp_ms_stack_l:      "Exposure Stack (ms)",
+    dither_enabled:      "Dither",
     dither_length_pixel: "Dither Length (px)",
-    dither_frequency:  "Dither Frequency",
-    lp_filter:         "LP Filter",
-    heater_power:      "Dew Heater Power",
-    save_good_frames:  "Save Good Frames",
-    save_all_frames:   "Save All Frames",
-    dec_pos_index:     "Dec Offset",
-    battery_low_limit: "Battery Low Limit (%)",
-    guest_mode:        "Claim Guest Mode",
+    dither_frequency:    "Dither Frequency",
+    lp_filter:           "LP Filter",
+    heater_power:        "Dew Heater Power (0-100)",
+    save_good_frames:    "Save Good Frames",
+    save_all_frames:     "Save All Frames",
+    dec_pos_index:       "Dec Offset Index (1-5)",
+    battery_low_limit:   "Battery Low Limit (%)",
+    guest_mode:          "Claim Guest Mode",
   };
 
-  function formatValue(val: unknown): string {
-    if (val === true)  return "Enabled";
-    if (val === false) return "Disabled";
-    if (val === "" || val === null || val === undefined) return "—";
-    return String(val);
+  // Which fields are numbers vs strings (booleans are detected automatically)
+  const NUMBER_FIELDS = new Set([
+    "port", "imgport", "stport", "timeout",
+    "uiport",
+    "max_log_size_mb", "log_num_keep",
+    "latitude", "longitude", "gain", "exp_ms_preview", "exp_ms_stack_l",
+    "dither_length_pixel", "dither_frequency", "heater_power",
+    "dec_pos_index", "battery_low_limit",
+  ]);
+
+  const SELECT_OPTIONS: Record<string, string[]> = {
+    log_level: ["DEBUG", "INFO", "WARNING", "ERROR"],
+    ui_theme:  ["dark", "light"],
+    frontend:  ["classic", "v2"],
+  };
+
+  // Restart-required fields (networking + ports)
+  const RESTART_FIELDS = new Set([
+    "ip_address", "port", "imgport", "stport", "sthost", "rtsp_udp",
+    "uiport", "frontend",
+  ]);
+
+  function setField(section: keyof ConfigData, key: string, value: unknown) {
+    if (!config) return;
+    config = {
+      ...config,
+      [section]: { ...(config[section] as Record<string, unknown>), [key]: value },
+    };
   }
 
-  function boolClass(val: unknown): string {
-    if (val === true)  return "success";
-    if (val === false) return "warning";
-    return "";
+  function needsRestart(key: string): boolean {
+    return RESTART_FIELDS.has(key);
   }
 
   async function load() {
@@ -79,11 +105,45 @@
       const res = await fetch("/api/v1/config");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       config = await res.json();
+      baseline = JSON.stringify(config);
     } catch (e) {
       error = String(e);
     } finally {
       loading = false;
     }
+  }
+
+  async function save() {
+    if (!config) return;
+    saving = true;
+    error = "";
+    try {
+      const res = await fetch("/api/v1/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          networking: config.networking,
+          webui:      config.webui,
+          logging:    config.logging,
+          init:       config.init,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail ?? `HTTP ${res.status}`);
+      }
+      baseline = JSON.stringify(config);
+      saved = true;
+      setTimeout(() => (saved = false), 2500);
+    } catch (e) {
+      error = String(e);
+    } finally {
+      saving = false;
+    }
+  }
+
+  function reset() {
+    config = JSON.parse(baseline);
   }
 
   onMount(load);
@@ -92,74 +152,201 @@
 <div class="page-hero">
   <p class="page-kicker">Application</p>
   <h1 class="page-title">Config</h1>
-  <p class="page-subtitle">SSC application configuration loaded from config.toml.</p>
-</div>
-
-<div class="alert alert-info readonly-notice">
-  Configuration is read-only. Edit <code>config.toml</code> and restart SSC to apply changes.
+  <p class="page-subtitle">SSC application configuration — saved to config.toml.</p>
 </div>
 
 {#if loading}
   <div class="loading">Loading configuration…</div>
-{:else if error}
+{:else if error && !config}
   <div class="alert alert-error">{error}</div>
 {:else if config}
 
+  <div class="config-header">
+    {#if isDirty}
+      <span class="unsaved-pill">● Unsaved Changes</span>
+    {/if}
+    <div class="header-actions">
+      {#if isDirty}
+        <button class="btn btn-secondary" on:click={reset}>Reset</button>
+      {/if}
+      <button class="btn btn-primary" on:click={save} disabled={saving || !isDirty}>
+        {saving ? "Saving…" : "Save to config.toml"}
+      </button>
+    </div>
+  </div>
+
+  {#if error}<div class="alert alert-error">{error}</div>{/if}
+  {#if saved}<div class="alert alert-success">Saved. Fields marked ↺ require a service restart.</div>{/if}
+
   <!-- Networking -->
   <div class="panel-card section-card">
-    <p class="panel-title">Networking</p>
+    <p class="group-title">Networking</p>
     {#each Object.entries(config.networking) as [key, val]}
-      <div class="stat-row">
-        <div class="stat-key">{NETWORKING_LABELS[key] ?? key}</div>
-        <div class="stat-value {boolClass(val)}">{formatValue(val)}</div>
+      <div class="setting-row">
+        <div class="setting-meta">
+          <div class="setting-name">
+            {NETWORKING_LABELS[key] ?? key}
+            {#if needsRestart(key)}<span class="restart-tag" title="Requires restart">↺</span>{/if}
+          </div>
+        </div>
+        <div class="setting-control">
+          {#if typeof val === "boolean"}
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" name="net-{key}" checked={val === true}
+                  on:change={() => setField("networking", key, true)} /> On
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="net-{key}" checked={val === false}
+                  on:change={() => setField("networking", key, false)} /> Off
+              </label>
+            </div>
+          {:else if NUMBER_FIELDS.has(key)}
+            <input type="number" class="form-input narrow"
+              value={Number(val)}
+              on:input={(e) => setField("networking", key, +e.currentTarget.value)} />
+          {:else}
+            <input type="text" class="form-input narrow"
+              value={String(val ?? "")}
+              on:input={(e) => setField("networking", key, e.currentTarget.value)} />
+          {/if}
+        </div>
       </div>
     {/each}
   </div>
 
   <!-- Web UI -->
   <div class="panel-card section-card">
-    <p class="panel-title">Web UI</p>
+    <p class="group-title">Web UI</p>
     {#each Object.entries(config.webui) as [key, val]}
-      <div class="stat-row">
-        <div class="stat-key">{WEBUI_LABELS[key] ?? key}</div>
-        <div class="stat-value {boolClass(val)}">{formatValue(val)}</div>
+      <div class="setting-row">
+        <div class="setting-meta">
+          <div class="setting-name">
+            {WEBUI_LABELS[key] ?? key}
+            {#if needsRestart(key)}<span class="restart-tag" title="Requires restart">↺</span>{/if}
+          </div>
+        </div>
+        <div class="setting-control">
+          {#if typeof val === "boolean"}
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" name="webui-{key}" checked={val === true}
+                  on:change={() => setField("webui", key, true)} /> On
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="webui-{key}" checked={val === false}
+                  on:change={() => setField("webui", key, false)} /> Off
+              </label>
+            </div>
+          {:else if key in SELECT_OPTIONS}
+            <select class="form-input narrow"
+              value={String(val)}
+              on:change={(e) => setField("webui", key, e.currentTarget.value)}>
+              {#each SELECT_OPTIONS[key] as opt}
+                <option value={opt}>{opt}</option>
+              {/each}
+            </select>
+          {:else if NUMBER_FIELDS.has(key)}
+            <input type="number" class="form-input narrow"
+              value={Number(val)}
+              on:input={(e) => setField("webui", key, +e.currentTarget.value)} />
+          {:else}
+            <input type="text" class="form-input narrow"
+              value={String(val ?? "")}
+              on:input={(e) => setField("webui", key, e.currentTarget.value)} />
+          {/if}
+        </div>
       </div>
     {/each}
   </div>
 
   <!-- Logging -->
   <div class="panel-card section-card">
-    <p class="panel-title">Logging</p>
+    <p class="group-title">Logging</p>
     {#each Object.entries(config.logging) as [key, val]}
-      <div class="stat-row">
-        <div class="stat-key">{LOGGING_LABELS[key] ?? key}</div>
-        <div class="stat-value {boolClass(val)}">{formatValue(val)}</div>
+      <div class="setting-row">
+        <div class="setting-meta">
+          <div class="setting-name">{LOGGING_LABELS[key] ?? key}</div>
+        </div>
+        <div class="setting-control">
+          {#if typeof val === "boolean"}
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" name="log-{key}" checked={val === true}
+                  on:change={() => setField("logging", key, true)} /> On
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="log-{key}" checked={val === false}
+                  on:change={() => setField("logging", key, false)} /> Off
+              </label>
+            </div>
+          {:else if key in SELECT_OPTIONS}
+            <select class="form-input narrow"
+              value={String(val)}
+              on:change={(e) => setField("logging", key, e.currentTarget.value)}>
+              {#each SELECT_OPTIONS[key] as opt}
+                <option value={opt}>{opt}</option>
+              {/each}
+            </select>
+          {:else if NUMBER_FIELDS.has(key)}
+            <input type="number" class="form-input narrow"
+              value={Number(val)}
+              on:input={(e) => setField("logging", key, +e.currentTarget.value)} />
+          {:else}
+            <input type="text" class="form-input narrow"
+              value={String(val ?? "")}
+              on:input={(e) => setField("logging", key, e.currentTarget.value)} />
+          {/if}
+        </div>
       </div>
     {/each}
   </div>
 
   <!-- Seestar Init Defaults -->
   <div class="panel-card section-card">
-    <p class="panel-title">Seestar Init Defaults</p>
+    <p class="group-title">Seestar Init Defaults</p>
+    <p class="section-note">Applied when a new telescope session starts.</p>
     {#each Object.entries(config.init) as [key, val]}
-      <div class="stat-row">
-        <div class="stat-key">{INIT_LABELS[key] ?? key}</div>
-        <div class="stat-value {boolClass(val)}">{formatValue(val)}</div>
+      <div class="setting-row">
+        <div class="setting-meta">
+          <div class="setting-name">{INIT_LABELS[key] ?? key}</div>
+        </div>
+        <div class="setting-control">
+          {#if typeof val === "boolean"}
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" name="init-{key}" checked={val === true}
+                  on:change={() => setField("init", key, true)} /> On
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="init-{key}" checked={val === false}
+                  on:change={() => setField("init", key, false)} /> Off
+              </label>
+            </div>
+          {:else if NUMBER_FIELDS.has(key)}
+            <input type="number" class="form-input narrow"
+              value={Number(val)}
+              on:input={(e) => setField("init", key, +e.currentTarget.value)} />
+          {:else}
+            <input type="text" class="form-input narrow"
+              value={String(val ?? "")}
+              on:input={(e) => setField("init", key, e.currentTarget.value)} />
+          {/if}
+        </div>
       </div>
     {/each}
   </div>
 
-  <!-- Devices -->
+  <!-- Devices (read-only) -->
   <div class="panel-card section-card">
-    <p class="panel-title">Devices</p>
+    <p class="group-title">Devices</p>
+    <p class="section-note">Edit device entries directly in config.toml.</p>
     {#if config.devices.length === 0}
       <div class="no-devices">No devices configured.</div>
     {:else}
       <div class="devices-table">
         <div class="devices-header">
-          <span>#</span>
-          <span>Name</span>
-          <span>IP Address</span>
+          <span>#</span><span>Name</span><span>IP Address</span>
         </div>
         {#each config.devices as d}
           <div class="devices-row">
@@ -172,39 +359,121 @@
     {/if}
   </div>
 
+  <div class="save-footer">
+    <button class="btn btn-primary" on:click={save} disabled={saving || !isDirty}>
+      {saving ? "Saving…" : "Save to config.toml"}
+    </button>
+    {#if isDirty}
+      <button class="btn btn-secondary" on:click={reset}>Reset</button>
+    {/if}
+  </div>
+
 {/if}
 
 <style>
   .loading { color: var(--ui-muted); font-size: 0.9rem; padding: 2rem 0; }
 
-  .readonly-notice {
-    margin-bottom: 1.25rem;
-    font-size: 0.85rem;
-  }
-  .readonly-notice code {
-    font-family: "SF Mono", "Fira Code", monospace;
-    font-size: 0.8em;
-    background: rgba(44, 177, 255, 0.12);
-    padding: 0.1em 0.35em;
-    border-radius: 3px;
-  }
-
-  .section-card {
+  .config-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
     margin-bottom: 1rem;
   }
+  .header-actions { display: flex; gap: 0.5rem; }
 
-  .no-devices {
+  .unsaved-pill {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--ui-warning);
+    background: rgba(246, 201, 14, 0.1);
+    border: 1px solid rgba(246, 201, 14, 0.25);
+    padding: 0.2rem 0.7rem;
+    border-radius: 99px;
+    margin-right: auto;
+  }
+
+  .section-card { margin-bottom: 1rem; }
+
+  .group-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ui-primary);
+    margin: 0 0 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(44, 177, 255, 0.15);
+  }
+
+  .section-note {
+    font-size: 0.78rem;
     color: var(--ui-muted);
-    font-size: 0.85rem;
-    padding: 0.5rem 0;
+    margin: 0 0 0.75rem;
   }
 
-  .devices-table {
+  .setting-row {
     display: flex;
-    flex-direction: column;
-    gap: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  }
+  .setting-row:last-child { border-bottom: none; }
+
+  .setting-meta { flex: 1; min-width: 0; }
+  .setting-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--ui-body);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
   }
 
+  .restart-tag {
+    font-size: 0.72rem;
+    color: var(--ui-warning);
+    font-weight: 700;
+    cursor: help;
+  }
+
+  .setting-control { flex-shrink: 0; }
+
+  .form-input.narrow {
+    width: 160px;
+    text-align: right;
+  }
+
+  select.form-input.narrow {
+    text-align: left;
+    padding-right: 0.5rem;
+  }
+
+  .radio-group { display: flex; gap: 1rem; }
+  .radio-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.83rem;
+    color: var(--ui-body);
+    cursor: pointer;
+  }
+  .radio-label input[type="radio"] {
+    accent-color: var(--ui-primary);
+    cursor: pointer;
+  }
+
+  .save-footer {
+    display: flex;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+  }
+
+  .no-devices { color: var(--ui-muted); font-size: 0.85rem; padding: 0.5rem 0; }
+
+  .devices-table { display: flex; flex-direction: column; }
   .devices-header {
     display: grid;
     grid-template-columns: 2.5rem 1fr 1fr;
@@ -218,7 +487,6 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.07);
     margin-bottom: 0.1rem;
   }
-
   .devices-row {
     display: grid;
     grid-template-columns: 2.5rem 1fr 1fr;
@@ -229,12 +497,7 @@
     color: var(--ui-body);
   }
   .devices-row:last-child { border-bottom: none; }
-
-  .device-num {
-    color: var(--ui-muted);
-    font-variant-numeric: tabular-nums;
-  }
-
+  .device-num { color: var(--ui-muted); font-variant-numeric: tabular-nums; }
   .device-ip {
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: 0.8rem;
@@ -242,13 +505,7 @@
   }
 
   @media (max-width: 600px) {
-    .devices-header,
-    .devices-row {
-      grid-template-columns: 2rem 1fr;
-    }
-    .devices-header span:last-child,
-    .devices-row .device-ip {
-      display: none;
-    }
+    .setting-row { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+    .form-input.narrow { width: 100%; text-align: left; }
   }
 </style>
