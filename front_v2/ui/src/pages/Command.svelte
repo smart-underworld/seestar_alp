@@ -8,14 +8,35 @@
   let error = "";
   let loading = false;
 
-  const PRESETS = [
-    { label: "Get Device State",  method: "get_device_state",  params: "{}" },
-    { label: "Get View State",    method: "get_view_state",    params: "{}" },
-    { label: "Get Setting",       method: "get_setting",       params: "{}" },
-    { label: "Get Stack Setting", method: "get_stack_setting", params: "{}" },
+  // Quick actions fire immediately and show their result
+  const QUICK_ACTIONS = [
+    { label: "Stop View",       icon: "⏹", action: () => api.devices.command($activeDevNum, "iscope_stop_view", {}) },
+    { label: "Park Scope",      icon: "🏠", action: () => api.devices.command($activeDevNum, "scope_park", {}) },
+    { label: "Auto Focus",      icon: "🔭", action: () => api.devices.command($activeDevNum, "start_auto_focus", {}) },
+    { label: "Stop Scheduler",  icon: "⏸", action: () => api.devices.schedule.setState($activeDevNum, "stop") },
+  ];
+
+  let actionLoading: Record<string, boolean> = {};
+
+  async function runAction(label: string, action: () => Promise<unknown>) {
+    actionLoading = { ...actionLoading, [label]: true };
+    error = "";
+    try {
+      result = await action();
+    } catch (e) {
+      error = String(e);
+    } finally {
+      actionLoading = { ...actionLoading, [label]: false };
+    }
+  }
+
+  // Debug presets just populate the raw command form
+  const DEBUG_PRESETS = [
+    { label: "Get Device State",  method: "get_device_state",     params: "{}" },
+    { label: "Get View State",    method: "get_view_state",       params: "{}" },
+    { label: "Get Setting",       method: "get_setting",          params: "{}" },
+    { label: "Get Stack Setting", method: "get_stack_setting",    params: "{}" },
     { label: "Get Focus Pos",     method: "get_focuser_position", params: "{}" },
-    { label: "Auto Focus",        method: "start_auto_focus",  params: "{}" },
-    { label: "Stop View",         method: "iscope_stop_view",  params: "{}" },
   ];
 
   function applyPreset(p: { method: string; params: string }) {
@@ -56,14 +77,28 @@
   <div class="cmd-layout">
 
     <div class="panel-card form-card">
-      <p class="panel-title">Quick Presets</p>
-      <div class="preset-grid">
-        {#each PRESETS as p}
-          <button class="preset-btn" on:click={() => applyPreset(p)}>{p.label}</button>
+      <p class="panel-title">Quick Actions</p>
+      <div class="action-grid">
+        {#each QUICK_ACTIONS as qa}
+          <button
+            class="action-btn"
+            on:click={() => runAction(qa.label, qa.action)}
+            disabled={!!actionLoading[qa.label]}
+          >
+            <span class="action-icon">{qa.icon}</span>
+            <span>{actionLoading[qa.label] ? "…" : qa.label}</span>
+          </button>
         {/each}
       </div>
 
       <div class="divider"></div>
+
+      <p class="panel-title">Raw Command</p>
+      <div class="preset-grid" style="margin-bottom:0.75rem">
+        {#each DEBUG_PRESETS as p}
+          <button class="preset-btn" on:click={() => applyPreset(p)}>{p.label}</button>
+        {/each}
+      </div>
 
       <form on:submit|preventDefault={send}>
         <div class="form-field" style="margin-bottom:0.75rem">
@@ -110,6 +145,34 @@
   }
   .form-card { width: 380px; flex-shrink: 0; }
   .result-col { flex: 1; min-width: 0; }
+
+  .action-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+  }
+  .action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.6rem 0.75rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    background: rgba(44,177,255,0.08);
+    border: 1px solid rgba(44,177,255,0.2);
+    color: var(--ui-primary);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .action-btn:hover:not(:disabled) {
+    background: rgba(44,177,255,0.16);
+    border-color: rgba(44,177,255,0.4);
+  }
+  .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .action-icon { font-size: 1rem; line-height: 1; }
 
   .preset-grid {
     display: flex;
