@@ -4,6 +4,7 @@
   import { initDevices } from "./lib/stores/deviceStore";
   import Nav from "./lib/components/Nav.svelte";
   import Home from "./pages/Home.svelte";
+  import Startup from "./pages/Startup.svelte";
   import Live from "./pages/Live.svelte";
   import Settings from "./pages/Settings.svelte";
   import Schedule from "./pages/Schedule.svelte";
@@ -11,16 +12,19 @@
   import Image from "./pages/Image.svelte";
   import Command from "./pages/Command.svelte";
   import Config from "./pages/Config.svelte";
+  import Support from "./pages/Support.svelte";
 
   const routes = {
     "/": Home,
+    "/startup": Startup,
     "/live": Live,
-    "/settings": Settings,
-    "/schedule": Schedule,
     "/goto": Goto,
     "/image": Image,
+    "/schedule": Schedule,
+    "/settings": Settings,
     "/config": Config,
     "/command": Command,
+    "/support": Support,
   };
 
   onMount(() => {

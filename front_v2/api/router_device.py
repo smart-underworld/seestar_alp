@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from typing import Any
+
+from fastapi import APIRouter, Body, HTTPException
 
 from front_v2.device_client import (
     check_api_state,
@@ -41,9 +43,21 @@ def device_position(dev_num: int):
         raise HTTPException(status_code=503, detail="Device not connected")
     result = method_sync("get_device_state", dev_num)
     return {
-        "ra": result.get("mount", {}).get("ra_j2000") if isinstance(result, dict) else None,
-        "dec": result.get("mount", {}).get("dec_j2000") if isinstance(result, dict) else None,
+        "ra": result.get("mount", {}).get("ra_j2000")
+        if isinstance(result, dict)
+        else None,
+        "dec": result.get("mount", {}).get("dec_j2000")
+        if isinstance(result, dict)
+        else None,
     }
+
+
+@router.post("/devices/{dev_num}/startup")
+def run_startup(dev_num: int, params: dict[str, Any] = Body(default={})):
+    if not check_api_state(dev_num):
+        raise HTTPException(status_code=503, detail="Device not connected")
+    result = do_action("action_start_up_sequence", dev_num, params)
+    return result or {}
 
 
 @router.post("/devices/{dev_num}/action")

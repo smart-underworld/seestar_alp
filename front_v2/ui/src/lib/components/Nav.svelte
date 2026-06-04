@@ -11,6 +11,7 @@
 
   const navLinks = [
     { href: "/",         label: "Home"     },
+    { href: "/startup",  label: "Startup"  },
     { href: "/live",     label: "Live"     },
     { href: "/goto",     label: "GoTo"     },
     { href: "/image",    label: "Image"    },
@@ -18,6 +19,7 @@
     { href: "/settings", label: "Settings" },
     { href: "/config",   label: "Config"   },
     { href: "/command",  label: "Command"  },
+    { href: "/support",  label: "Support"  },
   ];
 </script>
 

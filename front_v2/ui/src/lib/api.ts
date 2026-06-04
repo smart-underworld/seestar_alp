@@ -97,6 +97,8 @@ export const api = {
     },
     command: (devNum: number, method: string, params: Record<string, unknown> = {}) =>
       post(`/api/v1/devices/${devNum}/command`, { method, params }),
+    startup: (devNum: number, params: Record<string, unknown>) =>
+      post(`/api/v1/devices/${devNum}/startup`, params),
     goto: (devNum: number, ra: string, dec: string, targetName = "", isJ2000 = true) =>
       post(`/api/v1/devices/${devNum}/goto`, { ra, dec, target_name: targetName, is_j2000: isJ2000 }),
     image: {
