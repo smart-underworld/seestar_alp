@@ -27,6 +27,17 @@ class DeviceStatus(BaseModel):
     ra: Any = None
     dec: Any = None
     schedule: Any = None
+    firmware_ver: str = ""
+    focal_position: Any = None
+    auto_power_off: bool = False
+    heater_enable: bool = False
+    balance_angle: Any = None
+    compass_direction: Any = None
+    charge_status: str = ""
+    battery_temp: Any = None
+    is_master: bool = True
+    connected_clients: list = []
+    schedule_state: str = ""
 
 
 class CommandRequest(BaseModel):

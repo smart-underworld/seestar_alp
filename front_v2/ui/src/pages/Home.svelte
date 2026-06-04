@@ -4,6 +4,21 @@
 
   $: s = $activeDeviceStatus;
   $: device = $deviceList.find((d) => d.device_num === $activeDevNum);
+
+  function wifiColor(signal: string): "success" | "warning" | "danger" {
+    if (!signal) return "danger";
+    const m = signal.match(/-?\d+/);
+    if (!m) return "danger";
+    const dbm = parseInt(m[0], 10);
+    if (dbm >= -69) return "success";
+    if (dbm >= -80) return "warning";
+    return "danger";
+  }
+
+  function fmt(v: unknown, unit = ""): string {
+    if (v == null || v === "") return "—";
+    return `${v}${unit}`;
+  }
 </script>
 
 <div class="page-hero">
@@ -36,6 +51,7 @@
 {:else}
   <div class="stat-grid">
 
+    <!-- Card 1: State -->
     <div class="panel-card stat-card">
       <p class="panel-title">State</p>
       <div class="big-value">{s.view_state || "Idle"}</div>
@@ -43,23 +59,28 @@
         <div class="sub-line">{s.mode}{s.stage ? ` · ${s.stage}` : ""}</div>
       {/if}
       {#if s.target}
-        <div class="sub-line target">⌖ {s.target}</div>
+        <div class="sub-line target">&#x2316; {s.target}</div>
+      {/if}
+      {#if s.schedule_state}
+        <div class="badge">{s.schedule_state}</div>
       {/if}
     </div>
 
+    <!-- Card 2: Mount -->
     <div class="panel-card stat-card">
       <p class="panel-title">Mount</p>
       <div class="big-value">{s.mount_mode}</div>
       {#if s.ra != null}
-        <div class="sub-line coord">RA &nbsp;{s.ra.toFixed(5)}°</div>
+        <div class="sub-line coord">RA &nbsp;&nbsp;{s.ra.toFixed(5)}&deg;</div>
       {/if}
       {#if s.dec != null}
-        <div class="sub-line coord">Dec {s.dec >= 0 ? "+" : ""}{s.dec.toFixed(5)}°</div>
+        <div class="sub-line coord">Dec &nbsp;{s.dec >= 0 ? "+" : ""}{s.dec.toFixed(5)}&deg;</div>
       {/if}
     </div>
 
+    <!-- Card 3: Capture -->
     <div class="panel-card stat-card">
-      <p class="panel-title">Capture Progress</p>
+      <p class="panel-title">Capture</p>
       {#if s.stacked !== "" && s.stacked != null}
         <div class="big-value success">{s.stacked} <span class="unit">stacked</span></div>
         {#if s.failed !== "" && s.failed != null && +s.failed > 0}
@@ -71,28 +92,42 @@
       {/if}
     </div>
 
+    <!-- Card 4: Power -->
     <div class="panel-card stat-card">
-      <p class="panel-title">System</p>
+      <p class="panel-title">Power</p>
       {#if s.battery_capacity != null}
         <div class="stat-row">
           <div class="stat-key">Battery</div>
           <div class="stat-value {batteryColor(s.battery_capacity)}">
             {s.battery_capacity}%
             <div class="metric-bar">
-              <div class="metric-bar-fill {batteryColor(s.battery_capacity)}" style="width:{Math.min(100,s.battery_capacity)}%"></div>
+              <div class="metric-bar-fill {batteryColor(s.battery_capacity)}" style="width:{Math.min(100, s.battery_capacity)}%"></div>
             </div>
           </div>
         </div>
       {/if}
+      <div class="stat-row">
+        <div class="stat-key">Charge</div>
+        <div class="stat-value">{fmt(s.charge_status)}</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-key">Batt Temp</div>
+        <div class="stat-value">{s.battery_temp != null ? `${Number(s.battery_temp).toFixed(1)}°C` : "—"}</div>
+      </div>
       {#if s.temp != null}
         <div class="stat-row">
-          <div class="stat-key">Temperature</div>
+          <div class="stat-key">CPU Temp</div>
           <div class="stat-value">{s.temp.toFixed(1)}°C</div>
         </div>
       {/if}
+    </div>
+
+    <!-- Card 5: Storage & Network -->
+    <div class="panel-card stat-card">
+      <p class="panel-title">Storage &amp; Network</p>
       {#if s.free_storage && s.free_storage !== "Unknown"}
         <div class="stat-row">
-          <div class="stat-key">Free Storage</div>
+          <div class="stat-key">Free</div>
           <div class="stat-value {storageColor(s.free_storage)}">
             {s.free_storage}
             <div class="metric-bar">
@@ -101,6 +136,39 @@
           </div>
         </div>
       {/if}
+      <div class="stat-row">
+        <div class="stat-key">Wi-Fi</div>
+        <div class="stat-value {wifiColor(s.wifi_signal)}">{fmt(s.wifi_signal)}</div>
+      </div>
+    </div>
+
+    <!-- Card 6: Telescope -->
+    <div class="panel-card stat-card">
+      <p class="panel-title">Telescope</p>
+      <div class="stat-row">
+        <div class="stat-key">Firmware</div>
+        <div class="stat-value">{fmt(s.firmware_ver)}</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-key">Focus</div>
+        <div class="stat-value">{fmt(s.focal_position)}</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-key">Balance</div>
+        <div class="stat-value">{s.balance_angle != null ? `${s.balance_angle}&deg;` : "—"}</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-key">Compass</div>
+        <div class="stat-value">{s.compass_direction != null ? `${s.compass_direction}&deg;` : "—"}</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-key">Auto Off</div>
+        <div class="stat-value">{s.auto_power_off ? "On" : "Off"}</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-key">Heater</div>
+        <div class="stat-value">{s.heater_enable ? "On" : "Off"}</div>
+      </div>
     </div>
 
   </div>
@@ -129,6 +197,50 @@
   .sub-line.target { color: var(--ui-primary); }
   .sub-line.danger { color: var(--ui-danger); }
   .sub-line.coord  { font-variant-numeric: tabular-nums; font-family: "SF Mono", monospace; font-size: 0.78rem; }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin: 0.2rem 0;
+    font-size: 0.82rem;
+  }
+  .stat-key   { color: var(--ui-muted); white-space: nowrap; flex-shrink: 0; }
+  .stat-value { color: var(--ui-body); text-align: right; word-break: break-word; }
+  .stat-value.success { color: var(--ui-success); }
+  .stat-value.warning { color: var(--ui-warning); }
+  .stat-value.danger  { color: var(--ui-danger); }
+
+  .metric-bar {
+    height: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    margin-top: 3px;
+    width: 100%;
+    min-width: 60px;
+  }
+  .metric-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+  .metric-bar-fill.success { background: var(--ui-success); }
+  .metric-bar-fill.warning { background: var(--ui-warning); }
+  .metric-bar-fill.danger  { background: var(--ui-danger); }
+
+  .badge {
+    display: inline-block;
+    margin-top: 0.4rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--ui-primary);
+    text-transform: capitalize;
+    letter-spacing: 0.03em;
+  }
 
   .init-card, .offline-card {
     display: flex;

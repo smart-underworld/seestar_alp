@@ -25,6 +25,7 @@ from front_v2.api.router_goto import router as goto_router
 from front_v2.api.router_image import router as image_router
 from front_v2.api.router_live import router as live_router
 from front_v2.api.router_schedule import router as schedule_router
+from front_v2.api.router_config import router as config_router
 from front_v2.ws import bridge
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ def build_app() -> FastAPI:
     app.include_router(image_router)
     app.include_router(live_router)
     app.include_router(schedule_router)
+    app.include_router(config_router)
 
     @app.websocket("/ws/{dev_num}")
     async def ws_endpoint(websocket: WebSocket, dev_num: int):
@@ -61,6 +63,7 @@ def build_app() -> FastAPI:
     @app.on_event("startup")
     async def on_startup():
         import asyncio
+
         bridge.set_event_loop(asyncio.get_running_loop())
         # Pre-start pump threads for all configured devices.
         for seestar in Config.seestars:
@@ -70,6 +73,7 @@ def build_app() -> FastAPI:
     if _UI_BUILD_DIR.exists():
         app.mount("/", StaticFiles(directory=str(_UI_BUILD_DIR), html=True), name="spa")
     else:
+
         @app.get("/")
         def index():
             return {

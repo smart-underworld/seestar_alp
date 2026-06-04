@@ -16,6 +16,7 @@
     { href: "/image",    label: "Image"    },
     { href: "/schedule", label: "Schedule" },
     { href: "/settings", label: "Settings" },
+    { href: "/config",   label: "Config"   },
     { href: "/command",  label: "Command"  },
   ];
 </script>

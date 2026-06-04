@@ -53,6 +53,32 @@ export interface DeviceStatus {
   ra: number | null;
   dec: number | null;
   schedule: unknown;
+  firmware_ver: string;
+  focal_position: number | null;
+  auto_power_off: boolean;
+  heater_enable: boolean;
+  balance_angle: number | null;
+  compass_direction: number | null;
+  charge_status: string;
+  battery_temp: number | null;
+  wifi_signal: string;
+  is_master: boolean;
+  connected_clients: unknown[];
+  schedule_state: string;
+}
+
+export interface ScheduleItem {
+  action: string;
+  params: Record<string, unknown>;
+  schedule_item_id: string;
+  state?: string;
+}
+
+export interface ScheduleData {
+  state?: string;
+  list?: ScheduleItem[];
+  schedule_id?: string;
+  [key: string]: unknown;
 }
 
 export interface LiveExposure {
@@ -96,8 +122,16 @@ export const api = {
         post(`/api/v1/devices/${devNum}/live/gain`, { gain }),
     },
     schedule: {
-      get: (devNum: number) => get(`/api/v1/devices/${devNum}/schedule`),
+      get: (devNum: number) => get<ScheduleData>(`/api/v1/devices/${devNum}/schedule`),
       clear: (devNum: number) => del(`/api/v1/devices/${devNum}/schedule`),
+      addItem: (devNum: number, action: string, params: Record<string, unknown> = {}) =>
+        post(`/api/v1/devices/${devNum}/schedule/item`, { action, params }),
+      insertItem: (devNum: number, action: string, params: Record<string, unknown>, before_id: string) =>
+        post(`/api/v1/devices/${devNum}/schedule/item/insert`, { action, params, before_id }),
+      deleteItem: (devNum: number, itemId: string) =>
+        del(`/api/v1/devices/${devNum}/schedule/item/${encodeURIComponent(itemId)}`),
+      setState: (devNum: number, state: "start" | "stop" | "pause") =>
+        post(`/api/v1/devices/${devNum}/schedule/state?state=${encodeURIComponent(state)}`),
     },
   },
 };

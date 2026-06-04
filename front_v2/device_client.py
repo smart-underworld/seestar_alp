@@ -124,6 +124,16 @@ def get_device_state(dev_num: int) -> dict:
     ra = None
     dec = None
     schedule = None
+    firmware_ver = ""
+    focal_position = None
+    auto_power_off = False
+    heater_enable = False
+    balance_angle = None
+    compass_direction = None
+    charge_status = ""
+    battery_temp = None
+    is_master = True
+    connected_clients: list = []
 
     if result:
         eq_mode = pydash.get(result, "mount.equ_mode", False)
@@ -137,10 +147,29 @@ def get_device_state(dev_num: int) -> dict:
         temp = pydash.get(result, "pi_status.temp")
         ra = pydash.get(result, "mount.ra_j2000")
         dec = pydash.get(result, "mount.dec_j2000")
+        firmware_ver = pydash.get(result, "device.firmware_ver_string", "")
+        focal_position = pydash.get(result, "focuser.step", None)
+        auto_power_off = pydash.get(result, "setting.auto_power_off", False)
+        heater_enable = pydash.get(result, "setting.heater_enable", False)
+        balance_angle = pydash.get(result, "balance_sensor.data.angle", None)
+        compass_direction = pydash.get(result, "compass_sensor.data.direction", None)
+        charge_status = pydash.get(result, "pi_status.charger_status", "")
+        battery_temp = pydash.get(result, "pi_status.battery_temp", None)
+        is_master = pydash.get(result, "client.is_master", True)
+        connected_clients = pydash.get(result, "client.connected", [])
+
+    wifi_raw = method_sync("pi_station_state", dev_num)
+    wifi_signal = ""
+    if wifi_raw and pydash.get(wifi_raw, "server", False):
+        sig = pydash.get(wifi_raw, "sig_lev", "")
+        if sig:
+            wifi_signal = f"{sig} dBm"
 
     schedule_raw = do_action("get_schedule", dev_num, {})
+    schedule_state = ""
     if schedule_raw:
         schedule = pydash.get(schedule_raw, "Value.result")
+        schedule_state = pydash.get(schedule_raw, "Value.state", "")
 
     return {
         "device_num": dev_num,
@@ -159,6 +188,18 @@ def get_device_state(dev_num: int) -> dict:
         "ra": ra,
         "dec": dec,
         "schedule": schedule,
+        "firmware_ver": firmware_ver,
+        "focal_position": focal_position,
+        "auto_power_off": auto_power_off,
+        "heater_enable": heater_enable,
+        "balance_angle": balance_angle,
+        "compass_direction": compass_direction,
+        "charge_status": charge_status,
+        "battery_temp": battery_temp,
+        "wifi_signal": wifi_signal,
+        "is_master": is_master,
+        "connected_clients": connected_clients,
+        "schedule_state": schedule_state,
     }
 
 
