@@ -12,6 +12,8 @@ def get_schedule(dev_num: int):
     if not check_api_state(dev_num):
         raise HTTPException(status_code=503, detail="Device not connected")
     result = do_action("get_schedule", dev_num, {})
+    if result and "Value" in result:
+        return result["Value"]
     return result or {}
 
 
