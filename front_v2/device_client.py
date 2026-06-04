@@ -28,13 +28,24 @@ def _imgport_url() -> str:
     return f"http://{host}:{Config.imgport}"
 
 
-def check_api_state(dev_num: int) -> bool:
+def _check_api_state_detailed(dev_num: int) -> tuple[bool, bool]:
+    """Return (is_connected, backend_ready).
+
+    backend_ready=False means the Alpaca server itself was not reachable
+    (e.g. seestar service is still initialising).  is_connected=False with
+    backend_ready=True means the server is up but the telescope is not connected.
+    """
     url = f"{_base_url()}/api/v1/telescope/{dev_num}/connected?ClientID=1&ClientTransactionID=999"
     try:
         r = requests.get(url, timeout=2)
-        return r.json().get("Value", False)
+        return r.json().get("Value", False), True
     except Exception:
-        return False
+        return False, False
+
+
+def check_api_state(dev_num: int) -> bool:
+    connected, _ = _check_api_state_detailed(dev_num)
+    return connected
 
 
 def do_action(action: str, dev_num: int, parameters: dict) -> dict | None:
@@ -61,7 +72,12 @@ def method_sync(method: str, dev_num: int, **kwargs) -> Any:
     if not value:
         return None
     # Unwrap single-key federation wrapper if present.
-    if isinstance(value, dict) and "result" not in value and "error" not in value and len(value) == 1:
+    if (
+        isinstance(value, dict)
+        and "result" not in value
+        and "error" not in value
+        and len(value) == 1
+    ):
         inner = next(iter(value.values()))
         if isinstance(inner, dict):
             value = inner
@@ -73,8 +89,13 @@ def method_sync(method: str, dev_num: int, **kwargs) -> Any:
 
 def get_device_state(dev_num: int) -> dict:
     """Return a normalised status dict matching DeviceStatus schema."""
-    if not check_api_state(dev_num):
-        return {"device_num": dev_num, "is_connected": False}
+    is_connected, backend_ready = _check_api_state_detailed(dev_num)
+    if not is_connected:
+        return {
+            "device_num": dev_num,
+            "is_connected": False,
+            "backend_ready": backend_ready,
+        }
 
     result = method_sync("get_device_state", dev_num)
     status = method_sync("get_view_state", dev_num)
@@ -85,8 +106,16 @@ def get_device_state(dev_num: int) -> dict:
     target = pydash.get(status, "View.target_name", "")
 
     stack_state = pydash.get(status, "View.Stack.state")
-    stacked = pydash.get(status, "View.Stack.stacked_frame", "") if stack_state == "working" else ""
-    failed = pydash.get(status, "View.Stack.dropped_frame", "") if stack_state == "working" else ""
+    stacked = (
+        pydash.get(status, "View.Stack.stacked_frame", "")
+        if stack_state == "working"
+        else ""
+    )
+    failed = (
+        pydash.get(status, "View.Stack.dropped_frame", "")
+        if stack_state == "working"
+        else ""
+    )
 
     free_storage = "Unknown"
     mount_mode = "Unknown"
@@ -116,6 +145,7 @@ def get_device_state(dev_num: int) -> dict:
     return {
         "device_num": dev_num,
         "is_connected": True,
+        "backend_ready": True,
         "view_state": view_state,
         "mode": mode,
         "stage": stage,
@@ -141,8 +171,7 @@ def get_device_settings(dev_num: int) -> dict:
     stack_settings_result = method_sync("get_stack_setting", dev_num) or {}
 
     stack_settings_error = (
-        not isinstance(stack_settings_result, dict)
-        or "error" in stack_settings_result
+        not isinstance(stack_settings_result, dict) or "error" in stack_settings_result
     )
 
     merged_stack = {}
@@ -165,7 +194,8 @@ def save_device_settings(dev_num: int, payload: dict) -> dict | None:
     payload is the flat settings dict from the request body.
     """
     stack_keys = {
-        k for k in payload
+        k
+        for k in payload
         if k.startswith("stack_") or k in ("exp_ms_stack_l", "exp_ms_continuous")
     }
     stack_payload = {k: payload[k] for k in stack_keys if k in payload}
@@ -175,7 +205,9 @@ def save_device_settings(dev_num: int, payload: dict) -> dict | None:
     if base_payload:
         results["set_setting"] = do_action("set_setting", dev_num, base_payload)
     if stack_payload:
-        results["set_stack_setting"] = do_action("set_stack_setting", dev_num, stack_payload)
+        results["set_stack_setting"] = do_action(
+            "set_stack_setting", dev_num, stack_payload
+        )
         results["set_stack_settings"] = do_action(
             "set_stack_settings", dev_num, {"stack": stack_payload}
         )
@@ -188,10 +220,12 @@ def get_device_list() -> list[dict]:
     for seestar in Config.seestars:
         dev_num = seestar["device_num"]
         connected = check_api_state(dev_num)
-        devices.append({
-            "device_num": dev_num,
-            "name": seestar.get("name", f"Seestar {dev_num}"),
-            "ip_address": seestar.get("ip_address", ""),
-            "is_connected": connected,
-        })
+        devices.append(
+            {
+                "device_num": dev_num,
+                "name": seestar.get("name", f"Seestar {dev_num}"),
+                "ip_address": seestar.get("ip_address", ""),
+                "is_connected": connected,
+            }
+        )
     return devices

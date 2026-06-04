@@ -39,6 +39,7 @@ export interface DeviceInfo {
 export interface DeviceStatus {
   device_num: number;
   is_connected: boolean;
+  backend_ready: boolean;
   view_state: string;
   mode: string;
   stage: string;

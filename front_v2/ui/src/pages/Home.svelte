@@ -14,18 +14,26 @@
   {/if}
 </div>
 
-{#if !$isConnected}
+{#if !s || !s.backend_ready}
+  <div class="panel-card init-card">
+    <div class="init-spinner"></div>
+    <div>
+      <div class="init-title">Initializing…</div>
+      <div class="init-sub">Seestar ALP is starting up. The telescope will connect automatically.</div>
+    </div>
+  </div>
+{:else if !s.is_connected}
   <div class="panel-card offline-card">
     <div class="offline-icon">📡</div>
     <div>
-      <div class="offline-title">Device Offline</div>
+      <div class="offline-title">Telescope Offline</div>
       <div class="offline-sub">
         {device?.name ?? `Device ${$activeDevNum}`} is not reachable.
         Check that the telescope is powered on and connected to your network.
       </div>
     </div>
   </div>
-{:else if s}
+{:else}
   <div class="stat-grid">
 
     <div class="panel-card stat-card">
@@ -96,8 +104,6 @@
     </div>
 
   </div>
-{:else}
-  <div class="loading">Loading device status…</div>
 {/if}
 
 <style>
@@ -124,15 +130,26 @@
   .sub-line.danger { color: var(--ui-danger); }
   .sub-line.coord  { font-variant-numeric: tabular-nums; font-family: "SF Mono", monospace; font-size: 0.78rem; }
 
-  .offline-card {
+  .init-card, .offline-card {
     display: flex;
     align-items: center;
     gap: 1.25rem;
     max-width: 540px;
   }
+  .init-spinner {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--ui-primary);
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .init-title { font-weight: 600; color: var(--ui-muted); margin-bottom: 0.25rem; }
+  .init-sub   { font-size: 0.85rem; color: var(--ui-muted); line-height: 1.5; opacity: 0.7; }
+
   .offline-icon  { font-size: 2rem; flex-shrink: 0; }
   .offline-title { font-weight: 600; color: var(--ui-danger); margin-bottom: 0.25rem; }
   .offline-sub   { font-size: 0.85rem; color: var(--ui-muted); line-height: 1.5; }
-
-  .loading { color: var(--ui-muted); font-size: 0.9rem; padding: 2rem 0; }
 </style>

@@ -26,6 +26,9 @@ export const isConnected = derived(
 // WebSocket connection, one per device
 const _sockets: Record<number, WebSocket> = {};
 
+// Status poll timers, one per device
+const _pollTimers: Record<number, ReturnType<typeof setTimeout>> = {};
+
 function wsUrl(devNum: number): string {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${location.host}/ws/${devNum}`;
@@ -74,6 +77,40 @@ export function connectDevice(devNum: number): void {
 export function disconnectDevice(devNum: number): void {
   _sockets[devNum]?.close();
   delete _sockets[devNum];
+  clearTimeout(_pollTimers[devNum]);
+  delete _pollTimers[devNum];
+}
+
+// Poll device status and reschedule. Uses 5 s when offline, 15 s when online.
+async function schedulePoll(devNum: number): Promise<void> {
+  let connected = false;
+  try {
+    const status = await api.devices.status(devNum);
+    deviceStatuses.update((prev) => ({ ...prev, [devNum]: status }));
+    connected = status.is_connected;
+  } catch {
+    // Backend unreachable (e.g. service restarting) — drop to loading state,
+    // not "offline", so the UI shows the initializing spinner rather than
+    // implying the telescope itself is the problem.
+    deviceStatuses.update((prev) => {
+      const next = { ...prev };
+      delete next[devNum];
+      return next;
+    });
+  }
+  // Keep deviceList in sync so the Nav dot reflects current connectivity
+  deviceList.update((list) =>
+    list.map((d) => (d.device_num === devNum ? { ...d, is_connected: connected } : d)),
+  );
+  _pollTimers[devNum] = setTimeout(
+    () => schedulePoll(devNum),
+    connected ? 15_000 : 5_000,
+  );
+}
+
+function startStatusPolling(devNum: number): void {
+  clearTimeout(_pollTimers[devNum]);
+  schedulePoll(devNum);
 }
 
 // Load the device list and connect to all devices
@@ -86,15 +123,10 @@ export async function initDevices(): Promise<void> {
     const firstConnected = devices.find((d) => d.is_connected);
     if (firstConnected) activeDevNum.set(firstConnected.device_num);
 
-    // Start WS connections and load initial status
+    // Start WS connections and status polling (poll does the initial fetch)
     for (const d of devices) {
       connectDevice(d.device_num);
-      try {
-        const status = await api.devices.status(d.device_num);
-        deviceStatuses.update((prev) => ({ ...prev, [d.device_num]: status }));
-      } catch {
-        // offline device — leave status empty
-      }
+      startStatusPolling(d.device_num);
     }
   } catch (err) {
     console.error("initDevices:", err);

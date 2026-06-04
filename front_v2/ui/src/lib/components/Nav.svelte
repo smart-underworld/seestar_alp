@@ -1,7 +1,13 @@
 <script lang="ts">
   import { link, location } from "svelte-spa-router";
-  import { deviceList, activeDevNum } from "../stores/deviceStore";
+  import { deviceList, activeDevNum, deviceStatuses } from "../stores/deviceStore";
   import { isNavActive } from "../utils";
+
+  function devState(devNum: number): "loading" | "offline" | "online" {
+    const s = $deviceStatuses[devNum];
+    if (!s || !s.backend_ready) return "loading";
+    return s.is_connected ? "online" : "offline";
+  }
 
   const navLinks = [
     { href: "/",         label: "Home"     },
@@ -37,14 +43,16 @@
     {#if $deviceList.length > 1}
       <select bind:value={$activeDevNum} class="device-select">
         {#each $deviceList as d}
+          {@const state = devState(d.device_num)}
           <option value={d.device_num}>
-            {d.name}{d.is_connected ? "" : " (offline)"}
+            {d.name}{state === "offline" ? " (offline)" : state === "loading" ? " …" : ""}
           </option>
         {/each}
       </select>
     {:else if $deviceList.length === 1}
+      {@const state = devState($deviceList[0].device_num)}
       <span class="device-chip">
-        <span class="dot" class:online={$deviceList[0].is_connected}></span>
+        <span class="dot" class:online={state === "online"} class:loading={state === "loading"}></span>
         {$deviceList[0].name}
       </span>
     {:else}
@@ -148,6 +156,14 @@
     flex-shrink: 0;
   }
   .dot.online { background: var(--ui-success); }
+  .dot.loading {
+    background: var(--ui-muted);
+    animation: dot-pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+  }
 
   @media (max-width: 768px) {
     nav { padding: 0 0.75rem; }

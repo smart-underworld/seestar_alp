@@ -12,6 +12,7 @@ class DeviceInfo(BaseModel):
 class DeviceStatus(BaseModel):
     device_num: int
     is_connected: bool
+    backend_ready: bool = True
     view_state: str = ""
     mode: str = ""
     stage: str = ""
