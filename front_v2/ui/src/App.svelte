@@ -13,6 +13,7 @@
   import Command from "./pages/Command.svelte";
   import Config from "./pages/Config.svelte";
   import Support from "./pages/Support.svelte";
+  import Planning from "./pages/Planning.svelte";
 
   const routes = {
     "/": Home,
@@ -21,6 +22,7 @@
     "/goto": Goto,
     "/image": Image,
     "/schedule": Schedule,
+    "/planning": Planning,
     "/settings": Settings,
     "/config": Config,
     "/command": Command,

@@ -16,6 +16,7 @@
     { href: "/goto",     label: "GoTo"     },
     { href: "/image",    label: "Image"    },
     { href: "/schedule", label: "Schedule" },
+    { href: "/planning", label: "Planning" },
     { href: "/settings", label: "Settings" },
     { href: "/config",   label: "Config"   },
     { href: "/command",  label: "Command"  },
