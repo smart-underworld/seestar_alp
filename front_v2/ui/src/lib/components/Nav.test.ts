@@ -5,20 +5,23 @@ import Nav from "./Nav.svelte";
 
 // Mock the deviceStore so we can inject test values
 vi.mock("../stores/deviceStore", () => ({
-  deviceList:   writable([]),
-  activeDevNum: writable(1),
+  deviceList:     writable([]),
+  activeDevNum:   writable(1),
+  deviceStatuses: writable({}),
 }));
 
 import * as deviceStore from "../stores/deviceStore";
 
-const { deviceList, activeDevNum } = deviceStore as {
-  deviceList: ReturnType<typeof writable>;
-  activeDevNum: ReturnType<typeof writable>;
+const { deviceList, activeDevNum, deviceStatuses } = deviceStore as {
+  deviceList:     ReturnType<typeof writable>;
+  activeDevNum:   ReturnType<typeof writable>;
+  deviceStatuses: ReturnType<typeof writable>;
 };
 
 beforeEach(() => {
   deviceList.set([]);
   activeDevNum.set(1);
+  deviceStatuses.set({});
 });
 
 describe("Nav", () => {
@@ -78,5 +81,26 @@ describe("Nav", () => {
     render(Nav);
     expect(screen.getByText(/alpha/i)).toBeInTheDocument();
     expect(screen.getByText(/beta.*offline/i)).toBeInTheDocument();
+  });
+
+  it("shows Guest Mode link when device status reports it available", () => {
+    activeDevNum.set(1);
+    deviceStatuses.set({ 1: { backend_ready: true, is_connected: true, guest_mode_available: true } as any });
+    const { container } = render(Nav);
+    expect(container.querySelector('a[href="/guestmode"]')).toBeInTheDocument();
+  });
+
+  it("hides Guest Mode link when device status reports it unavailable", () => {
+    activeDevNum.set(1);
+    deviceStatuses.set({ 1: { backend_ready: true, is_connected: true, guest_mode_available: false } as any });
+    const { container } = render(Nav);
+    expect(container.querySelector('a[href="/guestmode"]')).not.toBeInTheDocument();
+  });
+
+  it("shows Guest Mode link when device status is not yet loaded", () => {
+    activeDevNum.set(1);
+    deviceStatuses.set({});
+    const { container } = render(Nav);
+    expect(container.querySelector('a[href="/guestmode"]')).toBeInTheDocument();
   });
 });

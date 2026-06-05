@@ -22,15 +22,38 @@ from device import telescope  # type: ignore
 
 
 def _ensure_v2_ui_built():
-    """Auto-build the Svelte UI if dist/ is missing. Source-checkout path only."""
-    dist_dir = Path(__file__).parent / "front_v2" / "ui" / "dist"
-    if dist_dir.exists():
-        return
-    script = Path(__file__).parent / "scripts" / "build_ui.sh"
+    """Auto-build the Svelte UI if dist/ is missing or source is newer than dist."""
+    base = Path(__file__).parent
+    dist_dir = base / "front_v2" / "ui" / "dist"
+    src_dir = base / "front_v2" / "ui" / "src"
+    script = base / "scripts" / "build_ui.sh"
+
     if not script.exists():
         return  # packaged install — dist should already be present
-    print("v2 UI dist/ not found — building now (this may take ~30 s on first run)…")
-    subprocess.run(["bash", str(script)], check=True)
+
+    if not dist_dir.exists():
+        print(
+            "v2 UI dist/ not found — building now (this may take ~30 s on first run)…"
+        )
+        subprocess.run(["bash", str(script)], check=True)
+        return
+
+    if src_dir.exists():
+        dist_mtime = max(
+            (f.stat().st_mtime for f in dist_dir.rglob("*") if f.is_file()), default=0
+        )
+        src_mtime = max(
+            (f.stat().st_mtime for f in src_dir.rglob("*") if f.is_file()), default=0
+        )
+        if src_mtime > dist_mtime:
+            print("v2 UI source changed — rebuilding…")
+            ui_dir = base / "front_v2" / "ui"
+            node_modules = ui_dir / "node_modules"
+            if node_modules.exists():
+                # node_modules present — skip npm ci, just rebuild
+                subprocess.run(["npm", "run", "build"], cwd=str(ui_dir), check=True)
+            else:
+                subprocess.run(["bash", str(script)], check=True)
 
 
 _frontend = getattr(Config, "frontend", "classic")

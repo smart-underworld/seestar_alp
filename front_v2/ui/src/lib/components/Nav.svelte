@@ -2,6 +2,7 @@
   import { link, location } from "svelte-spa-router";
   import { onMount } from "svelte";
   import { deviceList, activeDevNum, deviceStatuses } from "../stores/deviceStore";
+  import type { DeviceStatus } from "../api";
   import { isNavActive } from "../utils";
 
   let menuOpen = false;
@@ -34,6 +35,15 @@
     { href: "/support",   label: "Support",    priority: 1 },
   ];
 
+  // Filter out Guest Mode when the active device has it disabled/unavailable.
+  // Show when status is unknown/loading to avoid flickering it away on connect.
+  $: activeStatus = $deviceStatuses[$activeDevNum] as DeviceStatus | undefined;
+  $: visibleNavLinks = navLinks.filter(link => {
+    if (link.href !== "/guestmode") return true;
+    if (!activeStatus || !activeStatus.backend_ready) return true;
+    return activeStatus.guest_mode_available;
+  });
+
   // Hidden ghost spans measure each link's rendered width once on mount.
   let linkWidths: number[] = navLinks.map(() => 80);
   let ghostEls: (HTMLElement | null)[] = new Array(navLinks.length).fill(null);
@@ -52,8 +62,8 @@
   $: visiblePriority = (() => {
     if (linksWidth === 0) return 4; // not yet measured — show all
     for (let maxP = 4; maxP >= 1; maxP--) {
-      const shown = navLinks.filter(l => l.priority <= maxP);
-      const hasOverflow = shown.length < navLinks.length;
+      const shown = visibleNavLinks.filter(l => l.priority <= maxP);
+      const hasOverflow = shown.length < visibleNavLinks.length;
       const total =
         shown.reduce((sum, l) => sum + (linkWidths[navLinks.indexOf(l)] || 80), 0) +
         (hasOverflow ? MORE_BTN_W : 0);
@@ -63,8 +73,8 @@
   })();
 
   $: useHamburger = linksWidth > 0 && visiblePriority === 0;
-  $: primaryLinks = useHamburger ? [] : navLinks.filter(l => l.priority <= visiblePriority);
-  $: overflowLinks = useHamburger ? [] : navLinks.filter(l => l.priority > visiblePriority);
+  $: primaryLinks = useHamburger ? [] : visibleNavLinks.filter(l => l.priority <= visiblePriority);
+  $: overflowLinks = useHamburger ? [] : visibleNavLinks.filter(l => l.priority > visiblePriority);
   $: hasMore = !useHamburger && overflowLinks.length > 0;
 </script>
 
@@ -183,7 +193,7 @@
   class:open={menuOpen}
   aria-hidden={!menuOpen}
 >
-  {#each navLinks as { href, label }}
+  {#each visibleNavLinks as { href, label }}
     <a
       {href}
       use:link

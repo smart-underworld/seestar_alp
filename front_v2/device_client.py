@@ -134,6 +134,7 @@ def get_device_state(dev_num: int) -> dict:
     battery_temp = None
     is_master = True
     connected_clients: list = []
+    guest_mode_available = False
 
     if result:
         eq_mode = pydash.get(result, "mount.equ_mode", False)
@@ -161,6 +162,11 @@ def get_device_state(dev_num: int) -> dict:
         battery_temp = pydash.get(result, "pi_status.battery_temp", None)
         is_master = pydash.get(result, "client.is_master", True)
         connected_clients = pydash.get(result, "client.connected", [])
+        fw_int = pydash.get(result, "device.firmware_ver_int", 0)
+        if fw_int >= 2400:
+            guest_mode_available = bool(pydash.get(result, "setting.guest_mode", False))
+        elif fw_int >= 2300:
+            guest_mode_available = True
 
     wifi_raw = method_sync("pi_station_state", dev_num)
     wifi_signal = ""
@@ -204,6 +210,7 @@ def get_device_state(dev_num: int) -> dict:
         "is_master": is_master,
         "connected_clients": connected_clients,
         "schedule_state": schedule_state,
+        "guest_mode_available": guest_mode_available,
     }
 
 

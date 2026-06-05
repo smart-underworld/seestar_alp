@@ -65,6 +65,7 @@ export interface DeviceStatus {
   is_master: boolean;
   connected_clients: unknown[];
   schedule_state: string;
+  guest_mode_available: boolean;
 }
 
 export interface ScheduleItem {
