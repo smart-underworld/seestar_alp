@@ -2450,3 +2450,195 @@ def test_force_stop_goto_idempotent_when_no_goto(monkeypatch, seestar):
 
     assert result["ok"] is True
     assert seestar.is_goto() is False
+
+
+# ---------------------------------------------------------------------------
+# exec scheduler action
+# ---------------------------------------------------------------------------
+
+
+def _exec_schedule(filepath="/usr/bin/true", timeout_sec=10):
+    return collections.deque(
+        [
+            {
+                "schedule_item_id": "e1",
+                "action": "exec",
+                "params": {"filepath": filepath, "timeout_sec": timeout_sec},
+            }
+        ]
+    )
+
+
+def _base_sched_state(seestar):
+    seestar.schedule["item_number"] = 1
+    seestar.schedule["state"] = "stopped"
+    seestar.schedule["is_skip_requested"] = False
+    seestar.play_sound = lambda _: None
+
+
+def test_scheduler_exec_completes_normally(monkeypatch, seestar):
+    """exec action: process exits cleanly, scheduler reaches 'complete'."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _: None)
+
+    class _Proc:
+        returncode = 0
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def poll(self):
+            return 0
+
+        def kill(self):
+            pass
+
+        def communicate(self, timeout=None):
+            return (b"ok\n", b"")
+
+    monkeypatch.setattr("device.seestar_device.subprocess.Popen", _Proc)
+    seestar.schedule["list"] = _exec_schedule()
+    _base_sched_state(seestar)
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {})
+
+    seestar.scheduler_thread_fn()
+    assert seestar.schedule["state"] == "complete"
+
+
+def test_scheduler_exec_timeout_kills_process(monkeypatch, seestar):
+    """exec action: process exceeds timeout → killed, scheduler reaches 'complete'."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _: None)
+    killed = []
+
+    class _Proc:
+        returncode = -9
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def poll(self):
+            return None  # never finishes on its own
+
+        def kill(self):
+            killed.append(True)
+
+        def communicate(self, timeout=None):
+            return (b"", b"")
+
+    monkeypatch.setattr("device.seestar_device.subprocess.Popen", _Proc)
+    # First call → start_time=0; second call → 9999 so elapsed > timeout_sec=1
+    _times = iter([0, 9999])
+    monkeypatch.setattr("device.seestar_device.time.time", lambda: next(_times, 9999))
+    seestar.schedule["list"] = _exec_schedule(timeout_sec=1)
+    _base_sched_state(seestar)
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {})
+
+    seestar.scheduler_thread_fn()
+    assert killed, "process should have been killed on timeout"
+    assert seestar.schedule["state"] == "complete"
+
+
+def test_scheduler_exec_skip_kills_process(monkeypatch, seestar):
+    """exec action: is_skip_requested → process killed before timeout check."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _: None)
+    killed = []
+
+    class _Proc:
+        returncode = -9
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def poll(self):
+            return None
+
+        def kill(self):
+            killed.append(True)
+
+        def communicate(self, timeout=None):
+            return (b"", b"")
+
+    monkeypatch.setattr("device.seestar_device.subprocess.Popen", _Proc)
+    seestar.schedule["list"] = _exec_schedule(timeout_sec=300)
+    _base_sched_state(seestar)
+    seestar.schedule["is_skip_requested"] = True
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {})
+
+    seestar.scheduler_thread_fn()
+    assert killed, "process should have been killed on skip"
+    assert seestar.schedule["state"] == "complete"
+
+
+def test_scheduler_exec_file_not_found_is_non_fatal(monkeypatch, seestar):
+    """exec action: FileNotFoundError is caught, scheduler continues to 'complete'."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _: None)
+
+    def _bad_popen(*a, **kw):
+        raise FileNotFoundError("no such file")
+
+    monkeypatch.setattr("device.seestar_device.subprocess.Popen", _bad_popen)
+    seestar.schedule["list"] = _exec_schedule(filepath="/nonexistent/script.sh")
+    _base_sched_state(seestar)
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {})
+
+    seestar.scheduler_thread_fn()
+    assert seestar.schedule["state"] == "complete"
+
+
+# ---------------------------------------------------------------------------
+# raw_command scheduler action
+# ---------------------------------------------------------------------------
+
+
+def test_scheduler_raw_command_sends_method_and_params(monkeypatch, seestar):
+    """raw_command: correct method + params forwarded to send_message_param_sync."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _: None)
+    sent = []
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda p: sent.append(p) or {"result": 0},
+    )
+    seestar.schedule["list"] = collections.deque(
+        [
+            {
+                "schedule_item_id": "r1",
+                "action": "raw_command",
+                "params": {"method": "iscope_start_view", "params": {"mode": "star"}},
+            }
+        ]
+    )
+    _base_sched_state(seestar)
+
+    seestar.scheduler_thread_fn()
+    assert seestar.schedule["state"] == "complete"
+    assert any(
+        m.get("method") == "iscope_start_view" and m.get("params") == {"mode": "star"}
+        for m in sent
+    ), f"expected iscope_start_view in {sent}"
+
+
+def test_scheduler_raw_command_missing_params_defaults_to_empty(monkeypatch, seestar):
+    """raw_command: absent 'params' key sends empty dict to the device."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _: None)
+    sent = []
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda p: sent.append(p) or {"result": 0},
+    )
+    seestar.schedule["list"] = collections.deque(
+        [
+            {
+                "schedule_item_id": "r1",
+                "action": "raw_command",
+                "params": {"method": "pi_get_network_setting"},
+            }
+        ]
+    )
+    _base_sched_state(seestar)
+
+    seestar.scheduler_thread_fn()
+    assert any(
+        m.get("method") == "pi_get_network_setting" and m.get("params") == {}
+        for m in sent
+    ), f"expected pi_get_network_setting with empty params in {sent}"

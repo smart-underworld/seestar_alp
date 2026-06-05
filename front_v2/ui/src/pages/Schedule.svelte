@@ -8,7 +8,7 @@
   // ---- Action definitions -----------------------------------------------
 
   type ActionGroup = "observation" | "setup" | "timing" | "control";
-  type FieldType = "bool" | "int" | "float" | "text" | "time" | "range" | "select";
+  type FieldType = "bool" | "int" | "float" | "text" | "textarea" | "time" | "range" | "select";
 
   interface FieldDef {
     key: string;
@@ -146,6 +146,24 @@
       group: "control",
       fields: [],
     },
+    {
+      key: "exec",
+      label: "Exec",
+      group: "control",
+      fields: [
+        { key: "filepath", label: "Executable Path", type: "text",  default: "", placeholder: "/path/to/script.sh" },
+        { key: "timeout_sec", label: "Timeout (s)",  type: "int",   default: 300, min: 1, max: 86400 },
+      ],
+    },
+    {
+      key: "raw_command",
+      label: "Raw Command",
+      group: "control",
+      fields: [
+        { key: "method", label: "Method",       type: "text",     default: "", placeholder: "e.g. iscope_start_view" },
+        { key: "params", label: "Params (JSON)", type: "textarea", default: "{}" },
+      ],
+    },
   ];
 
   // Covers both frontend keys and device action names so the queue renders readable labels
@@ -201,6 +219,21 @@
   let editMode = false;
   let editingItemId = "";
   let saving = false;
+
+  // True when a wait_until item appears before any item that has end_local_time set.
+  // The end deadline may fire before (or immediately after) the item starts.
+  $: endTimeAfterWait = (() => {
+    let sawWaitUntil = false;
+    for (const item of items) {
+      if (item.action === "wait_until") {
+        sawWaitUntil = true;
+      } else if (sawWaitUntil) {
+        const p = item.params as Record<string, unknown>;
+        if (p?.end_local_time) return true;
+      }
+    }
+    return false;
+  })();
 
   // ---- Helpers ----------------------------------------------------------
 
@@ -335,6 +368,16 @@
           panel_overlap_percent: 100,
           selected_panels: "",
         };
+      } else if (selectedAction === "raw_command") {
+        let parsedParams: unknown = {};
+        try {
+          parsedParams = JSON.parse(String(formValues.params ?? "{}"));
+        } catch {
+          error = "Params must be valid JSON";
+          adding = false;
+          return;
+        }
+        params = { method: formValues.method, params: parsedParams };
       } else {
         params = { ...formValues } as Record<string, unknown>;
       }
@@ -385,6 +428,10 @@
     if (def.key === "lpf" && Array.isArray(params)) {
       return { ...defaults, enable: (params as number[])[0] === 2 };
     }
+    if (def.key === "raw_command" && params && typeof params === "object" && !Array.isArray(params)) {
+      const p = params as Record<string, unknown>;
+      return { method: p.method ?? "", params: JSON.stringify(p.params ?? {}, null, 2) };
+    }
     if (params && typeof params === "object" && !Array.isArray(params)) {
       return { ...defaults, ...(params as Record<string, unknown>) };
     }
@@ -428,6 +475,16 @@
         params = formValues.enable ? [2] : [1];
       } else if (selectedAction === "image") {
         params = { ...formValues, ra_num: 1, dec_num: 1, panel_overlap_percent: 100, selected_panels: "" };
+      } else if (selectedAction === "raw_command") {
+        let parsedParams: unknown = {};
+        try {
+          parsedParams = JSON.parse(String(formValues.params ?? "{}"));
+        } catch {
+          error = "Params must be valid JSON";
+          saving = false;
+          return;
+        }
+        params = { method: formValues.method, params: parsedParams };
       } else {
         params = { ...formValues } as Record<string, unknown>;
       }
@@ -476,6 +533,42 @@
     } catch (e) {
       error = String(e);
     }
+  }
+
+  async function exportScheduleHandler() {
+    error = "";
+    try {
+      const resp = await api.devices.schedule.exportSchedule($activeDevNum);
+      if (!resp.ok) { error = `Export failed: ${resp.status}`; return; }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `schedule_dev${$activeDevNum}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function importScheduleHandler(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    error = "";
+    try {
+      const content = await file.text();
+      const result = await api.devices.schedule.importSchedule($activeDevNum, content) as Record<string, unknown>;
+      if (result?.code === -1) {
+        error = `Import failed: ${result["message"] ?? JSON.stringify(result)}`;
+      } else {
+        await load();
+      }
+    } catch (e) {
+      error = String(e);
+    }
+    input.value = "";
   }
 
   // Drag-and-drop reorder: clear then re-add in new order.
@@ -712,6 +805,15 @@
                         on:input={(e) => setField(field.key, +e.currentTarget.value)}
                       />
 
+                    {:else if field.type === "textarea"}
+                      <textarea
+                        id="field-{field.key}"
+                        class="form-input code-input"
+                        rows="4"
+                        value={String(formValues[field.key] ?? field.default ?? "{}")}
+                        on:input={(e) => setField(field.key, e.currentTarget.value)}
+                      />
+
                     {:else}
                       <input
                         id="field-{field.key}"
@@ -816,6 +918,17 @@
               ⊘ Clear
             </button>
           {/if}
+          {#if !isActive(schedState)}
+            {#if items.length > 0}
+              <button class="btn btn-secondary btn-sm" on:click={exportScheduleHandler} title="Export schedule to JSON file">
+                ↓ Export
+              </button>
+            {/if}
+            <label class="btn btn-secondary btn-sm import-label" title="Import schedule from JSON file">
+              ↑ Import
+              <input type="file" accept=".json" style="display:none" on:change={importScheduleHandler} />
+            </label>
+          {/if}
         </div>
       </div>
 
@@ -836,6 +949,13 @@
       {#if isActive(schedState)}
         <div class="alert alert-info reorder-notice">
           Schedule is running. Drag reorder is disabled while active.
+        </div>
+      {/if}
+
+      {#if endTimeAfterWait}
+        <div class="alert alert-warning reorder-notice">
+          Warning: a "Wait Until" item precedes an item with an End Time set. The waiting may push the
+          start past the end deadline, causing the item to stop immediately or never run.
         </div>
       {/if}
 
@@ -1208,5 +1328,14 @@
   .input-disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+  .import-label {
+    cursor: pointer;
+    margin: 0;
+  }
+  .code-input {
+    font-family: monospace;
+    font-size: 0.85rem;
+    resize: vertical;
   }
 </style>

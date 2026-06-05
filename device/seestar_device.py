@@ -1,5 +1,6 @@
 import socket
 import json
+import subprocess
 import time
 import base64
 from pathlib import Path
@@ -2754,6 +2755,69 @@ class Seestar:
                     f"Trying to set exposure to {cur_schedule_item['params']}"
                 )
                 self.action_set_exposure(cur_schedule_item["params"])
+            elif action == "exec":
+                filepath = cur_schedule_item["params"].get("filepath", "")
+                timeout_sec = int(cur_schedule_item["params"].get("timeout_sec", 300))
+                item_state: SchedulerItemState = {
+                    "type": "exec",
+                    "schedule_item_id": self.schedule["current_item_id"],
+                    "action": f"exec {filepath}",
+                }
+                self.update_scheduler_state_obj(item_state)
+                try:
+                    proc = subprocess.Popen(
+                        [filepath],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                    start_time = time.time()
+                    while proc.poll() is None:
+                        update_time()
+                        if self.schedule["is_skip_requested"]:
+                            proc.kill()
+                            self.logger.info(
+                                "Exec: skip requested, killed %s", filepath
+                            )
+                            break
+                        if time.time() - start_time >= timeout_sec:
+                            proc.kill()
+                            self.logger.warning(
+                                "Exec: timeout after %ds, killed %s",
+                                timeout_sec,
+                                filepath,
+                            )
+                            break
+                        time.sleep(2)
+                    stdout, stderr = proc.communicate(timeout=5)
+                    self.logger.info(
+                        "Exec %s exit=%d stdout=%s",
+                        filepath,
+                        proc.returncode,
+                        stdout[:500].decode(errors="replace"),
+                    )
+                    if stderr:
+                        self.logger.warning(
+                            "Exec %s stderr=%s",
+                            filepath,
+                            stderr[:500].decode(errors="replace"),
+                        )
+                except FileNotFoundError:
+                    self.logger.error("Exec: file not found: %s", filepath)
+                except Exception as exc:
+                    self.logger.error("Exec %s failed: %s", filepath, exc)
+            elif action == "raw_command":
+                method = cur_schedule_item["params"].get("method", "")
+                cmd_params = cur_schedule_item["params"].get("params", {})
+                item_state: SchedulerItemState = {
+                    "type": "raw_command",
+                    "schedule_item_id": self.schedule["current_item_id"],
+                    "action": f"raw: {method}",
+                }
+                self.update_scheduler_state_obj(item_state)
+                self.logger.info("raw_command: %s params=%s", method, cmd_params)
+                request: MessageParams = {"method": method, "params": cmd_params}
+                result = self.send_message_param_sync(request)
+                self.logger.info("raw_command %s result: %s", method, result)
             else:
                 if "params" in cur_schedule_item:
                     request: MessageParams = {

@@ -194,6 +194,17 @@ export const api = {
         del(`/api/v1/devices/${devNum}/schedule/item/${encodeURIComponent(itemId)}`),
       setState: (devNum: number, state: "start" | "stop" | "pause") =>
         post(`/api/v1/devices/${devNum}/schedule/state?state=${encodeURIComponent(state)}`),
+      exportSchedule: (devNum: number) =>
+        fetch(`/api/v1/devices/${devNum}/schedule/export`),
+      importSchedule: (devNum: number, content: string) =>
+        fetch(`/api/v1/devices/${devNum}/schedule/import`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: content,
+        }).then((res) => {
+          if (!res.ok) throw new Error(`POST schedule/import → ${res.status}`);
+          return res.json();
+        }),
     },
   },
 };
