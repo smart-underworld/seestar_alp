@@ -73,6 +73,33 @@ class ImageRequest(BaseModel):
     count: int = 0
 
 
+class MosaicRequest(BaseModel):
+    target_name: str
+    ra: str
+    dec: str
+    is_j2000: bool = True
+    ra_num: int = 1
+    dec_num: int = 1
+    panel_overlap_percent: int = 10
+    panel_time_sec: int = 3600
+    gain: int = 80
+    is_use_lp_filter: bool = False
+    is_use_autofocus: bool = False
+    num_tries: int = 1
+    retry_wait_s: int = 300
+    stack_type: str = "DeepSky"
+    federation_mode: str | None = None
+    max_devices: int | None = None
+
+
+class GuestModeState(BaseModel):
+    firmware_ver_int: int = 0
+    guest_mode: bool = False
+    client_master: bool = True
+    master_index: int = -1
+    client_list: list = []
+
+
 class WsMessage(BaseModel):
     type: str
     payload: Any

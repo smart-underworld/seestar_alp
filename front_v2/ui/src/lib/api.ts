@@ -86,6 +86,33 @@ export interface LiveExposure {
   gain: number;
 }
 
+export interface GuestModeState {
+  firmware_ver_int: number;
+  guest_mode: boolean;
+  client_master: boolean;
+  master_index: number;
+  client_list: string[];
+}
+
+export interface MosaicRequest {
+  target_name: string;
+  ra: string;
+  dec: string;
+  is_j2000?: boolean;
+  ra_num?: number;
+  dec_num?: number;
+  panel_overlap_percent?: number;
+  panel_time_sec?: number;
+  gain?: number;
+  is_use_lp_filter?: boolean;
+  is_use_autofocus?: boolean;
+  num_tries?: number;
+  retry_wait_s?: number;
+  stack_type?: string;
+  federation_mode?: string;
+  max_devices?: number;
+}
+
 export interface EventState {
   state?: string;
   error?: string;
@@ -136,6 +163,15 @@ export const api = {
         post(`/api/v1/devices/${devNum}/live/gain`, { gain }),
     },
     events: (devNum: number) => get<Record<string, EventState>>(`/api/v1/devices/${devNum}/events`),
+    guestmode: {
+      get: (devNum: number) => get<GuestModeState>(`/api/v1/devices/${devNum}/guestmode`),
+      grab: (devNum: number) => post(`/api/v1/devices/${devNum}/guestmode/grab`),
+      release: (devNum: number) => post(`/api/v1/devices/${devNum}/guestmode/release`),
+    },
+    mosaic: {
+      start: (devNum: number, body: MosaicRequest) =>
+        post(`/api/v1/devices/${devNum}/mosaic/start`, body),
+    },
     schedule: {
       get: (devNum: number) => get<ScheduleData>(`/api/v1/devices/${devNum}/schedule`),
       clear: (devNum: number) => del(`/api/v1/devices/${devNum}/schedule`),

@@ -14,6 +14,9 @@
   import Config from "./pages/Config.svelte";
   import Support from "./pages/Support.svelte";
   import Planning from "./pages/Planning.svelte";
+  import Stats from "./pages/Stats.svelte";
+  import GuestMode from "./pages/GuestMode.svelte";
+  import Mosaic from "./pages/Mosaic.svelte";
 
   const routes = {
     "/": Home,
@@ -21,11 +24,14 @@
     "/live": Live,
     "/goto": Goto,
     "/image": Image,
+    "/mosaic": Mosaic,
     "/schedule": Schedule,
     "/planning": Planning,
     "/settings": Settings,
     "/config": Config,
     "/command": Command,
+    "/stats": Stats,
+    "/guestmode": GuestMode,
     "/support": Support,
   };
 

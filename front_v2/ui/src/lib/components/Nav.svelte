@@ -18,17 +18,20 @@
   // Priority 1 = always visible, 4 = collapses into "More" first.
   // Order is preserved — priority only controls which items survive at narrow widths.
   const navLinks = [
-    { href: "/",         label: "Home",     priority: 1 },
-    { href: "/startup",  label: "Startup",  priority: 3 },
-    { href: "/live",     label: "Live",     priority: 2 },
-    { href: "/goto",     label: "GoTo",     priority: 2 },
-    { href: "/image",    label: "Image",    priority: 3 },
-    { href: "/schedule", label: "Schedule", priority: 1 },
-    { href: "/planning", label: "Planning", priority: 3 },
-    { href: "/settings", label: "Settings", priority: 4 },
-    { href: "/config",   label: "Config",   priority: 4 },
-    { href: "/command",  label: "Command",  priority: 4 },
-    { href: "/support",  label: "Support",  priority: 1 },
+    { href: "/",          label: "Home",       priority: 1 },
+    { href: "/startup",   label: "Startup",    priority: 3 },
+    { href: "/live",      label: "Live",       priority: 2 },
+    { href: "/goto",      label: "GoTo",       priority: 2 },
+    { href: "/image",     label: "Image",      priority: 3 },
+    { href: "/mosaic",    label: "Mosaic",     priority: 3 },
+    { href: "/schedule",  label: "Schedule",   priority: 1 },
+    { href: "/planning",  label: "Planning",   priority: 3 },
+    { href: "/stats",     label: "Stats",      priority: 2 },
+    { href: "/settings",  label: "Settings",   priority: 4 },
+    { href: "/config",    label: "Config",     priority: 4 },
+    { href: "/command",   label: "Commands",   priority: 4 },
+    { href: "/guestmode", label: "Guest Mode", priority: 4 },
+    { href: "/support",   label: "Support",    priority: 1 },
   ];
 
   // Hidden ghost spans measure each link's rendered width once on mount.

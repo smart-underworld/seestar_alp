@@ -28,6 +28,8 @@ from front_v2.api.router_schedule import router as schedule_router
 from front_v2.api.router_config import router as config_router
 from front_v2.api.router_support import router as support_router
 from front_v2.api.router_planning import router as planning_router
+from front_v2.api.router_guestmode import router as guestmode_router
+from front_v2.api.router_mosaic import router as mosaic_router
 from front_v2.ws import bridge
 
 logger = logging.getLogger(__name__)
@@ -59,6 +61,8 @@ def build_app() -> FastAPI:
     app.include_router(config_router)
     app.include_router(support_router)
     app.include_router(planning_router)
+    app.include_router(guestmode_router)
+    app.include_router(mosaic_router)
 
     @app.websocket("/ws/{dev_num}")
     async def ws_endpoint(websocket: WebSocket, dev_num: int):
