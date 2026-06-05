@@ -359,6 +359,7 @@ def test_reconnect_success_and_fail_paths(monkeypatch, seestar):
             self.connected = addr
 
     monkeypatch.setattr("device.seestar_device.socket.socket", lambda *_args: Sock())
+    monkeypatch.setattr(seestar, "authenticate", lambda: True)
     seestar.is_connected = False
     assert seestar.reconnect() is True
 

@@ -256,7 +256,12 @@ def save_device_settings(dev_num: int, payload: dict) -> dict | None:
 
 
 def get_device_list() -> list[dict]:
-    """Return all configured seestars with their connection state."""
+    """Return all configured seestars with their connection state.
+
+    When more than one seestar is configured, prepend the federation
+    virtual device (device_num=0) so the UI can target all scopes at once,
+    matching the classic UI behaviour.
+    """
     devices = []
     for seestar in Config.seestars:
         dev_num = seestar["device_num"]
@@ -268,5 +273,15 @@ def get_device_list() -> list[dict]:
                 "ip_address": seestar.get("ip_address", ""),
                 "is_connected": connected,
             }
+        )
+    if len(devices) > 1:
+        devices.insert(
+            0,
+            {
+                "device_num": 0,
+                "name": "Seestar Federation",
+                "ip_address": "",
+                "is_connected": any(d["is_connected"] for d in devices),
+            },
         )
     return devices
