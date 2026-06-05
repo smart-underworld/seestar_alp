@@ -41,7 +41,8 @@ function install_apt_packages {
           libsqlite3-dev llvm libncurses-dev \
           xz-utils tk-dev libgdbm-dev lzma tcl-dev \
           libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev \
-          wget curl make build-essential openssl libgl1 indi-bin
+          wget curl make build-essential openssl libgl1 indi-bin \
+          nodejs npm
   else
       # bookworm
       sudo apt-get install --yes software-properties-common \
@@ -49,7 +50,8 @@ function install_apt_packages {
           libsqlite3-dev llvm libncurses5-dev libncursesw5-dev \
           xz-utils tk-dev libgdbm-dev lzma lzma-dev tcl-dev \
           libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev \
-          wget curl make build-essential openssl libgl1 indi-bin
+          wget curl make build-essential openssl libgl1 indi-bin \
+          nodejs npm
   fi
 }
 
@@ -341,6 +343,7 @@ function setup() {
 
   config_toml_setup
   python_virtualenv_setup
+  bash "${src_home}/scripts/build_ui.sh"
   network_config
   systemd_service_setup
   if [ "${WITH_PROXY}" = "true" ]; then

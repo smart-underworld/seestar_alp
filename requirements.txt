@@ -31,3 +31,12 @@ sdnotify==0.3.2
 pyhocon==0.3.61
 pydantic==2.11.7
 cryptography>=39.0.0
+# v2 frontend dependencies
+fastapi==0.136.3
+uvicorn[standard]==0.48.0
+websockets==16.0
+starlette==1.2.1
+anyio==4.13.0
+h11==0.16.0
+httptools==0.8.0
+uvloop==0.22.1

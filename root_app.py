@@ -2,9 +2,11 @@
 # Start frontend and pass in ALP for it to manage
 #
 import os
+import subprocess
 import threading
 import time
 import warnings
+from pathlib import Path
 
 import sdnotify
 import waitress
@@ -18,8 +20,22 @@ from device.config import Config  # type: ignore
 from device import log  # type: ignore
 from device import telescope  # type: ignore
 
+
+def _ensure_v2_ui_built():
+    """Auto-build the Svelte UI if dist/ is missing. Source-checkout path only."""
+    dist_dir = Path(__file__).parent / "front_v2" / "ui" / "dist"
+    if dist_dir.exists():
+        return
+    script = Path(__file__).parent / "scripts" / "build_ui.sh"
+    if not script.exists():
+        return  # packaged install — dist should already be present
+    print("v2 UI dist/ not found — building now (this may take ~30 s on first run)…")
+    subprocess.run(["bash", str(script)], check=True)
+
+
 _frontend = getattr(Config, "frontend", "classic")
 if _frontend == "v2":
+    _ensure_v2_ui_built()
     try:
         from front_v2.app import FrontMainV2 as FrontMain
         from front.app import get_live_status
