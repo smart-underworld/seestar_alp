@@ -152,7 +152,11 @@ def get_device_state(dev_num: int) -> dict:
         auto_power_off = pydash.get(result, "setting.auto_power_off", False)
         heater_enable = pydash.get(result, "setting.heater_enable", False)
         balance_angle = pydash.get(result, "balance_sensor.data.angle", None)
+        if isinstance(balance_angle, str):
+            balance_angle = balance_angle.replace("&deg;", "°")
         compass_direction = pydash.get(result, "compass_sensor.data.direction", None)
+        if isinstance(compass_direction, str):
+            compass_direction = compass_direction.replace("&deg;", "°")
         charge_status = pydash.get(result, "pi_status.charger_status", "")
         battery_temp = pydash.get(result, "pi_status.battery_temp", None)
         is_master = pydash.get(result, "client.is_master", True)

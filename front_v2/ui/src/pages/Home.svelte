@@ -155,11 +155,11 @@
       </div>
       <div class="stat-row">
         <div class="stat-key">Balance</div>
-        <div class="stat-value">{s.balance_angle != null ? `${s.balance_angle}&deg;` : "—"}</div>
+        <div class="stat-value">{s.balance_angle != null ? s.balance_angle : "—"}</div>
       </div>
       <div class="stat-row">
         <div class="stat-key">Compass</div>
-        <div class="stat-value">{s.compass_direction != null ? `${s.compass_direction}&deg;` : "—"}</div>
+        <div class="stat-value">{s.compass_direction != null ? s.compass_direction : "—"}</div>
       </div>
       <div class="stat-row">
         <div class="stat-key">Auto Off</div>
