@@ -70,13 +70,109 @@
     await loadScript("https://www.gstatic.com/charts/loader.js");
     await loadScript("/AstroMosaicEngine.js");
 
-    const w = window as unknown as Record<string, unknown>;
-    if (typeof w["init_astro_mosaic"] === "function") {
-      (w["init_astro_mosaic"] as (lat: number, lon: number, utcOffset: number) => void)(lat, lon, utcOffset);
-    } else if (typeof w["update_astro_mosaic"] === "function") {
-      (w["update_astro_mosaic"] as () => void)();
+    // Replicate the classic template's inline <script> — AstroMosaicEngine.js
+    // only provides StartAstroMosaicViewerEngine; the caller glue lives here.
+    const w = window as Record<string, unknown>;
+
+    let isProgrammaticUpdate = false;
+    const viewer_params: Record<string, unknown> = {
+      fov_x: 43.8, fov_y: 77.4,
+      grid_type: "fov", grid_size_x: 1, grid_size_y: 1, grid_overlap: 20,
+      location_lat: lat, location_lng: lon,
+      horizonSoft: null, horizonHard: [30], meridian_transit: null,
+      UTCdate_ms: null, timezoneOffset: utcOffset,
+      isCustomMode: true,
+      chartTextColor: "white", gridlinesColor: "gray", backgroundColor: "black",
+      isRepositionModeFunc: () => {
+        const cb = document.getElementById("repositionCheckbox") as HTMLInputElement;
+        return cb?.checked ?? false;
+      },
+      repositionTargetFunc: (target_str: string) => {
+        isProgrammaticUpdate = true;
+        const el = document.getElementById("astro_mosaic_search_text") as HTMLInputElement;
+        if (el) el.value = target_str;
+        setTimeout(() => { isProgrammaticUpdate = false; }, 100);
+      },
+    };
+
+    const runUpdate = () => {
+      if (isProgrammaticUpdate) return;
+      const get = (id: string) => (document.getElementById(id) as HTMLInputElement)?.value ?? "";
+      const num = (id: string, def = 0) => Number(get(id)) || def;
+
+      const seestar = get("seestar");
+      if (seestar === "S50")    { viewer_params.fov_x = 43.8;  viewer_params.fov_y = 77.4;  }
+      else if (seestar === "S30")     { viewer_params.fov_x = 73.2;  viewer_params.fov_y = 130.2; }
+      else if (seestar === "S30 Pro") { viewer_params.fov_x = 144.4; viewer_params.fov_y = 256.7; }
+
+      const gx = num("astro_mosaic_grid_x", 1);
+      const gy = num("astro_mosaic_grid_y", 1);
+      const ov = num("astro_mosaic_overlap", 20);
+      if (gx === 1 && gy === 1) {
+        viewer_params.grid_type = "fov"; viewer_params.grid_size_x = 1;
+        viewer_params.grid_size_y = 1;  viewer_params.grid_overlap = 100;
+      } else {
+        viewer_params.grid_type = "mosaic"; viewer_params.grid_size_x = gx;
+        viewer_params.grid_size_y = gy;     viewer_params.grid_overlap = ov;
+      }
+      viewer_params.am_fov_x = (viewer_params.fov_x as number * 60) / 3600;
+      viewer_params.am_fov_y = (viewer_params.fov_y as number * 60) / 3600;
+
+      if (viewer_params.UTCdate_ms == null) {
+        const d = new Date();
+        viewer_params.UTCdate_ms = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+      }
+
+      const StartEngine = w["StartAstroMosaicViewerEngine"] as (
+        type: string, target: string, params: unknown, panels: unknown,
+        catalogs: unknown, overlap: unknown, resources: unknown
+      ) => unknown;
+
+      if (typeof StartEngine === "function") {
+        StartEngine(
+          "all", get("astro_mosaic_search_text"), viewer_params,
+          {
+            aladin_panel: "aladin-div", aladin_panel_text: "radec-div",
+            dayvisibility_panel: "day-div",
+            dayvisibility_panel_text: "dayvisibility-panel-text",
+            yearvisibility_panel: "year-div",
+            yearvisibility_panel_text: "yearvisibility-panel-text",
+            status_text: "status-text", error_text: "error-text",
+            panel_view_x: null, panel_view_y: null,
+            panel_view_div: null, panel_view_text: null,
+          },
+          null,
+          viewer_params.grid_overlap ?? 20,
+          {
+            isRepositionModeFunc: viewer_params.isRepositionModeFunc,
+            repositionTargetFunc: viewer_params.repositionTargetFunc,
+            sun_rise_set: () => ({ sunset: 0, sunrise: 0 }),
+            object_altitude_init: () => ({}),
+            object_altaz: () => ({ alt: 0, az: 0 }),
+            object_altitude_get: () => 0,
+            moon_position: () => ({ ra: 0, dec: 0 }),
+            moon_topocentric_correction: () => 0,
+            moon_distance: () => 0,
+            getTargetAboveRightNow: () => [0, 0],
+          }
+        );
+      }
+    };
+
+    // Expose as global so the search/select onchange handlers can call it
+    w["update_astro_mosaic"] = runUpdate;
+
+    // Google Charts triggers the initial render
+    const google = w["google"] as { charts: { load: (v: string, o: unknown) => void; setOnLoadCallback: (fn: () => void) => void } };
+    if (google?.charts) {
+      google.charts.load("current", { packages: ["corechart"] });
+      google.charts.setOnLoadCallback(runUpdate);
+    } else {
+      // Fallback if Google Charts not yet ready
+      setTimeout(runUpdate, 500);
     }
 
+    // Wire the "Send to Schedule" button
     const btn = document.getElementById("open_send_to_schedule_modal_btn");
     if (btn) btn.addEventListener("click", openSchedModal);
 
