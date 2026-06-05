@@ -226,6 +226,8 @@
     color: var(--ui-body);
     text-align: right;
     flex: 1;
+    min-width: 0;
+    overflow-wrap: break-word;
   }
   :global(.stat-value.success) { color: var(--ui-success); }
   :global(.stat-value.warning) { color: var(--ui-warning); }

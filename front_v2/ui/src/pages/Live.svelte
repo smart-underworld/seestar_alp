@@ -88,8 +88,81 @@
     try { await api.devices.live.setGain($activeDevNum, gain); } catch { /* best effort */ }
   }
 
+  // Rotation — persisted to localStorage, same key as classic UI
+  let rotation = 0; // 0 | 90 | 180 | 270
+  const ROTATION_KEY = 'ssc.live.rotation';
+
+  // Zoom (digital, CSS scale)
+  let zoom = 1.0;
+  const ZOOM_STEP = 0.25;
+  const ZOOM_MIN = 0.25;
+  const ZOOM_MAX = 4.0;
+  function zoomIn()    { zoom = Math.min(+(zoom + ZOOM_STEP).toFixed(2), ZOOM_MAX); }
+  function zoomOut()   { zoom = Math.max(+(zoom - ZOOM_STEP).toFixed(2), ZOOM_MIN); }
+  function zoomReset() { zoom = 1.0; }
+
+  // Fullscreen — native API where available, fixed-overlay fallback for iOS Safari
+  let feedCardEl: HTMLElement;
+  let imgEl: HTMLImageElement;
+  let isFullscreen = false;
+  let isFakeFullscreen = false;
+
+  onMount(() => {
+    try {
+      const r = parseInt(localStorage.getItem(ROTATION_KEY) || '0', 10);
+      if ([0, 90, 180, 270].includes(r)) rotation = r;
+    } catch { /* ignore */ }
+
+    const onFsChange = () => {
+      const el = document.fullscreenElement ?? (document as any).webkitFullscreenElement;
+      isFullscreen = !!el;
+      if (!el) { isFakeFullscreen = false; document.body.style.overflow = ''; }
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange);
+      document.removeEventListener('webkitfullscreenchange', onFsChange);
+    };
+  });
+
+  function rotateFeed() {
+    rotation = (rotation + 90) % 360;
+    try { localStorage.setItem(ROTATION_KEY, String(rotation)); } catch { /* ignore */ }
+  }
+
+  function toggleFullscreen() {
+    if (isFullscreen) {
+      if (isFakeFullscreen) {
+        isFakeFullscreen = false;
+        isFullscreen = false;
+        document.body.style.overflow = '';
+      } else {
+        const exit = document.exitFullscreen ?? (document as any).webkitExitFullscreen;
+        exit.call(document);
+      }
+      return;
+    }
+    zoom = 1.0;
+    const req = feedCardEl.requestFullscreen ?? (feedCardEl as any).webkitRequestFullscreen;
+    if (req) {
+      req.call(feedCardEl);
+    } else {
+      // iOS Safari: no fullscreen API for non-video — use fixed viewport overlay
+      isFakeFullscreen = true;
+      isFullscreen = true;
+      document.body.style.overflow = 'hidden';
+    }
+  }
+
+  $: isQuarterTurn = rotation % 180 !== 0;
+  $: imgTransform = [
+    zoom !== 1 ? `scale(${zoom})` : '',
+    rotation   ? `rotate(${rotation}deg)` : '',
+  ].filter(Boolean).join(' ');
+
   $: s = $activeDeviceStatus;
-  $: if ($activeDevNum) { activeMode = null; focusPos = null; }
+  $: if ($activeDevNum) { activeMode = null; focusPos = null; zoom = 1.0; }
 </script>
 
 <div class="page-hero">
@@ -135,10 +208,56 @@
 
       <!-- Live feed (always visible once mode is set) -->
       {#if activeMode && activeMode !== "none"}
-        <div class="panel-card feed-card">
-          <p class="panel-title">Live Feed</p>
-          <div class="feed-wrap">
-            <img src={vidUrl} alt="Live telescope feed" class="live-feed" />
+        <div class="panel-card feed-card" class:feed-fs={isFullscreen} bind:this={feedCardEl}>
+          <div class="feed-title-row">
+            <p class="panel-title">Live Feed</p>
+            <div class="feed-controls">
+              <button class="feed-btn" on:click={zoomOut} disabled={zoom <= ZOOM_MIN} aria-label="Zoom out">−</button>
+              <button class="feed-btn zoom-label" on:click={zoomReset} title="Reset zoom to 1×" aria-label="Reset zoom to 1×">{zoom}×</button>
+              <button class="feed-btn" on:click={zoomIn} disabled={zoom >= ZOOM_MAX} aria-label="Zoom in">+</button>
+              <button
+                class="feed-btn"
+                on:click={rotateFeed}
+                title="Rotate 90° (current: {rotation}°)"
+                aria-label="Rotate live view 90 degrees, currently {rotation} degrees"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 2v6h-6"/>
+                  <path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+                  <path d="M3 22v-6h6"/>
+                  <path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+                </svg>
+                {rotation}°
+              </button>
+              <button
+                class="feed-btn"
+                on:click={toggleFullscreen}
+                title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+              >
+                {#if isFullscreen}
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
+                    <path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
+                  </svg>
+                {:else}
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M3 7V3h4"/><path d="M21 7V3h-4"/>
+                    <path d="M3 17v4h4"/><path d="M21 17v4h-4"/>
+                  </svg>
+                {/if}
+              </button>
+            </div>
+          </div>
+          <div class="feed-wrap" class:feed-wrap-quarter={isQuarterTurn} class:feed-wrap-fs={isFullscreen}>
+            <img
+              bind:this={imgEl}
+              src={vidUrl}
+              alt="Live telescope feed"
+              class="live-feed"
+              class:live-feed-fs={isFullscreen}
+              style={imgTransform ? `transform:${imgTransform}` : ''}
+            />
             {#if s}
               <div class="feed-overlay">
                 {#if s.view_state}<span class="chip">{s.view_state}</span>{/if}
@@ -315,12 +434,81 @@
   .mode-icon { font-size: 1.4rem; line-height: 1; }
   .mode-label { font-weight: 500; }
 
-  .feed-card {}
+  .feed-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.6rem;
+  }
+  .feed-title-row .panel-title { margin-bottom: 0; }
+
+  .feed-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .feed-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    color: rgba(231, 237, 247, 0.6);
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+    user-select: none;
+  }
+  .feed-btn:hover {
+    color: var(--ui-body);
+    border-color: rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .feed-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+  .zoom-label {
+    min-width: 2.8rem;
+    text-align: center;
+  }
+
+  /* Fullscreen mode — driven by isFullscreen state, not :fullscreen pseudo-class
+     (Svelte strips :fullscreen to a bare element selector, so it never applies) */
+  .feed-fs {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: #000;
+    border-radius: 0;
+    border: none;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+  }
+  .feed-wrap-fs {
+    flex: 1;
+    aspect-ratio: unset;
+  }
+  .live-feed-fs {
+    height: 100%;
+    min-height: 0;
+  }
+
+  /* Feed container */
   .feed-wrap {
     position: relative;
-    display: inline-block;
+    overflow: hidden;
     width: 100%;
   }
+  /* Square container for quarter turns — image fills it, object-fit:contain keeps full video visible */
+  .feed-wrap-quarter {
+    aspect-ratio: 1;
+  }
+
   .live-feed {
     width: 100%;
     max-width: 100%;
@@ -329,6 +517,12 @@
     background: #000;
     min-height: 200px;
     object-fit: contain;
+    transform-origin: center center;
+  }
+  /* Fill the square container at quarter turns so rotate() acts on the full area */
+  .feed-wrap-quarter .live-feed {
+    height: 100%;
+    min-height: 0;
   }
   .feed-overlay {
     position: absolute;
