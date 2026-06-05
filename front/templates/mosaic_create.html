@@ -182,9 +182,32 @@
                 <label for="panelTime" class="form-label">Panel Acquisition Time</label>
                 <input type="text" class="form-control" id="panelTime" name="panelTime"
                        aria-describedby="panelTimeHelp" value="{{ values.panel_time_sec }}" required>
-                <div id="panelTimeHelp" class="form-text">How much acquisition time for each panel (ex: 1h 30m or 5400).
+                <div id="panelTimeHelp" class="form-text">How much acquisition time for each panel (ex: 1h 30m or 5400). Disabled when End Time is set.
                 </div>
             </div>
+
+            <div class="text-center text-muted small mb-2">— or —</div>
+
+            <div class="mb-3">
+                <label for="endLocalTime" class="form-label">End Time (local)</label>
+                <input type="time" class="form-control" id="endLocalTime" name="endLocalTime"
+                       aria-describedby="endLocalTimeHelp" value="{{ values.end_local_time or '' }}"
+                       oninput="syncTimingFields()">
+                <div id="endLocalTimeHelp" class="form-text">Stop at this local time regardless of when the item started (handles midnight). Clears Panel Acquisition Time control.
+                </div>
+            </div>
+
+            <script>
+            function syncTimingFields() {
+                var endEl = document.getElementById('endLocalTime');
+                var panelEl = document.getElementById('panelTime');
+                var hasEndTime = endEl.value !== '';
+                panelEl.disabled = hasEndTime;
+                panelEl.required = !hasEndTime;
+                panelEl.closest('.mb-3').style.opacity = hasEndTime ? '0.4' : '';
+            }
+            document.addEventListener('DOMContentLoaded', syncTimingFields);
+            </script>
 
             <div class="mb-3">
                 {% if values.gain %}

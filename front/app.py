@@ -1367,6 +1367,7 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
     stack_type = _parse_stack_type(form)
     action = form.get("action", "")
     selected_items = form.get("selected_items", "")
+    end_local_time = form.get("endLocalTime") or None
     errors = {}
     values = {
         "target_name": targetName,
@@ -1385,6 +1386,8 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
         "retry_wait_s": int(retry_wait_s) if retry_wait_s else 300,
         "stack_type": stack_type,
     }
+    if end_local_time:
+        values["end_local_time"] = end_local_time
 
     if telescope_id == 0:
         fedMode = form.get("federation_mode")
@@ -1439,6 +1442,7 @@ def do_create_image(req, resp, schedule, telescope_id):
     stack_type = _parse_stack_type(form)
     action = form.get("action", "")
     selected_items = form.get("selected_items", "")
+    end_local_time = form.get("endLocalTime") or None
     errors = {}
     values = {
         "target_name": targetName,
@@ -1457,6 +1461,8 @@ def do_create_image(req, resp, schedule, telescope_id):
         "retry_wait_s": int(retry_wait_s) if retry_wait_s else 300,
         "stack_type": stack_type,
     }
+    if end_local_time:
+        values["end_local_time"] = end_local_time
 
     if telescope_id == 0:
         fedMode = form.get("federation_mode")

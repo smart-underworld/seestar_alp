@@ -37,6 +37,7 @@
     { key: "dec",              label: "Dec",                type: "text",   default: "",      placeholder: "e.g. -05d23m28s" },
     { key: "is_j2000",         label: "J2000 Coords",       type: "bool",   default: true },
     { key: "panel_time_sec",   label: "Panel Time (s)",     type: "int",    default: 3600,    min: 60, max: 86400, placeholder: "e.g. 3600 = 1h" },
+    { key: "end_local_time",   label: "— or — End Time (local)", type: "time",  default: "",      placeholder: "Stop at this local time (handles midnight)" },
     { key: "gain",             label: "Gain",               type: "int",    default: 80,      min: 0, max: 100 },
     { key: "is_use_lp_filter", label: "LP Filter",          type: "bool",   default: false },
     { key: "is_use_autofocus", label: "Auto Focus",         type: "bool",   default: true },
@@ -697,10 +698,13 @@
                       />
 
                     {:else if field.type === "int" || field.type === "float"}
+                      {@const isPanelTimeDisabled = field.key === "panel_time_sec" && !!formValues.end_local_time}
                       <input
                         id="field-{field.key}"
                         type="number"
                         class="form-input"
+                        class:input-disabled={isPanelTimeDisabled}
+                        disabled={isPanelTimeDisabled}
                         min={field.min}
                         max={field.max}
                         step={field.type === "float" ? 0.001 : 1}
@@ -1199,5 +1203,10 @@
   :global(.btn-sm) {
     padding: 0.35rem 0.75rem !important;
     font-size: 0.8rem !important;
+  }
+
+  .input-disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 </style>

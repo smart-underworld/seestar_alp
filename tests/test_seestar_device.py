@@ -2152,8 +2152,11 @@ def _setup_mosaic_item_test(monkeypatch, seestar):
     )
 
     def fake_mosaic_thread_fn(*args, **kwargs):
-        # stack_type is the last positional arg passed by the lambda in start_mosaic_item
-        received["stack_type"] = args[-1] if args else kwargs.get("stack_type")
+        # end_local_time is last, stack_type is second-to-last
+        received["stack_type"] = (
+            args[-2] if len(args) >= 2 else kwargs.get("stack_type")
+        )
+        received["end_local_time"] = args[-1] if args else kwargs.get("end_local_time")
 
     class FakeThread:
         def __init__(self, target=None):
