@@ -274,7 +274,7 @@ def get_device_list() -> list[dict]:
                 "is_connected": connected,
             }
         )
-    if len(devices) > 1:
+    if devices:
         devices.insert(
             0,
             {
