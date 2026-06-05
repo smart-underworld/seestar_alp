@@ -60,6 +60,25 @@ def run_startup(dev_num: int, params: dict[str, Any] = Body(default={})):
     return result or {}
 
 
+@router.get("/devices/{dev_num}/events")
+def get_events(dev_num: int):
+    raw = do_action("get_event_state", dev_num, {})
+    if not raw or "Value" not in raw:
+        return {}
+    value = raw["Value"]
+    if not isinstance(value, dict):
+        return {}
+    # Single-device format: {"result": {"3PPA": {...}, ...}}
+    if "result" in value and isinstance(value["result"], dict):
+        return value["result"]
+    # Multi-device format: {"devId": {"result": {...}}, ...}
+    merged: dict = {}
+    for dev_info in value.values():
+        if isinstance(dev_info, dict) and isinstance(dev_info.get("result"), dict):
+            merged.update(dev_info["result"])
+    return merged
+
+
 @router.post("/devices/{dev_num}/action")
 def raw_action(dev_num: int, action: str, parameters: dict = {}):
     if not check_api_state(dev_num):

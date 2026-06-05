@@ -86,6 +86,18 @@ export interface LiveExposure {
   gain: number;
 }
 
+export interface EventState {
+  state?: string;
+  error?: string;
+  percent?: number;
+  position?: number;
+  eq_offset_alt?: number;
+  eq_offset_az?: number;
+  cur_scheduler_item?: { type?: string };
+  stacked_frame?: number;
+  dropped_frame?: number;
+}
+
 export const api = {
   devices: {
     list: () => get<DeviceInfo[]>("/api/v1/devices"),
@@ -123,6 +135,7 @@ export const api = {
       setGain: (devNum: number, gain: number) =>
         post(`/api/v1/devices/${devNum}/live/gain`, { gain }),
     },
+    events: (devNum: number) => get<Record<string, EventState>>(`/api/v1/devices/${devNum}/events`),
     schedule: {
       get: (devNum: number) => get<ScheduleData>(`/api/v1/devices/${devNum}/schedule`),
       clear: (devNum: number) => del(`/api/v1/devices/${devNum}/schedule`),

@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import { activeDevNum, isConnected, activeDeviceStatus } from "../lib/stores/deviceStore";
-  import { api } from "../lib/api";
+  import { api, type EventState } from "../lib/api";
 
   let polarAlign = true;
   let autoFocus = true;
@@ -11,17 +12,72 @@
 
   let running = false;
   let stopping = false;
-  let result: unknown = null;
   let error = "";
 
   $: s = $activeDeviceStatus;
   $: schedState = (s as { schedule_state?: string })?.schedule_state ?? "";
   $: isRunning = schedState === "running" || schedState === "working";
 
+  // ── Event status polling ───────────────────────────────────────────────────
+  const EVENT_NAMES = ["3PPA", "AutoFocus", "DarkLibrary", "PlateSolve", "WheelMove", "Scheduler"] as const;
+  type EventName = typeof EVENT_NAMES[number];
+
+  const EVENT_LABELS: Record<EventName, string> = {
+    "3PPA":        "Polar Align",
+    "AutoFocus":   "Auto Focus",
+    "DarkLibrary": "Dark Frames",
+    "PlateSolve":  "Plate Solve",
+    "WheelMove":   "Filter Wheel",
+    "Scheduler":   "Scheduler",
+  };
+
+  let events: Record<string, EventState> = {};
+  let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function pollEvents() {
+    if (!$isConnected) return;
+    try {
+      events = await api.devices.events($activeDevNum);
+    } catch {
+      // silently ignore poll errors
+    }
+    const interval = isRunning ? 1000 : 3000;
+    pollTimer = setTimeout(pollEvents, interval);
+  }
+
+  $: if ($isConnected) {
+    if (pollTimer) clearTimeout(pollTimer);
+    pollEvents();
+  } else {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    events = {};
+  }
+
+  onDestroy(() => { if (pollTimer) clearTimeout(pollTimer); });
+
+  function stateClass(ev: EventState | undefined): string {
+    if (!ev?.state || ev.state === "idle") return "state-idle";
+    if (ev.state === "in progress")        return "state-progress";
+    if (ev.state === "complete")           return "state-complete";
+    if (ev.state === "fail")              return "state-fail";
+    return "state-idle";
+  }
+
+  function stateLabel(ev: EventState | undefined): string {
+    return ev?.state || "Idle";
+  }
+
+  function filterName(pos: number | undefined): string {
+    if (pos === 0) return "Dark";
+    if (pos === 1) return "IR Cut";
+    if (pos === 2) return "LP";
+    return "—";
+  }
+
+  // ── Startup sequence ───────────────────────────────────────────────────────
   async function start() {
     running = true;
     error = "";
-    result = null;
     try {
       const params: Record<string, unknown> = {
         auto_focus:    autoFocus,
@@ -33,7 +89,7 @@
         params.lat = parseFloat(lat);
         params.lon = parseFloat(lon);
       }
-      result = await api.devices.startup($activeDevNum, params);
+      await api.devices.startup($activeDevNum, params);
     } catch (e) {
       error = String(e);
     } finally {
@@ -66,12 +122,51 @@
 {:else}
   {#if error}<div class="alert alert-error">{error}</div>{/if}
 
-  {#if isRunning}
-    <div class="alert alert-info running-banner">
-      Startup sequence is running — scheduler state: <strong>{schedState}</strong>
+  <!-- ── Event Status ────────────────────────────────────────────────────── -->
+  <div class="panel-card events-card">
+    <p class="panel-title">Event Status</p>
+    <div class="events-grid">
+      {#each EVENT_NAMES as name}
+        {@const ev = events[name]}
+        <div class="event-tile {stateClass(ev)}">
+          <div class="event-name">{EVENT_LABELS[name]}</div>
+          <div class="event-state">{stateLabel(ev)}</div>
+          {#if ev?.error}
+            <div class="event-detail error-text">{ev.error}</div>
+          {/if}
+          {#if name === "3PPA"}
+            {#if ev?.percent != null}
+              <div class="event-detail">{ev.percent}%</div>
+              <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" style="width:{Math.min(ev.percent, 100)}%"></div>
+              </div>
+            {/if}
+            {#if ev?.eq_offset_alt != null && ev?.eq_offset_az != null}
+              <div class="event-detail">Alt err: {ev.eq_offset_alt.toFixed(3)}°</div>
+              <div class="event-detail">Az err: {ev.eq_offset_az.toFixed(3)}°</div>
+            {/if}
+          {/if}
+          {#if name === "AutoFocus" && ev?.position != null}
+            <div class="event-detail">Pos: {ev.position}</div>
+          {/if}
+          {#if name === "DarkLibrary" && ev?.percent != null}
+            <div class="event-detail">{ev.percent.toFixed(1)}%</div>
+            <div class="progress-bar-wrap">
+              <div class="progress-bar-fill" style="width:{Math.min(ev.percent, 100)}%"></div>
+            </div>
+          {/if}
+          {#if name === "WheelMove" && ev?.position != null}
+            <div class="event-detail">{filterName(ev.position)}</div>
+          {/if}
+          {#if name === "Scheduler" && ev?.cur_scheduler_item?.type}
+            <div class="event-detail">{ev.cur_scheduler_item.type}</div>
+          {/if}
+        </div>
+      {/each}
     </div>
-  {/if}
+  </div>
 
+  <!-- ── Options ────────────────────────────────────────────────────────── -->
   <div class="startup-layout">
     <div class="panel-card options-card">
       <p class="panel-title">Startup Options</p>
@@ -82,12 +177,8 @@
           <div class="option-help">Run 3-point polar alignment at session start</div>
         </div>
         <div class="radio-group">
-          <label class="radio-label">
-            <input type="radio" bind:group={polarAlign} value={true} /> On
-          </label>
-          <label class="radio-label">
-            <input type="radio" bind:group={polarAlign} value={false} /> Off
-          </label>
+          <label class="radio-label"><input type="radio" bind:group={polarAlign} value={true} /> On</label>
+          <label class="radio-label"><input type="radio" bind:group={polarAlign} value={false} /> Off</label>
         </div>
       </div>
 
@@ -97,12 +188,8 @@
           <div class="option-help">Run auto-focus routine before imaging</div>
         </div>
         <div class="radio-group">
-          <label class="radio-label">
-            <input type="radio" bind:group={autoFocus} value={true} /> On
-          </label>
-          <label class="radio-label">
-            <input type="radio" bind:group={autoFocus} value={false} /> Off
-          </label>
+          <label class="radio-label"><input type="radio" bind:group={autoFocus} value={true} /> On</label>
+          <label class="radio-label"><input type="radio" bind:group={autoFocus} value={false} /> Off</label>
         </div>
       </div>
 
@@ -112,12 +199,8 @@
           <div class="option-help">Capture dark calibration frames</div>
         </div>
         <div class="radio-group">
-          <label class="radio-label">
-            <input type="radio" bind:group={darkFrames} value={true} /> On
-          </label>
-          <label class="radio-label">
-            <input type="radio" bind:group={darkFrames} value={false} /> Off
-          </label>
+          <label class="radio-label"><input type="radio" bind:group={darkFrames} value={true} /> On</label>
+          <label class="radio-label"><input type="radio" bind:group={darkFrames} value={false} /> Off</label>
         </div>
       </div>
 
@@ -126,12 +209,7 @@
           <div class="option-label">Dec Offset (1–5)</div>
           <div class="option-help">Declination offset index for EQ polar alignment</div>
         </div>
-        <input
-          type="number"
-          class="form-input dec-input"
-          min="1" max="5" step="1"
-          bind:value={decOffset}
-        />
+        <input type="number" class="form-input dec-input" min="1" max="5" step="1" bind:value={decOffset} />
       </div>
 
       <div class="coords-section">
@@ -149,11 +227,7 @@
       </div>
 
       <div class="action-row">
-        <button
-          class="btn btn-primary"
-          on:click={start}
-          disabled={running || isRunning}
-        >
+        <button class="btn btn-primary" on:click={start} disabled={running || isRunning}>
           {running ? "Starting…" : "▶ Run Startup Sequence"}
         </button>
         {#if isRunning}
@@ -163,27 +237,88 @@
         {/if}
       </div>
     </div>
-
-    {#if result !== null}
-      <div class="panel-card result-card">
-        <p class="panel-title">Response</p>
-        <pre class="result-pre">{JSON.stringify(result, null, 2)}</pre>
-      </div>
-    {/if}
   </div>
 {/if}
 
 <style>
   .offline-msg { color: var(--ui-muted); font-size: 0.9rem; }
-  .running-banner { margin-bottom: 1rem; }
 
-  .startup-layout {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    max-width: 600px;
+  /* ── Event tiles ─────────────────────────────────────────────────────── */
+  .events-card { margin-bottom: 1rem; }
+
+  .events-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.6rem;
   }
 
+  .event-tile {
+    border-radius: 8px;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid transparent;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-height: 80px;
+  }
+
+  .event-name {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.75;
+  }
+  .event-state {
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-transform: capitalize;
+  }
+  .event-detail {
+    font-size: 0.72rem;
+    opacity: 0.8;
+  }
+  .error-text { color: #fc8181; }
+
+  /* State color variants */
+  .state-idle {
+    background: rgba(255,255,255,0.03);
+    border-color: rgba(255,255,255,0.08);
+    color: var(--ui-muted);
+  }
+  .state-progress {
+    background: rgba(237,184,40,0.12);
+    border-color: rgba(237,184,40,0.35);
+    color: #edb828;
+  }
+  .state-complete {
+    background: rgba(72,187,120,0.12);
+    border-color: rgba(72,187,120,0.35);
+    color: #48bb78;
+  }
+  .state-fail {
+    background: rgba(245,101,101,0.12);
+    border-color: rgba(245,101,101,0.35);
+    color: #f56565;
+  }
+
+  /* Progress bar inside tiles */
+  .progress-bar-wrap {
+    height: 3px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 2px;
+    margin-top: 0.2rem;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: currentColor;
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+
+  /* ── Options form ────────────────────────────────────────────────────── */
+  .startup-layout { max-width: 600px; }
   .options-card { display: flex; flex-direction: column; gap: 0; }
 
   .option-row {
@@ -239,20 +374,10 @@
     flex-wrap: wrap;
   }
 
-  .result-card {}
-  .result-pre {
-    margin: 0;
-    padding: 0.75rem;
-    background: rgba(0,0,0,0.25);
-    border-radius: 6px;
-    border: 1px solid rgba(255,255,255,0.06);
-    font-size: 0.78rem;
-    color: var(--ui-muted);
-    overflow: auto;
-    max-height: 300px;
-    font-family: "SF Mono","Fira Code",monospace;
-    line-height: 1.55;
-    white-space: pre-wrap;
-    word-break: break-all;
+  @media (max-width: 900px) {
+    .events-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 540px) {
+    .events-grid { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
