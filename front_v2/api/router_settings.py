@@ -1,6 +1,10 @@
 from fastapi import APIRouter, HTTPException
 
-from front_v2.device_client import check_api_state, get_device_settings, save_device_settings
+from front_v2.device_client import (
+    check_api_state,
+    get_device_settings,
+    save_device_settings,
+)
 from front_v2.schemas.models import SettingsSaveRequest
 
 router = APIRouter(prefix="/api/v1")

@@ -13,8 +13,12 @@ import time
 import pytest
 
 # Skip entire module at collection time if v2 deps are not installed.
-pytest.importorskip("fastapi", reason="fastapi not installed; run: pip install -e '.[v2]'")
-pytest.importorskip("uvicorn", reason="uvicorn not installed; run: pip install -e '.[v2]'")
+pytest.importorskip(
+    "fastapi", reason="fastapi not installed; run: pip install -e '.[v2]'"
+)
+pytest.importorskip(
+    "uvicorn", reason="uvicorn not installed; run: pip install -e '.[v2]'"
+)
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -44,7 +48,12 @@ FAKE_STATUS = {
 }
 
 FAKE_DEVICE_LIST = [
-    {"device_num": 1, "name": "Seestar Alpha", "ip_address": "127.0.0.1", "is_connected": True}
+    {
+        "device_num": 1,
+        "name": "Seestar Alpha",
+        "ip_address": "127.0.0.1",
+        "is_connected": True,
+    }
 ]
 
 
@@ -54,14 +63,25 @@ def v2_app(monkeypatch):
     import front_v2.device_client as dc
 
     monkeypatch.setattr(dc, "check_api_state", lambda dev_num: True)
-    monkeypatch.setattr(dc, "get_device_state", lambda dev_num: {**FAKE_STATUS, "device_num": dev_num})
+    monkeypatch.setattr(
+        dc, "get_device_state", lambda dev_num: {**FAKE_STATUS, "device_num": dev_num}
+    )
     monkeypatch.setattr(dc, "get_device_list", lambda: FAKE_DEVICE_LIST)
-    monkeypatch.setattr(dc, "get_device_settings", lambda dev_num: {"raw": {}, "stack": {}, "merged": {}})
-    monkeypatch.setattr(dc, "save_device_settings", lambda dev_num, payload: {"set_setting": None})
+    monkeypatch.setattr(
+        dc,
+        "get_device_settings",
+        lambda dev_num: {"raw": {}, "stack": {}, "merged": {}},
+    )
+    monkeypatch.setattr(
+        dc, "save_device_settings", lambda dev_num, payload: {"set_setting": None}
+    )
     monkeypatch.setattr(dc, "method_sync", lambda method, dev_num, **kw: {"ok": True})
-    monkeypatch.setattr(dc, "do_action", lambda action, dev_num, params: {"Value": {"result": {}}})
+    monkeypatch.setattr(
+        dc, "do_action", lambda action, dev_num, params: {"Value": {"result": {}}}
+    )
 
     from front_v2.app import build_app
+
     return build_app()
 
 
@@ -73,6 +93,7 @@ def client(v2_app):
 # ---------------------------------------------------------------------------
 # REST API tests
 # ---------------------------------------------------------------------------
+
 
 def test_list_devices(client):
     r = client.get("/api/v1/devices")
@@ -105,7 +126,9 @@ def test_device_settings_save(client):
 
 
 def test_send_command(client):
-    r = client.post("/api/v1/devices/1/command", json={"method": "get_device_state", "params": {}})
+    r = client.post(
+        "/api/v1/devices/1/command", json={"method": "get_device_state", "params": {}}
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["command"] == "get_device_state"
@@ -115,6 +138,7 @@ def test_send_command(client):
 # ---------------------------------------------------------------------------
 # WebSocket bridge tests
 # ---------------------------------------------------------------------------
+
 
 def test_ws_connect_receives_greeting(client):
     """Client should receive a 'connected' message immediately on connect."""
@@ -153,6 +177,7 @@ def test_ws_fanout(v2_app, monkeypatch):
         # Inject an event directly into the queue — simulates what the pump
         # thread would do after draining get_events().
         import asyncio
+
         loop = bridge._loop
         if loop and not loop.is_closed():
             asyncio.run_coroutine_threadsafe(
@@ -181,6 +206,7 @@ def test_ws_keepalive_ping(client):
 # ---------------------------------------------------------------------------
 # Multiple devices
 # ---------------------------------------------------------------------------
+
 
 def test_separate_ws_per_device(client):
     """WS connections for different dev_nums are independent."""

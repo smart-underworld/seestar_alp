@@ -51,6 +51,7 @@ def get_or_create_queue(device_num: int) -> asyncio.Queue:
 # Pump thread: runs in a daemon thread, drains the sync generator
 # ---------------------------------------------------------------------------
 
+
 def _pump(device_num: int) -> None:
     """Drain telescope.get_seestar_device(device_num).get_events() in a thread."""
     from device import telescope  # local import — avoids circular at module load
@@ -64,6 +65,7 @@ def _pump(device_num: int) -> None:
         except (KeyError, Exception):
             # Device not yet registered — wait and retry.
             import time
+
             time.sleep(1)
             continue
 
@@ -77,14 +79,13 @@ def _pump(device_num: int) -> None:
                 if msg is None:
                     continue
                 try:
-                    _loop.call_soon_threadsafe(
-                        _enqueue_nowait, queue, device_num, msg
-                    )
+                    _loop.call_soon_threadsafe(_enqueue_nowait, queue, device_num, msg)
                 except RuntimeError:
                     break
         except Exception as exc:
             logger.warning("WS bridge: pump error for device %d: %s", device_num, exc)
             import time
+
             time.sleep(1)
 
 
@@ -121,9 +122,9 @@ def _parse_sse_frame(raw: bytes) -> dict[str, Any] | None:
     for line in text.split("\n"):
         line = line.strip()
         if line.startswith("event: "):
-            event_name = line[len("event: "):]
+            event_name = line[len("event: ") :]
         elif line.startswith("data: "):
-            data_val = line[len("data: "):]
+            data_val = line[len("data: ") :]
             # Named-event data lines are plain values, not JSON objects.
             if event_name and not data_val.startswith("{"):
                 return {"type": event_name, "payload": data_val}
@@ -166,6 +167,7 @@ def start_pump(device_num: int) -> None:
 # Async fan-out task: runs inside Uvicorn's event loop
 # ---------------------------------------------------------------------------
 
+
 async def _fanout(device_num: int) -> None:
     """Read from the device queue and broadcast to all connected tabs."""
     queue = get_or_create_queue(device_num)
@@ -202,6 +204,7 @@ async def ensure_fanout(device_num: int) -> None:
 # FastAPI WebSocket endpoint handler
 # ---------------------------------------------------------------------------
 
+
 async def handle_ws(websocket: WebSocket, device_num: int) -> None:
     """Accept a WebSocket connection and keep it alive until the client disconnects."""
     await websocket.accept()
@@ -214,10 +217,14 @@ async def handle_ws(websocket: WebSocket, device_num: int) -> None:
     logger.debug("WS bridge: client connected for device %d", device_num)
 
     # Send a greeting so the client knows it's live.
-    await websocket.send_text(json.dumps({
-        "type": "connected",
-        "payload": {"device_num": device_num},
-    }))
+    await websocket.send_text(
+        json.dumps(
+            {
+                "type": "connected",
+                "payload": {"device_num": device_num},
+            }
+        )
+    )
 
     try:
         # Keep the connection open; client sends pings or nothing.

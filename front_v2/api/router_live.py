@@ -67,6 +67,7 @@ def move_focus(dev_num: int, body: FocusRequest):
         {"method": "move_focuser", "params": {"step": new_pos, "ret_step": True}},
     )
     import pydash
+
     pos = pydash.get(result, "Value.result.step", new_pos)
     return {"position": pos}
 
