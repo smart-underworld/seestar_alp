@@ -14,6 +14,65 @@
   let stopping = false;
   let error = "";
 
+  // ── PA Refinement ─────────────────────────────────────────────────────────
+  let paOpen = false;
+  let paRunning = false;
+  let paStopping = false;
+  let paError = "";
+  let paAltErr = 0.0;
+  let paAzErr  = 0.0;
+  let paMaxDeg = 5.0;          // slider value
+  let paGardenEl: HTMLDivElement | null = null;
+  let paPollTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function paBallPos(errAlt: number, errAz: number, max: number, size: number) {
+    const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
+    const x = Math.round(size / 2 * (1 + clamp(errAz, -max, max) / max));
+    const y = Math.round(size / 2 * (1 - clamp(errAlt, -max, max) / max));
+    return { x, y };
+  }
+
+  async function paPoll() {
+    if (!$isConnected || !paRunning) return;
+    try {
+      const d = await api.devices.paRefine.data($activeDevNum);
+      paAltErr = d.error_alt;
+      paAzErr  = d.error_az;
+    } catch { /* ignore */ }
+    paPollTimer = setTimeout(paPoll, 1000);
+  }
+
+  async function paStart() {
+    paError = "";
+    try {
+      const r = await api.devices.paRefine.start($activeDevNum);
+      if ((r as { ok?: boolean }).ok === false) {
+        paError = (r as { error?: string }).error ?? "Failed to start";
+        return;
+      }
+      paRunning = true;
+      paPoll();
+    } catch (e) {
+      paError = String(e);
+    }
+  }
+
+  async function paStop() {
+    paStopping = true;
+    if (paPollTimer) { clearTimeout(paPollTimer); paPollTimer = null; }
+    try {
+      await api.devices.paRefine.stop($activeDevNum);
+    } catch { /* ignore */ } finally {
+      paRunning  = false;
+      paStopping = false;
+    }
+  }
+
+  onDestroy(() => {
+    if (pollTimer)   clearTimeout(pollTimer);
+    if (paPollTimer) clearTimeout(paPollTimer);
+  });
+
   $: s = $activeDeviceStatus;
   $: schedState = (s as { schedule_state?: string })?.schedule_state ?? "";
   $: isRunning = schedState === "running" || schedState === "working";
@@ -53,7 +112,7 @@
     events = {};
   }
 
-  onDestroy(() => { if (pollTimer) clearTimeout(pollTimer); });
+  // onDestroy is defined below with PA cleanup included
 
   function stateClass(ev: EventState | undefined): string {
     if (!ev?.state || ev.state === "idle") return "state-idle";
@@ -204,12 +263,37 @@
         </div>
       </div>
 
-      <div class="option-row">
+      <div class="option-row option-row-dec">
         <div class="option-meta">
-          <div class="option-label">Dec Offset (1–5)</div>
-          <div class="option-help">Declination offset index for EQ polar alignment</div>
+          <div class="option-label">Dec Offset</div>
+          <div class="option-help">Declination arm position for EQ polar alignment</div>
         </div>
-        <input type="number" class="form-input dec-input" min="1" max="5" step="1" bind:value={decOffset} />
+      </div>
+      <div class="dec-picker">
+        <div class="dec-arc-wrap">
+          <img
+            class="dec-scope"
+            src="/S50.png"
+            alt="telescope"
+            style="transform: translateX(-50%) rotate({(decOffset - 1) * 30 - 60}deg)"
+          />
+          {#each [1,2,3,4,5] as pos}
+            {@const angle = (pos - 1) * 30 - 60}
+            {@const rad = angle * Math.PI / 180}
+            {@const x = 50 + 45 * Math.sin(rad)}
+            {@const y = 60 - 45 * Math.cos(rad)}
+            <label
+              class="dec-option"
+              class:dec-option-selected={decOffset === pos}
+              style="left:{x}%; top:{y}%"
+            >
+              <input type="radio" bind:group={decOffset} value={pos} />
+              <span>{pos}</span>
+            </label>
+          {/each}
+          <span class="dec-dir dec-dir-left">← S</span>
+          <span class="dec-dir dec-dir-right">N →</span>
+        </div>
       </div>
 
       <div class="coords-section">
@@ -237,6 +321,70 @@
         {/if}
       </div>
     </div>
+  </div>
+
+  <!-- ── PA Refinement ────────────────────────────────────────────────────── -->
+  <div class="panel-card pa-card">
+    <button class="pa-header" on:click={() => paOpen = !paOpen} aria-expanded={paOpen}>
+      <span class="panel-title pa-title">PA Refinement</span>
+      <span class="pa-chevron" class:pa-chevron-open={paOpen}>▶</span>
+    </button>
+
+    {#if paOpen}
+      <p class="pa-desc">Use the plate-solve loop to measure and guide polar alignment corrections.</p>
+
+      {#if paError}<div class="alert alert-error">{paError}</div>{/if}
+
+      <div class="pa-body">
+        <!-- garden -->
+        <div class="pa-garden" bind:this={paGardenEl}>
+          {#if paGardenEl}
+            {@const sz = paGardenEl.clientWidth}
+            {@const pos = paBallPos(paAltErr, paAzErr, paMaxDeg, sz)}
+            <div class="pa-ball" style="left:{pos.x}px; top:{pos.y}px"></div>
+          {:else}
+            <div class="pa-ball" style="left:50%;top:50%"></div>
+          {/if}
+          <div class="pa-circle" style="width:10%;height:10%"></div>
+          <div class="pa-circle" style="width:30%;height:30%"></div>
+          <div class="pa-circle" style="width:80%;height:80%"></div>
+          <div class="pa-crosshair-h"></div>
+          <div class="pa-crosshair-v"></div>
+        </div>
+
+        <!-- readouts + controls -->
+        <div class="pa-controls">
+          <div class="pa-errors">
+            <div class="pa-err-row"><span class="pa-err-label">Alt error</span><span class="pa-err-val">{paAltErr.toFixed(3)}°</span></div>
+            <div class="pa-err-row"><span class="pa-err-label">Az error</span><span class="pa-err-val">{paAzErr.toFixed(3)}°</span></div>
+          </div>
+
+          <div class="pa-slider-row">
+            <label class="pa-slider-label" for="pa-slider">Zoom (max ±{paMaxDeg.toFixed(1)}°)</label>
+            <input id="pa-slider" type="range" min="0.1" max="10" step="0.1" bind:value={paMaxDeg} class="pa-slider" />
+          </div>
+
+          <div class="pa-actions">
+            {#if !paRunning}
+              <button class="btn btn-primary" on:click={paStart}>▶ Start</button>
+            {:else}
+              <button class="btn btn-danger" on:click={paStop} disabled={paStopping}>
+                {paStopping ? "Stopping…" : "⏹ Stop"}
+              </button>
+            {/if}
+          </div>
+
+          <div class="pa-instructions">
+            <ol>
+              <li>Press Start to begin the plate-solve loop.</li>
+              <li>Adjust zoom so the dot is visible within the garden.</li>
+              <li>Gradually adjust alt/az on your wedge; wait for the dot to move between adjustments.</li>
+              <li>When satisfied, press Stop.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    {/if}
   </div>
 {/if}
 
@@ -341,7 +489,73 @@
   }
   .radio-label input { accent-color: var(--ui-primary); cursor: pointer; }
 
-  .dec-input { width: 80px; text-align: center; flex-shrink: 0; }
+  /* Dec offset arc picker */
+  .option-row-dec { border-bottom: none; padding-bottom: 0; }
+
+  .dec-picker {
+    padding: 0.5rem 0 0.75rem;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .dec-arc-wrap {
+    position: relative;
+    width: 280px;
+    height: 200px;
+  }
+
+  .dec-scope {
+    position: absolute;
+    width: 36px;
+    height: auto;
+    left: 50%;
+    top: 42%;
+    transform-origin: 50% 90%;
+    transform: translateX(-50%) rotate(-60deg);
+    transition: transform 0.3s ease;
+    pointer-events: none;
+    filter: brightness(1.4);
+  }
+
+  .dec-option {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    user-select: none;
+  }
+  .dec-option input[type="radio"] { display: none; }
+  .dec-option span {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ui-muted);
+    background: rgba(255,255,255,0.05);
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+  .dec-option-selected span {
+    border-color: var(--ui-primary);
+    background: var(--ui-primary);
+    color: #fff;
+  }
+
+  .dec-dir {
+    position: absolute;
+    bottom: 8px;
+    font-size: 0.72rem;
+    color: var(--ui-muted);
+    user-select: none;
+  }
+  .dec-dir-left  { left: 4px; }
+  .dec-dir-right { right: 4px; }
 
   .coords-section {
     margin-top: 1rem;
@@ -380,4 +594,108 @@
   @media (max-width: 540px) {
     .events-grid { grid-template-columns: repeat(2, 1fr); }
   }
+
+  /* ── PA Refinement ───────────────────────────────────────────────────── */
+  .pa-card { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; }
+
+  .pa-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: inherit;
+  }
+  .pa-title { margin: 0; }
+  .pa-chevron {
+    font-size: 0.65rem;
+    color: var(--ui-muted);
+    transition: transform 0.2s ease;
+    transform: rotate(0deg);
+  }
+  .pa-chevron-open { transform: rotate(90deg); }
+
+  .pa-desc { font-size: 0.8rem; color: var(--ui-muted); margin: 0; }
+
+  .pa-body {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .pa-garden {
+    position: relative;
+    width: 360px;
+    height: 360px;
+    flex-shrink: 0;
+    border: 2px solid rgba(255,255,255,0.15);
+    border-radius: 10px;
+    overflow: visible;
+  }
+  .pa-crosshair-h {
+    position: absolute;
+    top: 50%; left: 0; width: 100%; height: 0;
+    border-top: 1px solid rgba(255,255,255,0.25);
+  }
+  .pa-crosshair-v {
+    position: absolute;
+    top: 0; left: 50%; width: 0; height: 100%;
+    border-left: 1px solid rgba(255,255,255,0.25);
+  }
+  .pa-circle {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 50%;
+  }
+  .pa-ball {
+    position: absolute;
+    width: 12px; height: 12px;
+    background: #fc8181;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+    transition: left 0.3s ease, top 0.3s ease;
+  }
+
+  .pa-controls {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 200px;
+  }
+
+  .pa-errors {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .pa-err-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+    font-size: 0.85rem;
+  }
+  .pa-err-label { color: var(--ui-muted); min-width: 5rem; }
+  .pa-err-val   { font-weight: 600; color: var(--ui-body); font-variant-numeric: tabular-nums; }
+
+  .pa-slider-row { display: flex; flex-direction: column; gap: 0.3rem; }
+  .pa-slider-label { font-size: 0.75rem; color: var(--ui-muted); }
+  .pa-slider { width: 100%; accent-color: var(--ui-primary); cursor: pointer; }
+
+  .pa-actions { display: flex; gap: 0.75rem; }
+
+  .pa-instructions {
+    font-size: 0.75rem;
+    color: var(--ui-muted);
+    line-height: 1.5;
+  }
+  .pa-instructions ol { margin: 0; padding-left: 1.1rem; }
+  .pa-instructions li { margin-bottom: 0.2rem; }
 </style>

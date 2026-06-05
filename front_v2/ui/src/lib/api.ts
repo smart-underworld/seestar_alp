@@ -172,6 +172,14 @@ export const api = {
       start: (devNum: number, body: MosaicRequest) =>
         post(`/api/v1/devices/${devNum}/mosaic/start`, body),
     },
+    paRefine: {
+      start: (devNum: number) =>
+        post<{ ok?: boolean; error?: string }>(`/api/v1/devices/${devNum}/pa-refine`, { action: "start" }),
+      stop: (devNum: number) =>
+        post<Record<string, unknown>>(`/api/v1/devices/${devNum}/pa-refine`, { action: "stop" }),
+      data: (devNum: number) =>
+        post<{ error_az: number; error_alt: number }>(`/api/v1/devices/${devNum}/pa-refine`, { action: "data" }),
+    },
     search: (devNum: number, q: string) =>
       get<{ query: string; result: unknown }>(`/api/v1/devices/${devNum}/search?q=${encodeURIComponent(q)}`),
     schedule: {

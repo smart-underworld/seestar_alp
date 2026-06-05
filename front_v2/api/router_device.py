@@ -79,6 +79,31 @@ def get_events(dev_num: int):
     return merged
 
 
+@router.post("/devices/{dev_num}/pa-refine")
+def pa_refine(dev_num: int, body: dict[str, Any] = Body(default={})):
+    if not check_api_state(dev_num):
+        raise HTTPException(status_code=503, detail="Device not connected")
+    action = body.get("action")
+    if action == "start":
+        result = do_action("start_plate_solve_loop", dev_num, {})
+        value = result.get("Value", {}) if result else {}
+        return value
+    elif action == "stop":
+        result = do_action("stop_plate_solve_loop", dev_num, {})
+        value = result.get("Value", {}) if result else {}
+        return value
+    elif action == "data":
+        result = do_action("get_pa_error", dev_num, {})
+        if not result:
+            raise HTTPException(status_code=502, detail="No data from device")
+        value = result.get("Value", {})
+        return {
+            "error_az": value.get("pa_error_az", 0.0),
+            "error_alt": value.get("pa_error_alt", 0.0),
+        }
+    raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
+
+
 @router.post("/devices/{dev_num}/action")
 def raw_action(dev_num: int, action: str, parameters: dict = {}):
     if not check_api_state(dev_num):
