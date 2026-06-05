@@ -214,16 +214,26 @@ def get_device_state(dev_num: int) -> dict:
     }
 
 
+def _method_sync_failed(result: Any) -> bool:
+    """Return True when method_sync returned an error-response dict rather than real data."""
+    return isinstance(result, dict) and result.get("status") == "error"
+
+
 def get_device_settings(dev_num: int) -> dict:
     """
     Return merged settings dict.  Supports both get_setting and get_stack_setting
     read paths per AGENTS.md compatibility requirement.
     """
     settings_result = method_sync("get_setting", dev_num) or {}
+    if _method_sync_failed(settings_result):
+        settings_result = {}
+
     stack_settings_result = method_sync("get_stack_setting", dev_num) or {}
 
     stack_settings_error = (
-        not isinstance(stack_settings_result, dict) or "error" in stack_settings_result
+        not isinstance(stack_settings_result, dict)
+        or "error" in stack_settings_result
+        or _method_sync_failed(stack_settings_result)
     )
 
     merged_stack = {}
@@ -233,10 +243,15 @@ def get_device_settings(dev_num: int) -> dict:
     if not stack_settings_error and isinstance(stack_settings_result, dict):
         merged_stack.update(stack_settings_result)
 
+    merged = {
+        k: v
+        for k, v in {**settings_result, **merged_stack}.items()
+        if isinstance(v, (bool, int, float, str, type(None)))
+    }
     return {
         "raw": settings_result,
         "stack": merged_stack,
-        "merged": {**settings_result, **merged_stack},
+        "merged": merged,
     }
 
 

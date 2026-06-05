@@ -15,8 +15,17 @@
   let saving = false;
   let saved = false;
   let error = "";
+  let submitted = false;
 
   $: isDirty = config !== null && JSON.stringify(config) !== baseline;
+  $: baselineObj = baseline ? (JSON.parse(baseline) as ConfigData) : null;
+
+  function isFieldDirty(section: keyof ConfigData, key: string, current: unknown): boolean {
+    if (!baselineObj) return false;
+    const sec = baselineObj[section];
+    if (!sec || typeof sec !== "object" || Array.isArray(sec)) return false;
+    return (sec as Record<string, unknown>)[key] !== current;
+  }
 
   const NETWORKING_LABELS: Record<string, string> = {
     ip_address: "Bind IP Address",
@@ -115,6 +124,7 @@
 
   async function save() {
     if (!config) return;
+    submitted = true;
     saving = true;
     error = "";
     try {
@@ -178,11 +188,13 @@
   {#if error}<div class="alert alert-error">{error}</div>{/if}
   {#if saved}<div class="alert alert-success">Saved. Fields marked ↺ require a service restart.</div>{/if}
 
+  <div class:was-validated={submitted}>
+
   <!-- Networking -->
   <div class="panel-card section-card">
     <p class="group-title">Networking</p>
     {#each Object.entries(config.networking) as [key, val]}
-      <div class="setting-row">
+      <div class="setting-row" class:row--dirty={isFieldDirty("networking", key, val)}>
         <div class="setting-meta">
           <div class="setting-name">
             {NETWORKING_LABELS[key] ?? key}
@@ -202,11 +214,11 @@
               </label>
             </div>
           {:else if NUMBER_FIELDS.has(key)}
-            <input type="number" class="form-input narrow"
+            <input type="number" class="form-input narrow" required
               value={Number(val)}
               on:input={(e) => setField("networking", key, +e.currentTarget.value)} />
           {:else}
-            <input type="text" class="form-input narrow"
+            <input type="text" class="form-input narrow" required
               value={String(val ?? "")}
               on:input={(e) => setField("networking", key, e.currentTarget.value)} />
           {/if}
@@ -219,7 +231,7 @@
   <div class="panel-card section-card">
     <p class="group-title">Web UI</p>
     {#each Object.entries(config.webui) as [key, val]}
-      <div class="setting-row">
+      <div class="setting-row" class:row--dirty={isFieldDirty("webui", key, val)}>
         <div class="setting-meta">
           <div class="setting-name">
             {WEBUI_LABELS[key] ?? key}
@@ -247,11 +259,11 @@
               {/each}
             </select>
           {:else if NUMBER_FIELDS.has(key)}
-            <input type="number" class="form-input narrow"
+            <input type="number" class="form-input narrow" required
               value={Number(val)}
               on:input={(e) => setField("webui", key, +e.currentTarget.value)} />
           {:else}
-            <input type="text" class="form-input narrow"
+            <input type="text" class="form-input narrow" required
               value={String(val ?? "")}
               on:input={(e) => setField("webui", key, e.currentTarget.value)} />
           {/if}
@@ -264,7 +276,7 @@
   <div class="panel-card section-card">
     <p class="group-title">Logging</p>
     {#each Object.entries(config.logging) as [key, val]}
-      <div class="setting-row">
+      <div class="setting-row" class:row--dirty={isFieldDirty("logging", key, val)}>
         <div class="setting-meta">
           <div class="setting-name">{LOGGING_LABELS[key] ?? key}</div>
         </div>
@@ -289,11 +301,11 @@
               {/each}
             </select>
           {:else if NUMBER_FIELDS.has(key)}
-            <input type="number" class="form-input narrow"
+            <input type="number" class="form-input narrow" required
               value={Number(val)}
               on:input={(e) => setField("logging", key, +e.currentTarget.value)} />
           {:else}
-            <input type="text" class="form-input narrow"
+            <input type="text" class="form-input narrow" required
               value={String(val ?? "")}
               on:input={(e) => setField("logging", key, e.currentTarget.value)} />
           {/if}
@@ -307,7 +319,7 @@
     <p class="group-title">Seestar Init Defaults</p>
     <p class="section-note">Applied when a new telescope session starts.</p>
     {#each Object.entries(config.init) as [key, val]}
-      <div class="setting-row">
+      <div class="setting-row" class:row--dirty={isFieldDirty("init", key, val)}>
         <div class="setting-meta">
           <div class="setting-name">{INIT_LABELS[key] ?? key}</div>
         </div>
@@ -324,11 +336,11 @@
               </label>
             </div>
           {:else if NUMBER_FIELDS.has(key)}
-            <input type="number" class="form-input narrow"
+            <input type="number" class="form-input narrow" required
               value={Number(val)}
               on:input={(e) => setField("init", key, +e.currentTarget.value)} />
           {:else}
-            <input type="text" class="form-input narrow"
+            <input type="text" class="form-input narrow" required
               value={String(val ?? "")}
               on:input={(e) => setField("init", key, e.currentTarget.value)} />
           {/if}
@@ -336,6 +348,8 @@
       </div>
     {/each}
   </div>
+
+  </div> <!-- end was-validated wrapper -->
 
   <!-- Devices (read-only) -->
   <div class="panel-card section-card">
@@ -417,10 +431,22 @@
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 0.6rem 0;
+    padding: 0.6rem 0.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    border-left: 2px solid transparent;
+    margin: 0 -0.5rem;
+    border-radius: 2px;
+    transition: border-color 0.15s, background 0.15s;
   }
   .setting-row:last-child { border-bottom: none; }
+  .row--dirty {
+    border-left-color: var(--ui-warning);
+    background: rgba(246, 201, 14, 0.05);
+  }
+  .was-validated .form-input:invalid {
+    border-color: var(--ui-danger);
+    box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.15);
+  }
 
   .setting-meta { flex: 1; min-width: 0; }
   .setting-name {

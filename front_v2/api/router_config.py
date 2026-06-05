@@ -4,8 +4,14 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException
 
 from device.config import Config  # type: ignore
+from device.version import Version  # type: ignore
 
 router = APIRouter(prefix="/api/v1")
+
+
+@router.get("/version")
+def get_version():
+    return {"version": Version.app_version()}
 
 
 @router.get("/config")

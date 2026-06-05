@@ -67,14 +67,24 @@
   const groupFor = settingGroupFor;
   const GROUP_ORDER = ["Imaging", "Environment", "Mount & Focus", "General"];
 
+  // Known per-field constraints (min/max) matching the classic UI
+  const CONSTRAINTS: Record<string, { min?: number; max?: number }> = {
+    exp_ms_stack_l:        { min: 5,  max: 90000 },
+    exp_ms_continuous:     { min: 5,  max: 90000 },
+    stack_dither_pix:      { min: 10, max: 200   },
+    stack_dither_interval: { min: 1              },
+  };
+
   let merged: Record<string, unknown> = {};
   let baseline = "";
   let saving = false;
   let saved = false;
   let error = "";
   let loading = true;
+  let submitted = false;
 
   $: isDirty = JSON.stringify(merged) !== baseline;
+  $: baselineObj = baseline ? (JSON.parse(baseline) as Record<string, unknown>) : {};
 
   async function load() {
     loading = true;
@@ -91,6 +101,7 @@
   }
 
   async function save() {
+    submitted = true;
     saving = true;
     error = "";
     try {
@@ -149,6 +160,7 @@
 
   {#if saved}<div class="alert alert-success">Settings saved successfully.</div>{/if}
 
+  <div class:was-validated={submitted}>
   {#each GROUP_ORDER as group}
     {@const entries = Object.entries(merged).filter(([k]) => groupFor(k) === group)}
     {#if entries.length > 0}
@@ -156,7 +168,8 @@
         <p class="group-title">{group}</p>
         <div class="settings-table">
           {#each entries as [key, val]}
-            <div class="setting-row">
+            {@const isDirtyRow = baselineObj[key] !== undefined && val !== baselineObj[key]}
+            <div class="setting-row" class:row--dirty={isDirtyRow}>
               <div class="setting-meta">
                 <div class="setting-name">{FRIENDLY[key] ?? key}</div>
                 {#if HELPER[key]}
@@ -184,6 +197,9 @@
                     type="number"
                     class="form-input narrow"
                     value={val}
+                    required
+                    min={CONSTRAINTS[key]?.min}
+                    max={CONSTRAINTS[key]?.max}
                     on:input={(e) => setVal(key, +e.currentTarget.value)}
                   />
                 {:else}
@@ -191,6 +207,7 @@
                     type="text"
                     class="form-input narrow"
                     value={String(val ?? "")}
+                    required
                     on:input={(e) => setVal(key, e.currentTarget.value)}
                   />
                 {/if}
@@ -201,6 +218,7 @@
       </div>
     {/if}
   {/each}
+  </div>
 
   <div class="save-footer">
     <button class="btn btn-primary" on:click={save} disabled={saving || !isDirty}>
@@ -256,10 +274,22 @@
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 0.65rem 0;
+    padding: 0.65rem 0.5rem 0.65rem 0.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    border-left: 2px solid transparent;
+    margin: 0 -0.5rem;
+    border-radius: 2px;
+    transition: border-color 0.15s, background 0.15s;
   }
   .setting-row:last-child { border-bottom: none; }
+  .row--dirty {
+    border-left-color: var(--ui-warning);
+    background: rgba(246, 201, 14, 0.05);
+  }
+  .was-validated .form-input:invalid {
+    border-color: var(--ui-danger);
+    box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.15);
+  }
 
   .setting-meta { flex: 1; min-width: 0; }
   .setting-name {

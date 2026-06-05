@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { activeDevNum } from "../lib/stores/deviceStore";
 
   let description = `Please describe your problem in as much detail as you can provide.
@@ -7,6 +8,14 @@ Reproduction steps and the times issues occurred are helpful.`;
   let includeSeestarLogs = false;
   let generating = false;
   let error = "";
+  let version = "";
+
+  onMount(async () => {
+    try {
+      const res = await fetch("/api/v1/version");
+      if (res.ok) version = (await res.json()).version ?? "";
+    } catch { /* non-fatal */ }
+  });
 
   async function downloadBundle() {
     generating = true;
@@ -125,6 +134,10 @@ Reproduction steps and the times issues occurred are helpful.`;
 
 </div>
 
+{#if version}
+  <p class="version-line">Seestar ALP {version}</p>
+{/if}
+
 <style>
   .support-grid {
     display: grid;
@@ -188,4 +201,12 @@ Reproduction steps and the times issues occurred are helpful.`;
   }
 
   .bundle-btn { width: 100%; justify-content: center; }
+
+  .version-line {
+    margin-top: 1.5rem;
+    font-size: 0.75rem;
+    color: var(--ui-muted);
+    opacity: 0.6;
+    text-align: center;
+  }
 </style>
