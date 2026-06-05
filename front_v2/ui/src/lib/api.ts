@@ -69,7 +69,7 @@ export interface DeviceStatus {
 
 export interface ScheduleItem {
   action: string;
-  params: Record<string, unknown>;
+  params: unknown;  // dict for most actions; list (e.g. [2]) for set_wheel_position
   schedule_item_id: string;
   state?: string;
 }
@@ -172,12 +172,14 @@ export const api = {
       start: (devNum: number, body: MosaicRequest) =>
         post(`/api/v1/devices/${devNum}/mosaic/start`, body),
     },
+    search: (devNum: number, q: string) =>
+      get<{ query: string; result: unknown }>(`/api/v1/devices/${devNum}/search?q=${encodeURIComponent(q)}`),
     schedule: {
       get: (devNum: number) => get<ScheduleData>(`/api/v1/devices/${devNum}/schedule`),
       clear: (devNum: number) => del(`/api/v1/devices/${devNum}/schedule`),
-      addItem: (devNum: number, action: string, params: Record<string, unknown> = {}) =>
+      addItem: (devNum: number, action: string, params: Record<string, unknown> | unknown[] = {}) =>
         post(`/api/v1/devices/${devNum}/schedule/item`, { action, params }),
-      insertItem: (devNum: number, action: string, params: Record<string, unknown>, before_id: string) =>
+      insertItem: (devNum: number, action: string, params: Record<string, unknown> | unknown[], before_id: string) =>
         post(`/api/v1/devices/${devNum}/schedule/item/insert`, { action, params, before_id }),
       deleteItem: (devNum: number, itemId: string) =>
         del(`/api/v1/devices/${devNum}/schedule/item/${encodeURIComponent(itemId)}`),

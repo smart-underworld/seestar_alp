@@ -8,8 +8,7 @@
   // ---- Action definitions -----------------------------------------------
 
   type ActionGroup = "observation" | "setup" | "timing" | "control";
-
-  type FieldType = "bool" | "int" | "float" | "text" | "time" | "range";
+  type FieldType = "bool" | "int" | "float" | "text" | "time" | "range" | "select";
 
   interface FieldDef {
     key: string;
@@ -20,6 +19,7 @@
     max?: number;
     step?: number;
     placeholder?: string;
+    options?: string[];
   }
 
   interface ActionDef {
@@ -27,17 +27,34 @@
     label: string;
     group: ActionGroup;
     fields: FieldDef[];
+    apiAction?: string;  // device-side action name when different from key
   }
+
+  // Fields shared by both Mosaic and Image actions
+  const MOSAIC_BASE_FIELDS: FieldDef[] = [
+    { key: "target_name",      label: "Target Name",        type: "text",   default: "",      placeholder: "e.g. M42" },
+    { key: "ra",               label: "RA",                 type: "text",   default: "",      placeholder: "e.g. 05h35m17.3s" },
+    { key: "dec",              label: "Dec",                type: "text",   default: "",      placeholder: "e.g. -05d23m28s" },
+    { key: "is_j2000",         label: "J2000 Coords",       type: "bool",   default: true },
+    { key: "panel_time_sec",   label: "Panel Time (s)",     type: "int",    default: 3600,    min: 60, max: 86400, placeholder: "e.g. 3600 = 1h" },
+    { key: "gain",             label: "Gain",               type: "int",    default: 80,      min: 0, max: 100 },
+    { key: "is_use_lp_filter", label: "LP Filter",          type: "bool",   default: false },
+    { key: "is_use_autofocus", label: "Auto Focus",         type: "bool",   default: true },
+    { key: "num_tries",        label: "Number of Retries",  type: "int",    default: 1,       min: 1, max: 10 },
+    { key: "retry_wait_s",     label: "Retry Delay (s)",    type: "int",    default: 300,     min: 0, max: 3600 },
+    { key: "stack_type",       label: "Stack Type (exp.)",  type: "select", default: "DeepSky", options: ["DeepSky", "SolarSystem", "MilkyWay"] },
+  ];
 
   const ACTION_DEFS: ActionDef[] = [
     {
       key: "startup",
       label: "Startup",
       group: "setup",
+      apiAction: "start_up_sequence",
       fields: [
-        { key: "polar_align", label: "Polar Align", type: "bool", default: true },
-        { key: "auto_focus",  label: "Auto Focus",  type: "bool", default: true },
-        { key: "dark_frames", label: "Dark Frames", type: "bool", default: false },
+        { key: "3ppa",        label: "Polar Align (3PPA)", type: "bool", default: true },
+        { key: "auto_focus",  label: "Auto Focus",          type: "bool", default: true },
+        { key: "dark_frames", label: "Dark Frames",          type: "bool", default: false },
       ],
     },
     {
@@ -45,64 +62,67 @@
       label: "Auto Focus",
       group: "setup",
       fields: [
-        { key: "auto_focus_rounds", label: "Rounds", type: "int", default: 1, min: 1, max: 10 },
+        { key: "try_count", label: "Rounds", type: "int", default: 1, min: 1, max: 10 },
       ],
     },
     {
-      key: "start_mosaic",
-      label: "Start Mosaic",
-      group: "observation",
-      fields: [
-        { key: "target_name",           label: "Target Name",            type: "text",  default: "",    placeholder: "e.g. M42" },
-        { key: "ra",                    label: "RA",                     type: "text",  default: "",    placeholder: "e.g. 05h35m17.3s" },
-        { key: "dec",                   label: "Dec",                    type: "text",  default: "",    placeholder: "e.g. -05d23m28s" },
-        { key: "is_j2000",              label: "J2000 Coords",           type: "bool",  default: true },
-        { key: "exp_ms",                label: "Exposure (ms)",          type: "int",   default: 10000, min: 100,  max: 60000 },
-        { key: "gain",                  label: "Gain",                   type: "int",   default: 80,    min: 0,    max: 100 },
-        { key: "count",                 label: "Count (0=unlimited)",    type: "int",   default: 0,     min: 0,    max: 9999 },
-        { key: "lp_filter",             label: "LP Filter",              type: "bool",  default: false },
-        { key: "panel_overlap_percent", label: "Panel Overlap %",        type: "int",   default: 30,    min: 0,    max: 60 },
-        { key: "session_time_limit",    label: "Time Limit s (0=none)",  type: "int",   default: 0,     min: 0,    max: 86400 },
-      ],
-    },
-    {
-      key: "focus",
+      key: "adjust_focus",
       label: "Focus Steps",
       group: "setup",
       fields: [
-        { key: "focus_step", label: "Focus Step", type: "int", default: 0, min: -5000, max: 5000 },
+        { key: "steps", label: "Focus Step", type: "int", default: 0, min: -5000, max: 5000 },
       ],
     },
     {
-      key: "exposure",
+      key: "action_set_exposure",
       label: "Exposure",
       group: "setup",
       fields: [
-        { key: "exp_ms", label: "Exposure (ms)", type: "int", default: 10000, min: 100, max: 60000 },
+        { key: "exp", label: "Exposure (ms)", type: "int", default: 10000, min: 100, max: 60000 },
       ],
     },
     {
-      key: "dew_heater",
+      key: "action_set_dew_heater",
       label: "Dew Heater",
       group: "setup",
       fields: [
-        { key: "heater_value", label: "Heater Power (0-100)", type: "range", default: 0, min: 0, max: 100, step: 1 },
+        { key: "heater", label: "Heater Power (0–100)", type: "range", default: 0, min: 0, max: 100, step: 1 },
       ],
     },
     {
       key: "lpf",
       label: "LP Filter",
       group: "setup",
+      apiAction: "set_wheel_position",
       fields: [
         { key: "enable", label: "Enable LP Filter", type: "bool", default: true },
       ],
+    },
+    {
+      key: "start_mosaic",
+      label: "Mosaic",
+      group: "observation",
+      fields: [
+        ...MOSAIC_BASE_FIELDS,
+        { key: "ra_num",                label: "RA Panels",         type: "int",  default: 1,  min: 1, max: 10 },
+        { key: "dec_num",               label: "Dec Panels",        type: "int",  default: 1,  min: 1, max: 10 },
+        { key: "panel_overlap_percent", label: "Panel Overlap %",   type: "int",  default: 30, min: 0, max: 60 },
+        { key: "selected_panels",       label: "Selected Panels",   type: "text", default: "",  placeholder: "e.g. 1;2;4 (empty = all)" },
+      ],
+    },
+    {
+      key: "image",
+      label: "Image (1×1)",
+      group: "observation",
+      apiAction: "start_mosaic",
+      fields: MOSAIC_BASE_FIELDS,
     },
     {
       key: "wait_for",
       label: "Wait For",
       group: "timing",
       fields: [
-        { key: "wait_for", label: "Seconds", type: "int", default: 60, min: 1, max: 86400 },
+        { key: "timer_sec", label: "Seconds", type: "int", default: 60, min: 1, max: 86400 },
       ],
     },
     {
@@ -110,11 +130,11 @@
       label: "Wait Until",
       group: "timing",
       fields: [
-        { key: "wait_until", label: "Time (local)", type: "time", default: "23:00" },
+        { key: "local_time", label: "Time (local)", type: "time", default: "23:00" },
       ],
     },
     {
-      key: "park",
+      key: "scope_park",
       label: "Park",
       group: "control",
       fields: [],
@@ -127,9 +147,18 @@
     },
   ];
 
-  const ACTION_LABELS: Record<string, string> = Object.fromEntries(
-    ACTION_DEFS.map((a) => [a.key, a.label])
-  );
+  // Covers both frontend keys and device action names so the queue renders readable labels
+  const ACTION_LABELS: Record<string, string> = {
+    ...Object.fromEntries(ACTION_DEFS.map((a) => [a.key, a.label])),
+    start_up_sequence:    "Startup",
+    auto_focus:           "Auto Focus",
+    adjust_focus:         "Focus Steps",
+    action_set_exposure:  "Exposure",
+    action_set_dew_heater:"Dew Heater",
+    set_wheel_position:   "LP Filter",
+    scope_park:           "Park",
+    start_mosaic:         "Mosaic",
+  };
 
   const GROUPS: { key: ActionGroup; label: string }[] = [
     { key: "observation", label: "Observation" },
@@ -138,9 +167,10 @@
     { key: "control",     label: "Control" },
   ];
 
+  const FEDERATION_MODES = ["by_time", "by_panel", "duplicate"];
+
   // ---- Component state --------------------------------------------------
 
-  // Queue items from device — each must have a unique `id` for dndzone
   type DndItem = ScheduleItem & { id: string };
 
   let items: DndItem[] = [];
@@ -151,11 +181,19 @@
   let reordering = false;
   let confirmClear = false;
 
-  // Action library
   let selectedAction = "";
   let formValues: Record<string, unknown> = {};
 
-  // Auto-refresh interval handle
+  // Object search (mosaic / image forms only)
+  let searchQuery = "";
+  let searching = false;
+  let searchError = "";
+  let searchResult: Record<string, unknown> | null = null;
+
+  // Federation settings (device 0 only, mosaic / image)
+  let federationMode = "by_time";
+  let maxDevices = 4;
+
   let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
   // ---- Helpers ----------------------------------------------------------
@@ -168,6 +206,9 @@
     const def = getActionDef(actionKey);
     if (!def) return;
     formValues = Object.fromEntries(def.fields.map((f) => [f.key, f.default]));
+    searchQuery = "";
+    searchResult = null;
+    searchError = "";
   }
 
   function selectAction(key: string) {
@@ -184,6 +225,10 @@
     formValues = { ...formValues, [key]: value };
   }
 
+  function isMosaicLike(key: string) {
+    return key === "start_mosaic" || key === "image";
+  }
+
   function toDndItems(raw: ScheduleItem[]): DndItem[] {
     return raw.map((item) => ({ ...item, id: item.schedule_item_id }));
   }
@@ -198,12 +243,53 @@
     return "state-muted";
   }
 
+  function hasParams(item: ScheduleItem): boolean {
+    const p = item.params;
+    if (Array.isArray(p)) return (p as unknown[]).length > 0;
+    if (!p || typeof p !== "object") return false;
+    return Object.keys(p as object).length > 0;
+  }
+
   function paramSummary(item: ScheduleItem): string {
-    const p = item.params ?? {};
-    const entries = Object.entries(p)
+    const p = item.params;
+    if (Array.isArray(p)) return `[${(p as unknown[]).join(", ")}]`;
+    if (!p || typeof p !== "object") return "";
+    const entries = Object.entries(p as Record<string, unknown>)
       .filter(([, v]) => v !== null && v !== undefined && v !== "")
       .slice(0, 4);
     return entries.map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("  ·  ");
+  }
+
+  // ---- Object search ---------------------------------------------------
+
+  async function doSearch() {
+    if (!searchQuery.trim() || searching) return;
+    searching = true;
+    searchError = "";
+    searchResult = null;
+    try {
+      const data = await api.devices.search($activeDevNum, searchQuery.trim());
+      const r = data.result;
+      if (!r || typeof r !== "object") {
+        searchError = "No result found.";
+      } else {
+        searchResult = r as Record<string, unknown>;
+      }
+    } catch (e) {
+      searchError = String(e);
+    } finally {
+      searching = false;
+    }
+  }
+
+  function applySearchResult() {
+    if (!searchResult) return;
+    if (searchResult.ra)  setField("ra",  String(searchResult.ra));
+    if (searchResult.dec) setField("dec", String(searchResult.dec));
+    const name = searchResult.name ?? searchResult.objectName ?? searchQuery;
+    setField("target_name", String(name));
+    searchResult = null;
+    searchQuery = "";
   }
 
   // ---- API actions -------------------------------------------------------
@@ -227,7 +313,33 @@
     adding = true;
     error = "";
     try {
-      await api.devices.schedule.addItem($activeDevNum, selectedAction, formValues as Record<string, unknown>);
+      const def = getActionDef(selectedAction);
+      const action = def?.apiAction ?? selectedAction;
+      let params: Record<string, unknown> | unknown[];
+
+      if (selectedAction === "lpf") {
+        // set_wheel_position expects a list: [2] = LP filter, [1] = IR cut
+        params = formValues.enable ? [2] : [1];
+      } else if (selectedAction === "image") {
+        // Image is a 1×1 mosaic with fixed grid
+        params = {
+          ...formValues,
+          ra_num: 1,
+          dec_num: 1,
+          panel_overlap_percent: 100,
+          selected_panels: "",
+        };
+      } else {
+        params = { ...formValues } as Record<string, unknown>;
+      }
+
+      // Append federation settings for mosaic-like actions when targeting all devices
+      if (isMosaicLike(selectedAction) && $activeDevNum === 0) {
+        (params as Record<string, unknown>).federation_mode = federationMode;
+        (params as Record<string, unknown>).max_devices = maxDevices;
+      }
+
+      await api.devices.schedule.addItem($activeDevNum, action, params);
       await load();
     } catch (e) {
       error = String(e);
@@ -269,12 +381,10 @@
   }
 
   // Drag-and-drop reorder: clear then re-add in new order.
-  // Drag is disabled while schedule is active (working/running).
   async function reorderItems(newOrder: DndItem[]) {
     if (reordering || isActive(schedState)) return;
     reordering = true;
     error = "";
-    // Optimistically show new order immediately
     items = newOrder;
     try {
       await api.devices.schedule.clear($activeDevNum);
@@ -282,10 +392,9 @@
         await api.devices.schedule.addItem(
           $activeDevNum,
           item.action,
-          (item.params ?? {}) as Record<string, unknown>
+          (item.params ?? {}) as Record<string, unknown> | unknown[]
         );
       }
-      // Reload to pick up new schedule_item_ids from the server
       await load();
     } catch (e) {
       error = String(e);
@@ -378,6 +487,43 @@
           <div class="add-form">
             <div class="add-form-title">Configure: {def.label}</div>
 
+            <!-- Object search (mosaic / image only) -->
+            {#if isMosaicLike(selectedAction)}
+              <div class="search-section">
+                <div class="search-label">Object Search</div>
+                <div class="search-row">
+                  <input
+                    type="text"
+                    class="form-input search-input"
+                    placeholder="e.g. M31, Orion Nebula"
+                    bind:value={searchQuery}
+                    on:keydown={(e) => e.key === "Enter" && doSearch()}
+                  />
+                  <button
+                    class="btn btn-secondary btn-sm search-btn"
+                    on:click={doSearch}
+                    disabled={searching || !searchQuery.trim()}
+                    type="button"
+                  >
+                    {searching ? "…" : "Search"}
+                  </button>
+                </div>
+                {#if searchError}
+                  <div class="search-error">{searchError}</div>
+                {/if}
+                {#if searchResult}
+                  <div class="search-result">
+                    <span class="search-result-coords">
+                      RA: {searchResult.ra ?? "?"} · Dec: {searchResult.dec ?? "?"}
+                    </span>
+                    <button class="btn btn-primary btn-sm" type="button" on:click={applySearchResult}>
+                      Use
+                    </button>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+
             {#if def.fields.length === 0}
               <p class="no-params">No parameters required.</p>
             {:else}
@@ -407,6 +553,18 @@
                           /> Off
                         </label>
                       </div>
+
+                    {:else if field.type === "select"}
+                      <select
+                        id="field-{field.key}"
+                        class="form-input"
+                        value={String(formValues[field.key] ?? field.default)}
+                        on:change={(e) => setField(field.key, e.currentTarget.value)}
+                      >
+                        {#each (field.options ?? []) as opt}
+                          <option value={opt}>{opt}</option>
+                        {/each}
+                      </select>
 
                     {:else if field.type === "range"}
                       <div class="range-row">
@@ -456,6 +614,36 @@
                     {/if}
                   </div>
                 {/each}
+              </div>
+            {/if}
+
+            <!-- Federation settings (all-device target only, mosaic/image) -->
+            {#if isMosaicLike(selectedAction) && $activeDevNum === 0}
+              <div class="federation-section">
+                <div class="federation-label">Federation Settings</div>
+                <div class="form-field">
+                  <label class="form-label" for="fed-mode">Mode</label>
+                  <select
+                    id="fed-mode"
+                    class="form-input"
+                    bind:value={federationMode}
+                  >
+                    {#each FEDERATION_MODES as m}
+                      <option value={m}>{m}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label class="form-label" for="fed-max">Max Devices</label>
+                  <input
+                    id="fed-max"
+                    type="number"
+                    class="form-input"
+                    min="1"
+                    max="20"
+                    bind:value={maxDevices}
+                  />
+                </div>
               </div>
             {/if}
 
@@ -575,7 +763,7 @@
                     >{item.state}</span>
                   {/if}
                 </div>
-                {#if item.params && Object.keys(item.params).length > 0}
+                {#if hasParams(item)}
                   <div class="item-params">{paramSummary(item)}</div>
                 {/if}
               </div>
@@ -602,7 +790,7 @@
   /* ---- Two-panel layout ---- */
   .builder-layout {
     display: grid;
-    grid-template-columns: 35% 1fr;
+    grid-template-columns: 38% 1fr;
     gap: 1.25rem;
     align-items: start;
   }
@@ -663,7 +851,61 @@
   .range-input { flex: 1; accent-color: var(--ui-primary); }
   .range-val { font-size: 0.82rem; color: var(--ui-body); min-width: 32px; text-align: right; }
 
-  .add-btn { width: 100%; justify-content: center; }
+  .add-btn { width: 100%; justify-content: center; margin-top: 0.5rem; }
+
+  /* ---- Object search ---- */
+  .search-section {
+    margin-bottom: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    background: rgba(44,177,255,0.04);
+    border: 1px solid rgba(44,177,255,0.12);
+    border-radius: var(--ui-radius-sm);
+  }
+  .search-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ui-primary);
+    margin-bottom: 0.4rem;
+    opacity: 0.8;
+  }
+  .search-row { display: flex; gap: 0.4rem; }
+  .search-input { flex: 1; }
+  .search-btn { flex-shrink: 0; }
+  .search-error { font-size: 0.75rem; color: var(--ui-danger); margin-top: 0.35rem; }
+  .search-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
+    padding: 0.35rem 0.5rem;
+    background: rgba(104,211,145,0.06);
+    border: 1px solid rgba(104,211,145,0.2);
+    border-radius: var(--ui-radius-sm);
+  }
+  .search-result-coords { font-size: 0.75rem; color: var(--ui-muted); }
+
+  /* ---- Federation section ---- */
+  .federation-section {
+    margin: 0.75rem 0;
+    padding: 0.6rem 0.75rem;
+    background: rgba(255,200,50,0.04);
+    border: 1px solid rgba(255,200,50,0.15);
+    border-radius: var(--ui-radius-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .federation-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255,200,50,0.8);
+    margin-bottom: 0.1rem;
+  }
 
   /* ---- Queue Panel ---- */
   .queue-header {
@@ -804,7 +1046,6 @@
   .empty-text { font-weight: 600; color: var(--ui-body); font-size: 0.9rem; }
   .empty-sub  { font-size: 0.78rem; color: var(--ui-muted); line-height: 1.5; max-width: 260px; }
 
-  /* Small button size applied globally so .btn class picks it up too */
   :global(.btn-sm) {
     padding: 0.35rem 0.75rem !important;
     font-size: 0.8rem !important;

@@ -19,7 +19,7 @@ def get_schedule(dev_num: int):
 
 class ScheduleItemRequest(BaseModel):
     action: str
-    params: dict[str, Any] = {}
+    params: Any = None  # dict for most actions; list for set_wheel_position
 
 
 @router.post("/devices/{dev_num}/schedule/item")
@@ -27,14 +27,19 @@ def add_schedule_item(dev_num: int, body: ScheduleItemRequest):
     if not check_api_state(dev_num):
         raise HTTPException(status_code=503, detail="Device not connected")
     result = do_action(
-        "add_schedule_item", dev_num, {"action": body.action, "params": body.params}
+        "add_schedule_item",
+        dev_num,
+        {
+            "action": body.action,
+            "params": body.params if body.params is not None else {},
+        },
     )
     return result or {}
 
 
 class InsertItemRequest(BaseModel):
     action: str
-    params: dict[str, Any] = {}
+    params: Any = None  # dict for most actions; list for set_wheel_position
     before_id: str
 
 
@@ -45,7 +50,11 @@ def insert_schedule_item(dev_num: int, body: InsertItemRequest):
     result = do_action(
         "insert_schedule_item_before",
         dev_num,
-        {"action": body.action, "params": body.params, "before_id": body.before_id},
+        {
+            "action": body.action,
+            "params": body.params if body.params is not None else {},
+            "before_id": body.before_id,
+        },
     )
     return result or {}
 
