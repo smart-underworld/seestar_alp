@@ -119,8 +119,8 @@ export async function initDevices(): Promise<void> {
     const devices = await api.devices.list();
     deviceList.set(devices);
 
-    // Set active device to the first connected one
-    const firstConnected = devices.find((d) => d.is_connected);
+    // Set active device to the first connected real device (skip federation=0)
+    const firstConnected = devices.find((d) => d.device_num !== 0 && d.is_connected);
     if (firstConnected) activeDevNum.set(firstConnected.device_num);
 
     // Start WS connections and status polling (poll does the initial fetch)
