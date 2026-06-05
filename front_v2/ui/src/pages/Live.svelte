@@ -191,8 +191,9 @@
         <div class="panel-card">
           <p class="panel-title">Exposure</p>
           <div class="control-group">
-            <label class="form-label">Exposure: <strong>{expMs} ms</strong></label>
+            <label class="form-label" for="exp-slider">Exposure: <strong>{expMs} ms</strong></label>
             <input
+              id="exp-slider"
               type="range" class="slider" min="100" max="60000" step="100"
               bind:value={expMs}
               on:change={onExpChange}
@@ -200,8 +201,9 @@
             <div class="slider-ticks"><span>100</span><span>30 000</span><span>60 000</span></div>
           </div>
           <div class="control-group">
-            <label class="form-label">Gain: <strong>{gain}</strong></label>
+            <label class="form-label" for="gain-slider">Gain: <strong>{gain}</strong></label>
             <input
+              id="gain-slider"
               type="range" class="slider" min="0" max="300" step="1"
               bind:value={gain}
               on:change={onGainChange}

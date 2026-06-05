@@ -285,7 +285,7 @@
         </div>
 
         <div class="ctrl-cell">
-          <label class="ctrl-label">Grid (X × Y)</label>
+          <label class="ctrl-label" for="astro_mosaic_grid_x">Grid (X × Y)</label>
           <div class="ctrl-row">
             <input type="number" class="form-input" id="astro_mosaic_grid_x" min="1" max="100" value="1"
               on:change={callUpdateMosaic} />
@@ -302,7 +302,7 @@
         </div>
 
         <div class="ctrl-cell">
-          <label class="ctrl-label">Send to Schedule</label>
+          <p class="ctrl-label">Send to Schedule</p>
           <button class="btn btn-secondary" type="button" id="open_send_to_schedule_modal_btn"
             disabled={!$isConnected}>
             📅 Send
@@ -332,8 +332,8 @@
 
 <!-- ── "Send to Schedule" modal ─────────────────────────────────────── -->
 {#if schedModal}
-  <div class="modal-backdrop" on:click={() => (schedModal = false)} role="presentation">
-    <div class="modal-card" on:click|stopPropagation role="dialog" aria-modal="true" aria-label="Send to Schedule">
+  <div class="modal-backdrop" on:click={(e) => { if (e.target === e.currentTarget) schedModal = false; }} role="presentation">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Send to Schedule">
       <div class="modal-header">
         <span class="modal-title">Send Mosaic to Schedule</span>
         <button class="btn-close" on:click={() => (schedModal = false)} aria-label="Close">✕</button>
