@@ -1258,6 +1258,19 @@ def test_auth_warning_absent_when_not_needed(monkeypatch):
     assert "Authentication required" not in html
 
 
+def test_planning_asset_prefetch_hints_in_base_template():
+    context = _minimal_context("home")
+    context["flashed_messages"] = []
+    context["messages"] = []
+    context["version"] = "test"
+    context["now"] = "now"
+    template = front_app.fetch_template("base.html")
+    html = template.render(**context)
+    assert 'rel="prefetch"' in html
+    assert "aladin.cds.unistra.fr" in html
+    assert "AstroMosaicEngine.js" in html
+
+
 # ---------------------------------------------------------------------------
 # Wide angle camera settings – GET (get_device_settings)
 # ---------------------------------------------------------------------------
