@@ -2,55 +2,180 @@
   import { activeDevNum, isConnected } from "../lib/stores/deviceStore";
   import { api } from "../lib/api";
 
-  let method = "";
-  let paramsJson = "{}";
   let result: unknown = null;
   let error = "";
   let loading = false;
+  let loadingKey = "";
 
-  // Quick actions fire immediately and show their result
+  // ── Quick Actions ──────────────────────────────────────────────────────────
   const QUICK_ACTIONS = [
-    { label: "Stop View",       icon: "⏹", action: () => api.devices.command($activeDevNum, "iscope_stop_view", {}) },
-    { label: "Park Scope",      icon: "🏠", action: () => api.devices.command($activeDevNum, "scope_park", {}) },
-    { label: "Auto Focus",      icon: "🔭", action: () => api.devices.command($activeDevNum, "start_auto_focus", {}) },
-    { label: "Stop Scheduler",  icon: "⏸", action: () => api.devices.schedule.setState($activeDevNum, "stop") },
+    { label: "Stop View",        icon: "⏹", cmd: "iscope_stop_view",       params: {} },
+    { label: "Park Scope",       icon: "🏠", cmd: "scope_park",             params: {} },
+    { label: "Auto Focus",       icon: "🔭", cmd: "start_auto_focus",       params: {} },
+    { label: "Stop Scheduler",   icon: "⏸", cmd: null,                      params: {} }, // handled specially
+    { label: "Open to Horizon",  icon: "↔", cmd: "scope_move_to_horizon",  params: {} },
   ];
 
-  let actionLoading: Record<string, boolean> = {};
-
-  async function runAction(label: string, action: () => Promise<unknown>) {
-    actionLoading = { ...actionLoading, [label]: true };
+  async function runQuick(qa: typeof QUICK_ACTIONS[0]) {
+    loadingKey = qa.label;
     error = "";
     try {
-      result = await action();
+      if (qa.label === "Stop Scheduler") {
+        result = await api.devices.schedule.setState($activeDevNum, "stop");
+      } else if (qa.cmd) {
+        result = await api.devices.command($activeDevNum, qa.cmd, qa.params);
+      }
     } catch (e) {
       error = String(e);
     } finally {
-      actionLoading = { ...actionLoading, [label]: false };
+      loadingKey = "";
     }
   }
 
-  // Debug presets just populate the raw command form
-  const DEBUG_PRESETS = [
-    { label: "Get Device State",  method: "get_device_state",     params: "{}" },
-    { label: "Get View State",    method: "get_view_state",       params: "{}" },
-    { label: "Get Setting",       method: "get_setting",          params: "{}" },
-    { label: "Get Stack Setting", method: "get_stack_setting",    params: "{}" },
-    { label: "Get Focus Pos",     method: "get_focuser_position", params: "{}" },
+  // ── Command Groups ─────────────────────────────────────────────────────────
+  interface CmdEntry { label: string; value: string; confirm?: string }
+  interface CmdGroup { label: string; commands: CmdEntry[] }
+
+  const CMD_GROUPS: CmdGroup[] = [
+    {
+      label: "Startup / Shutdown",
+      commands: [
+        { label: "Move to Horizon",  value: "scope_move_to_horizon" },
+        { label: "Park Scope",       value: "scope_park" },
+        { label: "Reboot",           value: "pi_reboot",   confirm: "Reboot the Seestar? This will disconnect all clients." },
+        { label: "Shutdown",         value: "pi_shutdown", confirm: "Shut down the Seestar?" },
+        { label: "Grab Control",     value: "grab_control" },
+        { label: "Release Control",  value: "release_control" },
+      ],
+    },
+    {
+      label: "AutoFocus",
+      commands: [
+        { label: "Start AutoFocus",            value: "start_auto_focus" },
+        { label: "Stop AutoFocus",             value: "stop_auto_focus" },
+        { label: "Get Focuser Position",       value: "get_focuser_position" },
+        { label: "Get Last Focuser Position",  value: "get_last_focuser_position" },
+      ],
+    },
+    {
+      label: "Calibration",
+      commands: [
+        { label: "Create Dark Frames",  value: "start_create_dark" },
+        { label: "Hot Pixel Correction",value: "start_create_hpc" },
+        { label: "Create Flat Frames",  value: "start_create_calib_frame",
+          confirm: "Ensure your Seestar is open and pointing at a white light source." },
+      ],
+    },
+    {
+      label: "Filter / Wheel",
+      commands: [
+        { label: "Use LP Filter",      value: "set_wheel_position_LP" },
+        { label: "Use IR Cut Filter",  value: "set_wheel_position_IR_Cut" },
+        { label: "Use Dark Filter",    value: "set_wheel_position_Dark" },
+        { label: "Get Wheel State",    value: "get_wheel_state" },
+        { label: "Get Wheel Setting",  value: "get_wheel_setting" },
+      ],
+    },
+    {
+      label: "Plate Solve",
+      commands: [
+        { label: "Start Plate Solve",       value: "start_solve" },
+        { label: "Get Current Result",      value: "get_solve_result" },
+        { label: "Get Last Result",         value: "get_last_solve_result" },
+      ],
+    },
+    {
+      label: "Imaging",
+      commands: [
+        { label: "Start Imaging",             value: "iscope_start_stack" },
+        { label: "Stop Imaging",              value: "iscope_stop_view" },
+        { label: "Get View State",            value: "get_view_state" },
+        { label: "Get Stack Info",            value: "get_stack_info" },
+        { label: "Get Image Name Field",      value: "get_img_name_field" },
+        { label: "Get Image Save Path",       value: "get_image_save_path" },
+        { label: "Get Camera State",          value: "get_camera_state" },
+        { label: "Get Camera Exp & Bin",      value: "get_camera_exp_and_bin" },
+      ],
+    },
+    {
+      label: "Get Information",
+      commands: [
+        { label: "Get Device State",       value: "get_device_state" },
+        { label: "Get App State",          value: "iscope_get_app_state" },
+        { label: "Get Event State",        value: "get_event_state" },
+        { label: "Get WiFi Info",          value: "pi_get_ap" },
+        { label: "Get App Setting",        value: "get_app_setting" },
+        { label: "Get Controls",           value: "get_controls" },
+        { label: "Get Disk Volume",        value: "get_disk_volume" },
+        { label: "Get Settings",           value: "get_setting" },
+        { label: "Get Stack Setting",      value: "get_stack_setting" },
+        { label: "Get Test Settings",      value: "get_test_setting" },
+        { label: "Get User Location",      value: "get_user_location" },
+        { label: "Get Equatorial Coord",   value: "scope_get_equ_coord" },
+        { label: "Get Horizon Coord",      value: "scope_get_horiz_coord" },
+        { label: "Get RA/Dec",             value: "scope_get_ra_dec" },
+      ],
+    },
+    {
+      label: "Set Mount Mode",
+      commands: [
+        { label: "Equatorial",   value: "set_eq_mode" },
+        { label: "Alt Azimuth",  value: "set_alt_az_mode" },
+      ],
+    },
   ];
 
-  function applyPreset(p: { method: string; params: string }) {
-    method = p.method;
-    paramsJson = p.params;
+  // Per-group selected value
+  let groupSelections: Record<string, string> = {};
+  for (const g of CMD_GROUPS) groupSelections[g.label] = "";
+
+  async function execGroup(group: CmdGroup) {
+    const sel = groupSelections[group.label];
+    if (!sel) return;
+    const entry = group.commands.find(c => c.value === sel);
+    if (!entry) return;
+    if (entry.confirm && !window.confirm(entry.confirm)) return;
+    loadingKey = group.label;
+    error = "";
+    try {
+      result = await api.devices.command($activeDevNum, sel, {});
+    } catch (e) {
+      error = String(e);
+    } finally {
+      loadingKey = "";
+    }
   }
 
-  async function send() {
+  // ── Magnetic Declination ───────────────────────────────────────────────────
+  let magDecAdjust = false;
+  let magDecOffset = 0;
+
+  async function execMagDec() {
+    loadingKey = "magdec";
+    error = "";
+    try {
+      result = await api.devices.command($activeDevNum, "adjust_mag_declination", {
+        adjust_mag_dec: magDecAdjust,
+        fudge_angle: magDecOffset,
+      });
+    } catch (e) {
+      error = String(e);
+    } finally {
+      loadingKey = "";
+    }
+  }
+
+  // ── Raw Command ───────────────────────────────────────────────────────────
+  let rawMethod = "";
+  let rawParams = "{}";
+
+  async function execRaw() {
+    loading = true;
     error = "";
     result = null;
-    loading = true;
     try {
-      const params = JSON.parse(paramsJson);
-      result = await api.devices.command($activeDevNum, method, params);
+      const params = JSON.parse(rawParams);
+      result = await api.devices.command($activeDevNum, rawMethod, params);
     } catch (e) {
       error = String(e);
     } finally {
@@ -58,7 +183,7 @@
     }
   }
 
-  function formatResult(r: unknown): string {
+  function fmt(r: unknown): string {
     return JSON.stringify(r, null, 2);
   }
 </script>
@@ -66,55 +191,109 @@
 <div class="page-hero">
   <p class="page-kicker">Developer</p>
   <h1 class="page-title">Command</h1>
-  <p class="page-subtitle">Send raw method calls directly to the telescope firmware.</p>
+  <p class="page-subtitle">Send commands directly to the telescope firmware.</p>
 </div>
 
 {#if !$isConnected}
-  <div class="panel-card offline-msg">
-    Device {$activeDevNum} is offline.
-  </div>
+  <div class="panel-card offline-msg">Device {$activeDevNum} is offline.</div>
 {:else}
   <div class="cmd-layout">
 
-    <div class="panel-card form-card">
-      <p class="panel-title">Quick Actions</p>
-      <div class="action-grid">
-        {#each QUICK_ACTIONS as qa}
+    <!-- ── Left column ────────────────────────────────────────────────── -->
+    <div class="left-col">
+
+      <!-- Quick Actions -->
+      <div class="panel-card">
+        <p class="panel-title">Quick Actions</p>
+        <div class="action-grid">
+          {#each QUICK_ACTIONS as qa}
+            <button
+              class="action-btn"
+              on:click={() => runQuick(qa)}
+              disabled={loadingKey === qa.label}
+            >
+              <span class="action-icon">{qa.icon}</span>
+              <span>{loadingKey === qa.label ? "…" : qa.label}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Command Groups -->
+      <div class="panel-card">
+        <p class="panel-title">Commands</p>
+        <div class="groups-grid">
+          {#each CMD_GROUPS as group}
+            <div class="group-panel">
+              <label class="group-label" for="grp-{group.label}">{group.label}</label>
+              <div class="group-row">
+                <select
+                  id="grp-{group.label}"
+                  class="form-input"
+                  bind:value={groupSelections[group.label]}
+                >
+                  <option value="">Select…</option>
+                  {#each group.commands as cmd}
+                    <option value={cmd.value}>{cmd.label}</option>
+                  {/each}
+                </select>
+                <button
+                  class="btn btn-primary exec-btn"
+                  on:click={() => execGroup(group)}
+                  disabled={!groupSelections[group.label] || loadingKey === group.label}
+                >
+                  {loadingKey === group.label ? "…" : "▶"}
+                </button>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Magnetic Declination -->
+      <div class="panel-card">
+        <p class="panel-title">Magnetic Declination Adjustment</p>
+        <p class="mag-note">Only use after a compass calibration at your current location.</p>
+        <div class="mag-form">
+          <label class="mag-check-label">
+            <input type="checkbox" bind:checked={magDecAdjust} />
+            Adjust Mag Dec to current location
+          </label>
+          <div class="form-field">
+            <label class="form-label" for="fudge">Add Offset (degrees)</label>
+            <input id="fudge" type="number" class="form-input" bind:value={magDecOffset} step="0.1" />
+          </div>
           <button
-            class="action-btn"
-            on:click={() => runAction(qa.label, qa.action)}
-            disabled={!!actionLoading[qa.label]}
+            class="btn btn-primary"
+            on:click={execMagDec}
+            disabled={loadingKey === "magdec"}
           >
-            <span class="action-icon">{qa.icon}</span>
-            <span>{actionLoading[qa.label] ? "…" : qa.label}</span>
+            {loadingKey === "magdec" ? "…" : "Execute"}
           </button>
-        {/each}
+        </div>
       </div>
 
-      <div class="divider"></div>
-
-      <p class="panel-title">Raw Command</p>
-      <div class="preset-grid" style="margin-bottom:0.75rem">
-        {#each DEBUG_PRESETS as p}
-          <button class="preset-btn" on:click={() => applyPreset(p)}>{p.label}</button>
-        {/each}
+      <!-- Raw Command -->
+      <div class="panel-card">
+        <p class="panel-title">Raw Command</p>
+        <form on:submit|preventDefault={execRaw}>
+          <div class="form-field" style="margin-bottom:0.75rem">
+            <label class="form-label" for="raw-method">Method</label>
+            <input id="raw-method" class="form-input" bind:value={rawMethod} placeholder="get_device_state" required />
+          </div>
+          <div class="form-field" style="margin-bottom:1rem">
+            <label class="form-label" for="raw-params">Parameters (JSON)</label>
+            <textarea id="raw-params" class="form-input" bind:value={rawParams} rows="4"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary" disabled={loading || !rawMethod}>
+            {loading ? "Sending…" : "▶ Send"}
+          </button>
+        </form>
       </div>
 
-      <form on:submit|preventDefault={send}>
-        <div class="form-field" style="margin-bottom:0.75rem">
-          <label class="form-label" for="cmd-method">Method</label>
-          <input id="cmd-method" class="form-input" bind:value={method} placeholder="get_device_state" required />
-        </div>
-        <div class="form-field" style="margin-bottom:1rem">
-          <label class="form-label" for="cmd-params">Parameters (JSON)</label>
-          <textarea id="cmd-params" class="form-input" bind:value={paramsJson} rows="5"></textarea>
-        </div>
-        <button type="submit" class="btn btn-primary" disabled={loading || !method}>
-          {loading ? "Sending…" : "▶ Send Command"}
-        </button>
-      </form>
     </div>
 
+    <!-- ── Right column: result ───────────────────────────────────────── -->
     <div class="result-col">
       {#if error}
         <div class="alert alert-error">{error}</div>
@@ -122,7 +301,7 @@
       {#if result !== null}
         <div class="panel-card result-card">
           <p class="panel-title">Response</p>
-          <pre class="result-pre">{formatResult(result)}</pre>
+          <pre class="result-pre">{fmt(result)}</pre>
         </div>
       {:else if !error}
         <div class="panel-card placeholder-card">
@@ -143,22 +322,30 @@
     gap: 1rem;
     align-items: flex-start;
   }
-  .form-card { width: 380px; flex-shrink: 0; }
-  .result-col { flex: 1; min-width: 0; }
 
+  .left-col {
+    width: 480px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .result-col { flex: 1; min-width: 0; position: sticky; top: 68px; }
+
+  /* Quick Actions */
   .action-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 0.5rem;
-    margin-bottom: 0.25rem;
   }
   .action-btn {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.4rem;
-    padding: 0.6rem 0.75rem;
-    font-size: 0.82rem;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.8rem;
     font-weight: 600;
     background: rgba(44,177,255,0.08);
     border: 1px solid rgba(44,177,255,0.2);
@@ -166,6 +353,7 @@
     border-radius: 8px;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
   }
   .action-btn:hover:not(:disabled) {
     background: rgba(44,177,255,0.16);
@@ -174,36 +362,52 @@
   .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .action-icon { font-size: 1rem; line-height: 1; }
 
-  .preset-grid {
+  /* Command Groups */
+  .groups-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  .group-panel {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    margin-bottom: 0.25rem;
+    flex-direction: column;
+    gap: 0.3rem;
   }
-  .preset-btn {
-    padding: 0.3rem 0.7rem;
+  .group-label {
     font-size: 0.75rem;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
+    font-weight: 600;
     color: var(--ui-muted);
-    border-radius: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .group-row {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .group-row .form-input { flex: 1; font-size: 0.8rem; padding: 0.3rem 0.5rem; }
+  .exec-btn { padding: 0.3rem 0.6rem; font-size: 0.8rem; flex-shrink: 0; }
+
+  /* Magnetic Declination */
+  .mag-note {
+    font-size: 0.8rem;
+    color: var(--ui-muted);
+    margin-bottom: 0.75rem;
+  }
+  .mag-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .mag-check-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
     cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-    white-space: nowrap;
   }
-  .preset-btn:hover {
-    background: rgba(44,177,255,0.1);
-    border-color: rgba(44,177,255,0.25);
-    color: var(--ui-primary);
-  }
+  .mag-check-label input { accent-color: var(--ui-primary); width: 14px; height: 14px; }
 
-  .divider {
-    height: 1px;
-    background: rgba(255,255,255,0.07);
-    margin: 1rem 0;
-  }
-
-  .result-card {}
+  /* Result */
   .result-pre {
     margin: 0;
     padding: 0.75rem;
@@ -213,13 +417,12 @@
     font-size: 0.78rem;
     color: var(--ui-muted);
     overflow: auto;
-    max-height: 60vh;
+    max-height: 70vh;
     font-family: "SF Mono", "Fira Code", monospace;
     line-height: 1.55;
     white-space: pre-wrap;
     word-break: break-all;
   }
-
   .placeholder-card {
     display: flex;
     flex-direction: column;
@@ -231,8 +434,10 @@
   .placeholder-icon { font-size: 2rem; color: var(--ui-muted); }
   .placeholder-text { font-size: 0.85rem; color: var(--ui-muted); }
 
-  @media (max-width: 700px) {
+  @media (max-width: 800px) {
     .cmd-layout { flex-direction: column; }
-    .form-card  { width: 100%; }
+    .left-col { width: 100%; }
+    .result-col { position: static; }
+    .action-grid { grid-template-columns: 1fr 1fr; }
   }
 </style>
