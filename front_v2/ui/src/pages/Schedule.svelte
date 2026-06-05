@@ -196,6 +196,11 @@
 
   let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
+  // Edit mode state
+  let editMode = false;
+  let editingItemId = "";
+  let saving = false;
+
   // ---- Helpers ----------------------------------------------------------
 
   function getActionDef(key: string): ActionDef | undefined {
@@ -350,11 +355,103 @@
 
   async function deleteItem(itemId: string) {
     error = "";
+    if (editingItemId === itemId) cancelEdit();
     try {
       await api.devices.schedule.deleteItem($activeDevNum, itemId);
       items = items.filter((i) => i.id !== itemId);
     } catch (e) {
       error = String(e);
+    }
+  }
+
+  // ---- Edit helpers ------------------------------------------------------
+
+  function findDefForItem(item: DndItem): ActionDef | undefined {
+    if (item.action === "start_mosaic") {
+      const p = item.params as Record<string, unknown>;
+      if (p && Number(p.ra_num) === 1 && Number(p.dec_num) === 1)
+        return getActionDef("image");
+      return getActionDef("start_mosaic");
+    }
+    if (item.action === "set_wheel_position") return getActionDef("lpf");
+    if (item.action === "start_up_sequence")  return getActionDef("startup");
+    return ACTION_DEFS.find((d) => (d.apiAction ?? d.key) === item.action)
+        ?? ACTION_DEFS.find((d) => d.key === item.action);
+  }
+
+  function paramsToFormValues(def: ActionDef, params: unknown): Record<string, unknown> {
+    const defaults = Object.fromEntries(def.fields.map((f) => [f.key, f.default]));
+    if (def.key === "lpf" && Array.isArray(params)) {
+      return { ...defaults, enable: (params as number[])[0] === 2 };
+    }
+    if (params && typeof params === "object" && !Array.isArray(params)) {
+      return { ...defaults, ...(params as Record<string, unknown>) };
+    }
+    return defaults;
+  }
+
+  function startEdit(item: DndItem) {
+    const def = findDefForItem(item);
+    if (!def) return;
+    editingItemId = item.id;
+    editMode = true;
+    selectedAction = def.key;
+    formValues = paramsToFormValues(def, item.params);
+    if (isMosaicLike(def.key) && $activeDevNum === 0) {
+      const p = item.params as Record<string, unknown>;
+      if (p?.federation_mode) federationMode = String(p.federation_mode);
+      if (p?.max_devices)     maxDevices = Number(p.max_devices);
+    }
+    searchQuery = "";
+    searchResult = null;
+    searchError = "";
+  }
+
+  function cancelEdit() {
+    editMode = false;
+    editingItemId = "";
+    selectedAction = "";
+    formValues = {};
+  }
+
+  async function saveEdit() {
+    if (!editingItemId || saving) return;
+    saving = true;
+    error = "";
+    try {
+      const def = getActionDef(selectedAction);
+      const action = def?.apiAction ?? selectedAction;
+      let params: Record<string, unknown> | unknown[];
+
+      if (selectedAction === "lpf") {
+        params = formValues.enable ? [2] : [1];
+      } else if (selectedAction === "image") {
+        params = { ...formValues, ra_num: 1, dec_num: 1, panel_overlap_percent: 100, selected_panels: "" };
+      } else {
+        params = { ...formValues } as Record<string, unknown>;
+      }
+
+      if (isMosaicLike(selectedAction) && $activeDevNum === 0) {
+        (params as Record<string, unknown>).federation_mode = federationMode;
+        (params as Record<string, unknown>).max_devices = maxDevices;
+      }
+
+      const idx = items.findIndex((i) => i.id === editingItemId);
+      const nextItem = items[idx + 1];
+
+      await api.devices.schedule.deleteItem($activeDevNum, editingItemId);
+      if (nextItem) {
+        await api.devices.schedule.insertItem($activeDevNum, action, params as Record<string, unknown>, nextItem.id);
+      } else {
+        await api.devices.schedule.addItem($activeDevNum, action, params);
+      }
+
+      cancelEdit();
+      await load();
+    } catch (e) {
+      error = String(e);
+    } finally {
+      saving = false;
     }
   }
 
@@ -459,33 +556,42 @@
          LEFT PANEL — Action Library
     ================================================================ -->
     <div class="library-panel panel-card">
-      <p class="panel-title">Action Library</p>
+      <p class="panel-title">{editMode ? "Edit Item" : "Action Library"}</p>
 
-      {#each GROUPS as group}
-        <div class="action-group">
-          <div class="group-label">{group.label}</div>
-          <div class="chip-row">
-            {#each ACTION_DEFS.filter((a) => a.group === group.key) as act}
-              <button
-                class="chip"
-                class:active={selectedAction === act.key}
-                on:click={() => selectAction(act.key)}
-                type="button"
-                aria-pressed={selectedAction === act.key}
-              >
-                {act.label}
-              </button>
-            {/each}
-          </div>
+      {#if editMode}
+        <div class="edit-banner">
+          <span class="edit-banner-text">Editing existing item</span>
+          <button class="btn-link" on:click={cancelEdit} type="button">← Cancel</button>
         </div>
-      {/each}
+      {/if}
+
+      {#if !editMode}
+        {#each GROUPS as group}
+          <div class="action-group">
+            <div class="group-label">{group.label}</div>
+            <div class="chip-row">
+              {#each ACTION_DEFS.filter((a) => a.group === group.key) as act}
+                <button
+                  class="chip"
+                  class:active={selectedAction === act.key}
+                  on:click={() => selectAction(act.key)}
+                  type="button"
+                  aria-pressed={selectedAction === act.key}
+                >
+                  {act.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      {/if}
 
       <!-- Inline add-item form -->
       {#if selectedAction}
         {@const def = getActionDef(selectedAction)}
         {#if def}
           <div class="add-form">
-            <div class="add-form-title">Configure: {def.label}</div>
+            <div class="add-form-title">{editMode ? "Edit" : "Configure"}: {def.label}</div>
 
             <!-- Object search (mosaic / image only) -->
             {#if isMosaicLike(selectedAction)}
@@ -647,9 +753,18 @@
               </div>
             {/if}
 
-            <button class="btn btn-primary add-btn" on:click={addItem} disabled={adding}>
-              {adding ? "Adding…" : "+ Add to Schedule"}
-            </button>
+            {#if editMode}
+              <button class="btn btn-primary add-btn" on:click={saveEdit} disabled={saving}>
+                {saving ? "Saving…" : "Save Changes"}
+              </button>
+              <button class="btn btn-secondary add-btn" on:click={cancelEdit} type="button" style="margin-top:0.5rem">
+                Cancel
+              </button>
+            {:else}
+              <button class="btn btn-primary add-btn" on:click={addItem} disabled={adding}>
+                {adding ? "Adding…" : "+ Add to Schedule"}
+              </button>
+            {/if}
           </div>
         {/if}
       {/if}
@@ -745,6 +860,7 @@
               class="queue-item"
               class:done={item.state === "done"}
               class:working={item.state === "working"}
+              class:editing={item.id === editingItemId}
             >
               <div
                 class="drag-handle"
@@ -768,6 +884,13 @@
                 {/if}
               </div>
 
+              <button
+                class="btn-icon edit-btn"
+                on:click={() => startEdit(item)}
+                disabled={isActive(schedState)}
+                title="Edit item"
+                aria-label="Edit {ACTION_LABELS[item.action] ?? item.action}"
+              >✏</button>
               <button
                 class="btn-icon delete-btn"
                 on:click={() => deleteItem(item.id)}
@@ -887,6 +1010,31 @@
   }
   .search-result-coords { font-size: 0.75rem; color: var(--ui-muted); }
 
+  /* ---- Edit banner ---- */
+  .edit-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0.65rem;
+    background: rgba(98,126,234,0.1);
+    border: 1px solid rgba(98,126,234,0.25);
+    border-radius: var(--ui-radius-sm);
+    font-size: 0.8rem;
+  }
+  .edit-banner-text { color: var(--ui-primary); font-weight: 500; }
+  .btn-link {
+    background: none;
+    border: none;
+    color: var(--ui-muted);
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 0;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: color 0.15s, text-decoration-color 0.15s;
+  }
+  .btn-link:hover { color: var(--ui-body); text-decoration-color: var(--ui-muted); }
+
   /* ---- Federation section ---- */
   .federation-section {
     margin: 0.75rem 0;
@@ -976,6 +1124,7 @@
   .queue-item:hover { background: rgba(255,255,255,0.055); }
   .queue-item.done    { opacity: 0.45; }
   .queue-item.working { border-color: rgba(104,211,145,0.3); background: rgba(104,211,145,0.04); }
+  .queue-item.editing { border-color: rgba(98,126,234,0.5); background: rgba(98,126,234,0.07); }
 
   .drag-handle {
     font-size: 1.1rem;
@@ -1033,6 +1182,7 @@
   .btn-icon:hover:not(:disabled) { opacity: 1; }
   .btn-icon:disabled { opacity: 0.2; cursor: not-allowed; }
   .delete-btn:hover:not(:disabled) { color: var(--ui-danger); }
+  .edit-btn:hover:not(:disabled) { color: var(--ui-primary); }
 
   .empty-queue {
     display: flex;
