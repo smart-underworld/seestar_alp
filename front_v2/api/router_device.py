@@ -60,6 +60,13 @@ def run_startup(dev_num: int, params: dict[str, Any] = Body(default={})):
     return result or {}
 
 
+@router.get("/devices/{dev_num}/balance-sensor")
+def get_balance_sensor(dev_num: int):
+    result = method_sync("get_device_state", dev_num)
+    data = (result or {}).get("balance_sensor", {}).get("data", {})
+    return {"x": data.get("x"), "y": data.get("y")}
+
+
 @router.get("/devices/{dev_num}/events")
 def get_events(dev_num: int):
     raw = do_action("get_event_state", dev_num, {})

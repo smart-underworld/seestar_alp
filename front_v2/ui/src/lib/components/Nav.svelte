@@ -2,11 +2,14 @@
   import { link, location } from "svelte-spa-router";
   import { onMount } from "svelte";
   import { deviceList, activeDevNum, deviceStatuses } from "../stores/deviceStore";
-  import type { DeviceStatus } from "../api";
+  import { api, type DeviceStatus } from "../api";
   import { isNavActive } from "../utils";
 
   let menuOpen = false;
   let moreOpen = false;
+  let isRaspberryPi = false;
+
+  api.platform.get().then(r => { isRaspberryPi = r.platform === "raspberry_pi"; }).catch(() => {});
 
   $: $location, (menuOpen = false), (moreOpen = false);
 
@@ -33,12 +36,15 @@
     { href: "/config",    label: "SSC Config", priority: 3 },
     { href: "/stats",     label: "Stats",      priority: 4 },
     { href: "/support",   label: "Support",    priority: 1 },
+    { href: "/platform",  label: "Platform",   priority: 4 },
   ];
 
-  // Filter out Guest Mode when the active device has it disabled/unavailable.
-  // Show when status is unknown/loading to avoid flickering it away on connect.
+  // Filter out Guest Mode when the active device has it disabled/unavailable,
+  // and Platform when the host isn't a Raspberry Pi.
+  // Show Guest Mode when status is unknown/loading to avoid flickering it away on connect.
   $: activeStatus = $deviceStatuses[$activeDevNum] as DeviceStatus | undefined;
   $: visibleNavLinks = navLinks.filter(link => {
+    if (link.href === "/platform") return isRaspberryPi;
     if (link.href !== "/guestmode") return true;
     if (!activeStatus || !activeStatus.backend_ready) return true;
     return activeStatus.guest_mode_available;

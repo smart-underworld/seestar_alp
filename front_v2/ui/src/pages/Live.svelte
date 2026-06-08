@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { activeDevNum, activeDeviceStatus, isConnected, deviceList } from "../lib/stores/deviceStore";
   import { api } from "../lib/api";
 
@@ -88,6 +88,90 @@
     try { await api.devices.live.setGain($activeDevNum, gain); } catch { /* best effort */ }
   }
 
+  // Recording
+  let recording = false;
+  let recordError = "";
+  async function toggleRecord() {
+    recordError = "";
+    recording = true;
+    try {
+      await api.devices.live.record($activeDevNum);
+    } catch (e) {
+      recordError = String(e);
+    } finally {
+      recording = false;
+    }
+  }
+
+  // Movement joystick — pointer-based control sending {angle, distance, force}
+  // to /live/move every 250ms while dragging, mirroring the classic nipplejs control.
+  let joystickZoneEl: HTMLDivElement;
+  let joystickKnobEl: HTMLDivElement;
+  let joystickDragging = false;
+  let joystickKnobX = 0;
+  let joystickKnobY = 0;
+  const JOYSTICK_RADIUS = 100;
+  const ZERO_VECTOR = { angle: 0, distance: 0, force: 0 };
+  let joystickVector = ZERO_VECTOR;
+  let joystickTimer: ReturnType<typeof setInterval> | null = null;
+  let joystickSending = false;
+
+  function sendJoystickMove(force = false) {
+    if (joystickSending && !force) return;
+    joystickSending = true;
+    const { angle, distance, force: f } = joystickVector;
+    api.devices.live.move($activeDevNum, angle, distance, f)
+      .catch(() => { /* best effort */ })
+      .finally(() => { joystickSending = false; });
+  }
+
+  function joystickPointerDown(evt: PointerEvent) {
+    joystickDragging = true;
+    joystickZoneEl.setPointerCapture(evt.pointerId);
+    joystickPointerMove(evt);
+  }
+
+  function joystickPointerMove(evt: PointerEvent) {
+    if (!joystickDragging) return;
+    const rect = joystickZoneEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let dx = evt.clientX - cx;
+    let dy = evt.clientY - cy;
+    const rawDist = Math.sqrt(dx * dx + dy * dy);
+    const clamped = Math.min(rawDist, JOYSTICK_RADIUS);
+    const ratio = rawDist > 0 ? clamped / rawDist : 0;
+    dx *= ratio;
+    dy *= ratio;
+    joystickKnobX = dx;
+    joystickKnobY = dy;
+
+    const distance = clamped / JOYSTICK_RADIUS;
+    // Screen Y grows downward; convert to a standard math angle (CCW from East).
+    let degrees = Math.atan2(-dy, dx) * (180 / Math.PI);
+    if (degrees < 0) degrees += 360;
+    joystickVector = { angle: degrees, distance, force: distance };
+
+    if (joystickTimer === null) {
+      sendJoystickMove();
+      joystickTimer = setInterval(() => sendJoystickMove(), 250);
+    }
+  }
+
+  function joystickPointerUp(evt: PointerEvent) {
+    if (!joystickDragging) return;
+    joystickDragging = false;
+    joystickZoneEl.releasePointerCapture(evt.pointerId);
+    joystickKnobX = 0;
+    joystickKnobY = 0;
+    if (joystickTimer !== null) {
+      clearInterval(joystickTimer);
+      joystickTimer = null;
+    }
+    joystickVector = ZERO_VECTOR;
+    sendJoystickMove(true);
+  }
+
   // Rotation — persisted to localStorage, same key as classic UI
   let rotation = 0; // 0 | 90 | 180 | 270
   const ROTATION_KEY = 'ssc.live.rotation';
@@ -124,6 +208,10 @@
       document.removeEventListener('fullscreenchange', onFsChange);
       document.removeEventListener('webkitfullscreenchange', onFsChange);
     };
+  });
+
+  onDestroy(() => {
+    if (joystickTimer !== null) clearInterval(joystickTimer);
   });
 
   function rotateFeed() {
@@ -305,6 +393,41 @@
             </div>
           </div>
         {/if}
+
+        <!-- Movement / joystick controls -->
+        <div class="panel-card">
+          <p class="panel-title">Movement</p>
+          <div class="joystick-zone-wrap">
+            <div
+              class="joystick-zone"
+              bind:this={joystickZoneEl}
+              on:pointerdown={joystickPointerDown}
+              on:pointermove={joystickPointerMove}
+              on:pointerup={joystickPointerUp}
+              on:pointercancel={joystickPointerUp}
+              role="slider"
+              aria-label="Telescope movement joystick"
+              aria-valuenow={Math.round(joystickVector.distance * 100)}
+              tabindex="0"
+            >
+              <div
+                class="joystick-knob"
+                bind:this={joystickKnobEl}
+                style="transform: translate({joystickKnobX}px, {joystickKnobY}px)"
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recording -->
+        <div class="panel-card">
+          <p class="panel-title">Recording</p>
+          {#if recordError}<div class="alert alert-error" style="margin-bottom:0.5rem">{recordError}</div>{/if}
+          <button class="btn btn-secondary record-btn" on:click={toggleRecord} disabled={recording}>
+            <span class="record-dot"></span>
+            {recording ? "Starting…" : "Record"}
+          </button>
+        </div>
 
         <!-- Exposure controls -->
         <div class="panel-card">
@@ -580,6 +703,50 @@
     justify-content: center;
   }
   .auto-focus-btn { width: 100%; justify-content: center; }
+
+  .joystick-zone-wrap {
+    display: flex;
+    justify-content: center;
+  }
+  .joystick-zone {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--ui-border);
+    touch-action: none;
+    cursor: grab;
+  }
+  .joystick-zone:active { cursor: grabbing; }
+  .joystick-knob {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 56px;
+    height: 56px;
+    margin: -28px 0 0 -28px;
+    border-radius: 50%;
+    background: var(--ui-accent);
+    opacity: 0.85;
+    pointer-events: none;
+    transition: transform 0.05s linear;
+  }
+
+  .record-btn {
+    width: 100%;
+    justify-content: center;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .record-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--ui-danger);
+    flex-shrink: 0;
+  }
 
   @media (max-width: 900px) {
     .live-layout { flex-direction: column; }

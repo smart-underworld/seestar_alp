@@ -1,6 +1,9 @@
 <script lang="ts">
   import { activeDevNum, isConnected } from "../lib/stores/deviceStore";
   import { api } from "../lib/api";
+  import EventStatusPanel from "../lib/components/EventStatusPanel.svelte";
+
+  const EVENTS = ["WheelMove", "AutoFocus", "DarkLibrary", "3PPA", "PlateSolve", "Scheduler"];
 
   let result: unknown = null;
   let error = "";
@@ -193,6 +196,8 @@
   <h1 class="page-title">Command</h1>
   <p class="page-subtitle">Send commands directly to the telescope firmware.</p>
 </div>
+
+<EventStatusPanel events={EVENTS} />
 
 {#if !$isConnected}
   <div class="panel-card offline-msg">Device {$activeDevNum} is offline.</div>

@@ -17,6 +17,7 @@
   import Stats from "./pages/Stats.svelte";
   import GuestMode from "./pages/GuestMode.svelte";
   import Mosaic from "./pages/Mosaic.svelte";
+  import Platform from "./pages/Platform.svelte";
 
   const routes = {
     "/": Home,
@@ -33,6 +34,7 @@
     "/stats": Stats,
     "/guestmode": GuestMode,
     "/support": Support,
+    "/platform": Platform,
   };
 
   onMount(() => {

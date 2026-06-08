@@ -162,8 +162,13 @@ export const api = {
         post(`/api/v1/devices/${devNum}/live/exposure`, { exp_ms }),
       setGain: (devNum: number, gain: number) =>
         post(`/api/v1/devices/${devNum}/live/gain`, { gain }),
+      move: (devNum: number, angle: number, distance: number, force: number) =>
+        post(`/api/v1/devices/${devNum}/live/move`, { angle, distance, force }),
+      record: (devNum: number) => post(`/api/v1/devices/${devNum}/live/record`),
     },
     events: (devNum: number) => get<Record<string, EventState>>(`/api/v1/devices/${devNum}/events`),
+    balanceSensor: (devNum: number) =>
+      get<{ x: number | null; y: number | null }>(`/api/v1/devices/${devNum}/balance-sensor`),
     guestmode: {
       get: (devNum: number) => get<GuestModeState>(`/api/v1/devices/${devNum}/guestmode`),
       grab: (devNum: number) => post(`/api/v1/devices/${devNum}/guestmode/grab`),
@@ -206,5 +211,10 @@ export const api = {
           return res.json();
         }),
     },
+  },
+  platform: {
+    get: () => get<{ platform: string }>(`/api/v1/platform`),
+    action: (command: string) =>
+      post<{ status: string; message: string }>(`/api/v1/platform/action`, { command }),
   },
 };

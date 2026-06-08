@@ -1,6 +1,9 @@
 <script lang="ts">
   import { activeDevNum, activeDeviceStatus, isConnected } from "../lib/stores/deviceStore";
   import { api } from "../lib/api";
+  import EventStatusPanel from "../lib/components/EventStatusPanel.svelte";
+
+  const EVENTS = ["WheelMove", "AutoGoto", "PlateSolve", "DarkLibrary", "AutoFocus", "Stack"];
 
   let expMs = 10000;
   let gain = 80;
@@ -50,6 +53,8 @@
   <h1 class="page-title">Image</h1>
   <p class="page-subtitle">Configure and start an imaging session.</p>
 </div>
+
+<EventStatusPanel events={EVENTS} />
 
 {#if !$isConnected}
   <div class="panel-card offline-msg">
@@ -133,7 +138,6 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    max-width: 600px;
   }
 
   .progress-card {}

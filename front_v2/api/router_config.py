@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 
+import tomlkit
 from fastapi import APIRouter, Body, HTTPException
 
 from device.config import Config  # type: ignore
@@ -202,5 +203,51 @@ def save_config(body: dict[str, Any] = Body(...)):
 
         Config.save_toml()
         return {"status": "ok"}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/config/devices")
+def save_devices(body: dict[str, Any] = Body(...)):
+    """Replace the configured Seestar device list and persist to config.toml.
+
+    Accepts {"devices": [{"name": str, "ip_address": str}, ...]} and assigns
+    sequential device numbers starting at 1, mirroring the classic UI's
+    load_from_form behavior.
+    """
+    try:
+        devices = body.get("devices", [])
+        if not isinstance(devices, list):
+            raise HTTPException(status_code=400, detail="devices must be a list")
+
+        Config.seestars = []
+        Config._dict["seestars"] = tomlkit.aot()
+
+        for idx, device in enumerate(devices, start=1):
+            name = str(device.get("name", "")).strip()
+            ip_address = str(device.get("ip_address", "")).strip()
+            if not name or not ip_address:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Each device requires a name and IP address",
+                )
+            entry = {"name": name, "ip_address": ip_address, "device_num": idx}
+            Config.seestars.append(entry)
+            Config._dict["seestars"].append(dict(entry))
+
+        Config.save_toml()
+        return {
+            "status": "ok",
+            "devices": [
+                {
+                    "device_num": s["device_num"],
+                    "name": s["name"],
+                    "ip_address": s["ip_address"],
+                }
+                for s in Config.seestars
+            ],
+        }
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

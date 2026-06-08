@@ -1,6 +1,9 @@
 <script lang="ts">
   import { activeDevNum, isConnected, activeDeviceStatus } from "../lib/stores/deviceStore";
   import { api } from "../lib/api";
+  import EventStatusPanel from "../lib/components/EventStatusPanel.svelte";
+
+  const EVENTS = ["WheelMove", "AutoGoto", "PlateSolve"];
 
   let ra = "";
   let dec = "";
@@ -41,6 +44,8 @@
   <h1 class="page-title">GoTo Target</h1>
   <p class="page-subtitle">Slew the telescope to a sky coordinate or named object.</p>
 </div>
+
+<EventStatusPanel events={EVENTS} />
 
 {#if !$isConnected}
   <div class="panel-card offline-msg">

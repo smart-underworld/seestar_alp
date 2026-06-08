@@ -22,6 +22,12 @@ class GainRequest(BaseModel):
     gain: int
 
 
+class MoveRequest(BaseModel):
+    angle: float = 0
+    distance: float = 0
+    force: float = 0
+
+
 def _require_connected(dev_num: int):
     if not check_api_state(dev_num):
         raise HTTPException(status_code=503, detail="Device not connected")
@@ -100,3 +106,39 @@ def set_gain(dev_num: int, body: GainRequest):
     _require_connected(dev_num)
     do_action("set_setting", dev_num, {"gain": body.gain})
     return {"status": "ok", "gain": body.gain}
+
+
+@router.post("/devices/{dev_num}/live/move")
+def move_telescope(dev_num: int, body: MoveRequest):
+    _require_connected(dev_num)
+    if body.distance == 0:
+        do_action(
+            "method_sync",
+            dev_num,
+            {
+                "method": "scope_speed_move",
+                "params": {"speed": 0, "angle": 0, "dur_sec": 3},
+            },
+        )
+        return {"status": "ok", "speed": 0, "angle": 0}
+    speed = min(body.distance * 14.4 * body.force, 1440.0)
+    do_action(
+        "method_sync",
+        dev_num,
+        {
+            "method": "scope_speed_move",
+            "params": {"speed": speed, "angle": int(body.angle), "dur_sec": 3},
+        },
+    )
+    return {"status": "ok", "speed": speed, "angle": int(body.angle)}
+
+
+@router.post("/devices/{dev_num}/live/record")
+def toggle_record(dev_num: int):
+    _require_connected(dev_num)
+    do_action(
+        "method_async",
+        dev_num,
+        {"method": "iscope_start_stack", "params": {"restart": True}},
+    )
+    return {"status": "ok"}

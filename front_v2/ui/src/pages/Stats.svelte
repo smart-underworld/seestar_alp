@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { activeDevNum, isConnected } from "../lib/stores/deviceStore";
   import { api, type DeviceStatus } from "../lib/api";
+  import BubbleLevel from "../lib/components/BubbleLevel.svelte";
 
   let status: DeviceStatus | null = null;
   let error = "";
@@ -121,6 +122,11 @@
       {/each}
     </div>
   </div>
+
+  <div class="panel-card bubble-level-card">
+    <p class="panel-title">Orientation</p>
+    <BubbleLevel />
+  </div>
 {/if}
 
 <style>
@@ -137,4 +143,5 @@
   }
   .offline-msg { color: var(--ui-muted); }
   .stat-list { display: flex; flex-direction: column; }
+  .bubble-level-card { margin-top: 1rem; }
 </style>

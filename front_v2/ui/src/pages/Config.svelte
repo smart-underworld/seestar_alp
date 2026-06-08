@@ -156,6 +156,65 @@
     config = JSON.parse(baseline);
   }
 
+  type DeviceEntry = { device_num: number; name: string; ip_address: string };
+
+  let devices: DeviceEntry[] = [];
+  let devicesBaseline = "";
+  let devicesSaving = false;
+  let devicesSaved = false;
+  let devicesError = "";
+
+  $: devicesDirty = JSON.stringify(devices) !== devicesBaseline;
+
+  function addDevice() {
+    devices = [...devices, { device_num: devices.length + 1, name: "", ip_address: "" }];
+  }
+
+  function removeDevice(index: number) {
+    devices = devices.filter((_, i) => i !== index).map((d, i) => ({ ...d, device_num: i + 1 }));
+  }
+
+  function setDeviceField(index: number, key: "name" | "ip_address", value: string) {
+    devices = devices.map((d, i) => (i === index ? { ...d, [key]: value } : d));
+  }
+
+  function resetDevices() {
+    devices = JSON.parse(devicesBaseline);
+  }
+
+  async function saveDevices() {
+    devicesSaving = true;
+    devicesError = "";
+    try {
+      const res = await fetch("/api/v1/config/devices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          devices: devices.map((d) => ({ name: d.name, ip_address: d.ip_address })),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      devices = data.devices ?? devices;
+      devicesBaseline = JSON.stringify(devices);
+      if (config) config = { ...config, devices };
+      devicesSaved = true;
+      setTimeout(() => (devicesSaved = false), 2500);
+    } catch (e) {
+      devicesError = String(e);
+    } finally {
+      devicesSaving = false;
+    }
+  }
+
+  $: if (config && devicesBaseline === "") {
+    devices = config.devices.map((d) => ({ ...d }));
+    devicesBaseline = JSON.stringify(devices);
+  }
+
   onMount(load);
 </script>
 
@@ -351,26 +410,47 @@
 
   </div> <!-- end was-validated wrapper -->
 
-  <!-- Devices (read-only) -->
+  <!-- Devices -->
   <div class="panel-card section-card">
     <p class="group-title">Devices</p>
-    <p class="section-note">Edit device entries directly in config.toml.</p>
-    {#if config.devices.length === 0}
+    <p class="section-note">Add, edit, or remove Seestar devices. Device numbers are reassigned sequentially on save.</p>
+    {#if devicesError}<div class="alert alert-error">{devicesError}</div>{/if}
+    {#if devicesSaved}<div class="alert alert-success">Devices saved. Restart required for changes to take effect.</div>{/if}
+    {#if devices.length === 0}
       <div class="no-devices">No devices configured.</div>
     {:else}
       <div class="devices-table">
-        <div class="devices-header">
-          <span>#</span><span>Name</span><span>IP Address</span>
+        <div class="devices-header devices-header--edit">
+          <span>#</span><span>Name</span><span>IP Address</span><span></span>
         </div>
-        {#each config.devices as d}
-          <div class="devices-row">
+        {#each devices as d, i}
+          <div class="devices-row devices-row--edit">
             <span class="device-num">{d.device_num}</span>
-            <span>{d.name}</span>
-            <span class="device-ip">{d.ip_address}</span>
+            <input type="text" class="form-input narrow" placeholder="Name" required
+              value={d.name}
+              on:input={(e) => setDeviceField(i, "name", e.currentTarget.value)} />
+            <input type="text" class="form-input narrow device-ip-input" placeholder="192.168.1.100" required
+              value={d.ip_address}
+              on:input={(e) => setDeviceField(i, "ip_address", e.currentTarget.value)} />
+            <button type="button" class="btn btn-secondary btn-remove-device" title="Remove device"
+              on:click={() => removeDevice(i)}>
+              Remove
+            </button>
           </div>
         {/each}
       </div>
     {/if}
+    <div class="devices-actions">
+      <button type="button" class="btn btn-secondary" on:click={addDevice}>Add Device</button>
+      <div class="devices-save-actions">
+        {#if devicesDirty}
+          <button type="button" class="btn btn-secondary" on:click={resetDevices}>Reset</button>
+        {/if}
+        <button type="button" class="btn btn-primary" on:click={saveDevices} disabled={devicesSaving || !devicesDirty}>
+          {devicesSaving ? "Saving…" : "Save Devices"}
+        </button>
+      </div>
+    </div>
   </div>
 
   <div class="save-footer">
@@ -524,11 +604,21 @@
   }
   .devices-row:last-child { border-bottom: none; }
   .device-num { color: var(--ui-muted); font-variant-numeric: tabular-nums; }
-  .device-ip {
-    font-family: "SF Mono", "Fira Code", monospace;
-    font-size: 0.8rem;
-    color: var(--ui-primary);
+
+  .devices-header--edit, .devices-row--edit {
+    grid-template-columns: 2.5rem 1fr 1fr auto;
+    align-items: center;
   }
+  .device-ip-input { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.8rem; }
+  .btn-remove-device { font-size: 0.8rem; padding: 0.35rem 0.75rem; }
+  .devices-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+  .devices-save-actions { display: flex; gap: 0.5rem; }
 
   @media (max-width: 600px) {
     .setting-row { flex-direction: column; align-items: flex-start; gap: 0.5rem; }

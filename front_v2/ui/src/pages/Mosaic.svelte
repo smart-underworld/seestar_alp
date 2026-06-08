@@ -1,6 +1,9 @@
 <script lang="ts">
   import { activeDevNum, isConnected, activeDeviceStatus } from "../lib/stores/deviceStore";
   import { api } from "../lib/api";
+  import EventStatusPanel from "../lib/components/EventStatusPanel.svelte";
+
+  const EVENTS = ["WheelMove", "AutoGoto", "PlateSolve", "DarkLibrary", "AutoFocus", "Stack"];
 
   let targetName = "";
   let ra = "";
@@ -89,6 +92,8 @@
     <p class="page-subtitle">Create and run a multi-panel mosaic. For scheduling, use the Schedule page.</p>
   </div>
 </div>
+
+<EventStatusPanel events={EVENTS} />
 
 {#if !$isConnected}
   <div class="panel-card offline-msg">Device {$activeDevNum} is offline.</div>

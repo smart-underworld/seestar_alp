@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/svelte";
+import { render, screen, waitFor } from "@testing-library/svelte";
 import { writable } from "svelte/store";
 import Nav from "./Nav.svelte";
+
+const { mockPlatformGet } = vi.hoisted(() => ({ mockPlatformGet: vi.fn() }));
 
 // Mock the deviceStore so we can inject test values
 vi.mock("../stores/deviceStore", () => ({
@@ -9,6 +11,14 @@ vi.mock("../stores/deviceStore", () => ({
   activeDevNum:   writable(1),
   deviceStatuses: writable({}),
 }));
+
+vi.mock("../api", async () => {
+  const actual = await vi.importActual<typeof import("../api")>("../api");
+  return {
+    ...actual,
+    api: { ...actual.api, platform: { get: mockPlatformGet, action: vi.fn() } },
+  };
+});
 
 import * as deviceStore from "../stores/deviceStore";
 
@@ -22,6 +32,8 @@ beforeEach(() => {
   deviceList.set([]);
   activeDevNum.set(1);
   deviceStatuses.set({});
+  mockPlatformGet.mockReset();
+  mockPlatformGet.mockResolvedValue({ platform: "other" });
 });
 
 describe("Nav", () => {
@@ -102,5 +114,18 @@ describe("Nav", () => {
     deviceStatuses.set({});
     const { container } = render(Nav);
     expect(container.querySelector('a[href="/guestmode"]')).toBeInTheDocument();
+  });
+
+  it("hides Platform link when host platform is not a Raspberry Pi", async () => {
+    mockPlatformGet.mockResolvedValue({ platform: "other" });
+    const { container } = render(Nav);
+    await waitFor(() => expect(mockPlatformGet).toHaveBeenCalled());
+    expect(container.querySelector('a[href="/platform"]')).not.toBeInTheDocument();
+  });
+
+  it("shows Platform link when host platform is a Raspberry Pi", async () => {
+    mockPlatformGet.mockResolvedValue({ platform: "raspberry_pi" });
+    const { container } = render(Nav);
+    await waitFor(() => expect(container.querySelector('a[href="/platform"]')).toBeInTheDocument());
   });
 });
