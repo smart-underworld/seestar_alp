@@ -14,6 +14,7 @@ const {
   mockScheduleGet, mockScheduleAddItem, mockScheduleDeleteItem,
   mockScheduleSetState, mockScheduleClear, mockScheduleSearch,
   mockScheduleExport, mockScheduleImport, mockScheduleInsertItem,
+  mockLibraryList, mockLibrarySave, mockLibraryLoad, mockLibraryDelete,
 } = vi.hoisted(() => ({
   mockScheduleGet: vi.fn(),
   mockScheduleAddItem: vi.fn(),
@@ -24,6 +25,10 @@ const {
   mockScheduleExport: vi.fn(),
   mockScheduleImport: vi.fn(),
   mockScheduleInsertItem: vi.fn(),
+  mockLibraryList: vi.fn(),
+  mockLibrarySave: vi.fn(),
+  mockLibraryLoad: vi.fn(),
+  mockLibraryDelete: vi.fn(),
 }));
 
 vi.mock("../lib/stores/deviceStore", () => ({
@@ -45,6 +50,12 @@ vi.mock("../lib/api", () => ({
         exportSchedule: mockScheduleExport,
         importSchedule: mockScheduleImport,
       },
+      scheduleLibrary: {
+        list: mockLibraryList,
+        save: mockLibrarySave,
+        load: mockLibraryLoad,
+        delete: mockLibraryDelete,
+      },
       search: mockScheduleSearch,
     },
   },
@@ -60,6 +71,10 @@ const HANG = new Promise<never>(() => {});
 
 const EMPTY_SCHEDULE = { state: "idle", list: [] };
 
+// URL.createObjectURL is not available in jsdom
+global.URL.createObjectURL = vi.fn(() => "blob:mock");
+global.URL.revokeObjectURL = vi.fn();
+
 beforeEach(() => {
   mockIsConnected.set(false);
   mockActiveDevNum.set(1);
@@ -71,12 +86,20 @@ beforeEach(() => {
   mockScheduleSearch.mockReset();
   mockScheduleExport.mockReset();
   mockScheduleImport.mockReset();
+  mockLibraryList.mockReset();
+  mockLibrarySave.mockReset();
+  mockLibraryLoad.mockReset();
+  mockLibraryDelete.mockReset();
   mockScheduleGet.mockResolvedValue(EMPTY_SCHEDULE);
   mockScheduleAddItem.mockResolvedValue({});
   mockScheduleDeleteItem.mockResolvedValue({});
   mockScheduleSetState.mockResolvedValue({});
   mockScheduleClear.mockResolvedValue({});
   mockScheduleSearch.mockResolvedValue({ query: "", result: {} });
+  mockLibraryList.mockResolvedValue({ files: [] });
+  mockLibrarySave.mockResolvedValue({ filename: "test.json" });
+  mockLibraryLoad.mockResolvedValue(JSON.stringify({ version: "1.0", state: "stopped", list: [] }));
+  mockLibraryDelete.mockResolvedValue({ status: "ok" });
 });
 
 describe("Schedule — offline", () => {
@@ -231,5 +254,112 @@ describe("Schedule — clear", () => {
     await waitFor(() =>
       expect(mockScheduleSetState).toHaveBeenCalledWith(1, "stop"),
     );
+  });
+});
+
+describe("Schedule — offline building", () => {
+  it("shows Load file button when offline", () => {
+    render(Schedule);
+    expect(screen.getByText(/↑ Load file/i)).toBeInTheDocument();
+  });
+
+  it("adds item to local queue without calling API when offline", async () => {
+    render(Schedule);
+    // Select the Park action (no params form, just a chip)
+    const parkChip = await waitFor(() => screen.getByRole("button", { name: /^Park$/i }));
+    parkChip.click();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /\+ Add to Schedule/i })).toBeInTheDocument(),
+    );
+    screen.getByRole("button", { name: /\+ Add to Schedule/i }).click();
+    await waitFor(() =>
+      expect(screen.getByText("1 item in queue")).toBeInTheDocument(),
+    );
+    // Device API should NOT have been called (offline)
+    expect(mockScheduleAddItem).not.toHaveBeenCalled();
+  });
+
+  it("deletes item from local queue without calling API when offline", async () => {
+    render(Schedule);
+    // Add an item first (offline)
+    const parkChip = await waitFor(() => screen.getByRole("button", { name: /^Park$/i }));
+    parkChip.click();
+    await waitFor(() => screen.getByRole("button", { name: /\+ Add to Schedule/i })).then(b => b.click());
+    await waitFor(() => expect(screen.getByText("1 item in queue")).toBeInTheDocument());
+    // Now delete it
+    screen.getByRole("button", { name: /Remove/i }).click();
+    await waitFor(() =>
+      expect(screen.getByText(/queue is empty/i)).toBeInTheDocument(),
+    );
+    expect(mockScheduleDeleteItem).not.toHaveBeenCalled();
+  });
+
+  it("shows Save file button when queue has items offline", async () => {
+    render(Schedule);
+    const parkChip = await waitFor(() => screen.getByRole("button", { name: /^Park$/i }));
+    parkChip.click();
+    await waitFor(() => screen.getByRole("button", { name: /\+ Add to Schedule/i })).then(b => b.click());
+    await waitFor(() => expect(screen.getByText("1 item in queue")).toBeInTheDocument());
+    expect(screen.getByTitle(/Download schedule/i)).toBeInTheDocument();
+  });
+});
+
+describe("Schedule — server library", () => {
+  it("renders Saved Schedules panel", () => {
+    render(Schedule);
+    expect(screen.getByText("Saved Schedules")).toBeInTheDocument();
+  });
+
+  it("expands to show empty state when no files on server", async () => {
+    render(Schedule);
+    screen.getByText("Saved Schedules").click();
+    await waitFor(() =>
+      expect(screen.getByText(/No saved schedules on server/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("expands to show list of saved files", async () => {
+    mockLibraryList.mockResolvedValue({
+      files: [
+        { name: "deep_sky_run.json", size: 1024, modified: 1700000000 },
+      ],
+    });
+    render(Schedule);
+    screen.getByText("Saved Schedules").click();
+    await waitFor(() =>
+      expect(screen.getByText("deep_sky_run")).toBeInTheDocument(),
+    );
+  });
+
+  it("calls library.delete when delete button is clicked", async () => {
+    mockLibraryList.mockResolvedValue({
+      files: [{ name: "old_run.json", size: 512, modified: 1700000000 }],
+    });
+    render(Schedule);
+    screen.getByText("Saved Schedules").click();
+    await waitFor(() => expect(screen.getByText("old_run")).toBeInTheDocument());
+    screen.getByTitle(/Delete old_run\.json/i).click();
+    await waitFor(() =>
+      expect(mockLibraryDelete).toHaveBeenCalledWith("old_run.json"),
+    );
+  });
+
+  it("calls library.load then applies content when Load is clicked offline", async () => {
+    const schedContent = JSON.stringify({
+      version: "1.0", state: "stopped",
+      list: [{ action: "scope_park", params: {}, schedule_item_id: "x1" }],
+    });
+    mockLibraryList.mockResolvedValue({
+      files: [{ name: "nightly.json", size: 100, modified: 1700000000 }],
+    });
+    mockLibraryLoad.mockResolvedValue(schedContent);
+    render(Schedule);
+    screen.getByText("Saved Schedules").click();
+    await waitFor(() => expect(screen.getByText("nightly")).toBeInTheDocument());
+    screen.getByRole("button", { name: /^Load$/i }).click();
+    await waitFor(() =>
+      expect(screen.getByText("1 item in queue")).toBeInTheDocument(),
+    );
+    expect(mockScheduleImport).not.toHaveBeenCalled(); // offline — local only
   });
 });
