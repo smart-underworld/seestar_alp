@@ -44,6 +44,8 @@ def _check_api_state_detailed(dev_num: int) -> tuple[bool, bool]:
 
 
 def check_api_state(dev_num: int) -> bool:
+    if dev_num == 0:
+        return any(check_api_state(d["device_num"]) for d in Config.seestars)
     connected, _ = _check_api_state_detailed(dev_num)
     return connected
 
