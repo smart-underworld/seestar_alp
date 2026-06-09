@@ -526,7 +526,9 @@ class Seestar:
             if sock is not None:
                 sock.close()
 
-    def reconnect(self, connect_timeout: float | None = None) -> bool:
+    def reconnect(
+        self, connect_timeout: float | None = None, skip_auth: bool = False
+    ) -> bool:
         if self.is_connected:
             return True
 
@@ -557,8 +559,8 @@ class Seestar:
             self.logger.info(
                 f"TIMING [{self.device_name}] reconnect.tcp_connect (timeout={_timeout}s): {time.perf_counter() - _r2:.3f}s"
             )
-            # self.s.settimeout(None)
             self.is_connected = True
+
             # If an interop PEM key is configured, attempt firmware 7.18+ auth
             # inline so a fresh connection is authenticated before
             # start_watch_thread() issues get_device_state etc.  Failure is
@@ -568,8 +570,18 @@ class Seestar:
             # connection for a connect -> auth-fail -> disconnect loop that
             # kills live telemetry.  Stay connected and let the heartbeat loop
             # retry via _maybe_authenticate() once the scope idles.
-            try:
-                if getattr(Config, "seestar_interop_pem", ""):
+            # skip_auth=True is used during the startup reachability loop: the scope accepts
+            # TCP connections before its auth handler is ready, so we close the socket and
+            # return True to signal "reachable"; the heartbeat thread does the full auth.
+            if getattr(Config, "seestar_interop_pem", ""):
+                if skip_auth:
+                    self.logger.info(
+                        f"TIMING [{self.device_name}] reconnect: TCP reachable, deferring auth to heartbeat"
+                    )
+                    self.socket_force_close()
+                    self.is_connected = False
+                    return True
+                try:
                     _r3 = time.perf_counter()
                     ok = self.authenticate()
                     self.logger.info(
@@ -584,11 +596,12 @@ class Seestar:
                         self.logger.warning(
                             "Authentication failed after connect; staying connected, will retry from heartbeat"
                         )
-            except Exception as e:
-                self._last_auth_attempt = time.time()
-                self.logger.warning(
-                    f"Authentication raised after connect (staying connected, will retry): {e}"
-                )
+                except Exception as e:
+                    self._last_auth_attempt = time.time()
+                    self.logger.warning(
+                        f"Authentication raised after connect (staying connected, will retry): {e}"
+                    )
+
             return True
         except socket.error:
             self.socket_force_close()
@@ -3006,12 +3019,16 @@ class Seestar:
             _t0 = time.perf_counter()
             self.logger.info(f"TIMING [{self.device_name}] start_watch_thread: begin")
 
-            # Use a short per-attempt timeout during startup — the heartbeat thread
-            # will keep retrying with the full Config.timeout at runtime.
+            # Use a short connect timeout and skip auth during startup: the scope accepts
+            # TCP connections before its auth handler is ready (auth times out at ~10s per
+            # attempt). We just check TCP reachability here; the heartbeat thread does the
+            # full auth once the scope is ready.
             _startup_connect_timeout = 2.0
             for i in range(3, 0, -1):
                 _tc = time.perf_counter()
-                if self.reconnect(connect_timeout=_startup_connect_timeout):
+                if self.reconnect(
+                    connect_timeout=_startup_connect_timeout, skip_auth=True
+                ):
                     self.logger.info(
                         f"TIMING [{self.device_name}] reconnect: success in {time.perf_counter() - _tc:.3f}s"
                     )
