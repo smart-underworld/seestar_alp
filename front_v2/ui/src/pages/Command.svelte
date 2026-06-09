@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { activeDevNum, isConnected } from "../lib/stores/deviceStore";
+  import { activeDevNum, isConnected, activeDeviceStatus } from "../lib/stores/deviceStore";
   import { api } from "../lib/api";
   import EventStatusPanel from "../lib/components/EventStatusPanel.svelte";
 
@@ -9,6 +9,8 @@
   let error = "";
   let loading = false;
   let loadingKey = "";
+
+  $: mountMode = $activeDeviceStatus?.mount_mode ?? "";
 
   // ── Quick Actions ──────────────────────────────────────────────────────────
   const QUICK_ACTIONS = [
@@ -28,6 +30,19 @@
       } else if (qa.cmd) {
         result = await api.devices.command($activeDevNum, qa.cmd, qa.params);
       }
+    } catch (e) {
+      error = String(e);
+    } finally {
+      loadingKey = "";
+    }
+  }
+
+  async function switchMountMode() {
+    const cmd = mountMode === "Equatorial" ? "set_alt_az_mode" : "set_eq_mode";
+    loadingKey = "mountmode";
+    error = "";
+    try {
+      result = await api.devices.command($activeDevNum, cmd, {});
     } catch (e) {
       error = String(e);
     } finally {
@@ -221,6 +236,20 @@
               <span>{loadingKey === qa.label ? "…" : qa.label}</span>
             </button>
           {/each}
+          <button
+            class="action-btn"
+            on:click={switchMountMode}
+            disabled={loadingKey === "mountmode"}
+          >
+            <span class="action-icon">⇄</span>
+            <span>
+              {#if loadingKey === "mountmode"}…
+              {:else if mountMode === "Equatorial"}→ Alt-Az
+              {:else if mountMode === "Alt Azimuth"}→ Equatorial
+              {:else}Switch Mount Mode
+              {/if}
+            </span>
+          </button>
         </div>
       </div>
 

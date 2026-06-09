@@ -15,6 +15,16 @@
     return "danger";
   }
 
+  function wifiBars(signal: string): number {
+    if (!signal) return 0;
+    const m = signal.match(/-?\d+/);
+    if (!m) return 0;
+    const dbm = parseInt(m[0], 10);
+    if (dbm >= -69) return 3;
+    if (dbm >= -80) return 2;
+    return 1;
+  }
+
   function fmt(v: unknown, unit = ""): string {
     if (v == null || v === "") return "—";
     return `${v}${unit}`;
@@ -131,20 +141,27 @@
     <!-- Card 5: Storage & Network -->
     <div class="panel-card stat-card">
       <p class="panel-title">Storage &amp; Network</p>
-      {#if s.free_storage && s.free_storage !== "Unknown"}
-        <div class="stat-row">
-          <div class="stat-key">Free</div>
-          <div class="stat-value {storageColor(s.free_storage)}">
-            {s.free_storage}
-            <div class="metric-bar">
-              <div class="metric-bar-fill {storageColor(s.free_storage)}" style="width:{storagePct(s.free_storage)}%"></div>
-            </div>
+      <div class="icon-metrics">
+        {#if s.free_storage && s.free_storage !== "Unknown"}
+          <div class="icon-metric">
+            <svg class="big-icon {storageColor(s.free_storage)}" viewBox="0 0 24 24" fill="none" stroke-linecap="round" aria-label="Storage: {s.free_storage}">
+              <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="3" opacity="0.2"/>
+              <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="3"
+                stroke-dasharray="{(storagePct(s.free_storage) / 100 * 50.265).toFixed(1)} 50.265"
+                transform="rotate(-90 12 12)"/>
+            </svg>
+            <div class="icon-label">{s.free_storage}</div>
           </div>
+        {/if}
+        <div class="icon-metric">
+          <svg class="big-icon {wifiColor(s.wifi_signal)}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Wi-Fi: {fmt(s.wifi_signal)}">
+            <path d="M1.42 9a16 16 0 0 1 21.16 0"    opacity={wifiBars(s.wifi_signal) >= 3 ? 1 : 0.2}/>
+            <path d="M5 12.55a11 11 0 0 1 14.08 0"   opacity={wifiBars(s.wifi_signal) >= 2 ? 1 : 0.2}/>
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"   opacity={wifiBars(s.wifi_signal) >= 1 ? 1 : 0.2}/>
+            <line x1="12" y1="20" x2="12.01" y2="20" stroke-width="3" opacity={wifiBars(s.wifi_signal) >= 1 ? 1 : 0.2}/>
+          </svg>
+          <div class="icon-label">{fmt(s.wifi_signal)}</div>
         </div>
-      {/if}
-      <div class="stat-row">
-        <div class="stat-key">Wi-Fi</div>
-        <div class="stat-value {wifiColor(s.wifi_signal)}">{fmt(s.wifi_signal)}</div>
       </div>
     </div>
 
@@ -207,6 +224,33 @@
     height: 1em;
     vertical-align: -0.15em;
     margin-right: 0.25em;
+  }
+
+  .icon-metrics {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    margin-top: 0.5rem;
+  }
+  .icon-metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .big-icon {
+    width: 3rem;
+    height: 3rem;
+    flex-shrink: 0;
+  }
+  .big-icon.success { color: var(--ui-success); }
+  .big-icon.warning { color: var(--ui-warning); }
+  .big-icon.danger  { color: var(--ui-danger); }
+  .icon-label {
+    font-size: 0.68rem;
+    color: var(--ui-muted);
+    text-align: center;
+    line-height: 1.3;
   }
 
   .sub-line { font-size: 0.82rem; color: var(--ui-muted); margin: 0.1rem 0; }
