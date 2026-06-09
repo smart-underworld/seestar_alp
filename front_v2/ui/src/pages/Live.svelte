@@ -18,6 +18,14 @@
   ];
 
   let activeMode: LiveMode | null = null;
+
+  // "idle"    – no mode selected yet
+  // "loading" – mode started but device not yet streaming (covers loading.gif phase)
+  // "live"    – device reports view_state === "working", show the MJPEG feed
+  $: feedState = !activeMode || activeMode === "none" ? "idle"
+               : $activeDeviceStatus?.view_state === "working" ? "live"
+               : "loading";
+
   let focusPos: number | null = null;
   let expMs = 10000;
   let gain = 80;
@@ -372,6 +380,39 @@
               class:live-feed-fs={isFullscreen}
               style={imgTransform ? `transform:${imgTransform}` : ''}
             />
+            {#if feedState !== "live"}
+              <div class="feed-placeholder">
+                <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" class="scope-svg" aria-hidden="true">
+                  <!-- Outer ring -->
+                  <circle cx="100" cy="100" r="88" fill="none" stroke="currentColor" stroke-width="0.75" opacity="0.12"/>
+                  <!-- Crosshairs -->
+                  <line x1="100" y1="16" x2="100" y2="184" stroke="currentColor" stroke-width="0.75" opacity="0.18"/>
+                  <line x1="16"  y1="100" x2="184" y2="100" stroke="currentColor" stroke-width="0.75" opacity="0.18"/>
+                  <!-- Crosshair end ticks -->
+                  <line x1="100" y1="16"  x2="100" y2="26"  stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+                  <line x1="100" y1="174" x2="100" y2="184" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+                  <line x1="16"  y1="100" x2="26"  y2="100" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+                  <line x1="174" y1="100" x2="184" y2="100" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+                  <!-- Inner focus ring -->
+                  <circle cx="100" cy="100" r="38" fill="none" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+                  <!-- Rotating scan arc (only while actively connecting) -->
+                  {#if feedState === "loading"}
+                    <circle cx="100" cy="100" r="62" fill="none" stroke="currentColor" stroke-width="1.5"
+                      stroke-dasharray="45 345" stroke-linecap="round" class="scan-arc"/>
+                  {/if}
+                  <!-- Corner brackets -->
+                  <path d="M36 54 L36 36 L54 36"   fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.45"/>
+                  <path d="M164 54 L164 36 L146 36" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.45"/>
+                  <path d="M36 146 L36 164 L54 164" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.45"/>
+                  <path d="M164 146 L164 164 L146 164" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.45"/>
+                  <!-- Centre dot -->
+                  <circle cx="100" cy="100" r="3.5" fill="currentColor" class="centre-dot"/>
+                </svg>
+                <div class="feed-placeholder-label">
+                  {feedState === "idle" ? "Select a mode to begin" : "Connecting…"}
+                </div>
+              </div>
+            {/if}
             {#if s}
               <div class="feed-overlay">
                 {#if s.view_state}<span class="chip">{s.view_state}</span>{/if}
@@ -673,6 +714,45 @@
     height: 100%;
     min-height: 0;
   }
+  /* Thematic placeholder that covers loading.gif and idle state */
+  .feed-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #0a0c10;
+    border-radius: 6px;
+    gap: 0.75rem;
+    color: var(--ui-primary, #4da6ff);
+  }
+  .scope-svg {
+    width: min(55%, 220px);
+    height: auto;
+    opacity: 0.9;
+  }
+  .feed-placeholder-label {
+    font-size: 0.75rem;
+    color: var(--ui-muted, #7a8a9a);
+    letter-spacing: 0.06em;
+  }
+  .scan-arc {
+    transform-origin: 100px 100px;
+    animation: scan-rotate 2.4s linear infinite;
+  }
+  .centre-dot {
+    animation: dot-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes scan-rotate {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 0.4; r: 3.5px; }
+    50%       { opacity: 1;   r: 5px;   }
+  }
+
   .feed-overlay {
     position: absolute;
     bottom: 0.6rem;
