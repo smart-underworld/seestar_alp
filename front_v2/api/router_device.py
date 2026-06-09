@@ -33,12 +33,30 @@ def device_connected(dev_num: int):
 def send_command(dev_num: int, body: CommandRequest):
     if not check_api_state(dev_num):
         raise HTTPException(status_code=503, detail="Device not connected")
-    # Translate mount-mode commands to the scope_park+equ_mode form that works
-    # on both old (pre-set_eq_mode) and new firmware.
+    # UI-level aliases that require translation to firmware methods/params.
     if body.method == "set_eq_mode":
         result = method_sync("scope_park", dev_num, params={"equ_mode": True})
     elif body.method == "set_alt_az_mode":
         result = method_sync("scope_park", dev_num, params={"equ_mode": False})
+    elif body.method == "set_wheel_position_LP":
+        result = method_sync("set_wheel_position", dev_num, params=[2])
+    elif body.method == "set_wheel_position_IR_Cut":
+        result = method_sync("set_wheel_position", dev_num, params=[1])
+    elif body.method == "set_wheel_position_Dark":
+        result = method_sync("set_wheel_position", dev_num, params=[0])
+    # Firmware spells autofocus with a trailing 'e' — normalise both directions.
+    elif body.method == "start_auto_focus":
+        result = method_sync("start_auto_focuse", dev_num)
+    elif body.method == "stop_auto_focus":
+        result = method_sync("stop_auto_focuse", dev_num)
+    # get_last_focuser_position is an alias — firmware only has get_focuser_position.
+    elif body.method == "get_last_focuser_position":
+        result = method_sync("get_focuser_position", dev_num)
+    # grab/release control set the master_cli flag via set_setting.
+    elif body.method == "grab_control":
+        result = method_sync("set_setting", dev_num, params={"master_cli": True})
+    elif body.method == "release_control":
+        result = method_sync("set_setting", dev_num, params={"master_cli": False})
     else:
         result = method_sync(body.method, dev_num, **body.params)
     return CommandResponse(command=body.method, status="success", result=result)

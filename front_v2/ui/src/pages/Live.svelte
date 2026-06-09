@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { activeDevNum, activeDeviceStatus, isConnected, deviceList } from "../lib/stores/deviceStore";
+  import { activeDevNum, activeDeviceStatus, isConnected, deviceList, deviceStatuses } from "../lib/stores/deviceStore";
   import { api } from "../lib/api";
 
   const imgPort = 7556;
@@ -26,15 +26,40 @@
   let focusing = false;
   let autoFocusing = false;
 
+  // One-shot status refresh 2 s after starting a live mode — catches the initial
+  // state transition without overlapping the 15 s global poll.  Ongoing updates
+  // arrive via the "View" WebSocket event handled in deviceStore.
+  let liveRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function startLiveRefresh() {
+    stopLiveRefresh();
+    liveRefreshTimer = setTimeout(async () => {
+      liveRefreshTimer = null;
+      try {
+        const status = await api.devices.status($activeDevNum);
+        deviceStatuses.update(prev => ({ ...prev, [$activeDevNum]: status }));
+      } catch { /* best effort */ }
+    }, 2000);
+  }
+
+  function stopLiveRefresh() {
+    if (liveRefreshTimer !== null) {
+      clearTimeout(liveRefreshTimer);
+      liveRefreshTimer = null;
+    }
+  }
+
   async function setMode(mode: LiveMode) {
     modeError = "";
     try {
       if (mode === "none") {
         await api.devices.live.stopMode($activeDevNum);
         activeMode = null;
+        stopLiveRefresh();
       } else {
         await api.devices.live.startMode($activeDevNum, mode);
         activeMode = mode;
+        startLiveRefresh();
         loadFocus();
         loadExposure();
       }
@@ -212,6 +237,7 @@
 
   onDestroy(() => {
     if (joystickTimer !== null) clearInterval(joystickTimer);
+    stopLiveRefresh();
   });
 
   function rotateFeed() {

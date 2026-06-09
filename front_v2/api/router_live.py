@@ -121,7 +121,9 @@ def move_telescope(dev_num: int, body: MoveRequest):
             },
         )
         return {"status": "ok", "speed": 0, "angle": 0}
-    speed = min(body.distance * 14.4 * body.force, 1440.0)
+    # distance arrives normalised 0–1 from the Svelte joystick; classic nipplejs
+    # sent raw pixels (0–100), so multiply by 100 to restore the same speed range.
+    speed = min(body.distance * 100 * 14.4 * body.force, 1440.0)
     do_action(
         "method_sync",
         dev_num,

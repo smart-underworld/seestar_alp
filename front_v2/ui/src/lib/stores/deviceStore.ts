@@ -52,8 +52,26 @@ export function connectDevice(devNum: number): void {
       case "connected":
       case "ping":
         break;
+      case "View": {
+        // Device pushes View events whenever live-view state changes — update
+        // view_state and mode immediately without waiting for the next HTTP poll.
+        if (typeof msg.payload === "object" && msg.payload !== null) {
+          const p = msg.payload as Record<string, unknown>;
+          deviceStatuses.update((prev) => {
+            const current = prev[devNum] ?? ({} as DeviceStatus);
+            return {
+              ...prev,
+              [devNum]: {
+                ...current,
+                ...(p.state !== undefined ? { view_state: p.state as string } : {}),
+                ...(p.mode  !== undefined ? { mode:       p.mode  as string } : {}),
+              },
+            };
+          });
+        }
+        break;
+      }
       default:
-        // Push every event into the status store so components can react.
         // Full status snapshot arrives as "device_status" type.
         deviceStatuses.update((prev) => {
           const current = prev[devNum] ?? ({} as DeviceStatus);
