@@ -535,30 +535,17 @@ class Seestar:
         try:
             self.logger.info(f"RECONNECTING {self.device_name}")
 
-            _r0 = time.perf_counter()
             self.disconnect()
-            self.logger.info(
-                f"TIMING [{self.device_name}] reconnect.disconnect: {time.perf_counter() - _r0:.3f}s"
-            )
 
-            _r1 = time.perf_counter()
             # send a udp message to satisfy seestar's guest mode to gain control properly
             self.send_udp_intro()
-            self.logger.info(
-                f"TIMING [{self.device_name}] reconnect.udp_intro: {time.perf_counter() - _r1:.3f}s"
-            )
 
             # note: the below isn't thread safe!  (Reconnect can be called from different threads.)
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            _timeout = (
+            self.s.settimeout(
                 connect_timeout if connect_timeout is not None else Config.timeout
             )
-            self.s.settimeout(_timeout)
-            _r2 = time.perf_counter()
             self.s.connect((self.host, self.port))
-            self.logger.info(
-                f"TIMING [{self.device_name}] reconnect.tcp_connect (timeout={_timeout}s): {time.perf_counter() - _r2:.3f}s"
-            )
             self.is_connected = True
 
             # If an interop PEM key is configured, attempt firmware 7.18+ auth
@@ -575,18 +562,11 @@ class Seestar:
             # return True to signal "reachable"; the heartbeat thread does the full auth.
             if getattr(Config, "seestar_interop_pem", ""):
                 if skip_auth:
-                    self.logger.info(
-                        f"TIMING [{self.device_name}] reconnect: TCP reachable, deferring auth to heartbeat"
-                    )
                     self.socket_force_close()
                     self.is_connected = False
                     return True
                 try:
-                    _r3 = time.perf_counter()
                     ok = self.authenticate()
-                    self.logger.info(
-                        f"TIMING [{self.device_name}] reconnect.authenticate: {time.perf_counter() - _r3:.3f}s"
-                    )
                     if ok:
                         self.is_authenticated = True
                     else:
@@ -859,7 +839,6 @@ class Seestar:
         else:
             cur_cmdid = self.send_message_param(data)
 
-        _sync_t0 = time.perf_counter()
         start = time.time()
         last_slow = start
         while cur_cmdid not in self.response_dict:
@@ -879,10 +858,6 @@ class Seestar:
                     )
                     # todo : dump out stats.  last run time on threads, connection status, etc.
             time.sleep(0.5)
-        _sync_elapsed = time.perf_counter() - _sync_t0
-        self.logger.info(
-            f"TIMING sync_call method={data['method']!r} elapsed={_sync_elapsed:.3f}s"
-        )
         self.logger.debug(f"response is {self.response_dict[cur_cmdid]}")
         return self.response_dict[cur_cmdid]
 
@@ -3016,28 +2991,18 @@ class Seestar:
         else:
             self.is_watch_events = True
 
-            _t0 = time.perf_counter()
-            self.logger.info(f"TIMING [{self.device_name}] start_watch_thread: begin")
-
             # Use a short connect timeout and skip auth during startup: the scope accepts
             # TCP connections before its auth handler is ready (auth times out at ~10s per
             # attempt). We just check TCP reachability here; the heartbeat thread does the
             # full auth once the scope is ready.
             _startup_connect_timeout = 2.0
             for i in range(3, 0, -1):
-                _tc = time.perf_counter()
                 if self.reconnect(
                     connect_timeout=_startup_connect_timeout, skip_auth=True
                 ):
-                    self.logger.info(
-                        f"TIMING [{self.device_name}] reconnect: success in {time.perf_counter() - _tc:.3f}s"
-                    )
                     self.logger.info(f"{self.device_name} Connected")
                     break
                 else:
-                    self.logger.info(
-                        f"TIMING [{self.device_name}] reconnect: failed in {time.perf_counter() - _tc:.3f}s"
-                    )
                     self.logger.info(
                         f"{self.device_name} Connection Failed, is Seestar turned on?"
                     )
@@ -3064,12 +3029,8 @@ class Seestar:
                 )
 
                 if self.is_connected:
-                    _tgs = time.perf_counter()
                     initial_state = self.send_message_param_sync(
                         {"method": "get_device_state"}
-                    )
-                    self.logger.info(
-                        f"TIMING [{self.device_name}] get_device_state: {time.perf_counter() - _tgs:.3f}s"
                     )
                     if self.firmware_ver_int == 0:
                         try:
@@ -3087,21 +3048,8 @@ class Seestar:
                 # move start of heartbeat thread to here to avoid error with simulator
                 self.heartbeat_msg_thread.start()
 
-                _tgm = time.perf_counter()
                 self.guest_mode_init()
-                self.logger.info(
-                    f"TIMING [{self.device_name}] guest_mode_init: {time.perf_counter() - _tgm:.3f}s"
-                )
-
-                _tec = time.perf_counter()
                 self.event_callbacks_init(initial_state["result"])
-                self.logger.info(
-                    f"TIMING [{self.device_name}] event_callbacks_init: {time.perf_counter() - _tec:.3f}s"
-                )
-
-                self.logger.info(
-                    f"TIMING [{self.device_name}] start_watch_thread: total {time.perf_counter() - _t0:.3f}s"
-                )
 
             except Exception:
                 # todo : Disconnect socket and set is_watch_events false
