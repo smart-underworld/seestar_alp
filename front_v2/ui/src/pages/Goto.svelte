@@ -216,7 +216,7 @@
     gap: 0.4rem;
     align-items: center;
   }
-  .search-catalog { flex: 0 0 auto; font-size: 0.8rem; padding: 0.3rem 0.5rem; }
+  .search-catalog { flex: 0 0 auto; width: auto; font-size: 0.8rem; padding: 0.3rem 0.5rem; }
   .search-input   { flex: 1; }
   .search-btn     { flex-shrink: 0; padding: 0.3rem 0.65rem; }
   .search-error   { font-size: 0.8rem; color: var(--ui-danger); margin: 0.3rem 0 0; }

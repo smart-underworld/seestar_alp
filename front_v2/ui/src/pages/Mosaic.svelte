@@ -298,9 +298,9 @@
   .offline-msg { color: var(--ui-muted); }
 
   .search-section { margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.06); }
-  .search-row { display: flex; flex-direction: column; gap: 0.4rem; }
-  .search-catalog { width: 100%; font-size: 0.85rem; }
-  .search-input-row { display: flex; gap: 0.4rem; align-items: center; }
+  .search-row { display: flex; flex-direction: row; gap: 0.4rem; align-items: center; }
+  .search-catalog { width: auto; font-size: 0.85rem; flex-shrink: 0; }
+  .search-input-row { display: flex; gap: 0.4rem; align-items: center; flex: 1; }
   .search-input { flex: 1; }
   .search-btn { flex-shrink: 0; padding: 0.3rem 0.65rem; }
   .search-error { font-size: 0.8rem; color: var(--ui-danger); margin: 0.3rem 0 0; }
