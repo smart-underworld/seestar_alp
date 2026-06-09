@@ -40,4 +40,4 @@ anyio==4.13.0
 h11==0.16.0
 httptools==0.8.0
 uvloop==0.22.1
-httpx2>=2.0
+httpx>=0.27
