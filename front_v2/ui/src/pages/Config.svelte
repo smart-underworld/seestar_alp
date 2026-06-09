@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
 
   interface ConfigData {
     networking: Record<string, unknown>;
@@ -215,7 +214,11 @@
     devicesBaseline = JSON.stringify(devices);
   }
 
-  onMount(load);
+  let started = false;
+  if (!started) {
+    started = true;
+    load();
+  }
 </script>
 
 <div class="page-hero">

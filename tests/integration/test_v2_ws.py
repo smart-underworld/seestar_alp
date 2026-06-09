@@ -136,6 +136,254 @@ def test_send_command(client):
 
 
 # ---------------------------------------------------------------------------
+# Live: joystick move / record toggle
+# ---------------------------------------------------------------------------
+
+
+def test_live_move_with_distance(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "front_v2.api.router_live.do_action",
+        lambda action, dev_num, params: (
+            calls.append((action, dev_num, params)),
+            {"Value": {"result": {}}},
+        )[1],
+    )
+    r = client.post(
+        "/api/v1/devices/1/live/move",
+        json={"angle": 90, "distance": 0.5, "force": 1.0},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok"
+    assert body["angle"] == 90
+    assert body["speed"] == pytest.approx(0.5 * 14.4 * 1.0)
+
+    action, dev_num, params = calls[0]
+    assert action == "method_sync"
+    assert dev_num == 1
+    assert params["method"] == "scope_speed_move"
+    assert params["params"]["angle"] == 90
+    assert params["params"]["speed"] == pytest.approx(7.2)
+    assert params["params"]["dur_sec"] == 3
+
+
+def test_live_move_stop_when_distance_zero(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "front_v2.api.router_live.do_action",
+        lambda action, dev_num, params: (
+            calls.append((action, dev_num, params)),
+            {"Value": {"result": {}}},
+        )[1],
+    )
+    r = client.post(
+        "/api/v1/devices/1/live/move",
+        json={"angle": 45, "distance": 0, "force": 1.0},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok", "speed": 0, "angle": 0}
+    assert calls[0][2]["params"] == {"speed": 0, "angle": 0, "dur_sec": 3}
+
+
+def test_live_move_speed_is_capped_at_max(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "front_v2.api.router_live.do_action",
+        lambda action, dev_num, params: (
+            calls.append((action, dev_num, params)),
+            {"Value": {"result": {}}},
+        )[1],
+    )
+    r = client.post(
+        "/api/v1/devices/1/live/move",
+        json={"angle": 180, "distance": 100, "force": 100},
+    )
+    assert r.status_code == 200
+    assert r.json()["speed"] == 1440.0
+    assert calls[0][2]["params"]["speed"] == 1440.0
+
+
+def test_live_move_requires_connected_device(client, monkeypatch):
+    monkeypatch.setattr(
+        "front_v2.api.router_live.check_api_state", lambda dev_num: False
+    )
+    r = client.post(
+        "/api/v1/devices/1/live/move",
+        json={"angle": 0, "distance": 1, "force": 1},
+    )
+    assert r.status_code == 503
+
+
+def test_live_record_toggle(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "front_v2.api.router_live.do_action",
+        lambda action, dev_num, params: (
+            calls.append((action, dev_num, params)),
+            {"Value": {"result": {}}},
+        )[1],
+    )
+    r = client.post("/api/v1/devices/1/live/record")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
+
+    action, dev_num, params = calls[0]
+    assert action == "method_async"
+    assert dev_num == 1
+    assert params == {"method": "iscope_start_stack", "params": {"restart": True}}
+
+
+# ---------------------------------------------------------------------------
+# Balance sensor (bubble level)
+# ---------------------------------------------------------------------------
+
+
+def test_balance_sensor_returns_xy(client, monkeypatch):
+    monkeypatch.setattr(
+        "front_v2.api.router_device.method_sync",
+        lambda method, dev_num, **kw: {
+            "balance_sensor": {"data": {"x": 1.5, "y": -2.25}}
+        },
+    )
+    r = client.get("/api/v1/devices/1/balance-sensor")
+    assert r.status_code == 200
+    assert r.json() == {"x": 1.5, "y": -2.25}
+
+
+def test_balance_sensor_handles_missing_data(client, monkeypatch):
+    monkeypatch.setattr(
+        "front_v2.api.router_device.method_sync", lambda method, dev_num, **kw: {}
+    )
+    r = client.get("/api/v1/devices/1/balance-sensor")
+    assert r.status_code == 200
+    assert r.json() == {"x": None, "y": None}
+
+
+# ---------------------------------------------------------------------------
+# Config: editable device list
+# ---------------------------------------------------------------------------
+
+
+def test_save_devices_round_trip(client, monkeypatch):
+    from device.config import Config
+
+    monkeypatch.setattr(Config, "save_toml", lambda: None)
+
+    r = client.post(
+        "/api/v1/config/devices",
+        json={
+            "devices": [
+                {"name": "Seestar A", "ip_address": "10.0.0.5"},
+                {"name": "Seestar B", "ip_address": "10.0.0.6"},
+            ]
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok"
+    assert body["devices"] == [
+        {"device_num": 1, "name": "Seestar A", "ip_address": "10.0.0.5"},
+        {"device_num": 2, "name": "Seestar B", "ip_address": "10.0.0.6"},
+    ]
+    assert [s["device_num"] for s in Config.seestars] == [1, 2]
+    assert [s["name"] for s in Config.seestars] == ["Seestar A", "Seestar B"]
+
+
+def test_save_devices_renumbers_sequentially_after_removal(client, monkeypatch):
+    from device.config import Config
+
+    monkeypatch.setattr(Config, "save_toml", lambda: None)
+
+    client.post(
+        "/api/v1/config/devices",
+        json={
+            "devices": [
+                {"name": "A", "ip_address": "10.0.0.1"},
+                {"name": "B", "ip_address": "10.0.0.2"},
+                {"name": "C", "ip_address": "10.0.0.3"},
+            ]
+        },
+    )
+    r = client.post(
+        "/api/v1/config/devices",
+        json={
+            "devices": [
+                {"name": "A", "ip_address": "10.0.0.1"},
+                {"name": "C", "ip_address": "10.0.0.3"},
+            ]
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert [d["device_num"] for d in body["devices"]] == [1, 2]
+    assert [d["name"] for d in body["devices"]] == ["A", "C"]
+
+
+def test_save_devices_requires_name_and_ip(client, monkeypatch):
+    from device.config import Config
+
+    monkeypatch.setattr(Config, "save_toml", lambda: None)
+
+    r = client.post(
+        "/api/v1/config/devices",
+        json={"devices": [{"name": "", "ip_address": "10.0.0.1"}]},
+    )
+    assert r.status_code == 400
+
+    r = client.post(
+        "/api/v1/config/devices",
+        json={"devices": [{"name": "NoIP", "ip_address": ""}]},
+    )
+    assert r.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Platform (Raspberry Pi service / power controls)
+# ---------------------------------------------------------------------------
+
+
+def test_platform_get_returns_detected_platform(client):
+    r = client.get("/api/v1/platform")
+    assert r.status_code == 200
+    assert "platform" in r.json()
+
+
+def test_platform_action_rejected_on_non_pi(client, monkeypatch):
+    monkeypatch.setattr("front_v2.api.router_platform._PLATFORM", "Linux")
+    r = client.post("/api/v1/platform/action", json={"command": "restart_alp"})
+    assert r.status_code == 403
+
+
+def test_platform_action_rejects_unknown_command(client, monkeypatch):
+    monkeypatch.setattr("front_v2.api.router_platform._PLATFORM", "raspberry_pi")
+    r = client.post("/api/v1/platform/action", json={"command": "nonsense"})
+    assert r.status_code == 400
+
+
+def test_platform_action_runs_known_command(client, monkeypatch):
+    monkeypatch.setattr("front_v2.api.router_platform._PLATFORM", "raspberry_pi")
+    calls = []
+    # Replace the background runner (looked up by name at call time inside the
+    # spawned thread) so the test never shells out to systemctl/reboot.
+    monkeypatch.setattr(
+        "front_v2.api.router_platform._background_run", lambda args: calls.append(args)
+    )
+
+    r = client.post("/api/v1/platform/action", json={"command": "restart_alp"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok"
+    assert "restarting" in body["message"].lower()
+
+    for _ in range(40):
+        if calls:
+            break
+        time.sleep(0.05)
+    assert calls == [["sudo", "systemctl", "restart", "seestar.service"]]
+
+
+# ---------------------------------------------------------------------------
 # WebSocket bridge tests
 # ---------------------------------------------------------------------------
 

@@ -42,11 +42,16 @@ describe("Nav", () => {
     expect(screen.getByText(/seestar alp/i)).toBeInTheDocument();
   });
 
-  it("renders all seven nav links", () => {
+  it("renders all primary nav links", () => {
     render(Nav);
-    const labels = ["Home", "Live", "GoTo", "Image", "Schedule", "Settings", "Command"];
+    // Use getByRole("link") — respects aria-hidden, filtering out ghost-span duplicates and
+    // the collapsed mobile-menu (aria-hidden="true") so each label resolves to exactly one element.
+    const labels = [
+      "Home", "Startup", "Commands", "Goto", "Image", "Live",
+      "Mosaic", "Planning", "Schedule", "Settings", "SSC Config", "Stats", "Support",
+    ];
     for (const label of labels) {
-      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
     }
   });
 
@@ -63,6 +68,8 @@ describe("Nav", () => {
 
   it("shows a connected dot indicator for a connected device", () => {
     deviceList.set([{ device_num: 1, name: "MyStar", ip_address: "10.0.0.1", is_connected: true }]);
+    // devState() checks backend_ready — without it the dot stays in "loading" state, not "online"
+    deviceStatuses.set({ 1: { backend_ready: true, is_connected: true } as any });
     const { container } = render(Nav);
     const dot = container.querySelector(".dot.online");
     expect(dot).toBeInTheDocument();
@@ -90,6 +97,11 @@ describe("Nav", () => {
       { device_num: 1, name: "Alpha", ip_address: "10.0.0.1", is_connected: true },
       { device_num: 2, name: "Beta",  ip_address: "10.0.0.2", is_connected: false },
     ]);
+    // devState() needs backend_ready to resolve offline vs loading; without it both show " …"
+    deviceStatuses.set({
+      1: { backend_ready: true, is_connected: true } as any,
+      2: { backend_ready: true, is_connected: false } as any,
+    });
     render(Nav);
     expect(screen.getByText(/alpha/i)).toBeInTheDocument();
     expect(screen.getByText(/beta.*offline/i)).toBeInTheDocument();

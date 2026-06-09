@@ -1,51 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/svelte";
-import { derived } from "svelte/store";
+import { writable } from "svelte/store";
 import type { DeviceStatus, DeviceInfo } from "../lib/api";
 
-// ---------------------------------------------------------------------------
-// Hoisted mock stores — must be declared before vi.mock factories run
-// ---------------------------------------------------------------------------
-const {
-  mockDeviceList,
-  mockActiveDevNum,
-  mockDevStatuses,
-} = vi.hoisted(() => {
-  const { writable } = require("svelte/store");
-  return {
-    mockDeviceList:   writable<DeviceInfo[]>([]),
-    mockActiveDevNum: writable<number>(1),
-    mockDevStatuses:  writable<Record<number, DeviceStatus>>({}),
-  };
-});
+vi.mock("../lib/stores/deviceStore", () => ({
+  activeDeviceStatus: writable<DeviceStatus | null>(null),
+  isConnected: writable<boolean>(false),
+  activeDevNum: writable<number>(1),
+  deviceList: writable<DeviceInfo[]>([]),
+}));
 
-vi.mock("../lib/stores/deviceStore", () => {
-  const { derived } = require("svelte/store");
-  const activeDeviceStatus = derived(
-    [mockActiveDevNum, mockDevStatuses],
-    ([$n, $s]: [number, Record<number, DeviceStatus>]) => $s[$n] ?? null,
-  );
-  const isConnected = derived(
-    activeDeviceStatus,
-    ($s: DeviceStatus | null) => $s?.is_connected ?? false,
-  );
-  return {
-    deviceList:         mockDeviceList,
-    activeDevNum:       mockActiveDevNum,
-    deviceStatuses:     mockDevStatuses,
-    activeDeviceStatus,
-    isConnected,
-    connectDevice:      vi.fn(),
-    disconnectDevice:   vi.fn(),
-    initDevices:        vi.fn(),
-  };
-});
-
+import * as deviceStore from "../lib/stores/deviceStore";
 import Home from "./Home.svelte";
 
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
+const mockActiveDeviceStatus = deviceStore.activeDeviceStatus as ReturnType<typeof writable<DeviceStatus | null>>;
+const mockActiveDevNum = deviceStore.activeDevNum as ReturnType<typeof writable<number>>;
+const mockDeviceList = deviceStore.deviceList as ReturnType<typeof writable<DeviceInfo[]>>;
+
 const DEVICE: DeviceInfo = {
   device_num: 1,
   name: "Seestar S50",
@@ -56,6 +27,7 @@ const DEVICE: DeviceInfo = {
 const BASE_STATUS: DeviceStatus = {
   device_num: 1,
   is_connected: true,
+  backend_ready: true,
   view_state: "Idle",
   mode: "",
   stage: "",
@@ -69,131 +41,155 @@ const BASE_STATUS: DeviceStatus = {
   ra: 10.75,
   dec: -5.123,
   schedule: null,
+  firmware_ver: "3.14",
+  focal_position: 1500,
+  auto_power_off: true,
+  heater_enable: false,
+  balance_angle: 4,
+  compass_direction: 180,
+  charge_status: "discharging",
+  battery_temp: 24.6,
+  wifi_signal: "-65dBm",
+  is_master: true,
+  connected_clients: [],
+  schedule_state: "",
+  guest_mode_available: true,
 };
 
 beforeEach(() => {
   mockDeviceList.set([]);
   mockActiveDevNum.set(1);
-  mockDevStatuses.set({});
+  mockActiveDeviceStatus.set(null);
 });
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-describe("Home — offline state", () => {
-  it("shows offline card when device is not connected", () => {
-    mockDeviceList.set([{ ...DEVICE, is_connected: false }]);
-    mockDevStatuses.set({ 1: { ...BASE_STATUS, is_connected: false } });
+describe("Home — initializing / no status", () => {
+  it("shows the initializing card when there is no status yet", () => {
     render(Home);
-    expect(screen.getByText(/device offline/i)).toBeInTheDocument();
+    expect(screen.getByText("Initializing…")).toBeInTheDocument();
   });
 
-  it("offline card mentions device name in the description text", () => {
-    mockDeviceList.set([{ ...DEVICE, is_connected: false }]);
+  it("shows the initializing card when backend_ready is false", () => {
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, backend_ready: false });
     render(Home);
-    // The offline-sub paragraph contains the name; use getAllByText to handle
-    // it also appearing in the page-title h1.
+    expect(screen.getByText("Initializing…")).toBeInTheDocument();
+  });
+
+  it("falls back to 'Telescope' as the heading when no device is configured", () => {
+    render(Home);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Telescope");
+  });
+});
+
+describe("Home — offline state", () => {
+  beforeEach(() => {
+    mockDeviceList.set([{ ...DEVICE, is_connected: false }]);
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, is_connected: false });
+  });
+
+  it("shows the offline card when the device is disconnected", () => {
+    render(Home);
+    expect(screen.getByText("Telescope Offline")).toBeInTheDocument();
+    expect(screen.getByText(/is not reachable/)).toBeInTheDocument();
+  });
+
+  it("mentions the device name in the offline description and the page title", () => {
+    render(Home);
     const matches = screen.getAllByText(/seestar s50/i);
-    expect(matches.length).toBeGreaterThanOrEqual(1);
+    expect(matches.length).toBeGreaterThanOrEqual(2);
   });
 });
 
 describe("Home — connected state with status", () => {
   beforeEach(() => {
     mockDeviceList.set([DEVICE]);
-    mockDevStatuses.set({ 1: BASE_STATUS });
+    mockActiveDeviceStatus.set(BASE_STATUS);
   });
 
-  it("shows the device name as page title", () => {
+  it("shows the device name as page title and IP as subtitle", () => {
     render(Home);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Seestar S50");
-  });
-
-  it("shows device IP as subtitle", () => {
-    render(Home);
     expect(screen.getByText("192.168.1.42")).toBeInTheDocument();
   });
 
-  it("renders the State card with view state", () => {
+  it("renders the State and Mount cards", () => {
     render(Home);
     expect(screen.getByText("Idle")).toBeInTheDocument();
-  });
-
-  it("renders the Mount card with mount mode", () => {
-    render(Home);
     expect(screen.getByText("Alt Azimuth")).toBeInTheDocument();
   });
 
-  it("renders battery percentage", () => {
+  it("renders battery percentage, temperature and free storage", () => {
     render(Home);
     expect(screen.getByText("80%")).toBeInTheDocument();
-  });
-
-  it("renders temperature", () => {
-    render(Home);
     expect(screen.getByText(/22\.5°C/)).toBeInTheDocument();
-  });
-
-  it("renders free storage", () => {
-    render(Home);
     expect(screen.getByText(/32\.0 GB \/ 64\.0 GB/)).toBeInTheDocument();
   });
 
-  it("renders RA and Dec coordinates", () => {
+  it("renders RA/Dec coordinates with sign formatting", () => {
     render(Home);
     expect(screen.getByText(/10\.75000/)).toBeInTheDocument();
     expect(screen.getByText(/-5\.12300/)).toBeInTheDocument();
   });
+
+  it("renders the Telescope card fields", () => {
+    render(Home);
+    expect(screen.getByText("3.14")).toBeInTheDocument();
+    expect(screen.getByText("1500")).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+    expect(screen.getByText("180")).toBeInTheDocument();
+    expect(screen.getByText("On")).toBeInTheDocument(); // Auto Off
+    expect(screen.getByText("Off")).toBeInTheDocument(); // Heater
+  });
+
+  it("shows a placeholder dash for unknown balance/compass/firmware fields", () => {
+    mockActiveDeviceStatus.set({
+      ...BASE_STATUS,
+      balance_angle: null,
+      compass_direction: null,
+      firmware_ver: "",
+      charge_status: "",
+    });
+    render(Home);
+    const dashes = screen.getAllByText("—");
+    expect(dashes.length).toBeGreaterThanOrEqual(2);
+  });
 });
 
 describe("Home — capture progress", () => {
-  it("shows stacked count when imaging is active", () => {
+  beforeEach(() => {
     mockDeviceList.set([DEVICE]);
-    mockDevStatuses.set({ 1: { ...BASE_STATUS, stacked: 42, failed: 3 } });
-    const { container } = render(Home);
-    // Target the big-value element specifically to avoid the IP "192.168.1.42"
-    // also matching a loose regex.
-    const bigValue = container.querySelector(".big-value.success");
-    expect(bigValue).toBeInTheDocument();
-    expect(bigValue).toHaveTextContent("42");
-    // "3 failed" is split across text nodes; match the combined text content.
-    expect(screen.getByText((_, el) =>
-      el?.textContent?.trim() === "3 failed"
-    )).toBeInTheDocument();
   });
 
-  it("shows idle placeholder when not imaging", () => {
-    mockDeviceList.set([DEVICE]);
-    mockDevStatuses.set({ 1: { ...BASE_STATUS, stacked: "", failed: "" } });
+  it("shows the stacked count and failed frames when imaging is active", () => {
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, stacked: 42, failed: 3 });
+    const { container } = render(Home);
+
+    const bigValue = container.querySelector(".big-value.success");
+    expect(bigValue).toHaveTextContent("42");
+    expect(screen.getByText((_, el) => el?.textContent?.trim() === "3 failed")).toBeInTheDocument();
+  });
+
+  it("shows an idle placeholder when there is no active session", () => {
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, stacked: "", failed: "" });
     render(Home);
     expect(screen.getByText("No active imaging session")).toBeInTheDocument();
   });
 
-  it("shows target name when set", () => {
-    mockDeviceList.set([DEVICE]);
-    mockDevStatuses.set({ 1: { ...BASE_STATUS, target: "M42", view_state: "Working" } });
-    render(Home);
-    expect(screen.getByText(/M42/)).toBeInTheDocument();
-  });
-});
-
-describe("Home — mode / stage info", () => {
-  it("shows mode and stage when both are set", () => {
-    mockDeviceList.set([DEVICE]);
-    mockDevStatuses.set({
-      1: { ...BASE_STATUS, mode: "star", stage: "stacking", view_state: "Working" },
+  it("shows the target name and mode/stage sub-line while working", () => {
+    mockActiveDeviceStatus.set({
+      ...BASE_STATUS,
+      target: "M42",
+      view_state: "Working",
+      mode: "star",
+      stage: "stacking",
     });
     render(Home);
-    // "star · stacking" is the sub-line; use exact sub-string match on the
-    // combined text to avoid the "Seestar S50" title also matching /star/.
+    expect(screen.getByText(/M42/)).toBeInTheDocument();
     expect(screen.getByText(/star\s*·\s*stacking/)).toBeInTheDocument();
   });
-});
 
-describe("Home — no device configured", () => {
-  it("falls back to 'Telescope' when device list is empty", () => {
-    // No devices, no status — shows the default heading.
+  it("shows a schedule-state badge when present", () => {
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, schedule_state: "Running" });
     render(Home);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Telescope");
+    expect(screen.getByText("Running")).toBeInTheDocument();
   });
 });
