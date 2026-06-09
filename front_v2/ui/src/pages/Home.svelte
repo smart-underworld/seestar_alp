@@ -1,9 +1,11 @@
 <script lang="ts">
-  import { activeDeviceStatus, isConnected, activeDevNum, deviceList } from "../lib/stores/deviceStore";
+  import { activeDeviceStatus, isConnected, activeDevNum, deviceList, deviceStatuses } from "../lib/stores/deviceStore";
   import { batteryColor, storagePct, storageColor } from "../lib/utils";
 
   $: s = $activeDeviceStatus;
   $: device = $deviceList.find((d) => d.device_num === $activeDevNum);
+  $: isFederation = $activeDevNum === 0;
+  $: realDevices = $deviceList.filter((d) => d.device_num !== 0);
 
   function wifiColor(signal: string): "success" | "warning" | "danger" {
     if (!signal) return "danger";
@@ -35,11 +37,60 @@
   <p class="page-kicker">Dashboard</p>
   <h1 class="page-title">{device?.name ?? "Telescope"}</h1>
   {#if device}
-    <p class="page-subtitle">{device.ip_address}</p>
+    <p class="page-subtitle">{isFederation ? `${realDevices.length} device${realDevices.length !== 1 ? "s" : ""}` : device.ip_address}</p>
   {/if}
 </div>
 
-{#if !s || !s.backend_ready}
+{#if isFederation}
+  <div class="fed-grid">
+    {#each realDevices as dev}
+      {@const ds = $deviceStatuses[dev.device_num]}
+      <div class="panel-card fed-card">
+        <div class="fed-header">
+          <span class="fed-name">{dev.name}</span>
+          <span class="fed-dot {ds?.is_connected ? 'online' : 'offline'}" title={ds?.is_connected ? 'Connected' : 'Offline'}></span>
+        </div>
+        <div class="fed-ip">{dev.ip_address}</div>
+        {#if !ds || !ds.is_connected}
+          <div class="fed-offline">Offline</div>
+        {:else}
+          <div class="fed-row">
+            <span class="fed-key">State</span>
+            <span class="fed-val">{ds.view_state || "Idle"}</span>
+          </div>
+          <div class="fed-row">
+            <span class="fed-key">Mount</span>
+            <span class="fed-val">
+              <svg class="mode-icon {ds.mount_mode === 'Equatorial' ? 'success' : ds.mount_mode === 'Alt Azimuth' ? 'warning' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+                <line x1="12" y1="2" x2="12" y2="12"/>
+              </svg>
+              {ds.mount_mode}
+            </span>
+          </div>
+          {#if ds.battery_capacity != null}
+            <div class="fed-row">
+              <span class="fed-key">Battery</span>
+              <span class="fed-val {batteryColor(ds.battery_capacity)}">{ds.battery_capacity}%</span>
+            </div>
+          {/if}
+          {#if ds.wifi_signal}
+            <div class="fed-row">
+              <span class="fed-key">Wi-Fi</span>
+              <span class="fed-val">{ds.wifi_signal}</span>
+            </div>
+          {/if}
+          {#if ds.view_state && ds.view_state !== "Idle" && ds.mode}
+            <div class="fed-row">
+              <span class="fed-key">Mode</span>
+              <span class="fed-val">{ds.mode}{ds.stage ? ` · ${ds.stage}` : ""}</span>
+            </div>
+          {/if}
+        {/if}
+      </div>
+    {/each}
+  </div>
+{:else if !s || !s.backend_ready}
   <div class="panel-card init-card">
     <div class="init-spinner"></div>
     <div>
@@ -301,6 +352,48 @@
     text-transform: capitalize;
     letter-spacing: 0.03em;
   }
+
+  /* Federation summary */
+  .fed-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+  .fed-card { display: flex; flex-direction: column; gap: 0.2rem; }
+  .fed-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.15rem;
+  }
+  .fed-name   { font-weight: 600; font-size: 0.92rem; color: var(--ui-body); }
+  .fed-ip     { font-size: 0.75rem; color: var(--ui-muted); margin-bottom: 0.4rem; }
+  .fed-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .fed-dot.online  { background: var(--ui-success); }
+  .fed-dot.offline { background: var(--ui-danger); }
+  .fed-offline { font-size: 0.82rem; color: var(--ui-danger); margin-top: 0.2rem; }
+  .fed-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+  }
+  .fed-key { color: var(--ui-muted); white-space: nowrap; flex-shrink: 0; }
+  .fed-val {
+    color: var(--ui-body);
+    text-align: right;
+    word-break: break-word;
+    display: flex;
+    align-items: center;
+    gap: 0.2em;
+    justify-content: flex-end;
+  }
+  .fed-val.success { color: var(--ui-success); }
+  .fed-val.warning { color: var(--ui-warning); }
+  .fed-val.danger  { color: var(--ui-danger); }
 
   .init-card, .offline-card {
     display: flex;
