@@ -2706,7 +2706,21 @@ class Seestar:
                 wait_until_time = cur_schedule_item["params"]["local_time"].split(":")
                 wait_until_hour = int(wait_until_time[0])
                 wait_until_minute = int(wait_until_time[1])
-                local_time = local_time = datetime.now()
+                local_time = datetime.now()
+                target_time = local_time.replace(
+                    hour=wait_until_hour,
+                    minute=wait_until_minute,
+                    second=0,
+                    microsecond=0,
+                )
+                past_delta = local_time - target_time
+                if timedelta(0) < past_delta <= timedelta(hours=8):
+                    self.logger.info(
+                        f"wait_until {cur_schedule_item['params']['local_time']} is "
+                        f"{int(past_delta.total_seconds() / 60)} min in the past, skipping."
+                    )
+                    index += 1
+                    continue
                 item_state: SchedulerItemState = {
                     "type": "wait_until",
                     "schedule_item_id": self.schedule["current_item_id"],

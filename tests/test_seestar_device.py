@@ -1831,6 +1831,71 @@ def test_scheduler_thread_extra_branches(monkeypatch, seestar):
     assert seestar.schedule["state"] == "complete"
 
 
+def test_wait_until_skips_if_in_recent_past(monkeypatch, seestar):
+    """wait_until whose target is 0–8 h in the past is skipped; subsequent items still run."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    import datetime as _dt
+
+    calls = []
+    seestar.schedule["list"] = collections.deque(
+        [
+            {
+                "schedule_item_id": "u1",
+                "action": "wait_until",
+                "params": {"local_time": "08:00"},
+            },
+            {"schedule_item_id": "o1", "action": "scope_get_equ_coord"},
+        ]
+    )
+    seestar.schedule["state"] = "stopped"
+    seestar.schedule["item_number"] = 1
+    seestar.schedule["is_skip_requested"] = False
+    seestar.play_sound = lambda _sid: None
+    seestar.send_message_param_sync = lambda p: calls.append(p) or {"ok": True}
+
+    # 12:00 — target 08:00 is 4 h in the past; should be skipped
+    monkeypatch.setattr(
+        "device.seestar_device.datetime",
+        SimpleNamespace(now=lambda: _dt.datetime(2000, 1, 1, 12, 0)),
+    )
+
+    seestar.scheduler_thread_fn()
+
+    assert seestar.schedule["state"] == "complete"
+    assert any(c.get("method") == "scope_get_equ_coord" for c in calls)
+
+
+def test_wait_until_not_skipped_if_more_than_8h_past(monkeypatch, seestar):
+    """wait_until more than 8 h in the past is NOT skipped (treated as a future occurrence)."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    import datetime as _dt
+
+    seestar.schedule["list"] = collections.deque(
+        [
+            {
+                "schedule_item_id": "u1",
+                "action": "wait_until",
+                "params": {"local_time": "08:00"},
+            },
+        ]
+    )
+    seestar.schedule["state"] = "stopped"
+    seestar.schedule["item_number"] = 1
+    seestar.schedule["is_skip_requested"] = True  # exits the wait loop immediately
+    seestar.play_sound = lambda _sid: None
+    seestar.send_message_param_sync = lambda _p: {"ok": True}
+
+    # 22:00 — target 08:00 is 14 h in the past; should NOT be skipped
+    monkeypatch.setattr(
+        "device.seestar_device.datetime",
+        SimpleNamespace(now=lambda: _dt.datetime(2000, 1, 1, 22, 0)),
+    )
+
+    seestar.scheduler_thread_fn()
+
+    assert seestar.schedule["state"] == "complete"
+
+
 def test_wait_guest_watch_and_events_extra(monkeypatch, seestar, tmp_path):
     monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
 
