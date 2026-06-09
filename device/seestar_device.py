@@ -526,7 +526,7 @@ class Seestar:
             if sock is not None:
                 sock.close()
 
-    def reconnect(self) -> bool:
+    def reconnect(self, connect_timeout: float | None = None) -> bool:
         if self.is_connected:
             return True
 
@@ -540,7 +540,9 @@ class Seestar:
 
             # note: the below isn't thread safe!  (Reconnect can be called from different threads.)
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.s.settimeout(Config.timeout)
+            self.s.settimeout(
+                connect_timeout if connect_timeout is not None else Config.timeout
+            )
             self.s.connect((self.host, self.port))
             # self.s.settimeout(None)
             self.is_connected = True
@@ -826,6 +828,7 @@ class Seestar:
         else:
             cur_cmdid = self.send_message_param(data)
 
+        _sync_t0 = time.perf_counter()
         start = time.time()
         last_slow = start
         while cur_cmdid not in self.response_dict:
@@ -845,6 +848,10 @@ class Seestar:
                     )
                     # todo : dump out stats.  last run time on threads, connection status, etc.
             time.sleep(0.5)
+        _sync_elapsed = time.perf_counter() - _sync_t0
+        self.logger.info(
+            f"TIMING sync_call method={data['method']!r} elapsed={_sync_elapsed:.3f}s"
+        )
         self.logger.debug(f"response is {self.response_dict[cur_cmdid]}")
         return self.response_dict[cur_cmdid]
 
@@ -2978,11 +2985,24 @@ class Seestar:
         else:
             self.is_watch_events = True
 
+            _t0 = time.perf_counter()
+            self.logger.info(f"TIMING [{self.device_name}] start_watch_thread: begin")
+
+            # Use a short per-attempt timeout during startup — the heartbeat thread
+            # will keep retrying with the full Config.timeout at runtime.
+            _startup_connect_timeout = 2.0
             for i in range(3, 0, -1):
-                if self.reconnect():
+                _tc = time.perf_counter()
+                if self.reconnect(connect_timeout=_startup_connect_timeout):
+                    self.logger.info(
+                        f"TIMING [{self.device_name}] reconnect: success in {time.perf_counter() - _tc:.3f}s"
+                    )
                     self.logger.info(f"{self.device_name} Connected")
                     break
                 else:
+                    self.logger.info(
+                        f"TIMING [{self.device_name}] reconnect: failed in {time.perf_counter() - _tc:.3f}s"
+                    )
                     self.logger.info(
                         f"{self.device_name} Connection Failed, is Seestar turned on?"
                     )
@@ -3007,26 +3027,46 @@ class Seestar:
                 self.heartbeat_msg_thread.name = (
                     f"HeartbeatMsgThread:{self.device_name}"
                 )
-                # self.heartbeat_msg_thread.start()
 
-                initial_state = self.send_message_param_sync(
-                    {"method": "get_device_state"}
-                )
-                if self.firmware_ver_int == 0:
-                    try:
-                        self.firmware_ver_int = initial_state["result"]["device"][
-                            "firmware_ver_int"
-                        ]
-                        self.logger.info(
-                            f"Firmware version (watch init): {self.firmware_ver_int}"
-                        )
-                    except Exception:
-                        pass
+                if self.is_connected:
+                    _tgs = time.perf_counter()
+                    initial_state = self.send_message_param_sync(
+                        {"method": "get_device_state"}
+                    )
+                    self.logger.info(
+                        f"TIMING [{self.device_name}] get_device_state: {time.perf_counter() - _tgs:.3f}s"
+                    )
+                    if self.firmware_ver_int == 0:
+                        try:
+                            self.firmware_ver_int = initial_state["result"]["device"][
+                                "firmware_ver_int"
+                            ]
+                            self.logger.info(
+                                f"Firmware version (watch init): {self.firmware_ver_int}"
+                            )
+                        except Exception:
+                            pass
+                else:
+                    initial_state = {"result": {}}
+
                 # move start of heartbeat thread to here to avoid error with simulator
                 self.heartbeat_msg_thread.start()
 
+                _tgm = time.perf_counter()
                 self.guest_mode_init()
+                self.logger.info(
+                    f"TIMING [{self.device_name}] guest_mode_init: {time.perf_counter() - _tgm:.3f}s"
+                )
+
+                _tec = time.perf_counter()
                 self.event_callbacks_init(initial_state["result"])
+                self.logger.info(
+                    f"TIMING [{self.device_name}] event_callbacks_init: {time.perf_counter() - _tec:.3f}s"
+                )
+
+                self.logger.info(
+                    f"TIMING [{self.device_name}] start_watch_thread: total {time.perf_counter() - _t0:.3f}s"
+                )
 
             except Exception:
                 # todo : Disconnect socket and set is_watch_events false

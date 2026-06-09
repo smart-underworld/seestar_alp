@@ -313,7 +313,7 @@ def test_send_message_paths(monkeypatch, seestar):
     monkeypatch.setattr(
         seestar, "disconnect", lambda: disconnected.__setitem__("count", 1)
     )
-    monkeypatch.setattr(seestar, "reconnect", lambda: False)
+    monkeypatch.setattr(seestar, "reconnect", lambda **kw: False)
     seestar.is_watch_events = True
     seestar.s = _DummySocket(send_error=socket.error("boom"))
     assert seestar.send_message("x") is False
@@ -574,7 +574,7 @@ def test_get_socket_msg_paths(monkeypatch, seestar):
     monkeypatch.setattr(
         seestar, "disconnect", lambda: disconnected.__setitem__("count", 1)
     )
-    monkeypatch.setattr(seestar, "reconnect", lambda: False)
+    monkeypatch.setattr(seestar, "reconnect", lambda **kw: False)
     seestar.is_watch_events = True
     seestar.s = _DummySocket(recv_error=socket.error("x"))
     assert seestar.get_socket_msg() is None
@@ -1136,7 +1136,7 @@ def test_heartbeat_thread_and_plate_solve(monkeypatch, seestar):
     seestar.is_connected = False
     reconnect_calls = {"n": 0}
 
-    def fake_reconnect():
+    def fake_reconnect(**kw):
         reconnect_calls["n"] += 1
         seestar.is_connected = True
         return True
@@ -1488,7 +1488,7 @@ def test_stop_scheduler_mark_wait_guest_and_watch(monkeypatch, seestar, tmp_path
             return False
 
     monkeypatch.setattr("device.seestar_device.threading.Thread", FakeThread)
-    monkeypatch.setattr(seestar, "reconnect", lambda: True)
+    monkeypatch.setattr(seestar, "reconnect", lambda **kw: True)
     monkeypatch.setattr(seestar, "guest_mode_init", lambda: None)
     monkeypatch.setattr(seestar, "event_callbacks_init", lambda _s: None)
     monkeypatch.setattr(
@@ -1883,7 +1883,7 @@ def test_wait_guest_watch_and_events_extra(monkeypatch, seestar, tmp_path):
     seestar.is_watch_events = True
     assert seestar.start_watch_thread() is None
     seestar.is_watch_events = False
-    monkeypatch.setattr(seestar, "reconnect", lambda: False)
+    monkeypatch.setattr(seestar, "reconnect", lambda **kw: False)
     monkeypatch.setattr(
         "device.seestar_device.threading.Thread",
         lambda *a, **k: (_ for _ in ()).throw(Exception("thread boom")),
@@ -1991,7 +1991,12 @@ def test_get_events_focus_empty_queue_and_watch_firmware_init(monkeypatch, seest
             return None
 
     monkeypatch.setattr("device.seestar_device.threading.Thread", FakeThread)
-    monkeypatch.setattr(seestar, "reconnect", lambda: True)
+
+    def fake_reconnect_connected(**kw):
+        seestar.is_connected = True
+        return True
+
+    monkeypatch.setattr(seestar, "reconnect", fake_reconnect_connected)
     monkeypatch.setattr(seestar, "guest_mode_init", lambda: None)
     monkeypatch.setattr(seestar, "event_callbacks_init", lambda _s: None)
     seestar.is_watch_events = False
