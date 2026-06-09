@@ -8,6 +8,7 @@ vi.mock("../lib/stores/deviceStore", () => ({
   isConnected: writable<boolean>(false),
   activeDevNum: writable<number>(1),
   deviceList: writable<DeviceInfo[]>([]),
+  deviceStatuses: writable<Record<number, DeviceStatus>>({}),
 }));
 
 import * as deviceStore from "../lib/stores/deviceStore";

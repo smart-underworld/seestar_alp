@@ -22,5 +22,16 @@ export default defineConfig({
     setupFiles: ["./src/setupTests.ts"],
     globals: true,
     include: ["src/**/*.test.{ts,js}"],
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.{ts,svelte}"],
+      exclude: ["src/main.ts", "src/App.svelte"],
+      thresholds: {
+        lines: 85,
+        statements: 85,
+        branches: 65,
+        functions: 14,
+      },
+    },
   },
 });

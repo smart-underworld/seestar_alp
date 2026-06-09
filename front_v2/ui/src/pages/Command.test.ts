@@ -61,11 +61,11 @@ describe("Command — connected layout", () => {
     expect(screen.getByText("Quick Actions")).toBeInTheDocument();
   });
 
-  it("renders all five quick action buttons", () => {
+  it("renders all quick action buttons including mount mode toggle", () => {
     const { container } = render(Command);
-    // Quick-action buttons carry class "action-btn"
+    // Quick-action buttons carry class "action-btn": 5 from QUICK_ACTIONS + 1 mount mode toggle
     const actionBtns = container.querySelectorAll("button.action-btn");
-    expect(actionBtns.length).toBe(5);
+    expect(actionBtns.length).toBe(6);
     // "Stop Scheduler" and "Open to Horizon" are unique to the quick-actions panel
     expect(screen.getByText("Stop Scheduler")).toBeInTheDocument();
     expect(screen.getByText("Open to Horizon")).toBeInTheDocument();
