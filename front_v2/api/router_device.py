@@ -57,6 +57,16 @@ def send_command(dev_num: int, body: CommandRequest):
         result = method_sync("set_setting", dev_num, params={"master_cli": True})
     elif body.method == "release_control":
         result = method_sync("set_setting", dev_num, params={"master_cli": False})
+    # get_event_state is assembled by the Python device layer, not the firmware —
+    # must use do_action, not method_sync (which would send it to firmware).
+    elif body.method == "get_event_state":
+        raw = do_action("get_event_state", dev_num, {})
+        result = raw.get("Value") if isinstance(raw, dict) else raw
+    # get_disk_volume is unreliable as a direct firmware method_sync; extract
+    # storage from get_device_state which is always available.
+    elif body.method == "get_disk_volume":
+        raw = method_sync("get_device_state", dev_num)
+        result = raw.get("storage") if isinstance(raw, dict) else raw
     else:
         result = method_sync(body.method, dev_num, **body.params)
     return CommandResponse(command=body.method, status="success", result=result)
