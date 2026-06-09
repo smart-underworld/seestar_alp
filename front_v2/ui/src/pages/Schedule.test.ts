@@ -80,14 +80,15 @@ beforeEach(() => {
 });
 
 describe("Schedule — offline", () => {
-  it("shows offline message when not connected", () => {
+  it("shows offline notice when not connected", () => {
     render(Schedule);
-    expect(screen.getByText(/Device 1 is offline/)).toBeInTheDocument();
+    expect(screen.getByText(/Scope is offline/)).toBeInTheDocument();
   });
 
-  it("does not show schedule controls when offline", () => {
+  it("hides Start button but shows builder when offline", () => {
     render(Schedule);
-    expect(screen.queryByText("Add Item")).not.toBeInTheDocument();
+    expect(screen.queryByText(/▶ Start/)).not.toBeInTheDocument();
+    expect(screen.getByText("Action Library")).toBeInTheDocument();
   });
 });
 

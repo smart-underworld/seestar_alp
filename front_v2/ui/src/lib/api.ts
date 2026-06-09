@@ -36,6 +36,12 @@ export interface DeviceInfo {
   is_connected: boolean;
 }
 
+export interface ScheduleLibraryFile {
+  name: string;
+  size: number;
+  modified: number;
+}
+
 export interface DeviceStatus {
   device_num: number;
   is_connected: boolean;
@@ -210,6 +216,25 @@ export const api = {
           if (!res.ok) throw new Error(`POST schedule/import → ${res.status}`);
           return res.json();
         }),
+    },
+    scheduleLibrary: {
+      list: () => get<{ files: ScheduleLibraryFile[] }>("/api/v1/schedules/library"),
+      save: (filename: string, content: string) =>
+        fetch(`/api/v1/schedules/library?filename=${encodeURIComponent(filename)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: content,
+        }).then((res) => {
+          if (!res.ok) throw new Error(`POST schedules/library → ${res.status}`);
+          return res.json() as Promise<{ filename: string }>;
+        }),
+      load: (filename: string) =>
+        fetch(`/api/v1/schedules/library/${encodeURIComponent(filename)}`).then((res) => {
+          if (!res.ok) throw new Error(`GET schedules/library/${filename} → ${res.status}`);
+          return res.text();
+        }),
+      delete: (filename: string) =>
+        del<{ status: string }>(`/api/v1/schedules/library/${encodeURIComponent(filename)}`),
     },
   },
   platform: {

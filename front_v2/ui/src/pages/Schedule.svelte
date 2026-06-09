@@ -3,7 +3,7 @@
   import { dndzone } from "svelte-dnd-action";
   import { activeDevNum, isConnected } from "../lib/stores/deviceStore";
   import { api } from "../lib/api";
-  import type { ScheduleItem } from "../lib/api";
+  import type { ScheduleItem, ScheduleLibraryFile } from "../lib/api";
 
   // ---- Action definitions -----------------------------------------------
 
@@ -230,6 +230,13 @@
   let editingItemId = "";
   let saving = false;
 
+  // ---- Server library state -----------------------------------------------
+  let libraryFiles: ScheduleLibraryFile[] = [];
+  let libraryLoading = false;
+  let librarySaveName = "";
+  let librarySaving = false;
+  let showLibrary = false;
+
   // True when a wait_until item appears before any item that has end_local_time set.
   // The end deadline may fire before (or immediately after) the item starts.
   $: endTimeAfterWait = (() => {
@@ -348,13 +355,30 @@
     loading = true;
     error = "";
     try {
-      const sched = await api.devices.schedule.get($activeDevNum);
-      schedState = (sched.state as string) ?? "";
-      items = toDndItems((sched.list as ScheduleItem[]) ?? []);
+      if ($isConnected) {
+        const sched = await api.devices.schedule.get($activeDevNum);
+        schedState = (sched.state as string) ?? "";
+        items = toDndItems((sched.list as ScheduleItem[]) ?? []);
+      } else {
+        schedState = "";
+        // Keep existing items when going offline so the draft isn't lost
+      }
     } catch (e) {
       error = String(e);
     } finally {
       loading = false;
+    }
+  }
+
+  async function loadLibrary() {
+    libraryLoading = true;
+    try {
+      const result = await api.devices.scheduleLibrary.list();
+      libraryFiles = result.files;
+    } catch (e) {
+      error = String(e);
+    } finally {
+      libraryLoading = false;
     }
   }
 
@@ -399,8 +423,18 @@
         (params as Record<string, unknown>).max_devices = maxDevices;
       }
 
-      await api.devices.schedule.addItem($activeDevNum, action, params);
-      await load();
+      if ($isConnected) {
+        await api.devices.schedule.addItem($activeDevNum, action, params);
+        await load();
+      } else {
+        const newId = crypto.randomUUID();
+        items = [...items, {
+          id: newId,
+          schedule_item_id: newId,
+          action,
+          params: params as Record<string, unknown>,
+        }];
+      }
     } catch (e) {
       error = String(e);
     } finally {
@@ -412,7 +446,9 @@
     error = "";
     if (editingItemId === itemId) cancelEdit();
     try {
-      await api.devices.schedule.deleteItem($activeDevNum, itemId);
+      if ($isConnected) {
+        await api.devices.schedule.deleteItem($activeDevNum, itemId);
+      }
       items = items.filter((i) => i.id !== itemId);
     } catch (e) {
       error = String(e);
@@ -508,15 +544,23 @@
       const idx = items.findIndex((i) => i.id === editingItemId);
       const nextItem = items[idx + 1];
 
-      await api.devices.schedule.deleteItem($activeDevNum, editingItemId);
-      if (nextItem) {
-        await api.devices.schedule.insertItem($activeDevNum, action, params as Record<string, unknown>, nextItem.id);
+      if ($isConnected) {
+        await api.devices.schedule.deleteItem($activeDevNum, editingItemId);
+        if (nextItem) {
+          await api.devices.schedule.insertItem($activeDevNum, action, params as Record<string, unknown>, nextItem.id);
+        } else {
+          await api.devices.schedule.addItem($activeDevNum, action, params);
+        }
+        cancelEdit();
+        await load();
       } else {
-        await api.devices.schedule.addItem($activeDevNum, action, params);
+        items = items.map((i) =>
+          i.id === editingItemId
+            ? { ...i, action, params: params as Record<string, unknown> }
+            : i
+        );
+        cancelEdit();
       }
-
-      cancelEdit();
-      await load();
     } catch (e) {
       error = String(e);
     } finally {
@@ -538,7 +582,9 @@
     confirmClear = false;
     error = "";
     try {
-      await api.devices.schedule.clear($activeDevNum);
+      if ($isConnected) {
+        await api.devices.schedule.clear($activeDevNum);
+      }
       items = [];
       schedState = "";
     } catch (e) {
@@ -546,21 +592,22 @@
     }
   }
 
-  async function exportScheduleHandler() {
+  function exportScheduleHandler() {
     error = "";
-    try {
-      const resp = await api.devices.schedule.exportSchedule($activeDevNum);
-      if (!resp.ok) { error = `Export failed: ${resp.status}`; return; }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `schedule_dev${$activeDevNum}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      error = String(e);
-    }
+    if (items.length === 0) return;
+    const exportData = {
+      version: "1.0",
+      Event: "Scheduler",
+      state: "stopped",
+      list: items.map(({ id: _id, ...item }) => item),
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `schedule_dev${$activeDevNum}_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function importScheduleHandler(event: Event) {
@@ -570,16 +617,34 @@
     error = "";
     try {
       const content = await file.text();
+      await applyScheduleContent(content);
+    } catch (e) {
+      error = String(e);
+    }
+    input.value = "";
+  }
+
+  async function applyScheduleContent(content: string) {
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    const rawList: ScheduleItem[] = Array.isArray(parsed)
+      ? (parsed as ScheduleItem[])
+      : Array.isArray(parsed.list)
+        ? (parsed.list as ScheduleItem[])
+        : [];
+    if (rawList.length === 0) { error = "No schedule items found in file."; return; }
+    if ($isConnected) {
       const result = await api.devices.schedule.importSchedule($activeDevNum, content) as Record<string, unknown>;
       if (result?.code === -1) {
         error = `Import failed: ${result["message"] ?? JSON.stringify(result)}`;
       } else {
         await load();
       }
-    } catch (e) {
-      error = String(e);
+    } else {
+      items = toDndItems(rawList.map((item) => ({
+        ...item,
+        schedule_item_id: item.schedule_item_id ?? crypto.randomUUID(),
+      })));
     }
-    input.value = "";
   }
 
   // Drag-and-drop reorder: clear then re-add in new order.
@@ -588,22 +653,23 @@
     reordering = true;
     error = "";
     items = newOrder;
-    try {
-      await api.devices.schedule.clear($activeDevNum);
-      for (const item of newOrder) {
-        await api.devices.schedule.addItem(
-          $activeDevNum,
-          item.action,
-          (item.params ?? {}) as Record<string, unknown> | unknown[]
-        );
+    if ($isConnected) {
+      try {
+        await api.devices.schedule.clear($activeDevNum);
+        for (const item of newOrder) {
+          await api.devices.schedule.addItem(
+            $activeDevNum,
+            item.action,
+            (item.params ?? {}) as Record<string, unknown> | unknown[]
+          );
+        }
+        await load();
+      } catch (e) {
+        error = String(e);
+        await load();
       }
-      await load();
-    } catch (e) {
-      error = String(e);
-      await load();
-    } finally {
-      reordering = false;
     }
+    reordering = false;
   }
 
   // ---- DnD event handlers -----------------------------------------------
@@ -638,10 +704,55 @@
     stopAutoRefresh();
   }
 
+  // ---- Server library actions -------------------------------------------
+
+  async function saveToLibrary() {
+    if (!librarySaveName.trim() || librarySaving || items.length === 0) return;
+    librarySaving = true;
+    error = "";
+    const filename = librarySaveName.trim().replace(/[^a-zA-Z0-9_\-]/g, "_") + ".json";
+    const exportData = {
+      version: "1.0",
+      Event: "Scheduler",
+      state: "stopped",
+      list: items.map(({ id: _id, ...item }) => item),
+    };
+    try {
+      await api.devices.scheduleLibrary.save(filename, JSON.stringify(exportData, null, 2));
+      librarySaveName = "";
+      await loadLibrary();
+    } catch (e) {
+      error = String(e);
+    } finally {
+      librarySaving = false;
+    }
+  }
+
+  async function loadFromLibrary(filename: string) {
+    error = "";
+    try {
+      const content = await api.devices.scheduleLibrary.load(filename);
+      await applyScheduleContent(content);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function deleteFromLibrary(filename: string) {
+    error = "";
+    try {
+      await api.devices.scheduleLibrary.delete(filename);
+      await loadLibrary();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
   // ---- Lifecycle ---------------------------------------------------------
 
-  onMount(load);
+  onMount(() => { load(); loadLibrary(); });
   $: if ($activeDevNum) load();
+  $: $isConnected, load();
   onDestroy(stopAutoRefresh);
 </script>
 
@@ -652,11 +763,14 @@
 </div>
 
 {#if !$isConnected}
-  <div class="panel-card offline-msg">Device {$activeDevNum} is offline.</div>
-{:else}
-  {#if error}<div class="alert alert-error">{error}</div>{/if}
+  <div class="alert alert-warning offline-notice">
+    Scope is offline — build and save schedules locally. Connect to start the schedule.
+  </div>
+{/if}
 
-  <div class="builder-layout">
+{#if error}<div class="alert alert-error">{error}</div>{/if}
+
+<div class="builder-layout">
     <!-- ================================================================
          LEFT PANEL — Action Library
     ================================================================ -->
@@ -905,15 +1019,17 @@
           {/if}
         </div>
         <div class="queue-actions">
-          <button
-            class="btn btn-secondary btn-sm"
-            on:click={load}
-            disabled={loading || reordering}
-            title="Refresh"
-          >
-            {loading ? "…" : "↻"}
-          </button>
-          {#if !isActive(schedState)}
+          {#if $isConnected}
+            <button
+              class="btn btn-secondary btn-sm"
+              on:click={load}
+              disabled={loading || reordering}
+              title="Refresh from device"
+            >
+              {loading ? "…" : "↻"}
+            </button>
+          {/if}
+          {#if $isConnected && !isActive(schedState)}
             <button
               class="btn btn-primary btn-sm"
               on:click={() => setState("start")}
@@ -921,7 +1037,7 @@
             >
               ▶ Start
             </button>
-          {:else}
+          {:else if $isConnected && isActive(schedState)}
             <button class="btn btn-secondary btn-sm" on:click={() => setState("pause")}>
               ⏸ Pause
             </button>
@@ -933,15 +1049,13 @@
             <button class="btn btn-danger btn-sm" on:click={() => (confirmClear = true)}>
               ⊘ Clear
             </button>
+            <button class="btn btn-secondary btn-sm" on:click={exportScheduleHandler} title="Download schedule as JSON file">
+              ↓ Save file
+            </button>
           {/if}
           {#if !isActive(schedState)}
-            {#if items.length > 0}
-              <button class="btn btn-secondary btn-sm" on:click={exportScheduleHandler} title="Export schedule to JSON file">
-                ↓ Export
-              </button>
-            {/if}
-            <label class="btn btn-secondary btn-sm import-label" title="Import schedule from JSON file">
-              ↑ Import
+            <label class="btn btn-secondary btn-sm import-label" title="Load schedule from JSON file">
+              ↑ Load file
               <input type="file" accept=".json" style="display:none" on:change={importScheduleHandler} />
             </label>
           {/if}
@@ -1044,7 +1158,78 @@
       {/if}
     </div>
   </div>
-{/if}
+
+<!-- ================================================================
+     SERVER LIBRARY — schedule files saved on the RPi
+================================================================ -->
+<div class="panel-card library-storage">
+  <div
+    class="library-storage-header"
+    role="button"
+    tabindex="0"
+    on:click={() => { showLibrary = !showLibrary; if (showLibrary) loadLibrary(); }}
+    on:keydown={(e) => { if (e.key === "Enter" || e.key === " ") { showLibrary = !showLibrary; if (showLibrary) loadLibrary(); } }}
+  >
+    <p class="panel-title" style="margin:0">Saved Schedules</p>
+    <span class="library-toggle">{showLibrary ? "▲" : "▼"}</span>
+  </div>
+
+  {#if showLibrary}
+    <div class="library-storage-body">
+      <!-- Save current queue -->
+      {#if items.length > 0 && !isActive(schedState)}
+        <div class="lib-save-row">
+          <input
+            class="form-input lib-name-input"
+            type="text"
+            placeholder="Name this schedule…"
+            bind:value={librarySaveName}
+            on:keydown={(e) => { if (e.key === "Enter") saveToLibrary(); }}
+          />
+          <button
+            class="btn btn-secondary btn-sm"
+            on:click={saveToLibrary}
+            disabled={librarySaving || !librarySaveName.trim()}
+          >
+            {librarySaving ? "Saving…" : "Save to server"}
+          </button>
+        </div>
+      {/if}
+
+      {#if libraryLoading}
+        <div class="lib-empty">Loading…</div>
+      {:else if libraryFiles.length === 0}
+        <div class="lib-empty">No saved schedules on server yet.</div>
+      {:else}
+        <div class="lib-list">
+          {#each libraryFiles as file}
+            <div class="lib-item">
+              <div class="lib-meta">
+                <span class="lib-name">{file.name.replace(/\.json$/i, "")}</span>
+                <span class="lib-date">{new Date(file.modified * 1000).toLocaleDateString()}</span>
+              </div>
+              <div class="lib-actions">
+                <button
+                  class="btn btn-secondary btn-sm"
+                  on:click={() => loadFromLibrary(file.name)}
+                  disabled={isActive(schedState)}
+                >
+                  Load
+                </button>
+                <button
+                  class="btn-icon delete-btn"
+                  on:click={() => deleteFromLibrary(file.name)}
+                  title="Delete {file.name}"
+                  aria-label="Delete {file.name}"
+                >🗑</button>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/if}
+</div>
 
 <style>
   .offline-msg { color: var(--ui-muted); font-size: 0.9rem; }
@@ -1356,4 +1541,67 @@
     font-size: 0.85rem;
     resize: vertical;
   }
+
+  /* ---- Offline notice ---- */
+  .offline-notice {
+    margin-bottom: 1rem;
+  }
+
+  /* ---- Server Library (Saved Schedules) ---- */
+  .library-storage {
+    margin-top: 1.25rem;
+  }
+  .library-storage-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+  }
+  .library-toggle {
+    font-size: 0.75rem;
+    color: var(--ui-muted);
+  }
+  .library-storage-body {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .lib-save-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--ui-border);
+  }
+  .lib-name-input { flex: 1; }
+  .lib-empty {
+    font-size: 0.82rem;
+    color: var(--ui-muted);
+    padding: 0.5rem 0;
+  }
+  .lib-list { display: flex; flex-direction: column; gap: 0.35rem; }
+  .lib-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.6rem;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-sm);
+  }
+  .lib-meta { display: flex; align-items: baseline; gap: 0.6rem; min-width: 0; }
+  .lib-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--ui-body);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 280px;
+  }
+  .lib-date { font-size: 0.72rem; color: var(--ui-muted); flex-shrink: 0; }
+  .lib-actions { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
 </style>
