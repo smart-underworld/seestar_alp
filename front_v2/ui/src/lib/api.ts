@@ -186,8 +186,8 @@ export const api = {
       data: (devNum: number) =>
         post<{ error_az: number; error_alt: number }>(`/api/v1/devices/${devNum}/pa-refine`, { action: "data" }),
     },
-    search: (devNum: number, q: string) =>
-      get<{ query: string; result: unknown }>(`/api/v1/devices/${devNum}/search?q=${encodeURIComponent(q)}`),
+    search: (devNum: number, q: string, catalog = "auto") =>
+      get<{ query: string; result: unknown }>(`/api/v1/devices/${devNum}/search?q=${encodeURIComponent(q)}&catalog=${catalog}`),
     schedule: {
       get: (devNum: number) => get<ScheduleData>(`/api/v1/devices/${devNum}/schedule`),
       clear: (devNum: number) => del(`/api/v1/devices/${devNum}/schedule`),

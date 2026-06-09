@@ -13,6 +13,40 @@
   let error = "";
   let imaging = false;
 
+  // ── Object search ─────────────────────────────────────────────────────────
+  const CATALOGS = [
+    { value: "auto",     label: "Auto (Local → Simbad)" },
+    { value: "local",    label: "Local DB" },
+    { value: "simbad",   label: "Simbad (Online)" },
+    { value: "planet",   label: "Planet / Moon" },
+    { value: "asteroid", label: "Minor Planet / Asteroid" },
+    { value: "comet",    label: "Comet" },
+    { value: "variable", label: "Variable Star (AAVSO)" },
+  ];
+  let searchQuery = "";
+  let searchCatalog = "auto";
+  let searching = false;
+  let searchError = "";
+  let searchResult: Record<string, unknown> | null = null;
+
+  async function doSearch() {
+    if (!searchQuery.trim() || searching) return;
+    searching = true; searchError = ""; searchResult = null;
+    try {
+      const data = await api.devices.search($activeDevNum, searchQuery.trim(), searchCatalog);
+      const r = data.result;
+      if (!r || typeof r !== "object") { searchError = "No result found."; }
+      else { searchResult = r as Record<string, unknown>; }
+    } catch (e) { searchError = String(e); }
+    finally { searching = false; }
+  }
+
+  function applySearch() {
+    if (!searchResult) return;
+    if (!targetName) targetName = String(searchResult.name ?? searchResult.objectName ?? searchQuery);
+    searchResult = null; searchQuery = "";
+  }
+
   async function startImaging() {
     error = "";
     status = "";
@@ -90,6 +124,27 @@
       {#if error}<div class="alert alert-error">{error}</div>{/if}
       {#if status}<div class="alert alert-success">{status}</div>{/if}
 
+      <!-- ── Object search ────────────────────────────────────────────── -->
+      <div class="search-section">
+        <div class="search-row">
+          <select class="form-input search-catalog" bind:value={searchCatalog}>
+            {#each CATALOGS as cat}<option value={cat.value}>{cat.label}</option>{/each}
+          </select>
+          <input class="form-input search-input" bind:value={searchQuery}
+            placeholder="Object name…" on:keydown={(e) => e.key === "Enter" && doSearch()} />
+          <button type="button" class="btn btn-secondary search-btn"
+            on:click={doSearch} disabled={searching || !searchQuery.trim()}
+          >{searching ? "…" : "🔍"}</button>
+        </div>
+        {#if searchError}<p class="search-error">{searchError}</p>{/if}
+        {#if searchResult}
+          <div class="search-result">
+            <span class="search-coords">RA {searchResult.ra} · Dec {searchResult.dec}</span>
+            <button type="button" class="btn btn-primary btn-sm" on:click={applySearch}>Use</button>
+          </div>
+        {/if}
+      </div>
+
       <form on:submit|preventDefault={startImaging}>
         <div class="form-field" style="margin-bottom:1rem">
           <label class="form-label" for="iname">Target Name</label>
@@ -133,6 +188,20 @@
 
 <style>
   .offline-msg { color: var(--ui-muted); font-size: 0.9rem; }
+
+  .search-section { margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .search-row { display: flex; gap: 0.4rem; align-items: center; }
+  .search-catalog { flex: 0 0 auto; font-size: 0.8rem; padding: 0.3rem 0.5rem; }
+  .search-input { flex: 1; }
+  .search-btn { flex-shrink: 0; padding: 0.3rem 0.65rem; }
+  .search-error { font-size: 0.8rem; color: var(--ui-danger); margin: 0.3rem 0 0; }
+  .search-result {
+    display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem;
+    padding: 0.45rem 0.65rem; background: rgba(44,177,255,0.07);
+    border: 1px solid rgba(44,177,255,0.2); border-radius: 6px; font-size: 0.82rem;
+  }
+  .search-coords { flex: 1; color: var(--ui-muted); font-family: "SF Mono","Fira Code",monospace; font-size: 0.78rem; }
+  .btn-sm { padding: 0.2rem 0.6rem; font-size: 0.8rem; }
 
   .image-layout {
     display: flex;

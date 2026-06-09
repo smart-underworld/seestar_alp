@@ -24,6 +24,42 @@
   let error = "";
   let submitting = false;
 
+  // ── Object search ─────────────────────────────────────────────────────────
+  const CATALOGS = [
+    { value: "auto",     label: "Auto (Local → Simbad)" },
+    { value: "local",    label: "Local DB" },
+    { value: "simbad",   label: "Simbad (Online)" },
+    { value: "planet",   label: "Planet / Moon" },
+    { value: "asteroid", label: "Minor Planet / Asteroid" },
+    { value: "comet",    label: "Comet" },
+    { value: "variable", label: "Variable Star (AAVSO)" },
+  ];
+  let searchQuery = "";
+  let searchCatalog = "auto";
+  let searching = false;
+  let searchError = "";
+  let searchResult: Record<string, unknown> | null = null;
+
+  async function doSearch() {
+    if (!searchQuery.trim() || searching) return;
+    searching = true; searchError = ""; searchResult = null;
+    try {
+      const data = await api.devices.search($activeDevNum, searchQuery.trim(), searchCatalog);
+      const r = data.result;
+      if (!r || typeof r !== "object") { searchError = "No result found."; }
+      else { searchResult = r as Record<string, unknown>; }
+    } catch (e) { searchError = String(e); }
+    finally { searching = false; }
+  }
+
+  function applySearch() {
+    if (!searchResult) return;
+    if (searchResult.ra)  ra  = String(searchResult.ra);
+    if (searchResult.dec) dec = String(searchResult.dec);
+    if (!targetName) targetName = String(searchResult.name ?? searchResult.objectName ?? searchQuery);
+    searchResult = null; searchQuery = "";
+  }
+
   $: isFederation = $activeDevNum === 0;
   let federationMode = "duplicate";
   let maxDevices = 1;
@@ -110,6 +146,28 @@
     <!-- Target -->
     <div class="panel-card">
       <p class="panel-title">Target</p>
+
+      <!-- ── Object search ──────────────────────────────────────────────── -->
+      <div class="search-section">
+        <div class="search-row">
+          <select class="form-input search-catalog" bind:value={searchCatalog}>
+            {#each CATALOGS as cat}<option value={cat.value}>{cat.label}</option>{/each}
+          </select>
+          <input class="form-input search-input" bind:value={searchQuery}
+            placeholder="Object name…" on:keydown={(e) => e.key === "Enter" && doSearch()} />
+          <button type="button" class="btn btn-secondary search-btn"
+            on:click={doSearch} disabled={searching || !searchQuery.trim()}
+          >{searching ? "…" : "🔍"}</button>
+        </div>
+        {#if searchError}<p class="search-error">{searchError}</p>{/if}
+        {#if searchResult}
+          <div class="search-result">
+            <span class="search-coords">RA {searchResult.ra} · Dec {searchResult.dec}</span>
+            <button type="button" class="btn btn-primary btn-sm" on:click={applySearch}>Use</button>
+          </div>
+        {/if}
+      </div>
+
       <div class="field-row">
         <div class="form-field">
           <label class="form-label" for="targetName">Target Name</label>
@@ -236,6 +294,20 @@
 
 <style>
   .offline-msg { color: var(--ui-muted); }
+
+  .search-section { margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .search-row { display: flex; gap: 0.4rem; align-items: center; }
+  .search-catalog { flex: 0 0 auto; font-size: 0.8rem; padding: 0.3rem 0.5rem; }
+  .search-input { flex: 1; }
+  .search-btn { flex-shrink: 0; padding: 0.3rem 0.65rem; }
+  .search-error { font-size: 0.8rem; color: var(--ui-danger); margin: 0.3rem 0 0; }
+  .search-result {
+    display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem;
+    padding: 0.45rem 0.65rem; background: rgba(44,177,255,0.07);
+    border: 1px solid rgba(44,177,255,0.2); border-radius: 6px;
+  }
+  .search-coords { flex: 1; color: var(--ui-muted); font-family: "SF Mono","Fira Code",monospace; font-size: 0.78rem; }
+  .btn-sm { padding: 0.2rem 0.6rem; font-size: 0.8rem; }
 
   .mosaic-form { display: flex; flex-direction: column; gap: 1rem; }
 

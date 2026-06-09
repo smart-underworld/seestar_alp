@@ -139,11 +139,20 @@ def get_device_state(dev_num: int) -> dict:
     if result:
         eq_mode = pydash.get(result, "mount.equ_mode", False)
         mount_mode = "Equatorial" if eq_mode else "Alt Azimuth"
-        storage = pydash.get(result, "storage")
-        if isinstance(storage, list) and storage:
-            free_mb = pydash.get(storage[0], "storage_free_mb", 0)
-            total_mb = pydash.get(storage[0], "storage_total_mb", 1)
-            free_storage = f"{free_mb / 1024:.1f} GB / {total_mb / 1024:.1f} GB"
+        # Device returns storage.storage_volume[0] with fields freeMB/totalMB (and
+        # snake_case aliases). The old code incorrectly expected storage to be a flat list.
+        storage_state = pydash.get(result, "storage.storage_volume[0].state", "")
+        if storage_state == "mounted":
+            free_mb = pydash.get(result, "storage.storage_volume[0].free_mb", 0) or \
+                      pydash.get(result, "storage.storage_volume[0].freeMB", 0)
+            total_mb = pydash.get(result, "storage.storage_volume[0].total_mb", 0) or \
+                       pydash.get(result, "storage.storage_volume[0].totalMB", 0)
+            if total_mb > 0:
+                free_storage = f"{free_mb / 1024:.1f} GB / {total_mb / 1024:.1f} GB"
+            else:
+                free_storage = f"{free_mb / 1024:.1f} GB free"
+        elif storage_state == "connected":
+            free_storage = "Unavailable (USB mode)"
         battery_capacity = pydash.get(result, "pi_status.battery_capacity")
         temp = pydash.get(result, "pi_status.temp")
         ra = pydash.get(result, "mount.ra_j2000")
