@@ -19,9 +19,11 @@ _DATA_DIR = _REPO_ROOT / "data"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
+
 def _sky_loader():
     """Return a skyfield Loader pointed at the repo data directory."""
     from skyfield.api import Loader  # type: ignore
+
     return Loader(str(_DATA_DIR))
 
 
@@ -40,6 +42,7 @@ def _fmt_dec(dec_obj) -> str:
 
 
 # ── catalog search functions ─────────────────────────────────────────────────
+
 
 def _search_local(query: str) -> dict | None:
     """Search the local object catalogue. Returns first match as {ra, dec, objectName} or None."""
@@ -159,7 +162,11 @@ def _search_asteroid(name: str) -> dict | None:
 
         load = _sky_loader()
         local_mpn = _DATA_DIR / "mpn-01.txt"
-        source = str(local_mpn) if local_mpn.exists() else "http://dss.stellarium.org/MPC/mpn-01.txt"
+        source = (
+            str(local_mpn)
+            if local_mpn.exists()
+            else "http://dss.stellarium.org/MPC/mpn-01.txt"
+        )
         with load.open(source) as f:
             minor_planets = mpc.load_mpcorb_dataframe(f)
 
@@ -188,7 +195,6 @@ def _search_asteroid(name: str) -> dict | None:
 def _search_variable_star(name: str) -> dict | None:
     """Look up a variable star via the AAVSO VSX API."""
     try:
-        url = f"https://www.aavso.org/vsx/index.php?view=api.object&format=json&ident={httpx.URL(name)}"
         resp = httpx.get(
             "https://www.aavso.org/vsx/index.php",
             params={"view": "api.object", "format": "json", "ident": name},
@@ -204,13 +210,16 @@ def _search_variable_star(name: str) -> dict | None:
 
         def _ra_to_hms(deg: float) -> str:
             h = deg / 15.0 % 24
-            hh = int(h); mm = int((h - hh) * 60)
+            hh = int(h)
+            mm = int((h - hh) * 60)
             ss = (h - hh - mm / 60) * 3600
             return f"{hh}h{mm:02d}m{abs(ss):.2f}s"
 
         def _dec_to_dms(deg: float) -> str:
             sign = "+" if deg >= 0 else "-"
-            d = abs(deg); dd = int(d); mm = int((d - dd) * 60)
+            d = abs(deg)
+            dd = int(d)
+            mm = int((d - dd) * 60)
             ss = (d - dd - mm / 60) * 3600
             return f"{sign}{dd}d{mm:02d}m{ss:.2f}s"
 
@@ -225,6 +234,7 @@ def _search_variable_star(name: str) -> dict | None:
 
 
 # ── routes ────────────────────────────────────────────────────────────────────
+
 
 @router.post("/devices/{dev_num}/goto")
 def goto_target(dev_num: int, body: GotoRequest):
@@ -266,11 +276,11 @@ def search_object(dev_num: int, q: str, catalog: str = "auto"):
       variable - variable star via AAVSO VSX
     """
     dispatch = {
-        "local":    _search_local,
-        "simbad":   _search_simbad,
-        "planet":   _search_planet,
+        "local": _search_local,
+        "simbad": _search_simbad,
+        "planet": _search_planet,
         "asteroid": _search_asteroid,
-        "comet":    _search_comet,
+        "comet": _search_comet,
         "variable": _search_variable_star,
     }
     if catalog in dispatch:
