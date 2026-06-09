@@ -89,6 +89,15 @@ def method_sync(method: str, dev_num: int, **kwargs) -> Any:
 
 def get_device_state(dev_num: int) -> dict:
     """Return a normalised status dict matching DeviceStatus schema."""
+    if dev_num == 0:
+        # Federation virtual device — connected whenever any real device is.
+        any_connected = any(check_api_state(d["device_num"]) for d in Config.seestars)
+        return {
+            "device_num": 0,
+            "is_connected": any_connected,
+            "backend_ready": True,
+        }
+
     is_connected, backend_ready = _check_api_state_detailed(dev_num)
     if not is_connected:
         return {

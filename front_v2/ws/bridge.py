@@ -150,6 +150,8 @@ def _parse_sse_frame(raw: bytes) -> dict[str, Any] | None:
 
 def start_pump(device_num: int) -> None:
     """Start the pump thread for device_num if not already running."""
+    if device_num == 0:
+        return  # Federation virtual device has no SSE event stream of its own.
     if device_num in _pump_threads and _pump_threads[device_num].is_alive():
         return
     t = threading.Thread(

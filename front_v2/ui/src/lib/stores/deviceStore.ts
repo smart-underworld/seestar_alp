@@ -141,9 +141,10 @@ export async function initDevices(): Promise<void> {
     const firstConnected = devices.find((d) => d.device_num !== 0 && d.is_connected);
     if (firstConnected) activeDevNum.set(firstConnected.device_num);
 
-    // Start WS connections and status polling (poll does the initial fetch)
+    // Start WS connections and status polling (poll does the initial fetch).
+    // Federation (device_num=0) has no SSE event stream — skip WS, keep polling.
     for (const d of devices) {
-      connectDevice(d.device_num);
+      if (d.device_num !== 0) connectDevice(d.device_num);
       startStatusPolling(d.device_num);
     }
   } catch (err) {
