@@ -41,6 +41,7 @@
     dark_mode:               "Dark Mode",
     stack_cont_capt:         "Continuous Capture Mode",
     stack_drizzle2x:         "4K Live Stack (2× Drizzle)",
+    beep_volume:             "Beep Volume",
   };
 
   const HELPER: Record<string, string> = {
@@ -60,12 +61,22 @@
     dark_mode:               "Disable LEDs during imaging.",
     stack_cont_capt:         "Continuous capture disables live stacking.",
     stack_drizzle2x:         "4K live stack with 2× drizzle.",
+    beep_volume:             "Beep volume preset: off, close (quiet), backyard, or outdoor (loud).",
   };
 
   import { settingGroupFor } from "../lib/utils";
 
   const groupFor = settingGroupFor;
   const GROUP_ORDER = ["Imaging", "Environment", "Mount & Focus", "General"];
+
+  const ENUMS: Record<string, { value: string; label: string }[]> = {
+    beep_volume: [
+      { value: "off",      label: "Off" },
+      { value: "close",    label: "Close (quiet)" },
+      { value: "backyard", label: "Backyard" },
+      { value: "outdoor",  label: "Outdoor (loud)" },
+    ],
+  };
 
   // Known per-field constraints (min/max) matching the classic UI
   const CONSTRAINTS: Record<string, { min?: number; max?: number }> = {
@@ -181,7 +192,17 @@
                 {/if}
               </div>
               <div class="setting-control">
-                {#if val === true || val === false}
+                {#if ENUMS[key]}
+                  <select
+                    class="form-input narrow"
+                    value={String(val ?? "")}
+                    on:change={(e) => setVal(key, e.currentTarget.value)}
+                  >
+                    {#each ENUMS[key] as opt}
+                      <option value={opt.value}>{opt.label}</option>
+                    {/each}
+                  </select>
+                {:else if val === true || val === false}
                   <div class="radio-group">
                     <label class="radio-label">
                       <input type="radio" name={key} value="true"

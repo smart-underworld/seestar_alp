@@ -292,13 +292,17 @@ def save_device_settings(dev_num: int, payload: dict) -> dict | None:
 
     results = {}
     if base_payload:
-        results["set_setting"] = do_action("set_setting", dev_num, base_payload)
-    if stack_payload:
-        results["set_stack_setting"] = do_action(
-            "set_stack_setting", dev_num, stack_payload
+        # "set_setting" is a firmware method, not a device-layer action — must go
+        # through method_sync (which routes via the method_sync action handler).
+        results["set_setting"] = method_sync(
+            "set_setting", dev_num, params=base_payload
         )
-        results["set_stack_settings"] = do_action(
-            "set_stack_settings", dev_num, {"stack": stack_payload}
+    if stack_payload:
+        results["set_stack_setting"] = method_sync(
+            "set_stack_setting", dev_num, params=stack_payload
+        )
+        results["set_stack_settings"] = method_sync(
+            "set_stack_settings", dev_num, params={"stack": stack_payload}
         )
     return results
 
