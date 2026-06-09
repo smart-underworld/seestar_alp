@@ -143,10 +143,12 @@ def get_device_state(dev_num: int) -> dict:
         # snake_case aliases). The old code incorrectly expected storage to be a flat list.
         storage_state = pydash.get(result, "storage.storage_volume[0].state", "")
         if storage_state == "mounted":
-            free_mb = pydash.get(result, "storage.storage_volume[0].free_mb", 0) or \
-                      pydash.get(result, "storage.storage_volume[0].freeMB", 0)
-            total_mb = pydash.get(result, "storage.storage_volume[0].total_mb", 0) or \
-                       pydash.get(result, "storage.storage_volume[0].totalMB", 0)
+            free_mb = pydash.get(
+                result, "storage.storage_volume[0].free_mb", 0
+            ) or pydash.get(result, "storage.storage_volume[0].freeMB", 0)
+            total_mb = pydash.get(
+                result, "storage.storage_volume[0].total_mb", 0
+            ) or pydash.get(result, "storage.storage_volume[0].totalMB", 0)
             if total_mb > 0:
                 free_storage = f"{free_mb / 1024:.1f} GB / {total_mb / 1024:.1f} GB"
             else:
