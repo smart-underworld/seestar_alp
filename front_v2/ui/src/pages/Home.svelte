@@ -69,7 +69,13 @@
     <!-- Card 2: Mount -->
     <div class="panel-card stat-card">
       <p class="panel-title">Mount</p>
-      <div class="big-value">{s.mount_mode}</div>
+      <div class="big-value">
+        <svg class="mode-icon {s.mount_mode === 'Equatorial' ? 'success' : s.mount_mode === 'Alt Azimuth' ? 'warning' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+          <line x1="12" y1="2" x2="12" y2="12"/>
+        </svg>
+        {s.mount_mode}
+      </div>
       {#if s.ra != null}
         <div class="sub-line coord">RA &nbsp;&nbsp;{s.ra.toFixed(5)}&deg;</div>
       {/if}
@@ -191,7 +197,17 @@
   }
   .big-value.success { color: var(--ui-success); }
   .big-value.muted   { color: var(--ui-muted); }
+
+  .mode-icon.success { color: var(--ui-success); }
+  .mode-icon.warning { color: var(--ui-warning); }
   .big-value .unit   { font-size: 0.78rem; font-weight: 400; color: var(--ui-muted); }
+
+  .mode-icon {
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.15em;
+    margin-right: 0.25em;
+  }
 
   .sub-line { font-size: 0.82rem; color: var(--ui-muted); margin: 0.1rem 0; }
   .sub-line.target { color: var(--ui-primary); }

@@ -33,7 +33,14 @@ def device_connected(dev_num: int):
 def send_command(dev_num: int, body: CommandRequest):
     if not check_api_state(dev_num):
         raise HTTPException(status_code=503, detail="Device not connected")
-    result = method_sync(body.method, dev_num, **body.params)
+    # Translate mount-mode commands to the scope_park+equ_mode form that works
+    # on both old (pre-set_eq_mode) and new firmware.
+    if body.method == "set_eq_mode":
+        result = method_sync("scope_park", dev_num, params={"equ_mode": True})
+    elif body.method == "set_alt_az_mode":
+        result = method_sync("scope_park", dev_num, params={"equ_mode": False})
+    else:
+        result = method_sync(body.method, dev_num, **body.params)
     return CommandResponse(command=body.method, status="success", result=result)
 
 
