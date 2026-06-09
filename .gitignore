@@ -24,6 +24,7 @@ front/planning.json
 front/node_modules/
 front_v2/ui/node_modules/
 front_v2/ui/dist/
+front_v2/ui/coverage/
 seestar_alp_upstream.egg-info/
 
 Seestar Alpaca API.json:Zone.Identifier
@@ -32,4 +33,5 @@ messages*.db
 
 test_schedule_1.json
 test_schedule.json
+schedule/*.json
 alpyca_EQFirmware.log
