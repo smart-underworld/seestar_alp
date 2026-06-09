@@ -42,6 +42,7 @@ function install_apt_packages {
           xz-utils tk-dev libgdbm-dev lzma tcl-dev \
           libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev \
           wget curl make build-essential openssl libgl1 indi-bin \
+          libuv1-dev \
           nodejs npm
   else
       # bookworm
@@ -51,6 +52,7 @@ function install_apt_packages {
           xz-utils tk-dev libgdbm-dev lzma lzma-dev tcl-dev \
           libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev \
           wget curl make build-essential openssl libgl1 indi-bin \
+          libuv1-dev \
           nodejs npm
   fi
 }
@@ -207,6 +209,9 @@ _EOF
     fi
   fi
 
+  # Upgrade pip first so wheel resolution works correctly for C extensions
+  # (uvloop, httptools) and finds piwheels.org ARM-native wheels.
+  pip install --upgrade pip
   pip install -r requirements.txt
 }
 
