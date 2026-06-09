@@ -134,7 +134,11 @@
   <p class="page-subtitle">Device capture, processing, and behavior controls.</p>
 </div>
 
-{#if !$isConnected}
+{#if $activeDevNum === 0}
+  <div class="panel-card offline-msg">
+    Settings are per-device. Select a specific telescope from the dropdown above.
+  </div>
+{:else if !$isConnected}
   <div class="panel-card offline-msg">
     Device {$activeDevNum} is offline. Connect to configure settings.
   </div>

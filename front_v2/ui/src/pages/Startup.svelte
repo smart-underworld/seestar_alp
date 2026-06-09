@@ -176,7 +176,11 @@
   <p class="page-subtitle">Run the telescope startup sequence — polar align, auto focus, dark frames.</p>
 </div>
 
-{#if !$isConnected}
+{#if $activeDevNum === 0}
+  <div class="panel-card offline-msg">
+    Startup requires a single telescope. Select a specific device from the dropdown above.
+  </div>
+{:else if !$isConnected}
   <div class="panel-card offline-msg">Device {$activeDevNum} is offline.</div>
 {:else}
   {#if error}<div class="alert alert-error">{error}</div>{/if}

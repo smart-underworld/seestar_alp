@@ -295,7 +295,11 @@
   {/each}
 </div>
 
-{#if !$isConnected}
+{#if $activeDevNum === 0}
+  <div class="panel-card offline-msg">
+    Live view requires a single telescope. Select a specific device from the dropdown above.
+  </div>
+{:else if !$isConnected}
   <div class="panel-card offline-msg">
     <span class="offline-dot"></span>
     Device {$activeDevNum} is offline or not connected.

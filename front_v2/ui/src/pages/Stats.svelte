@@ -94,7 +94,11 @@
   <span class="refresh-note">Auto-refresh every 15 s</span>
 </div>
 
-{#if !$isConnected}
+{#if $activeDevNum === 0}
+  <div class="panel-card offline-msg">
+    Stats are per-device. Select a specific telescope from the dropdown above.
+  </div>
+{:else if !$isConnected}
   <div class="panel-card offline-msg">Device {$activeDevNum} is offline.</div>
 {:else if error}
   <div class="alert alert-error">{error}</div>

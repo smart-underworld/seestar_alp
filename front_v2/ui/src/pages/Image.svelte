@@ -90,7 +90,11 @@
 
 <EventStatusPanel events={EVENTS} />
 
-{#if !$isConnected}
+{#if $activeDevNum === 0}
+  <div class="panel-card offline-msg">
+    Imaging requires a single telescope. Select a specific device from the dropdown above.
+  </div>
+{:else if !$isConnected}
   <div class="panel-card offline-msg">
     Device {$activeDevNum} is offline. Connect to start imaging.
   </div>

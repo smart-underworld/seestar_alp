@@ -52,7 +52,11 @@
   </div>
 </div>
 
-{#if !$isConnected}
+{#if $activeDevNum === 0}
+  <div class="panel-card offline-msg">
+    Guest mode is per-device. Select a specific telescope from the dropdown above.
+  </div>
+{:else if !$isConnected}
   <div class="panel-card offline-msg">Device {$activeDevNum} is offline.</div>
 {:else if error}
   <div class="alert alert-error">{error}</div>
