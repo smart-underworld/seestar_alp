@@ -62,6 +62,9 @@ def send_command(dev_num: int, body: CommandRequest):
     elif body.method == "get_event_state":
         raw = do_action("get_event_state", dev_num, {})
         result = raw.get("Value") if isinstance(raw, dict) else raw
+    # adjust_mag_declination is a device-layer action, not a firmware method.
+    elif body.method == "adjust_mag_declination":
+        result = do_action("adjust_mag_declination", dev_num, body.params)
     # get_disk_volume is unreliable as a direct firmware method_sync; extract
     # storage from get_device_state which is always available.
     elif body.method == "get_disk_volume":
