@@ -157,14 +157,14 @@ def test_live_move_with_distance(client, monkeypatch):
     body = r.json()
     assert body["status"] == "ok"
     assert body["angle"] == 90
-    assert body["speed"] == pytest.approx(0.5 * 14.4 * 1.0)
+    assert body["speed"] == pytest.approx(0.5 * 100 * 14.4 * 1.0)
 
     action, dev_num, params = calls[0]
     assert action == "method_sync"
     assert dev_num == 1
     assert params["method"] == "scope_speed_move"
     assert params["params"]["angle"] == 90
-    assert params["params"]["speed"] == pytest.approx(7.2)
+    assert params["params"]["speed"] == pytest.approx(720.0)
     assert params["params"]["dur_sec"] == 3
 
 
