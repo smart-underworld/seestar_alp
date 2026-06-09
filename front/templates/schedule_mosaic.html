@@ -5,3 +5,8 @@
         {% include 'mosaic_create.html' with context %}
     {% endwith %}
 {% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script src="/public/command.js"></script>
+{% endblock %}

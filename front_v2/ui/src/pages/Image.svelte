@@ -130,11 +130,13 @@
           <select class="form-input search-catalog" bind:value={searchCatalog}>
             {#each CATALOGS as cat}<option value={cat.value}>{cat.label}</option>{/each}
           </select>
-          <input class="form-input search-input" bind:value={searchQuery}
-            placeholder="Object name…" on:keydown={(e) => e.key === "Enter" && doSearch()} />
-          <button type="button" class="btn btn-secondary search-btn"
-            on:click={doSearch} disabled={searching || !searchQuery.trim()}
-          >{searching ? "…" : "🔍"}</button>
+          <div class="search-input-row">
+            <input class="form-input search-input" bind:value={searchQuery}
+              placeholder="Object name…" on:keydown={(e) => e.key === "Enter" && doSearch()} />
+            <button type="button" class="btn btn-secondary search-btn"
+              on:click={doSearch} disabled={searching || !searchQuery.trim()}
+            >{searching ? "…" : "🔍"}</button>
+          </div>
         </div>
         {#if searchError}<p class="search-error">{searchError}</p>{/if}
         {#if searchResult}
@@ -190,8 +192,9 @@
   .offline-msg { color: var(--ui-muted); font-size: 0.9rem; }
 
   .search-section { margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.06); }
-  .search-row { display: flex; gap: 0.4rem; align-items: center; }
-  .search-catalog { flex: 0 0 auto; font-size: 0.8rem; padding: 0.3rem 0.5rem; }
+  .search-row { display: flex; flex-direction: column; gap: 0.4rem; }
+  .search-catalog { width: 100%; font-size: 0.85rem; }
+  .search-input-row { display: flex; gap: 0.4rem; align-items: center; }
   .search-input { flex: 1; }
   .search-btn { flex-shrink: 0; padding: 0.3rem 0.65rem; }
   .search-error { font-size: 0.8rem; color: var(--ui-danger); margin: 0.3rem 0 0; }

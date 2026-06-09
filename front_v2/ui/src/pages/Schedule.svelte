@@ -204,7 +204,17 @@
   let formValues: Record<string, unknown> = {};
 
   // Object search (mosaic / image forms only)
+  const CATALOGS = [
+    { value: "auto",     label: "Auto (Local → Simbad)" },
+    { value: "local",    label: "Local DB" },
+    { value: "simbad",   label: "Simbad (Online)" },
+    { value: "planet",   label: "Planet / Moon" },
+    { value: "asteroid", label: "Minor Planet / Asteroid" },
+    { value: "comet",    label: "Comet" },
+    { value: "variable", label: "Variable Star (AAVSO)" },
+  ];
   let searchQuery = "";
+  let searchCatalog = "auto";
   let searching = false;
   let searchError = "";
   let searchResult: Record<string, unknown> | null = null;
@@ -246,6 +256,7 @@
     if (!def) return;
     formValues = Object.fromEntries(def.fields.map((f) => [f.key, f.default]));
     searchQuery = "";
+    searchCatalog = "auto";
     searchResult = null;
     searchError = "";
   }
@@ -307,7 +318,7 @@
     searchError = "";
     searchResult = null;
     try {
-      const data = await api.devices.search($activeDevNum, searchQuery.trim());
+      const data = await api.devices.search($activeDevNum, searchQuery.trim(), searchCatalog);
       const r = data.result;
       if (!r || typeof r !== "object") {
         searchError = "No result found.";
@@ -692,21 +703,26 @@
               <div class="search-section">
                 <div class="search-label">Object Search</div>
                 <div class="search-row">
-                  <input
-                    type="text"
-                    class="form-input search-input"
-                    placeholder="e.g. M31, Orion Nebula"
-                    bind:value={searchQuery}
-                    on:keydown={(e) => e.key === "Enter" && doSearch()}
-                  />
-                  <button
-                    class="btn btn-secondary btn-sm search-btn"
-                    on:click={doSearch}
-                    disabled={searching || !searchQuery.trim()}
-                    type="button"
-                  >
-                    {searching ? "…" : "Search"}
-                  </button>
+                  <select class="form-input search-catalog" bind:value={searchCatalog}>
+                    {#each CATALOGS as cat}<option value={cat.value}>{cat.label}</option>{/each}
+                  </select>
+                  <div class="search-input-row">
+                    <input
+                      type="text"
+                      class="form-input search-input"
+                      placeholder="e.g. M31, Orion Nebula"
+                      bind:value={searchQuery}
+                      on:keydown={(e) => e.key === "Enter" && doSearch()}
+                    />
+                    <button
+                      class="btn btn-secondary btn-sm search-btn"
+                      on:click={doSearch}
+                      disabled={searching || !searchQuery.trim()}
+                      type="button"
+                    >
+                      {searching ? "…" : "🔍"}
+                    </button>
+                  </div>
                 </div>
                 {#if searchError}
                   <div class="search-error">{searchError}</div>
@@ -1117,7 +1133,9 @@
     margin-bottom: 0.4rem;
     opacity: 0.8;
   }
-  .search-row { display: flex; gap: 0.4rem; }
+  .search-row { display: flex; flex-direction: column; gap: 0.4rem; }
+  .search-catalog { width: 100%; font-size: 0.85rem; }
+  .search-input-row { display: flex; gap: 0.4rem; align-items: center; }
   .search-input { flex: 1; }
   .search-btn { flex-shrink: 0; }
   .search-error { font-size: 0.75rem; color: var(--ui-danger); margin-top: 0.35rem; }
