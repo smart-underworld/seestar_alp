@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { activeDevNum, isConnected } from "../lib/stores/deviceStore";
+  import { navGuardMessage } from "../lib/stores/navGuard";
   import { api } from "../lib/api";
 
   const FRIENDLY: Record<string, string> = {
@@ -135,7 +136,18 @@
     merged = { ...merged, [key]: val };
   }
 
-  onMount(load);
+  $: navGuardMessage.set(isDirty ? "You have unsaved changes. Leave this page?" : null);
+  onDestroy(() => navGuardMessage.set(null));
+
+  function beforeUnload(e: BeforeUnloadEvent) {
+    if (isDirty) e.preventDefault();
+  }
+
+  onMount(() => {
+    load();
+    window.addEventListener("beforeunload", beforeUnload);
+  });
+  onDestroy(() => window.removeEventListener("beforeunload", beforeUnload));
   $: if ($activeDevNum) load();
 </script>
 

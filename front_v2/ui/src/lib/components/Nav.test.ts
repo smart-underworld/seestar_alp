@@ -111,33 +111,33 @@ describe("Nav", () => {
     activeDevNum.set(1);
     deviceStatuses.set({ 1: { backend_ready: true, is_connected: true, guest_mode_available: true } as any });
     const { container } = render(Nav);
-    expect(container.querySelector('a[href="/guestmode"]')).toBeInTheDocument();
+    expect(container.querySelector('a[href="#/guestmode"]')).toBeInTheDocument();
   });
 
   it("hides Guest Mode link when device status reports it unavailable", () => {
     activeDevNum.set(1);
     deviceStatuses.set({ 1: { backend_ready: true, is_connected: true, guest_mode_available: false } as any });
     const { container } = render(Nav);
-    expect(container.querySelector('a[href="/guestmode"]')).not.toBeInTheDocument();
+    expect(container.querySelector('a[href="#/guestmode"]')).not.toBeInTheDocument();
   });
 
   it("shows Guest Mode link when device status is not yet loaded", () => {
     activeDevNum.set(1);
     deviceStatuses.set({});
     const { container } = render(Nav);
-    expect(container.querySelector('a[href="/guestmode"]')).toBeInTheDocument();
+    expect(container.querySelector('a[href="#/guestmode"]')).toBeInTheDocument();
   });
 
   it("hides Platform link when host platform is not a Raspberry Pi", async () => {
     mockPlatformGet.mockResolvedValue({ platform: "other" });
     const { container } = render(Nav);
     await waitFor(() => expect(mockPlatformGet).toHaveBeenCalled());
-    expect(container.querySelector('a[href="/platform"]')).not.toBeInTheDocument();
+    expect(container.querySelector('a[href="#/platform"]')).not.toBeInTheDocument();
   });
 
   it("shows Platform link when host platform is a Raspberry Pi", async () => {
     mockPlatformGet.mockResolvedValue({ platform: "raspberry_pi" });
     const { container } = render(Nav);
-    await waitFor(() => expect(container.querySelector('a[href="/platform"]')).toBeInTheDocument());
+    await waitFor(() => expect(container.querySelector('a[href="#/platform"]')).toBeInTheDocument());
   });
 });

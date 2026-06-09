@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { link, location } from "svelte-spa-router";
+  import { push, location } from "svelte-spa-router";
+  import { get } from "svelte/store";
+  import { navGuardMessage } from "../stores/navGuard";
   import { onMount } from "svelte";
   import { deviceList, activeDevNum, deviceStatuses } from "../stores/deviceStore";
   import { api, type DeviceStatus } from "../api";
@@ -12,6 +14,12 @@
   api.platform.get().then(r => { isRaspberryPi = r.platform === "raspberry_pi"; }).catch(() => {});
 
   $: $location, (menuOpen = false), (moreOpen = false);
+
+  function guardedPush(href: string) {
+    const msg = get(navGuardMessage);
+    if (msg && !confirm(msg)) return;
+    push(href);
+  }
 
   function devState(devNum: number): "loading" | "offline" | "online" {
     const s = $deviceStatuses[devNum];
@@ -92,7 +100,7 @@
     {/each}
   </div>
 
-  <a href="/" use:link class="brand">
+  <a href="#/" on:click|preventDefault={() => guardedPush("/")} class="brand">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="10"/>
       <circle cx="12" cy="12" r="3"/>
@@ -108,7 +116,7 @@
   <div class="links" bind:clientWidth={linksWidth}>
     {#if !useHamburger}
       {#each primaryLinks as { href, label }}
-        <a {href} use:link class:active={isNavActive(href, $location)}>{label}</a>
+        <a href="#{href}" on:click|preventDefault={() => guardedPush(href)} class:active={isNavActive(href, $location)}>{label}</a>
       {/each}
 
       {#if hasMore}
@@ -124,11 +132,10 @@
           <div class="more-menu" class:open={moreOpen} role="menu">
             {#each overflowLinks as { href, label }}
               <a
-                {href}
-                use:link
+                href="#{href}"
                 role="menuitem"
                 class:active={isNavActive(href, $location)}
-                on:click={() => (moreOpen = false)}
+                on:click|preventDefault={() => { guardedPush(href); moreOpen = false; }}
               >{label}</a>
             {/each}
           </div>
@@ -201,10 +208,9 @@
 >
   {#each visibleNavLinks as { href, label }}
     <a
-      {href}
-      use:link
+      href="#{href}"
       class:active={isNavActive(href, $location)}
-      on:click={() => (menuOpen = false)}
+      on:click|preventDefault={() => { guardedPush(href); menuOpen = false; }}
     >{label}</a>
   {/each}
 </div>

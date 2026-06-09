@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onMount, onDestroy } from "svelte";
+  import { navGuardMessage } from "../lib/stores/navGuard";
 
   interface ConfigData {
     networking: Record<string, unknown>;
@@ -213,6 +215,18 @@
     devices = config.devices.map((d) => ({ ...d }));
     devicesBaseline = JSON.stringify(devices);
   }
+
+  $: navGuardMessage.set(
+    (isDirty || devicesDirty) ? "You have unsaved changes. Leave this page?" : null
+  );
+  onDestroy(() => navGuardMessage.set(null));
+
+  function beforeUnload(e: BeforeUnloadEvent) {
+    if (isDirty || devicesDirty) e.preventDefault();
+  }
+
+  onMount(() => window.addEventListener("beforeunload", beforeUnload));
+  onDestroy(() => window.removeEventListener("beforeunload", beforeUnload));
 
   let started = false;
   if (!started) {
