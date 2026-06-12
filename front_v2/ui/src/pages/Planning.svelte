@@ -22,9 +22,8 @@
   let schedTarget = "";
   let schedRa = "";
   let schedDec = "";
-  let schedExp = 10000;
+  let schedPanelTimeRaw = "1h";
   let schedGain = 80;
-  let schedCount = 0;
   let schedLp = false;
   let schedGridX = 1;
   let schedGridY = 1;
@@ -196,14 +195,40 @@
   }
 
   function openSchedModal() {
-    // Read current values from the AstroMosaic form fields
-    schedRa  = (document.getElementById("ra")  as HTMLInputElement)?.value ?? "";
-    schedDec = (document.getElementById("dec") as HTMLInputElement)?.value ?? "";
+    // Read current target/grid settings from the AstroMosaic pane
+    schedTarget = (document.getElementById("astro_mosaic_search_text") as HTMLInputElement)?.value ?? "";
     schedGridX  = parseInt((document.getElementById("astro_mosaic_grid_x")  as HTMLInputElement)?.value ?? "1") || 1;
     schedGridY  = parseInt((document.getElementById("astro_mosaic_grid_y")  as HTMLInputElement)?.value ?? "1") || 1;
-    schedOverlap = parseInt((document.getElementById("astro_mosaic_overlap") as HTMLInputElement)?.value ?? "20") || 20;
+    schedOverlap = (schedGridX === 1 && schedGridY === 1)
+      ? 100
+      : parseInt((document.getElementById("astro_mosaic_overlap") as HTMLInputElement)?.value ?? "20") || 20;
+
+    // Aladin Lite's internal goto/search field holds the resolved target's
+    // RA/Dec as 6 space-separated tokens: "HH MM SS.ss +DD MM SS.s"
+    const radec = ((document.querySelector(".search") as HTMLInputElement)?.value ?? "").trim().split(/\s+/);
+    if (radec.length === 6) {
+      schedRa  = `${radec[0]}h${radec[1]}m${radec[2]}s`;
+      schedDec = `${radec[3]}d${radec[4]}m${radec[5]}s`;
+    } else {
+      schedRa  = "";
+      schedDec = "";
+    }
+
     schedError = "";
     schedModal = true;
+  }
+
+  // Mirrors Mosaic.svelte's panel-time parsing so "1h 30m" / "5400" both work.
+  function parsePanelTime(val: string): number {
+    val = val.trim();
+    let total = 0;
+    const hMatch = val.match(/(\d+)\s*h/i);
+    const mMatch = val.match(/(\d+)\s*m/i);
+    const sMatch = val.match(/^(\d+)$/);
+    if (hMatch) total += parseInt(hMatch[1]) * 3600;
+    if (mMatch) total += parseInt(mMatch[1]) * 60;
+    if (sMatch) total = parseInt(sMatch[1]);
+    return total || 3600;
   }
 
   async function sendToSchedule() {
@@ -215,13 +240,12 @@
         ra:                    schedRa,
         dec:                   schedDec,
         is_j2000:              true,
-        exp_ms:                schedExp,
+        is_use_lp_filter:      schedLp,
+        panel_time_sec:        parsePanelTime(schedPanelTimeRaw),
         gain:                  schedGain,
-        count:                 schedCount,
-        lp_filter:             schedLp,
+        ra_num:                schedGridX,
+        dec_num:               schedGridY,
         panel_overlap_percent: schedOverlap,
-        panel_x:               schedGridX,
-        panel_y:               schedGridY,
       });
       schedModal = false;
     } catch (e) {
@@ -311,9 +335,7 @@
       </div>
     </div>
 
-    <!-- Hidden inputs AstroMosaicEngine reads/writes -->
-    <input type="hidden" id="ra" />
-    <input type="hidden" id="dec" />
+    <!-- Hidden input AstroMosaicEngine reads for reposition mode -->
     <input type="hidden" id="repositionCheckbox" />
 
     <!-- Aladin viewer -->
@@ -358,16 +380,13 @@
         </div>
         <div class="modal-row">
           <div class="form-field">
-            <label class="form-label" for="sched-exp">Exposure (ms)</label>
-            <input id="sched-exp" class="form-input" type="number" min="100" max="60000" bind:value={schedExp} />
+            <label class="form-label" for="sched-panel-time">Time per Panel</label>
+            <input id="sched-panel-time" class="form-input" type="text" bind:value={schedPanelTimeRaw} placeholder="e.g. 1h 30m or 5400" />
+            <span class="field-hint">Hours/minutes or seconds</span>
           </div>
           <div class="form-field">
             <label class="form-label" for="sched-gain">Gain</label>
             <input id="sched-gain" class="form-input" type="number" min="0" max="100" bind:value={schedGain} />
-          </div>
-          <div class="form-field">
-            <label class="form-label" for="sched-count">Count (0=∞)</label>
-            <input id="sched-count" class="form-input" type="number" min="0" bind:value={schedCount} />
           </div>
         </div>
         <div class="modal-row">
@@ -582,6 +601,7 @@
     gap: 0.75rem;
   }
   .modal-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.6rem; }
+  .field-hint { font-size: 0.72rem; color: var(--ui-muted); margin-top: 0.15rem; }
   .modal-footer {
     display: flex;
     justify-content: flex-end;
