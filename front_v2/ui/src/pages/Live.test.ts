@@ -1,0 +1,231 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/svelte";
+import { writable } from "svelte/store";
+import type { DeviceStatus } from "../lib/api";
+
+const {
+  mockStartMode,
+  mockStopMode,
+  mockGetFocus,
+  mockMoveFocus,
+  mockAutoFocus,
+  mockGetExposure,
+  mockSetExposure,
+  mockSetGain,
+  mockMove,
+  mockRecord,
+  mockStatus,
+} = vi.hoisted(() => ({
+  mockStartMode: vi.fn(),
+  mockStopMode: vi.fn(),
+  mockGetFocus: vi.fn(),
+  mockMoveFocus: vi.fn(),
+  mockAutoFocus: vi.fn(),
+  mockGetExposure: vi.fn(),
+  mockSetExposure: vi.fn(),
+  mockSetGain: vi.fn(),
+  mockMove: vi.fn(),
+  mockRecord: vi.fn(),
+  mockStatus: vi.fn(),
+}));
+
+vi.mock("../lib/stores/deviceStore", () => ({
+  activeDevNum: writable<number>(1),
+  activeDeviceStatus: writable<DeviceStatus | null>(null),
+  isConnected: writable<boolean>(true),
+  deviceList: writable([]),
+  deviceStatuses: writable<Record<number, DeviceStatus>>({}),
+}));
+
+vi.mock("../lib/api", () => ({
+  api: {
+    devices: {
+      status: mockStatus,
+      live: {
+        startMode: mockStartMode,
+        stopMode: mockStopMode,
+        getFocus: mockGetFocus,
+        moveFocus: mockMoveFocus,
+        autoFocus: mockAutoFocus,
+        getExposure: mockGetExposure,
+        setExposure: mockSetExposure,
+        setGain: mockSetGain,
+        move: mockMove,
+        record: mockRecord,
+      },
+    },
+  },
+}));
+
+import * as deviceStore from "../lib/stores/deviceStore";
+import Live from "./Live.svelte";
+
+const mockActiveDevNum = deviceStore.activeDevNum as ReturnType<typeof writable<number>>;
+const mockActiveDeviceStatus = deviceStore.activeDeviceStatus as ReturnType<typeof writable<DeviceStatus | null>>;
+const mockIsConnected = deviceStore.isConnected as ReturnType<typeof writable<boolean>>;
+
+const BASE_STATUS: DeviceStatus = {
+  device_num: 1, is_connected: true, backend_ready: true,
+  view_state: "Idle", mode: "", stage: "", target: "", stacked: "", failed: "",
+  mount_mode: "", free_storage: "", battery_capacity: null, temp: null,
+  ra: null, dec: null, schedule: null, firmware_ver: "", focal_position: null,
+  auto_power_off: false, heater_enable: false, balance_angle: null,
+  compass_direction: null, charge_status: "", battery_temp: null,
+  wifi_signal: "", is_master: true, connected_clients: [],
+  schedule_state: "", guest_mode_available: false,
+};
+
+beforeEach(() => {
+  mockActiveDevNum.set(1);
+  mockIsConnected.set(true);
+  mockActiveDeviceStatus.set(null);
+
+  mockStartMode.mockReset().mockResolvedValue({ status: "ok" });
+  mockStopMode.mockReset().mockResolvedValue({ status: "ok" });
+  mockGetFocus.mockReset().mockResolvedValue({ position: 1500 });
+  mockMoveFocus.mockReset().mockResolvedValue({ position: 1500 });
+  mockAutoFocus.mockReset().mockResolvedValue({});
+  mockGetExposure.mockReset().mockResolvedValue({ exp_ms: 10000, gain: 80 });
+  mockSetExposure.mockReset().mockResolvedValue({});
+  mockSetGain.mockReset().mockResolvedValue({});
+  mockMove.mockReset().mockResolvedValue({});
+  mockRecord.mockReset().mockResolvedValue({});
+  mockStatus.mockReset().mockResolvedValue(BASE_STATUS);
+});
+
+describe("Live — syncing active mode from device status", () => {
+  it("activates the matching mode and shows the live feed when imaging is already in progress", async () => {
+    mockActiveDeviceStatus.set({
+      ...BASE_STATUS,
+      view_state: "working",
+      mode: "star",
+      stacked: 12,
+      schedule_state: "working",
+    });
+
+    render(Live);
+
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+    const starBtn = screen.getByTitle("Deep sky / star mode");
+    expect(starBtn.classList.contains("active")).toBe(true);
+  });
+
+  it("does not auto-activate a mode when the device is idle", () => {
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, view_state: "Idle", mode: "", stacked: "" });
+
+    render(Live);
+
+    expect(screen.queryByText("Live Feed")).not.toBeInTheDocument();
+  });
+
+  it("syncs even on a cold load, once the first status poll resolves after mount", async () => {
+    // Simulates closing the browser and reopening: the store is empty at
+    // mount time and only gets populated once the poll/WS response arrives.
+    mockActiveDeviceStatus.set(null);
+
+    render(Live);
+    expect(screen.queryByText("Live Feed")).not.toBeInTheDocument();
+
+    mockActiveDeviceStatus.set({
+      ...BASE_STATUS,
+      view_state: "working",
+      mode: "star",
+      stacked: 7,
+      schedule_state: "working",
+    });
+
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+    const starBtn = screen.getByTitle("Deep sky / star mode");
+    expect(starBtn.classList.contains("active")).toBe(true);
+  });
+});
+
+describe("Live — confirmation before interrupting an active imaging session", () => {
+  it("warns and blocks the mode switch when the user cancels", async () => {
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, stacked: 5, schedule_state: "working" });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(Live);
+    const starBtn = screen.getByTitle("Deep sky / star mode");
+    await starBtn.click();
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(mockStartMode).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("proceeds with the mode switch when the user confirms", async () => {
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, stacked: 5, schedule_state: "working" });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(Live);
+    const starBtn = screen.getByTitle("Deep sky / star mode");
+    await starBtn.click();
+
+    await waitFor(() => expect(mockStartMode).toHaveBeenCalledWith(1, "star"));
+    confirmSpy.mockRestore();
+  });
+
+  it("does not warn when no imaging session is active", async () => {
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, stacked: "", schedule_state: "" });
+    const confirmSpy = vi.spyOn(window, "confirm");
+
+    render(Live);
+    const starBtn = screen.getByTitle("Deep sky / star mode");
+    await starBtn.click();
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(mockStartMode).toHaveBeenCalledWith(1, "star"));
+    confirmSpy.mockRestore();
+  });
+
+  it("warns before stopping live view too, when imaging is active", async () => {
+    mockActiveDeviceStatus.set({
+      ...BASE_STATUS,
+      view_state: "working",
+      mode: "star",
+      stacked: 5,
+      schedule_state: "working",
+    });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(Live);
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+
+    const stopBtn = screen.getByTitle("Stop live view");
+    await stopBtn.click();
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(mockStopMode).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("re-selecting the already-active mode still warns, since the firmware restarts the pipeline", async () => {
+    mockActiveDeviceStatus.set({
+      ...BASE_STATUS,
+      view_state: "working",
+      mode: "star",
+      stacked: 5,
+      schedule_state: "working",
+    });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(Live);
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+
+    const starBtn = screen.getByTitle("Deep sky / star mode");
+    await starBtn.click();
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(mockStartMode).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+});
+
+describe("Live — offline", () => {
+  it("shows an offline message when the device is not connected", () => {
+    mockIsConnected.set(false);
+    render(Live);
+    expect(screen.getByText(/is offline or not connected/)).toBeInTheDocument();
+  });
+});

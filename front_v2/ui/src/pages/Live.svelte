@@ -19,6 +19,16 @@
 
   let activeMode: LiveMode | null = null;
 
+  // Set once we've checked the device's current view state for the active
+  // device, so we only auto-sync activeMode from status once per device
+  // switch (and don't fight a user's subsequent explicit mode changes).
+  let modeInitialized = false;
+
+  const LIVE_MODE_IDS = new Set<string>(modes.filter((m) => m.id !== "none").map((m) => m.id));
+  function isLiveMode(mode: string): mode is Exclude<LiveMode, "none"> {
+    return LIVE_MODE_IDS.has(mode);
+  }
+
   // "idle"    – no mode selected yet
   // "loading" – mode started but device not yet streaming (covers loading.gif phase)
   // "live"    – device reports view_state === "working", show the MJPEG feed
@@ -57,8 +67,22 @@
     }
   }
 
+  // The device firmware restarts its live-view pipeline on every
+  // iscope_start_view/iscope_stop_view call — even when re-selecting the
+  // already-active mode — which cancels any in-progress stacking exposure.
+  function isImagingActive(): boolean {
+    return !!s && (s.stacked !== "" || s.schedule_state === "working");
+  }
+
   async function setMode(mode: LiveMode) {
     modeError = "";
+    if (isImagingActive()) {
+      const action = mode === "none" ? "stop live view" : `switch to ${mode} mode`;
+      const proceed = window.confirm(
+        `An imaging session appears to be active. Changing the live view mode will interrupt the current stack. Do you want to ${action} anyway?`,
+      );
+      if (!proceed) return;
+    }
     try {
       if (mode === "none") {
         await api.devices.live.stopMode($activeDevNum);
@@ -284,7 +308,19 @@
   ].filter(Boolean).join(' ');
 
   $: s = $activeDeviceStatus;
-  $: if ($activeDevNum) { activeMode = null; focusPos = null; zoom = 1.0; }
+  $: if ($activeDevNum) { activeMode = null; focusPos = null; zoom = 1.0; modeInitialized = false; }
+
+  // Once status for the active device arrives, sync activeMode so the page
+  // reflects an already-running live view / imaging session instead of
+  // showing "Select a mode to begin" while a stack is in progress.
+  $: if (s && !modeInitialized && s.device_num === $activeDevNum) {
+    modeInitialized = true;
+    if (s.view_state === "working" && isLiveMode(s.mode)) {
+      activeMode = s.mode;
+      loadFocus();
+      loadExposure();
+    }
+  }
 </script>
 
 <div class="page-hero">
