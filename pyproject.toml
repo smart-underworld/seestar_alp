@@ -78,7 +78,7 @@ v2 = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
     "websockets>=12",
-    "httpx2>=2.0",
+    "httpx>=0.27",
 ]
 
 [dependency-groups]
