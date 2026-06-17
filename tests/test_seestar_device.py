@@ -847,6 +847,21 @@ def test_start_stack_and_stop_plate_and_last_image(monkeypatch, seestar):
     assert any(c["method"] == "stop_polar_align" for c in calls)
 
 
+def test_start_stack_defaults_restart_when_missing(monkeypatch, seestar):
+    """front_v2's image router omitted "restart"; start_stack must not KeyError."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+
+    calls = []
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda payload: calls.append(payload) or {"result": "ok"},
+    )
+
+    assert seestar.start_stack({"exp_ms": 10000, "gain": 80, "count": 0}) is True
+    assert calls[0]["params"]["restart"] is True
+
+
 def test_start_stack_failure_path(monkeypatch, seestar):
     monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
     monkeypatch.setattr(
@@ -1549,6 +1564,76 @@ def test_mosaic_thread_fn_happy_path(monkeypatch, seestar):
         seestar.event_state["scheduler"]["cur_scheduler_item"]["action"] == "complete"
     )
     assert seestar.is_cur_scheduler_item_working is False
+
+
+def test_mosaic_thread_fn_checks_end_local_time_even_with_zero_panel_time(
+    monkeypatch, seestar
+):
+    """Regression: panel_time_sec=0 must not skip the end_local_time deadline.
+
+    Combining a degenerate panel_time_sec with an end_local_time used to make
+    the per-panel `for i in range(round(panel_time_sec / 5))` loop run zero
+    times, so the deadline check inside it never executed and the mosaic
+    just completed instantly instead of honoring the requested stop time.
+    """
+    import datetime as dt
+
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "device.seestar_device.Util.mosaic_next_center_spacing", lambda *_a: [0.1, 0.2]
+    )
+    monkeypatch.setattr(seestar, "mosaic_goto_inner_worker", lambda *_a, **_k: True)
+    monkeypatch.setattr(seestar, "set_target_name", lambda _n: {"ok": True})
+    monkeypatch.setattr(seestar, "start_stack", lambda _p: True)
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {"ok": True})
+
+    stopped = []
+    monkeypatch.setattr(
+        seestar, "stop_stack", lambda: stopped.append(True) or {"ok": True}
+    )
+
+    class _FixedNow(dt.datetime):
+        _tick = 0
+
+        @classmethod
+        def now(cls, tz=None):
+            _FixedNow._tick += 1
+            base = cls(2024, 1, 1, 22, 59, 50)
+            return base + dt.timedelta(seconds=10 * (_FixedNow._tick - 1))
+
+    monkeypatch.setattr("device.seestar_device.datetime", _FixedNow)
+
+    seestar.schedule["state"] = "working"
+    seestar.schedule["is_skip_requested"] = False
+    seestar.schedule["current_item_id"] = "m1"
+    seestar.event_state["scheduler"] = {"cur_scheduler_item": {}}
+
+    seestar.mosaic_thread_fn(
+        "T1",
+        1.0,
+        2.0,
+        False,
+        0,  # panel_time_sec — degenerate; end_local_time must still be honored
+        1,
+        1,
+        10,
+        80,
+        False,
+        "",
+        1,
+        5,
+        end_local_time="23:00",
+    )
+
+    assert stopped == [True]
+    # The deadline branch returns immediately and never reaches the
+    # "Finished mosaic." / action="complete" code at the end of the
+    # function — unlike the old bug, where a zero-length panel loop fell
+    # straight through to a normal completion.
+    assert (
+        seestar.event_state["scheduler"]["cur_scheduler_item"]["action"] != "complete"
+    )
 
 
 def test_start_mosaic_item_paths(monkeypatch, seestar):

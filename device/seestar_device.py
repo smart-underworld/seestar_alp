@@ -1366,8 +1366,9 @@ class Seestar:
             self.send_message_param_sync(
                 {"method": "set_stack_type", "params": {"type": stack_type}}
             )
+        restart = params.get("restart", True)
         result = self.send_message_param_sync(
-            {"method": "iscope_start_stack", "params": {"restart": params["restart"]}}
+            {"method": "iscope_start_stack", "params": {"restart": restart}}
         )
         if "error" in result:
             # try again:
@@ -1376,7 +1377,7 @@ class Seestar:
             result = self.send_message_param_sync(
                 {
                     "method": "iscope_start_stack",
-                    "params": {"restart": params["restart"]},
+                    "params": {"restart": restart},
                 }
             )
             if "error" in result:
@@ -2164,7 +2165,14 @@ class Seestar:
                         continue
 
                     panel_remaining_time_s = sleep_time_per_panel
-                    for i in range(round(sleep_time_per_panel / 5)):
+                    panel_iterations = round(sleep_time_per_panel / 5)
+                    # When an end time is set, that deadline -- not panel_time_sec --
+                    # governs when to stop (the UI presents them as alternatives, "—
+                    # or —"). A degenerate panel_time_sec (e.g. 0, used as a
+                    # placeholder when only an end time is wanted) must not cause
+                    # the deadline check below to be skipped entirely.
+                    i = 0
+                    while end_deadline is not None or i < panel_iterations:
                         self.event_state["scheduler"]["cur_scheduler_item"][
                             "panel_remaining_time_s"
                         ] = panel_remaining_time_s
@@ -2205,6 +2213,7 @@ class Seestar:
                         time.sleep(5)
                         panel_remaining_time_s -= 5
                         item_remaining_time_s -= 5
+                        i += 1
                     self.event_state["scheduler"]["cur_scheduler_item"][
                         "panel_remaining_time_s"
                     ] = 0
