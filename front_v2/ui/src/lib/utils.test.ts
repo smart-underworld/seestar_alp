@@ -123,6 +123,15 @@ describe("settingGroupFor", () => {
     ["focal_pos",            "General"],
     ["auto_power_off",       "General"],
     ["dark_mode",            "General"],
+    // Real device "stack" sub-object keys have no "stack_" prefix, so they
+    // need the explicit IMAGING_KEYS allow-list to stay grouped correctly.
+    ["dbe",                  "Imaging"],
+    ["star_correction",      "Imaging"],
+    ["airplane_line_removal","Imaging"],
+    ["drizzle2x",            "Imaging"],
+    ["star_trails",          "Imaging"],
+    ["cont_capt",            "Imaging"],
+    ["wide_denoise",         "Imaging"],
   ];
 
   it.each(cases)("groups '%s' into '%s'", (key, group) => {

@@ -270,10 +270,18 @@ def get_device_settings(dev_num: int) -> dict:
         for k, v in {**settings_result, **merged_stack}.items()
         if isinstance(v, (bool, int, float, str, type(None)))
     }
+
+    # Needed by the UI to hide/gate fields that don't apply to older
+    # firmware (see guest_mode_available in get_device_state for the same
+    # pattern).
+    device_result = method_sync("get_device_state", dev_num) or {}
+    firmware_ver_int = pydash.get(device_result, "device.firmware_ver_int", 0)
+
     return {
         "raw": settings_result,
         "stack": merged_stack,
         "merged": merged,
+        "firmware_ver_int": firmware_ver_int,
     }
 
 

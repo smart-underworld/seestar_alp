@@ -18,12 +18,14 @@
     stack_brightness:        "Stack Brightness",
     stack_contrast:          "Stack Contrast",
     stack_saturation:        "Stack Saturation",
-    stack_dbe_enable:        "Stack DBE",
+    dbe:                     "Stack DBE",
     plan_target_af:          "Plan Target AF",
     viewplan_gohome:         "Viewplan Go Home",
     expert_mode:             "Expert Mode",
     af_before_stack:         "AF Before Stack",
-    stack_star_trails:       "Stack Star Trails",
+    star_trails:             "Stack Star Trails",
+    star_correction:         "Star Correction",
+    airplane_line_removal:   "Airplane Line Removal",
     auto_3ppa_calib:         "Horizontal Calibration",
     frame_calib:             "Frame Calibration",
     stack_masic:             "Stack Mosaic",
@@ -40,9 +42,18 @@
     stack_lenhance:          "Light Pollution Filter",
     auto_lenhance:           "Auto DSO Enhancement",
     dark_mode:               "Dark Mode",
-    stack_cont_capt:         "Continuous Capture Mode",
-    stack_drizzle2x:         "4K Live Stack (2× Drizzle)",
+    cont_capt:               "Continuous Capture Mode",
+    drizzle2x:               "4K Live Stack (2× Drizzle)",
     beep_volume:             "Beep Volume",
+    isp_exp_ms:              "ISP Exposure (ms)",
+    isp_gain:                "ISP Gain",
+    calib_location:          "Calibration Location",
+    wifi_country:            "WiFi Country Code",
+    manual_exp:              "Manual Exposure",
+    remote_joined:           "Remote Joined",
+    ae_bri_percent:          "Auto-Exposure Brightness %",
+    lang:                    "Language",
+    expt_heater_enable:      "Heater Enable (Extended)",
   };
 
   const HELPER: Record<string, string> = {
@@ -60,9 +71,23 @@
     stack_lenhance:          "Enable Light Pollution (LP) filter.",
     auto_lenhance:           "Auto DSO enhancement during stacking (firmware 7.75+).",
     dark_mode:               "Disable LEDs during imaging.",
-    stack_cont_capt:         "Continuous capture disables live stacking.",
-    stack_drizzle2x:         "4K live stack with 2× drizzle.",
+    cont_capt:               "Continuous capture disables live stacking.",
+    drizzle2x:               "4K live stack with 2× drizzle.",
     beep_volume:             "Beep volume preset: off, close (quiet), backyard, or outdoor (loud).",
+    dbe:                     "Dynamic Background Extraction during stacking.",
+    star_trails:             "Render trails instead of stacking point sources.",
+    star_correction:         "Correct star shapes during stacking.",
+    airplane_line_removal:   "Remove airplane/satellite trail streaks during stacking.",
+    wide_denoise:            "Apply denoise processing to wide-camera frames.",
+    isp_exp_ms:              "Manual exposure time in milliseconds. Only used when Manual Exposure is enabled.",
+    isp_gain:                "Manual sensor gain. Only used when Manual Exposure is enabled.",
+    calib_location:          "Internal frame-calibration reference index.",
+    wifi_country:            "WiFi regulatory country code.",
+    manual_exp:              "Override auto-exposure with a fixed exposure and gain (see ISP Exposure / ISP Gain).",
+    remote_joined:           "Whether a remote client has joined this session.",
+    ae_bri_percent:          "Target brightness percentage for auto-exposure.",
+    lang:                    "Device UI language code.",
+    expt_heater_enable:      "Enable the extended/experimental dew heater control.",
   };
 
   import { settingGroupFor } from "../lib/utils";
@@ -87,7 +112,23 @@
     stack_dither_interval: { min: 1              },
   };
 
+  // Minimum firmware_ver_int required for a field to be shown. Populate as
+  // specific fields' introduction firmware becomes known — empty for now,
+  // so nothing is hidden until thresholds are confirmed.
+  const FIRMWARE_MIN: Record<string, number> = {};
+
+  function hideIfBelowFirmware(key: string, firmwareVerInt: number): boolean {
+    const min = FIRMWARE_MIN[key];
+    return min !== undefined && firmwareVerInt < min;
+  }
+
+  // These fields are device-reported "auto" sentinels when Manual Exposure
+  // is off (e.g. isp_exp_ms: -999000, isp_gain: -9990) and only mean
+  // something once manual_exp is enabled.
+  const REQUIRES_MANUAL_EXP = new Set(["isp_exp_ms", "isp_gain"]);
+
   let merged: Record<string, unknown> = {};
+  let firmwareVerInt = 0;
   let baseline = "";
   let saving = false;
   let saved = false;
@@ -102,8 +143,12 @@
     loading = true;
     error = "";
     try {
-      const result = await api.devices.settings.get($activeDevNum) as { merged?: Record<string, unknown> };
+      const result = await api.devices.settings.get($activeDevNum) as {
+        merged?: Record<string, unknown>;
+        firmware_ver_int?: number;
+      };
       merged = result.merged ?? {};
+      firmwareVerInt = result.firmware_ver_int ?? 0;
       baseline = JSON.stringify(merged);
     } catch (e) {
       error = String(e);
@@ -189,7 +234,7 @@
 
   <div class:was-validated={submitted}>
   {#each GROUP_ORDER as group}
-    {@const entries = Object.entries(merged).filter(([k]) => groupFor(k) === group)}
+    {@const entries = Object.entries(merged).filter(([k]) => groupFor(k) === group && !hideIfBelowFirmware(k, firmwareVerInt))}
     {#if entries.length > 0}
       <div class="panel-card settings-group">
         <p class="group-title">{group}</p>
@@ -230,15 +275,20 @@
                     </label>
                   </div>
                 {:else if typeof val === "number"}
+                  {@const manualExpRequired = REQUIRES_MANUAL_EXP.has(key) && merged.manual_exp !== true}
                   <input
                     type="number"
                     class="form-input narrow"
                     value={val}
                     required
+                    disabled={manualExpRequired}
                     min={CONSTRAINTS[key]?.min}
                     max={CONSTRAINTS[key]?.max}
                     on:input={(e) => setVal(key, +e.currentTarget.value)}
                   />
+                  {#if manualExpRequired}
+                    <div class="setting-help">Enable Manual Exposure to edit.</div>
+                  {/if}
                 {:else}
                   <input
                     type="text"

@@ -163,3 +163,96 @@ describe("Settings — loaded", () => {
     );
   });
 });
+
+describe("Settings — real device key labels", () => {
+  // device_client.py merges the device's "stack" sub-object verbatim (no
+  // "stack_" prefix renaming), and several other real fields had no label
+  // at all. These must show plain labels, not the raw key.
+  beforeEach(() => {
+    mockIsConnected.set(true);
+    mockSettingsGet.mockResolvedValue({
+      merged: {
+        dbe: false,
+        star_trails: false,
+        cont_capt: false,
+        drizzle2x: false,
+        isp_exp_ms: -999000,
+        isp_gain: -9990,
+        manual_exp: false,
+        wifi_country: "",
+        lang: "en",
+      },
+      firmware_ver_int: 2582,
+    });
+  });
+
+  it("labels real stack sub-object keys instead of showing the raw key", async () => {
+    render(Settings);
+    await waitFor(() => expect(screen.getByText("Stack DBE")).toBeInTheDocument());
+    expect(screen.getByText("Stack Star Trails")).toBeInTheDocument();
+    expect(screen.getByText("Continuous Capture Mode")).toBeInTheDocument();
+    expect(screen.getByText("4K Live Stack (2× Drizzle)")).toBeInTheDocument();
+    expect(screen.queryByText("dbe")).not.toBeInTheDocument();
+    expect(screen.queryByText("star_trails")).not.toBeInTheDocument();
+  });
+
+  it("labels previously-unlabeled fields instead of showing the raw key", async () => {
+    render(Settings);
+    await waitFor(() =>
+      expect(screen.getByText("ISP Exposure (ms)")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("ISP Gain")).toBeInTheDocument();
+    expect(screen.getByText("Manual Exposure")).toBeInTheDocument();
+    expect(screen.getByText("WiFi Country Code")).toBeInTheDocument();
+    expect(screen.getByText("Language")).toBeInTheDocument();
+  });
+});
+
+describe("Settings — manual_exp gating", () => {
+  it("disables isp_exp_ms/isp_gain when manual_exp is false", async () => {
+    mockIsConnected.set(true);
+    mockSettingsGet.mockResolvedValue({
+      merged: { manual_exp: false, isp_exp_ms: -999000, isp_gain: -9990 },
+    });
+    render(Settings);
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("-999000")).toBeInTheDocument(),
+    );
+    expect(screen.getByDisplayValue("-999000")).toBeDisabled();
+    expect(screen.getByDisplayValue("-9990")).toBeDisabled();
+    expect(screen.getAllByText(/Enable Manual Exposure to edit/).length).toBe(2);
+  });
+
+  it("enables isp_exp_ms/isp_gain when manual_exp is true", async () => {
+    mockIsConnected.set(true);
+    mockSettingsGet.mockResolvedValue({
+      merged: { manual_exp: true, isp_exp_ms: 5000, isp_gain: 100 },
+    });
+    render(Settings);
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("5000")).toBeInTheDocument(),
+    );
+    expect(screen.getByDisplayValue("5000")).not.toBeDisabled();
+    expect(screen.getByDisplayValue("100")).not.toBeDisabled();
+    expect(screen.queryByText(/Enable Manual Exposure to edit/)).not.toBeInTheDocument();
+  });
+});
+
+describe("Settings — firmware_ver_int plumbing", () => {
+  it("renders normally when firmware_ver_int is absent from the response", async () => {
+    mockIsConnected.set(true);
+    mockSettingsGet.mockResolvedValue({ merged: { heater_enable: false } });
+    render(Settings);
+    await waitFor(() => expect(screen.getByText("Dew Heater")).toBeInTheDocument());
+  });
+
+  it("does not hide any field yet, since no FIRMWARE_MIN thresholds are set", async () => {
+    mockIsConnected.set(true);
+    mockSettingsGet.mockResolvedValue({
+      merged: { heater_enable: false },
+      firmware_ver_int: 0,
+    });
+    render(Settings);
+    await waitFor(() => expect(screen.getByText("Dew Heater")).toBeInTheDocument());
+  });
+});
