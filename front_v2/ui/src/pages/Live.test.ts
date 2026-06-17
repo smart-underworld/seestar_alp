@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/svelte";
 import { writable } from "svelte/store";
 import type { DeviceStatus } from "../lib/api";
@@ -227,5 +227,106 @@ describe("Live — offline", () => {
     mockIsConnected.set(false);
     render(Live);
     expect(screen.getByText(/is offline or not connected/)).toBeInTheDocument();
+  });
+});
+
+describe("Live — video feed URL", () => {
+  const originalLocation = window.location;
+
+  afterEach(() => {
+    Object.defineProperty(window, "location", { value: originalLocation, writable: true });
+  });
+
+  it("builds the feed URL from the page's own protocol instead of a hardcoded http://", async () => {
+    Object.defineProperty(window, "location", {
+      value: { ...originalLocation, protocol: "https:", hostname: "scope.local" },
+      writable: true,
+    });
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, view_state: "working", mode: "star" });
+
+    render(Live);
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+    const img = screen.getByAltText("Live telescope feed") as HTMLImageElement;
+    expect(img.src).toBe("https://scope.local:7556/1/vid");
+  });
+
+  it("still works over plain http", async () => {
+    Object.defineProperty(window, "location", {
+      value: { ...originalLocation, protocol: "http:", hostname: "scope.local" },
+      writable: true,
+    });
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, view_state: "working", mode: "star" });
+
+    render(Live);
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+    const img = screen.getByAltText("Live telescope feed") as HTMLImageElement;
+    expect(img.src).toBe("http://scope.local:7556/1/vid");
+  });
+});
+
+describe("Live — zoom and pan", () => {
+  beforeEach(() => {
+    mockActiveDeviceStatus.set({
+      ...BASE_STATUS,
+      view_state: "working",
+      mode: "star",
+      stacked: 7,
+      schedule_state: "working",
+    });
+  });
+
+  // jsdom has no PointerEvent constructor; a plain Event with the same
+  // fields the handlers read (pointerId/clientX/clientY) works just as well.
+  function pointerEvent(type: string, init: { pointerId: number; clientX: number; clientY: number }) {
+    return Object.assign(new Event(type), init);
+  }
+
+  it("does not mark the feed pannable at the default 1x zoom", async () => {
+    render(Live);
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+    const img = screen.getByAltText("Live telescope feed");
+    expect(img.classList.contains("pannable")).toBe(false);
+  });
+
+  it("marks the feed pannable once zoomed in", async () => {
+    render(Live);
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+    const img = screen.getByAltText("Live telescope feed");
+    screen.getByRole("button", { name: "Zoom in" }).click();
+    await waitFor(() => expect(img.classList.contains("pannable")).toBe(true));
+  });
+
+  it("pans the feed via pointer drag once zoomed in", async () => {
+    render(Live);
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+    screen.getByRole("button", { name: "Zoom in" }).click();
+
+    const img = screen.getByAltText("Live telescope feed") as HTMLImageElement;
+    img.setPointerCapture = vi.fn();
+    img.releasePointerCapture = vi.fn();
+
+    img.dispatchEvent(pointerEvent("pointerdown", { pointerId: 1, clientX: 100, clientY: 100 }));
+    img.dispatchEvent(pointerEvent("pointermove", { pointerId: 1, clientX: 140, clientY: 130 }));
+    img.dispatchEvent(pointerEvent("pointerup", { pointerId: 1, clientX: 140, clientY: 130 }));
+
+    await waitFor(() => expect(img.style.transform).toContain("translate(40px, 30px)"));
+  });
+
+  it("resets pan when zoom is reset to 1x", async () => {
+    render(Live);
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+    screen.getByRole("button", { name: "Zoom in" }).click();
+
+    const img = screen.getByAltText("Live telescope feed") as HTMLImageElement;
+    img.setPointerCapture = vi.fn();
+    img.releasePointerCapture = vi.fn();
+    img.dispatchEvent(pointerEvent("pointerdown", { pointerId: 1, clientX: 0, clientY: 0 }));
+    img.dispatchEvent(pointerEvent("pointermove", { pointerId: 1, clientX: 50, clientY: 50 }));
+    img.dispatchEvent(pointerEvent("pointerup", { pointerId: 1, clientX: 50, clientY: 50 }));
+    await waitFor(() => expect(img.style.transform).toContain("translate"));
+
+    screen.getByRole("button", { name: "Reset zoom to 1×" }).click();
+    await waitFor(() => expect(img.classList.contains("pannable")).toBe(false));
+    expect(img.style.transform).not.toContain("translate");
   });
 });

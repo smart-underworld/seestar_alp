@@ -4,7 +4,11 @@
   import { api } from "../lib/api";
 
   const imgPort = 7556;
-  $: vidUrl = `http://${location.hostname}:${imgPort}/${$activeDevNum}/vid`;
+  // Match the page's own scheme — a hardcoded "http://" becomes a scheme
+  // downgrade (and a blocked mixed-content subresource load) when the SPA
+  // itself is served over https, which some browsers enforce more strictly
+  // than others.
+  $: vidUrl = `${location.protocol}//${location.hostname}:${imgPort}/${$activeDevNum}/vid`;
 
   type LiveMode = "none" | "star" | "sun" | "moon" | "planet" | "scenery";
 
@@ -233,14 +237,50 @@
   let rotation = 0; // 0 | 90 | 180 | 270
   const ROTATION_KEY = 'ssc.live.rotation';
 
-  // Zoom (digital, CSS scale)
+  // Zoom (digital, CSS scale). The feed container stays a fixed size, so
+  // zooming in clips the image — pan lets the user reach the clipped area
+  // instead of just losing it.
   let zoom = 1.0;
   const ZOOM_STEP = 0.25;
   const ZOOM_MIN = 0.25;
   const ZOOM_MAX = 4.0;
-  function zoomIn()    { zoom = Math.min(+(zoom + ZOOM_STEP).toFixed(2), ZOOM_MAX); }
-  function zoomOut()   { zoom = Math.max(+(zoom - ZOOM_STEP).toFixed(2), ZOOM_MIN); }
-  function zoomReset() { zoom = 1.0; }
+  let panX = 0;
+  let panY = 0;
+  let panning = false;
+  let panPointerId: number | null = null;
+  let panStartX = 0;
+  let panStartY = 0;
+  let panOriginX = 0;
+  let panOriginY = 0;
+
+  function resetPan() { panX = 0; panY = 0; }
+  function zoomIn()    { zoom = Math.min(+(zoom + ZOOM_STEP).toFixed(2), ZOOM_MAX); if (zoom <= 1) resetPan(); }
+  function zoomOut()   { zoom = Math.max(+(zoom - ZOOM_STEP).toFixed(2), ZOOM_MIN); if (zoom <= 1) resetPan(); }
+  function zoomReset() { zoom = 1.0; resetPan(); }
+
+  function feedPointerDown(evt: PointerEvent) {
+    if (zoom <= 1) return;
+    panning = true;
+    panPointerId = evt.pointerId;
+    panStartX = evt.clientX;
+    panStartY = evt.clientY;
+    panOriginX = panX;
+    panOriginY = panY;
+    (evt.currentTarget as HTMLElement).setPointerCapture(evt.pointerId);
+  }
+
+  function feedPointerMove(evt: PointerEvent) {
+    if (!panning || evt.pointerId !== panPointerId) return;
+    panX = panOriginX + (evt.clientX - panStartX);
+    panY = panOriginY + (evt.clientY - panStartY);
+  }
+
+  function feedPointerUp(evt: PointerEvent) {
+    if (!panning || evt.pointerId !== panPointerId) return;
+    panning = false;
+    panPointerId = null;
+    try { (evt.currentTarget as HTMLElement).releasePointerCapture(evt.pointerId); } catch { /* ignore */ }
+  }
 
   // Fullscreen — native API where available, fixed-overlay fallback for iOS Safari
   let feedCardEl: HTMLElement;
@@ -290,6 +330,7 @@
       return;
     }
     zoom = 1.0;
+    resetPan();
     const req = feedCardEl.requestFullscreen ?? (feedCardEl as any).webkitRequestFullscreen;
     if (req) {
       req.call(feedCardEl);
@@ -303,12 +344,15 @@
 
   $: isQuarterTurn = rotation % 180 !== 0;
   $: imgTransform = [
+    // translate() listed before scale() so the pan offset is applied in
+    // final screen pixels — otherwise a 1px drag would move (1 * zoom)px.
+    (panX || panY) ? `translate(${panX}px, ${panY}px)` : '',
     zoom !== 1 ? `scale(${zoom})` : '',
     rotation   ? `rotate(${rotation}deg)` : '',
   ].filter(Boolean).join(' ');
 
   $: s = $activeDeviceStatus;
-  $: if ($activeDevNum) { activeMode = null; focusPos = null; zoom = 1.0; modeInitialized = false; }
+  $: if ($activeDevNum) { activeMode = null; focusPos = null; zoom = 1.0; panX = 0; panY = 0; modeInitialized = false; }
 
   // Once status for the active device arrives, sync activeMode so the page
   // reflects an already-running live view / imaging session instead of
@@ -418,7 +462,12 @@
               alt="Live telescope feed"
               class="live-feed"
               class:live-feed-fs={isFullscreen}
+              class:pannable={zoom > 1}
               style={imgTransform ? `transform:${imgTransform}` : ''}
+              on:pointerdown={feedPointerDown}
+              on:pointermove={feedPointerMove}
+              on:pointerup={feedPointerUp}
+              on:pointercancel={feedPointerUp}
             />
             {#if feedState !== "live"}
               <div class="feed-placeholder">
@@ -748,6 +797,15 @@
     min-height: 200px;
     object-fit: contain;
     transform-origin: center center;
+    touch-action: none;
+  }
+  /* Zoomed past 1x: the feed container clips, so let the user drag to pan
+     the otherwise-unreachable cropped area instead of just losing it. */
+  .live-feed.pannable {
+    cursor: grab;
+  }
+  .live-feed.pannable:active {
+    cursor: grabbing;
   }
   /* Fill the square container at quarter turns so rotate() acts on the full area */
   .feed-wrap-quarter .live-feed {
