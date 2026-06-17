@@ -92,6 +92,7 @@
 
   let events: Record<string, EventState> = {};
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
+  let pollingActive = false;
 
   async function pollEvents() {
     if (!$isConnected) return;
@@ -104,13 +105,23 @@
     pollTimer = setTimeout(pollEvents, interval);
   }
 
-  $: if ($isConnected) {
-    if (pollTimer) clearTimeout(pollTimer);
+  function startPolling() {
+    if (pollingActive) return;
+    pollingActive = true;
     pollEvents();
-  } else {
+  }
+
+  function stopPolling() {
+    pollingActive = false;
     if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
     events = {};
   }
+
+  // Depend only on $isConnected — referencing pollTimer/pollingActive here
+  // (even just to read them) would make this block re-fire on every
+  // assignment to them, including the one pollEvents() makes every tick,
+  // collapsing the polling interval into a tight back-to-back loop.
+  $: $isConnected ? startPolling() : stopPolling();
 
   // onDestroy is defined below with PA cleanup included
 

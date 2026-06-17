@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/svelte";
 import { writable } from "svelte/store";
 import type { DeviceStatus } from "../lib/api";
@@ -194,6 +194,64 @@ describe("Startup — event grid", () => {
     await waitFor(() => {
       expect(screen.getByText("focus timeout")).toBeInTheDocument();
     });
+  });
+});
+
+// ── Polling cadence ───────────────────────────────────────────────────────────
+// Regression coverage for the bug where the $: reactive block driving
+// pollEvents() also depended on pollTimer, which pollEvents() itself
+// reassigns — causing every poll tick to immediately re-trigger another
+// poll instead of waiting out the interval. With HANG-based mocks (used
+// everywhere else in this file) the loop never gets far enough to expose
+// this, so this block uses a resolving mock + fake timers instead.
+describe("Startup — polling cadence", () => {
+  beforeEach(() => {
+    mockIsConnected.set(true);
+    mockEvents.mockReset();
+    mockEvents.mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("polls once per interval, not back-to-back", async () => {
+    vi.useFakeTimers();
+    try {
+      render(Startup);
+
+      // Initial poll fires immediately on connect.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockEvents).toHaveBeenCalledTimes(1);
+
+      // schedule_state is unset → isRunning is false → 3000ms interval.
+      // Advancing by less than the interval must not produce another call.
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(mockEvents).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(mockEvents).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mockEvents).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops polling once disconnected", async () => {
+    vi.useFakeTimers();
+    try {
+      render(Startup);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockEvents).toHaveBeenCalledTimes(1);
+
+      mockIsConnected.set(false);
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(mockEvents).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
