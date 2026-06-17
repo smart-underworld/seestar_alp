@@ -15,6 +15,7 @@ def start_imaging(dev_num: int, body: ImageRequest):
         "exp_ms": body.exp_ms,
         "gain": body.gain,
         "count": body.count,
+        "restart": True,
     }
     if body.ra and body.dec:
         params["ra"] = body.ra
@@ -23,8 +24,9 @@ def start_imaging(dev_num: int, body: ImageRequest):
         params["target_name"] = body.target_name
 
     result = do_action("start_stack", dev_num, params)
-    if result is None:
-        raise HTTPException(status_code=502, detail="Start imaging failed")
+    if result is None or result.get("ErrorNumber", 0) != 0:
+        detail = (result or {}).get("ErrorMessage") or "Start imaging failed"
+        raise HTTPException(status_code=502, detail=detail)
     return result
 
 
