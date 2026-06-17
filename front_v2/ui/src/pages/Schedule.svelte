@@ -194,6 +194,9 @@
 
   let items: DndItem[] = [];
   let schedState = "";
+  let isStackingPaused = false;
+  let currentItemId = "";
+  let curSchedulerItem: Record<string, unknown> | null = null;
   let error = "";
   let loading = false;
   let adding = false;
@@ -317,6 +320,16 @@
     return entries.map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("  ·  ");
   }
 
+  // Formats a remaining-seconds count (from the device's live scheduler
+  // state) as "M:SS". Returns "" for missing/invalid values.
+  function formatRemaining(value: unknown): string {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) return "";
+    const m = Math.floor(n / 60);
+    const s = Math.floor(n % 60);
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+
   // ---- Object search ---------------------------------------------------
 
   async function doSearch() {
@@ -359,8 +372,14 @@
         const sched = await api.devices.schedule.get($activeDevNum);
         schedState = (sched.state as string) ?? "";
         items = toDndItems((sched.list as ScheduleItem[]) ?? []);
+        isStackingPaused = Boolean(sched.is_stacking_paused);
+        currentItemId = (sched.current_item_id as string) ?? "";
+        curSchedulerItem = (sched.cur_scheduler_item as Record<string, unknown>) ?? null;
       } else {
         schedState = "";
+        isStackingPaused = false;
+        currentItemId = "";
+        curSchedulerItem = null;
         // Keep existing items when going offline so the draft isn't lost
       }
     } catch (e) {
@@ -568,7 +587,7 @@
     }
   }
 
-  async function setState(state: "start" | "stop" | "pause") {
+  async function setState(state: "start" | "stop" | "pause" | "resume") {
     error = "";
     try {
       await api.devices.schedule.setState($activeDevNum, state);
@@ -587,6 +606,9 @@
       }
       items = [];
       schedState = "";
+      isStackingPaused = false;
+      currentItemId = "";
+      curSchedulerItem = null;
     } catch (e) {
       error = String(e);
     }
@@ -1015,7 +1037,9 @@
         <div class="queue-header-left">
           <p class="panel-title" style="margin:0">Queue</p>
           {#if schedState}
-            <span class="sched-state-badge {stateColorClass(schedState)}">{schedState}</span>
+            <span class="sched-state-badge {stateColorClass(schedState)}">
+              {isActive(schedState) && isStackingPaused ? "paused" : schedState}
+            </span>
           {/if}
         </div>
         <div class="queue-actions">
@@ -1038,9 +1062,15 @@
               ▶ Start
             </button>
           {:else if $isConnected && isActive(schedState)}
-            <button class="btn btn-secondary btn-sm" on:click={() => setState("pause")}>
-              ⏸ Pause
-            </button>
+            {#if isStackingPaused}
+              <button class="btn btn-secondary btn-sm" on:click={() => setState("resume")}>
+                ▶ Resume
+              </button>
+            {:else}
+              <button class="btn btn-secondary btn-sm" on:click={() => setState("pause")}>
+                ⏸ Pause
+              </button>
+            {/if}
             <button class="btn btn-danger btn-sm" on:click={() => setState("stop")}>
               ⏹ Stop
             </button>
@@ -1113,7 +1143,7 @@
             <div
               class="queue-item"
               class:done={item.state === "done"}
-              class:working={item.state === "working"}
+              class:working={item.id === currentItemId}
               class:editing={item.id === editingItemId}
             >
               <div
@@ -1125,15 +1155,30 @@
               <div class="item-content">
                 <div class="item-action">
                   {ACTION_LABELS[item.action] ?? item.action}
-                  {#if item.state}
-                    <span
-                      class="item-state-badge"
-                      class:state-success={item.state === "working"}
-                      class:state-muted={item.state !== "working"}
-                    >{item.state}</span>
+                  {#if item.id === currentItemId}
+                    <span class="item-state-badge state-success">working</span>
+                  {:else if item.state}
+                    <span class="item-state-badge state-muted">{item.state}</span>
                   {/if}
                 </div>
-                {#if hasParams(item)}
+                {#if item.id === currentItemId && curSchedulerItem}
+                  <div class="item-live">
+                    {#if curSchedulerItem.action}
+                      <div class="item-live-action">{curSchedulerItem.action}</div>
+                    {/if}
+                    <div class="item-live-progress">
+                      {#if curSchedulerItem.item_remaining_time_s != null}
+                        <span>⏱ {formatRemaining(curSchedulerItem.item_remaining_time_s)} remaining</span>
+                      {/if}
+                      {#if curSchedulerItem.panel_remaining_time_s != null}
+                        <span>panel {formatRemaining(curSchedulerItem.panel_remaining_time_s)}</span>
+                      {/if}
+                      {#if curSchedulerItem.cur_ra_panel_num != null && curSchedulerItem.cur_dec_panel_num != null}
+                        <span>grid {curSchedulerItem.cur_ra_panel_num},{curSchedulerItem.cur_dec_panel_num}</span>
+                      {/if}
+                    </div>
+                  </div>
+                {:else if hasParams(item)}
                   <div class="item-params">{paramSummary(item)}</div>
                 {/if}
               </div>
@@ -1483,6 +1528,24 @@
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
+  }
+  .item-live {
+    margin-top: 0.2rem;
+  }
+  .item-live-action {
+    font-size: 0.72rem;
+    color: var(--ui-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .item-live-progress {
+    font-size: 0.7rem;
+    color: var(--ui-muted);
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 0.1rem;
   }
 
   .item-state-badge {

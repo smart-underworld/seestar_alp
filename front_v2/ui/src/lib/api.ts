@@ -203,7 +203,7 @@ export const api = {
         post(`/api/v1/devices/${devNum}/schedule/item/insert`, { action, params, before_id }),
       deleteItem: (devNum: number, itemId: string) =>
         del(`/api/v1/devices/${devNum}/schedule/item/${encodeURIComponent(itemId)}`),
-      setState: (devNum: number, state: "start" | "stop" | "pause") =>
+      setState: (devNum: number, state: "start" | "stop" | "pause" | "resume") =>
         post(`/api/v1/devices/${devNum}/schedule/state?state=${encodeURIComponent(state)}`),
       exportSchedule: (devNum: number) =>
         fetch(`/api/v1/devices/${devNum}/schedule/export`),

@@ -138,13 +138,14 @@ async def import_schedule(dev_num: int, request: Request):
 
 @router.post("/devices/{dev_num}/schedule/state")
 def toggle_schedule(dev_num: int, state: str):
-    """state: 'start' | 'stop' | 'pause'"""
+    """state: 'start' | 'stop' | 'pause' | 'resume'"""
     if not check_api_state(dev_num):
         raise HTTPException(status_code=503, detail="Device not connected")
     action_map = {
         "start": "start_scheduler",
         "stop": "stop_scheduler",
         "pause": "pause_scheduler",
+        "resume": "continue_scheduler",
     }
     action = action_map.get(state, f"schedule_{state}")
     result = do_action(action, dev_num, {})

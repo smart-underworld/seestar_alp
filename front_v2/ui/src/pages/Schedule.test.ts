@@ -363,3 +363,93 @@ describe("Schedule — server library", () => {
     expect(mockScheduleImport).not.toHaveBeenCalled(); // offline — local only
   });
 });
+
+describe("Schedule — pause / resume", () => {
+  beforeEach(() => mockIsConnected.set(true));
+
+  it("shows Pause button (not paused) on a running schedule", async () => {
+    mockScheduleGet.mockResolvedValue({ state: "running", list: [], is_stacking_paused: false });
+    render(Schedule);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /⏸ Pause/i })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("button", { name: /▶ Resume/i })).not.toBeInTheDocument();
+  });
+
+  it("calls setState pause when Pause is clicked", async () => {
+    mockScheduleGet.mockResolvedValue({ state: "running", list: [], is_stacking_paused: false });
+    render(Schedule);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /⏸ Pause/i })).toBeInTheDocument(),
+    );
+    screen.getByRole("button", { name: /⏸ Pause/i }).click();
+    await waitFor(() =>
+      expect(mockScheduleSetState).toHaveBeenCalledWith(1, "pause"),
+    );
+  });
+
+  it("shows Resume button and 'paused' badge when is_stacking_paused is true", async () => {
+    mockScheduleGet.mockResolvedValue({ state: "running", list: [], is_stacking_paused: true });
+    render(Schedule);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /▶ Resume/i })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("button", { name: /⏸ Pause/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/paused/i)).toBeInTheDocument();
+  });
+
+  it("calls setState resume when Resume is clicked", async () => {
+    mockScheduleGet.mockResolvedValue({ state: "running", list: [], is_stacking_paused: true });
+    render(Schedule);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /▶ Resume/i })).toBeInTheDocument(),
+    );
+    screen.getByRole("button", { name: /▶ Resume/i }).click();
+    await waitFor(() =>
+      expect(mockScheduleSetState).toHaveBeenCalledWith(1, "resume"),
+    );
+  });
+});
+
+describe("Schedule — active item live info", () => {
+  beforeEach(() => mockIsConnected.set(true));
+
+  it("renders live action text and remaining time for the current scheduler item", async () => {
+    mockScheduleGet.mockResolvedValue({
+      state: "running",
+      list: [
+        { action: "start_mosaic", params: { target_name: "M13" }, schedule_item_id: "id-1" },
+      ],
+      current_item_id: "id-1",
+      cur_scheduler_item: {
+        action: "stacking the panel for 3600 seconds",
+        item_remaining_time_s: 125,
+        panel_remaining_time_s: 65,
+      },
+    });
+    render(Schedule);
+    await waitFor(() =>
+      expect(screen.getByText("stacking the panel for 3600 seconds")).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/2:05 remaining/)).toBeInTheDocument();
+    expect(screen.getByText(/panel 1:05/)).toBeInTheDocument();
+    // Falls back to nothing from paramSummary for the active item (live info wins)
+    expect(screen.queryByText(/target_name/)).not.toBeInTheDocument();
+  });
+
+  it("falls back to static param summary for items that are not the current item", async () => {
+    mockScheduleGet.mockResolvedValue({
+      state: "running",
+      list: [
+        { action: "scope_park", params: {}, schedule_item_id: "id-1" },
+        { action: "start_mosaic", params: { target_name: "M13" }, schedule_item_id: "id-2" },
+      ],
+      current_item_id: "id-1",
+      cur_scheduler_item: { action: "stacking", item_remaining_time_s: 10 },
+    });
+    render(Schedule);
+    await waitFor(() =>
+      expect(screen.getByText(/target_name/)).toBeInTheDocument(),
+    );
+  });
+});
