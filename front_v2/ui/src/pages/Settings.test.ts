@@ -181,6 +181,12 @@ describe("Settings — real device key labels", () => {
         manual_exp: false,
         wifi_country: "",
         lang: "en",
+        auto_af: false,
+        stack_after_goto: false,
+        guest_mode: false,
+        user_stack_sim: false,
+        usb_en_eth: false,
+        light_duration_min: -1,
       },
       firmware_ver_int: 2582,
     });
@@ -206,21 +212,106 @@ describe("Settings — real device key labels", () => {
     expect(screen.getByText("WiFi Country Code")).toBeInTheDocument();
     expect(screen.getByText("Language")).toBeInTheDocument();
   });
+
+  it("labels device-reported fields that previously fell back to the raw key", async () => {
+    render(Settings);
+    await waitFor(() =>
+      expect(screen.getByText("Auto-Focus Before Capture")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Stack After Goto")).toBeInTheDocument();
+    expect(screen.getByText("Guest Mode")).toBeInTheDocument();
+    expect(screen.getByText("Simulate Stacking")).toBeInTheDocument();
+    expect(screen.getByText("USB-to-Ethernet")).toBeInTheDocument();
+    expect(screen.getByText("Light Duration Min")).toBeInTheDocument();
+    expect(screen.queryByText("auto_af")).not.toBeInTheDocument();
+    expect(screen.queryByText("stack_after_goto")).not.toBeInTheDocument();
+    expect(screen.queryByText("guest_mode")).not.toBeInTheDocument();
+    expect(screen.queryByText("user_stack_sim")).not.toBeInTheDocument();
+    expect(screen.queryByText("usb_en_eth")).not.toBeInTheDocument();
+  });
+
+  it("shows helper description text for the newly-labeled fields", async () => {
+    render(Settings);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Automatically run autofocus before each capture/),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(/Automatically begin stacking once a goto\/slew completes/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Allow multiple app clients to connect at once/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Simulate the stacking process without real frames/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Enable USB-to-Ethernet adapter support/),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("Settings — newer firmware's flattened stack sub-object", () => {
+  // On firmware 7.32 the device's "stack" sub-object reports bare keys
+  // (capt_type, capt_num, brightness, contrast, saturation, goto,
+  // move_sleep_sec, dbe_enable) rather than the "stack_"-prefixed names
+  // used elsewhere. device_client.py flattens these verbatim, so both
+  // naming variants must resolve to a label, not a raw key.
+  beforeEach(() => {
+    mockIsConnected.set(true);
+    mockSettingsGet.mockResolvedValue({
+      merged: {
+        dbe: false,
+        dbe_enable: false,
+        capt_type: "stack",
+        capt_num: 50,
+        brightness: 0,
+        contrast: 0,
+        saturation: 0,
+        goto: true,
+        move_sleep_sec: 1,
+      },
+      firmware_ver_int: 2732,
+    });
+  });
+
+  it("labels the bare stack-object keys instead of showing the raw key", async () => {
+    render(Settings);
+    await waitFor(() =>
+      expect(screen.getByText("Stack Capture Type")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Stack Capture Count")).toBeInTheDocument();
+    expect(screen.getByText("Stack Brightness")).toBeInTheDocument();
+    expect(screen.getByText("Stack Contrast")).toBeInTheDocument();
+    expect(screen.getByText("Stack Saturation")).toBeInTheDocument();
+    expect(screen.getByText("Stack Goto")).toBeInTheDocument();
+    expect(screen.getByText("Mount Move Settle Time (s)")).toBeInTheDocument();
+    expect(screen.getByText("Stack DBE (Enable)")).toBeInTheDocument();
+    expect(screen.queryByText("capt_type")).not.toBeInTheDocument();
+    expect(screen.queryByText("move_sleep_sec")).not.toBeInTheDocument();
+    expect(screen.queryByText("dbe_enable")).not.toBeInTheDocument();
+  });
 });
 
 describe("Settings — manual_exp gating", () => {
-  it("disables isp_exp_ms/isp_gain when manual_exp is false", async () => {
+  it("disables isp_exp_ms/isp_gain when manual_exp is false, showing Auto instead of the raw sentinel", async () => {
     mockIsConnected.set(true);
     mockSettingsGet.mockResolvedValue({
       merged: { manual_exp: false, isp_exp_ms: -999000, isp_gain: -9990 },
     });
     render(Settings);
     await waitFor(() =>
-      expect(screen.getByDisplayValue("-999000")).toBeInTheDocument(),
+      expect(screen.getAllByPlaceholderText("Auto").length).toBe(2),
     );
-    expect(screen.getByDisplayValue("-999000")).toBeDisabled();
-    expect(screen.getByDisplayValue("-9990")).toBeDisabled();
+    const autoInputs = screen.getAllByPlaceholderText("Auto") as HTMLInputElement[];
+    for (const input of autoInputs) {
+      expect(input).toBeDisabled();
+      expect(input.value).toBe("");
+    }
     expect(screen.getAllByText(/Enable Manual Exposure to edit/).length).toBe(2);
+    expect(screen.queryByDisplayValue("-999000")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("-9990")).not.toBeInTheDocument();
   });
 
   it("enables isp_exp_ms/isp_gain when manual_exp is true", async () => {
