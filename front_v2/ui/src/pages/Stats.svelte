@@ -42,7 +42,10 @@
 
   function barClass(key: string, pct: number): string {
     if (key === "Battery") return pct < 20 ? "danger" : pct < 50 ? "warning" : "success";
-    if (key === "Free Storage") return pct > 90 ? "danger" : pct > 70 ? "warning" : "success";
+    // pct here is percent FREE (storagePct computes free/total), so low
+    // free space is the danger case — not high, like the raw threshold
+    // numbers might suggest.
+    if (key === "Free Storage") return pct < 10 ? "danger" : pct < 30 ? "warning" : "success";
     if (key === "Wi-Fi Signal") return pct < 30 ? "danger" : pct < 60 ? "warning" : "success";
     return "primary";
   }

@@ -155,6 +155,34 @@ describe("Stats — connected with data", () => {
     expect(screen.getByText("32.0 GB / 64.0 GB")).toBeInTheDocument();
   });
 
+  it("colors the Free Storage bar green when plenty of space is free", async () => {
+    mockStatus.mockResolvedValue({ ...STATUS, free_storage: "95.0 GB / 100.0 GB" });
+    render(Stats);
+    await waitFor(() =>
+      expect(screen.getByText("Free Storage")).toBeInTheDocument(),
+    );
+    const fill = screen
+      .getByText("Free Storage")
+      .closest(".stat-row")
+      ?.querySelector(".metric-bar-fill");
+    expect(fill).toHaveClass("success");
+    expect(fill).not.toHaveClass("danger");
+  });
+
+  it("colors the Free Storage bar red when space is nearly full", async () => {
+    mockStatus.mockResolvedValue({ ...STATUS, free_storage: "5.0 GB / 100.0 GB" });
+    render(Stats);
+    await waitFor(() =>
+      expect(screen.getByText("Free Storage")).toBeInTheDocument(),
+    );
+    const fill = screen
+      .getByText("Free Storage")
+      .closest(".stat-row")
+      ?.querySelector(".metric-bar-fill");
+    expect(fill).toHaveClass("danger");
+    expect(fill).not.toHaveClass("success");
+  });
+
   it("shows mode and stage rows only when view_state is not Idle", async () => {
     mockStatus.mockResolvedValue({
       ...STATUS,
