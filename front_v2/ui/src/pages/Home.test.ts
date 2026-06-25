@@ -43,6 +43,7 @@ const BASE_STATUS: DeviceStatus = {
   dec: -5.123,
   schedule: null,
   firmware_ver: "3.14",
+  model: "Seestar S30 Pro",
   focal_position: 1500,
   auto_power_off: true,
   heater_enable: false,
@@ -133,6 +134,7 @@ describe("Home — connected state with status", () => {
 
   it("renders the Telescope card fields", () => {
     render(Home);
+    expect(screen.getByText("Seestar S30 Pro")).toBeInTheDocument();
     expect(screen.getByText("3.14")).toBeInTheDocument();
     expect(screen.getByText("1500")).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument();

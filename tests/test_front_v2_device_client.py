@@ -109,3 +109,25 @@ def test_wide_cam_fields_hidden_when_experimental_off(monkeypatch):
 
     assert "wide_cam" not in settings["merged"]
     assert "wide_4k" not in settings["merged"]
+
+
+def test_get_device_state_includes_model(monkeypatch):
+    monkeypatch.setattr(
+        device_client, "_check_api_state_detailed", lambda dev_num: (True, True)
+    )
+
+    def fake_method_sync(method, dev_num, **kwargs):
+        if method == "get_device_state":
+            return _device_state("Seestar S30 Pro")
+        if method == "get_view_state":
+            return {}
+        if method == "pi_station_state":
+            return {}
+        raise AssertionError(f"Unexpected method: {method}")
+
+    monkeypatch.setattr(device_client, "method_sync", fake_method_sync)
+    monkeypatch.setattr(device_client, "do_action", lambda *a, **kw: None)
+
+    status = device_client.get_device_state(1)
+
+    assert status["model"] == "Seestar S30 Pro"

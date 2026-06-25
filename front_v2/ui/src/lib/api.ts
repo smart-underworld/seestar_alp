@@ -60,6 +60,7 @@ export interface DeviceStatus {
   dec: number | null;
   schedule: unknown;
   firmware_ver: string;
+  model: string;
   focal_position: number | null;
   auto_power_off: boolean;
   heater_enable: boolean;

@@ -68,7 +68,7 @@ const BASE_STATUS: DeviceStatus = {
   device_num: 1, is_connected: true, backend_ready: true,
   view_state: "Idle", mode: "", stage: "", target: "", stacked: "", failed: "",
   mount_mode: "", free_storage: "", battery_capacity: null, temp: null,
-  ra: null, dec: null, schedule: null, firmware_ver: "", focal_position: null,
+  ra: null, dec: null, schedule: null, firmware_ver: "", model: "", focal_position: null,
   auto_power_off: false, heater_enable: false, balance_angle: null,
   compass_direction: null, charge_status: "", battery_temp: null,
   wifi_signal: "", is_master: true, connected_clients: [],

@@ -146,6 +146,7 @@ def get_device_state(dev_num: int) -> dict:
     is_master = True
     connected_clients: list = []
     guest_mode_available = False
+    model = ""
 
     if result:
         eq_mode = pydash.get(result, "mount.equ_mode", False)
@@ -171,6 +172,7 @@ def get_device_state(dev_num: int) -> dict:
         ra = pydash.get(result, "mount.ra_j2000")
         dec = pydash.get(result, "mount.dec_j2000")
         firmware_ver = pydash.get(result, "device.firmware_ver_string", "")
+        model = pydash.get(result, "device.product_model", "") or ""
         focal_position = pydash.get(result, "focuser.step", None)
         auto_power_off = pydash.get(result, "setting.auto_power_off", False)
         heater_enable = pydash.get(result, "setting.heater_enable", False)
@@ -221,6 +223,7 @@ def get_device_state(dev_num: int) -> dict:
         "dec": dec,
         "schedule": schedule,
         "firmware_ver": firmware_ver,
+        "model": model,
         "focal_position": focal_position,
         "auto_power_off": auto_power_off,
         "heater_enable": heater_enable,

@@ -28,6 +28,7 @@ class DeviceStatus(BaseModel):
     dec: Any = None
     schedule: Any = None
     firmware_ver: str = ""
+    model: str = ""
     focal_position: Any = None
     auto_power_off: bool = False
     heater_enable: bool = False

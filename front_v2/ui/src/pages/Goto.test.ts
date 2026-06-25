@@ -35,7 +35,7 @@ const BASE_STATUS: DeviceStatus = {
   view_state: "Idle", mode: "", stage: "", target: "", stacked: "", failed: "",
   mount_mode: "Alt Azimuth", free_storage: "",
   battery_capacity: null, temp: null, ra: 10.75, dec: -5.12,
-  schedule: null, firmware_ver: "", focal_position: null,
+  schedule: null, firmware_ver: "", model: "", focal_position: null,
   auto_power_off: false, heater_enable: false, balance_angle: null,
   compass_direction: null, charge_status: "", battery_temp: null,
   wifi_signal: "", is_master: true, connected_clients: [],

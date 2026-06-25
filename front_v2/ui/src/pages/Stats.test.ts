@@ -36,7 +36,7 @@ const STATUS: DeviceStatus = {
   view_state: "Idle", mode: "", stage: "", target: "", stacked: "", failed: "",
   mount_mode: "Alt Azimuth", free_storage: "32.0 GB / 64.0 GB",
   battery_capacity: 75, temp: 22.5, ra: 10.75, dec: -5.12,
-  schedule: null, firmware_ver: "3.14", focal_position: 1500,
+  schedule: null, firmware_ver: "3.14", model: "Seestar S50", focal_position: 1500,
   auto_power_off: true, heater_enable: false, balance_angle: 4,
   compass_direction: 180, charge_status: "discharging", battery_temp: 24.6,
   wifi_signal: "-65dBm", is_master: true, connected_clients: [],

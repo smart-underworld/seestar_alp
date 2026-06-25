@@ -220,6 +220,10 @@
     <div class="panel-card stat-card">
       <p class="panel-title">Telescope</p>
       <div class="stat-row">
+        <div class="stat-key">Model</div>
+        <div class="stat-value">{fmt(s.model)}</div>
+      </div>
+      <div class="stat-row">
         <div class="stat-key">Firmware</div>
         <div class="stat-value">{fmt(s.firmware_ver)}</div>
       </div>
