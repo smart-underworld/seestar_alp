@@ -4,11 +4,18 @@
   import { api } from "../lib/api";
 
   const imgPort = 7556;
+  // The backend ends the MJPEG response the moment the device goes idle
+  // (device/seestar_imaging.py get_frame()) and never resumes it — so once
+  // that happens the <img> just freezes on the last "Idle" placeholder frame.
+  // Browsers don't fire `error` on a clean stream end, so we can't rely on
+  // that; instead we bump this to force a brand-new connection whenever we
+  // detect the device has (re)started streaming.
+  let vidNonce = 0;
   // Match the page's own scheme — a hardcoded "http://" becomes a scheme
   // downgrade (and a blocked mixed-content subresource load) when the SPA
   // itself is served over https, which some browsers enforce more strictly
   // than others.
-  $: vidUrl = `${location.protocol}//${location.hostname}:${imgPort}/${$activeDevNum}/vid`;
+  $: vidUrl = `${location.protocol}//${location.hostname}:${imgPort}/${$activeDevNum}/vid?t=${vidNonce}`;
 
   type LiveMode = "none" | "star" | "sun" | "moon" | "planet" | "scenery";
 
@@ -39,6 +46,19 @@
   $: feedState = !activeMode || activeMode === "none" ? "idle"
                : $activeDeviceStatus?.view_state === "working" ? "live"
                : "loading";
+
+  // Reconnect the feed whenever polling confirms the device just became live —
+  // this is what recovers from the backend's stream-ends-on-idle behavior once
+  // the device actually starts streaming. Both the edge check and the
+  // previous-value update must be in the same block: Svelte runs reactive
+  // statements in dependency order, not source order, so a separate
+  // `$: prevFeedState = feedState` would update prevFeedState before this
+  // check ever sees the old value.
+  let prevFeedState: string | undefined;
+  $: {
+    if (feedState === "live" && prevFeedState !== "live") vidNonce = Date.now();
+    prevFeedState = feedState;
+  }
 
   let focusPos: number | null = null;
   let expMs = 10000;
@@ -95,6 +115,10 @@
       } else {
         await api.devices.live.startMode($activeDevNum, mode);
         activeMode = mode;
+        // Force a fresh connection — switching directly between two live modes
+        // (e.g. star → moon) keeps the same <img> element mounted, and the
+        // firmware restarts its view pipeline on every iscope_start_view call.
+        vidNonce = Date.now();
         startLiveRefresh();
         loadFocus();
         loadExposure();

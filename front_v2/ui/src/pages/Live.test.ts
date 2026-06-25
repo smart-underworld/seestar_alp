@@ -247,7 +247,7 @@ describe("Live — video feed URL", () => {
     render(Live);
     await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
     const img = screen.getByAltText("Live telescope feed") as HTMLImageElement;
-    expect(img.src).toBe("https://scope.local:7556/1/vid");
+    expect(img.src).toMatch(/^https:\/\/scope\.local:7556\/1\/vid\?t=\d+$/);
   });
 
   it("still works over plain http", async () => {
@@ -260,7 +260,40 @@ describe("Live — video feed URL", () => {
     render(Live);
     await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
     const img = screen.getByAltText("Live telescope feed") as HTMLImageElement;
-    expect(img.src).toBe("http://scope.local:7556/1/vid");
+    expect(img.src).toMatch(/^http:\/\/scope\.local:7556\/1\/vid\?t=\d+$/);
+  });
+
+  it("reconnects the feed once polling confirms the device transitioned to live", async () => {
+    Object.defineProperty(window, "location", {
+      value: { ...originalLocation, protocol: "http:", hostname: "scope.local" },
+      writable: true,
+    });
+    // Monotonically increasing, rather than a fixed value, so the assertion
+    // below can't pass merely because two calls landed in the same
+    // millisecond — every call (ours or any library internals) gets a
+    // distinct value, so "changed" is a precise signal of a real reconnect.
+    let nowCounter = 1000;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => nowCounter++);
+    // Mirrors the real race: the device hasn't started streaming yet when the
+    // mode is first selected, so the initial connection would freeze on the
+    // backend's "Idle" placeholder frame.
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, view_state: "Idle", mode: "", stacked: "" });
+
+    render(Live);
+    const starBtn = screen.getByTitle("Deep sky / star mode");
+    await starBtn.click();
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+
+    const img = screen.getByAltText("Live telescope feed") as HTMLImageElement;
+    const srcAfterClick = img.src;
+    expect(srcAfterClick).toMatch(/^http:\/\/scope\.local:7556\/1\/vid\?t=\d+$/);
+
+    // Polling now confirms the device is actually streaming — the feed must
+    // reconnect with a new nonce, not stay frozen on the stale connection.
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, view_state: "working", mode: "star", stacked: "" });
+
+    await waitFor(() => expect(img.src).not.toBe(srcAfterClick));
+    nowSpy.mockRestore();
   });
 });
 
