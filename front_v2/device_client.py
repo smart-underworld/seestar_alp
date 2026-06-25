@@ -276,6 +276,15 @@ def get_device_settings(dev_num: int) -> dict:
     # pattern).
     device_result = method_sync("get_device_state", dev_num) or {}
     firmware_ver_int = pydash.get(device_result, "device.firmware_ver_int", 0)
+    product_model = pydash.get(device_result, "device.product_model", "") or ""
+
+    # Wide-angle camera fields only apply to S30/S30 Pro/S30 Plus hardware,
+    # gated the same way as the classic UI (front/app.py get_device_settings):
+    # behind Config.experimental, since some firmware/simulator responses
+    # report these keys even on non-S30 devices.
+    if not (Config.experimental and "S30" in product_model):
+        for key in ("wide_cam", "wide_4k", "wide_denoise", "wide_focal_pos"):
+            merged.pop(key, None)
 
     return {
         "raw": settings_result,
