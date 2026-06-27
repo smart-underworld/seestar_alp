@@ -151,6 +151,24 @@ def test_blank_frame_and_build_frame_bytes(monkeypatch):
     assert frame2.startswith(b"Content-Type: image/jpeg")
 
 
+def test_get_frame_sets_is_live_viewing(monkeypatch):
+    imager = make_imager(monkeypatch)
+
+    monkeypatch.setattr(imager, "build_frame_bytes", lambda *_args, **_kwargs: b"FRAME")
+    monkeypatch.setattr(
+        imager,
+        "blank_frame",
+        lambda message="", timestamp=False: f"BLANK:{message}:{timestamp}".encode(),
+    )
+
+    imager.device.view_state = {"state": "idle", "stage": "RTSP"}
+    assert imager.is_live_viewing is False
+
+    list(imager.get_frame())
+
+    assert imager.is_live_viewing is True
+
+
 def test_get_frame_yields_initial_and_idle_frames(monkeypatch):
     imager = make_imager(monkeypatch)
 

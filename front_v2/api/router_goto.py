@@ -247,7 +247,7 @@ def goto_target(dev_num: int, body: GotoRequest):
         "target_name": body.target_name,
         "is_j2000": body.is_j2000,
     }
-    result = do_action("scope_goto", dev_num, params)
+    result = do_action("goto_target", dev_num, params)
     if result is None:
         raise HTTPException(status_code=502, detail="Goto command failed")
     return result
@@ -257,7 +257,7 @@ def goto_target(dev_num: int, body: GotoRequest):
 def cancel_goto(dev_num: int):
     if not check_api_state(dev_num):
         raise HTTPException(status_code=503, detail="Device not connected")
-    result = do_action("stop_goto", dev_num, {})
+    result = do_action("stop_goto_target", dev_num, {})
     return result or {"status": "ok"}
 
 
