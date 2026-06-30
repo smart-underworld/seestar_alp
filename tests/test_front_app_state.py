@@ -223,6 +223,31 @@ def test_get_nearest_csc_uses_result_cache(monkeypatch):
     assert calls["count"] == 1
 
 
+def test_config_json_resource_contract(monkeypatch):
+    monkeypatch.setattr(
+        Config,
+        "seestars",
+        [
+            {"device_num": 1, "name": "Seestar Alpha", "ip_address": "192.168.1.50"},
+            {"device_num": 2, "name": "Seestar Beta", "ip_address": "192.168.1.51"},
+        ],
+    )
+    monkeypatch.setattr(Config, "port", 5555)
+    monkeypatch.setattr(Config, "imgport", 7556)
+
+    resp = falcon.Response()
+    front_app.ConfigJsonResource.on_get(DummyReq(), resp)
+
+    assert resp.status == falcon.HTTP_200
+    assert resp.content_type == "application/json"
+    data = json.loads(resp.text)
+    assert data["server"] == {"alpaca_port": 5555, "imaging_port": 7556}
+    assert data["devices"] == [
+        {"device_num": 1, "name": "Seestar Alpha", "ip_address": "192.168.1.50"},
+        {"device_num": 2, "name": "Seestar Beta", "ip_address": "192.168.1.51"},
+    ]
+
+
 def test_get_planning_cards_uses_file_mtime_cache(monkeypatch, tmp_path):
     planning_file = tmp_path / "planning.json"
     planning_file.write_text(
