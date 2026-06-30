@@ -3,8 +3,8 @@ import { render, screen, waitFor } from "@testing-library/svelte";
 import { writable } from "svelte/store";
 import type { DeviceStatus } from "../lib/api";
 
-const { mockImageStart, mockImageStop, mockEvents } = vi.hoisted(() => ({
-  mockImageStart: vi.fn(),
+const { mockMosaicStart, mockImageStop, mockEvents } = vi.hoisted(() => ({
+  mockMosaicStart: vi.fn(),
   mockImageStop: vi.fn(),
   mockEvents: vi.fn(),
 }));
@@ -18,7 +18,8 @@ vi.mock("../lib/stores/deviceStore", () => ({
 vi.mock("../lib/api", () => ({
   api: {
     devices: {
-      image: { start: mockImageStart, stop: mockImageStop },
+      image: { stop: mockImageStop },
+      mosaic: { start: mockMosaicStart },
       events: mockEvents,
     },
   },
@@ -46,10 +47,10 @@ beforeEach(() => {
   mockIsConnected.set(false);
   mockActiveDevNum.set(1);
   mockActiveDeviceStatus.set(null);
-  mockImageStart.mockReset();
+  mockMosaicStart.mockReset();
   mockImageStop.mockReset();
   mockEvents.mockReset();
-  mockImageStart.mockResolvedValue({});
+  mockMosaicStart.mockResolvedValue({});
   mockImageStop.mockResolvedValue({});
   mockEvents.mockResolvedValue({});
 });
@@ -62,19 +63,37 @@ describe("Image — offline", () => {
 
   it("hides form when offline", () => {
     render(Image);
-    expect(screen.queryByLabelText("Exposure (ms)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("RA")).not.toBeInTheDocument();
   });
 });
 
 describe("Image — form", () => {
   beforeEach(() => mockIsConnected.set(true));
 
-  it("renders target name, exposure, gain, count inputs", () => {
+  it("renders target name, RA, Dec, gain inputs", () => {
     render(Image);
     expect(screen.getByLabelText("Target Name")).toBeInTheDocument();
-    expect(screen.getByLabelText("Exposure (ms)")).toBeInTheDocument();
+    expect(screen.getByLabelText("RA")).toBeInTheDocument();
+    expect(screen.getByLabelText("Dec")).toBeInTheDocument();
     expect(screen.getByLabelText("Gain")).toBeInTheDocument();
-    expect(screen.getByLabelText("Frame Count")).toBeInTheDocument();
+  });
+
+  it("renders panel time and end time inputs", () => {
+    render(Image);
+    expect(screen.getByLabelText("Panel Time (s)")).toBeInTheDocument();
+    expect(screen.getByLabelText(/End Time/)).toBeInTheDocument();
+  });
+
+  it("renders LP Filter and Auto Focus toggles", () => {
+    render(Image);
+    expect(screen.getByText("LP Filter")).toBeInTheDocument();
+    expect(screen.getByText("Auto Focus")).toBeInTheDocument();
+  });
+
+  it("renders retry fields", () => {
+    render(Image);
+    expect(screen.getByLabelText("Number of Retries")).toBeInTheDocument();
+    expect(screen.getByLabelText("Retry Delay (s)")).toBeInTheDocument();
   });
 
   it("renders Start and Stop buttons", () => {
@@ -82,24 +101,26 @@ describe("Image — form", () => {
     expect(screen.getByRole("button", { name: /▶ Start/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /⏹ Stop/ })).toBeInTheDocument();
   });
-
-  it("shows param summary line with exposure, gain, and continuous mode", () => {
-    render(Image);
-    // The summary line is the only element containing all three on one line
-    expect(screen.getByText(/Continuous/)).toBeInTheDocument();
-  });
 });
 
 describe("Image — start/stop", () => {
   beforeEach(() => mockIsConnected.set(true));
 
-  it("calls image.start with default params when Start is submitted", async () => {
+  it("calls mosaic.start with default params when Start is submitted", async () => {
     render(Image);
     screen.getByRole("button", { name: /▶ Start/ }).click();
     await waitFor(() =>
-      expect(mockImageStart).toHaveBeenCalledWith(
+      expect(mockMosaicStart).toHaveBeenCalledWith(
         1,
-        expect.objectContaining({ exp_ms: 10000, gain: 80, count: 0 }),
+        expect.objectContaining({
+          ra_num: 1,
+          dec_num: 1,
+          panel_overlap_percent: 100,
+          gain: 80,
+          is_use_lp_filter: false,
+          is_use_autofocus: true,
+          num_tries: 1,
+        }),
       ),
     );
   });
@@ -113,7 +134,7 @@ describe("Image — start/stop", () => {
   });
 
   it("shows error when start fails", async () => {
-    mockImageStart.mockRejectedValue(new Error("camera busy"));
+    mockMosaicStart.mockRejectedValue(new Error("camera busy"));
     render(Image);
     screen.getByRole("button", { name: /▶ Start/ }).click();
     await waitFor(() =>

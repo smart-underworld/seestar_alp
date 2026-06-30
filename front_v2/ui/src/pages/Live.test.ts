@@ -231,43 +231,19 @@ describe("Live — offline", () => {
 });
 
 describe("Live — video feed URL", () => {
-  const originalLocation = window.location;
-
-  afterEach(() => {
-    Object.defineProperty(window, "location", { value: originalLocation, writable: true });
-  });
-
-  it("builds the feed URL from the page's own protocol instead of a hardcoded http://", async () => {
-    Object.defineProperty(window, "location", {
-      value: { ...originalLocation, protocol: "https:", hostname: "scope.local" },
-      writable: true,
-    });
+  it("routes the feed through the FastAPI proxy path instead of a direct port-7556 URL", async () => {
     mockActiveDeviceStatus.set({ ...BASE_STATUS, view_state: "working", mode: "star" });
 
     render(Live);
     await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
     const img = screen.getByAltText("Live telescope feed") as HTMLImageElement;
-    expect(img.src).toMatch(/^https:\/\/scope\.local:7556\/1\/vid\?t=\d+$/);
-  });
-
-  it("still works over plain http", async () => {
-    Object.defineProperty(window, "location", {
-      value: { ...originalLocation, protocol: "http:", hostname: "scope.local" },
-      writable: true,
-    });
-    mockActiveDeviceStatus.set({ ...BASE_STATUS, view_state: "working", mode: "star" });
-
-    render(Live);
-    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
-    const img = screen.getByAltText("Live telescope feed") as HTMLImageElement;
-    expect(img.src).toMatch(/^http:\/\/scope\.local:7556\/1\/vid\?t=\d+$/);
+    // Relative URL — JSDOM resolves it against localhost:3000; what matters is
+    // the path hits the proxy endpoint, not a hardcoded port-7556 address.
+    expect(img.src).toMatch(/\/api\/v1\/devices\/1\/vid\?t=\d+$/);
+    expect(img.src).not.toContain(":7556");
   });
 
   it("reconnects the feed once polling confirms the device transitioned to live", async () => {
-    Object.defineProperty(window, "location", {
-      value: { ...originalLocation, protocol: "http:", hostname: "scope.local" },
-      writable: true,
-    });
     // Monotonically increasing, rather than a fixed value, so the assertion
     // below can't pass merely because two calls landed in the same
     // millisecond — every call (ours or any library internals) gets a
@@ -286,7 +262,7 @@ describe("Live — video feed URL", () => {
 
     const img = screen.getByAltText("Live telescope feed") as HTMLImageElement;
     const srcAfterClick = img.src;
-    expect(srcAfterClick).toMatch(/^http:\/\/scope\.local:7556\/1\/vid\?t=\d+$/);
+    expect(srcAfterClick).toMatch(/\/api\/v1\/devices\/1\/vid\?t=\d+$/);
 
     // Polling now confirms the device is actually streaming — the feed must
     // reconnect with a new nonce, not stay frozen on the stale connection.
