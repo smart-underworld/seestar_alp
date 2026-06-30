@@ -3,7 +3,6 @@
   import { activeDevNum, activeDeviceStatus, isConnected, deviceList, deviceStatuses } from "../lib/stores/deviceStore";
   import { api } from "../lib/api";
 
-  const imgPort = 7556;
   // The backend ends the MJPEG response the moment the device goes idle
   // (device/seestar_imaging.py get_frame()) and never resumes it — so once
   // that happens the <img> just freezes on the last "Idle" placeholder frame.
@@ -11,11 +10,9 @@
   // that; instead we bump this to force a brand-new connection whenever we
   // detect the device has (re)started streaming.
   let vidNonce = 0;
-  // Match the page's own scheme — a hardcoded "http://" becomes a scheme
-  // downgrade (and a blocked mixed-content subresource load) when the SPA
-  // itself is served over https, which some browsers enforce more strictly
-  // than others.
-  $: vidUrl = `${location.protocol}//${location.hostname}:${imgPort}/${$activeDevNum}/vid?t=${vidNonce}`;
+  // Use a same-origin relative URL so the browser never needs to reach the
+  // imaging server's port (7556) directly — the FastAPI app proxies it.
+  $: vidUrl = `/api/v1/devices/${$activeDevNum}/vid?t=${vidNonce}`;
 
   type LiveMode = "none" | "star" | "sun" | "moon" | "planet" | "scenery";
 
@@ -414,26 +411,25 @@
     <!-- Main column -->
     <div class="live-main">
 
-      <!-- Mode selection -->
-      <div class="panel-card">
-        <p class="panel-title">Select Live Mode</p>
-        {#if modeError}
-          <div class="alert alert-error">{modeError}</div>
-        {/if}
-        <div class="mode-grid">
+      <!-- Mode selection — compact strip -->
+      <div class="panel-card mode-strip-card">
+        <div class="mode-strip">
           {#each modes as m}
             <button
-              class="mode-btn"
+              class="mode-chip"
               class:active={activeMode === m.id}
-              class:stop-btn={m.id === "none"}
+              class:stop-chip={m.id === "none"}
               on:click={() => setMode(m.id)}
               title={m.desc}
             >
-              <span class="mode-icon">{m.icon}</span>
-              <span class="mode-label">{m.label}</span>
+              <span class="mode-icon-sm">{m.icon}</span>
+              <span>{m.label}</span>
             </button>
           {/each}
         </div>
+        {#if modeError}
+          <div class="alert alert-error" style="margin-top:0.5rem;margin-bottom:0">{modeError}</div>
+        {/if}
       </div>
 
       <!-- Live feed (always visible once mode is set) -->
@@ -574,7 +570,8 @@
           </div>
         {/if}
 
-        <!-- Movement / joystick controls -->
+        <!-- Movement / joystick — hidden while stacking so it doesn't interrupt captures -->
+        {#if s?.stage !== "Stack"}
         <div class="panel-card">
           <p class="panel-title">Movement</p>
           <div class="joystick-zone-wrap">
@@ -598,6 +595,7 @@
             </div>
           </div>
         </div>
+        {/if}
 
         <!-- Recording -->
         <div class="panel-card">
@@ -701,41 +699,40 @@
     gap: 1rem;
   }
 
-  .mode-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.6rem;
-  }
-  .mode-btn {
-    display: flex;
-    flex-direction: column;
+  .mode-strip-card { padding: 0.6rem 0.85rem; }
+  .mode-strip { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+  .mode-chip {
+    display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    padding: 0.85rem 0.5rem;
+    padding: 0.32rem 0.75rem;
+    border-radius: 99px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: var(--ui-radius-sm);
     color: var(--ui-body);
-    cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
     font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
   }
-  .mode-btn:hover {
+  .mode-chip:hover {
     background: rgba(44, 177, 255, 0.1);
-    border-color: rgba(44, 177, 255, 0.3);
+    border-color: rgba(44, 177, 255, 0.35);
+    color: var(--ui-primary);
   }
-  .mode-btn.active {
+  .mode-chip.active {
     background: rgba(44, 177, 255, 0.15);
     border-color: var(--ui-primary);
     color: var(--ui-primary);
   }
-  .mode-btn.stop-btn:hover {
+  .mode-chip.stop-chip:hover {
     background: rgba(233, 69, 96, 0.1);
     border-color: rgba(233, 69, 96, 0.35);
     color: var(--ui-danger);
   }
-  .mode-icon { font-size: 1.4rem; line-height: 1; }
-  .mode-label { font-weight: 500; }
+  .mode-icon-sm { font-size: 1rem; line-height: 1; }
 
   .feed-title-row {
     display: flex;
@@ -979,6 +976,5 @@
   @media (max-width: 900px) {
     .live-layout { flex-direction: column; }
     .live-sidebar { width: 100%; }
-    .mode-grid { grid-template-columns: repeat(3, 1fr); }
   }
 </style>

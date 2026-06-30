@@ -1,6 +1,9 @@
+import httpx
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from device.config import Config  # type: ignore
 from front_v2.device_client import check_api_state, do_action, method_sync
 
 router = APIRouter(prefix="/api/v1")
@@ -133,6 +136,33 @@ def move_telescope(dev_num: int, body: MoveRequest):
         },
     )
     return {"status": "ok", "speed": speed, "angle": int(body.angle)}
+
+
+@router.get("/devices/{dev_num}/vid")
+async def proxy_vid(dev_num: int):
+    """Proxy the MJPEG stream from the imaging server through the FastAPI app.
+
+    The imaging server (root_app.py / waitress) binds to Config.ip_address
+    (default 127.0.0.1), so browsers accessing via a network hostname can't
+    reach it directly.  This endpoint proxies the stream so the SPA only needs
+    to reach the FastAPI port.
+    """
+    imgport = getattr(Config, "imgport", 7556)
+    upstream = f"http://127.0.0.1:{imgport}/{dev_num}/vid"
+
+    async def _stream():
+        try:
+            async with httpx.AsyncClient(timeout=None) as client:
+                async with client.stream("GET", upstream) as resp:
+                    async for chunk in resp.aiter_bytes(chunk_size=8192):
+                        yield chunk
+        except (httpx.ConnectError, httpx.RemoteProtocolError):
+            return
+
+    return StreamingResponse(
+        _stream(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
 
 
 @router.post("/devices/{dev_num}/live/record")
