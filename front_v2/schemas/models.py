@@ -89,6 +89,7 @@ class MosaicRequest(BaseModel):
     num_tries: int = 1
     retry_wait_s: int = 300
     stack_type: str = "DeepSky"
+    end_local_time: str | None = None
     federation_mode: str | None = None
     max_devices: int | None = None
 

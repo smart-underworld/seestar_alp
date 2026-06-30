@@ -117,6 +117,7 @@ export interface MosaicRequest {
   num_tries?: number;
   retry_wait_s?: number;
   stack_type?: string;
+  end_local_time?: string;
   federation_mode?: string;
   max_devices?: number;
 }

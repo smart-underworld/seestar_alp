@@ -5,10 +5,23 @@
 
   const EVENTS = ["WheelMove", "AutoGoto", "PlateSolve", "DarkLibrary", "AutoFocus", "Stack"];
 
-  let expMs = 10000;
-  let gain = 80;
-  let count = 0;
+  // Target
   let targetName = "";
+  let ra = "";
+  let dec = "";
+  let isJ2000 = true;
+
+  // Session
+  let panelTimeSec = 3600;
+  let endLocalTime = "";
+  let gain = 80;
+  let isUseLpFilter = false;
+  let isUseAutofocus = true;
+
+  // Retries
+  let numTries = 1;
+  let retryWaitS = 300;
+
   let status = "";
   let error = "";
   let imaging = false;
@@ -43,8 +56,12 @@
 
   function applySearch() {
     if (!searchResult) return;
-    if (!targetName) targetName = String(searchResult.name ?? searchResult.objectName ?? searchQuery);
-    searchResult = null; searchQuery = "";
+    if (searchResult.ra)  ra  = String(searchResult.ra);
+    if (searchResult.dec) dec = String(searchResult.dec);
+    const name = searchResult.name ?? searchResult.objectName ?? searchQuery;
+    if (!targetName) targetName = String(name);
+    searchResult = null;
+    searchQuery = "";
   }
 
   async function startImaging() {
@@ -52,12 +69,23 @@
     status = "";
     imaging = true;
     try {
-      await api.devices.image.start($activeDevNum, {
-        exp_ms: expMs,
-        gain,
-        count,
+      const body: Record<string, unknown> = {
         target_name: targetName,
-      });
+        ra,
+        dec,
+        is_j2000: isJ2000,
+        ra_num: 1,
+        dec_num: 1,
+        panel_overlap_percent: 100,
+        panel_time_sec: panelTimeSec,
+        gain,
+        is_use_lp_filter: isUseLpFilter,
+        is_use_autofocus: isUseAutofocus,
+        num_tries: numTries,
+        retry_wait_s: retryWaitS,
+      };
+      if (endLocalTime) body.end_local_time = endLocalTime;
+      await api.devices.mosaic.start($activeDevNum, body as Parameters<typeof api.devices.mosaic.start>[1]);
       status = "Imaging session started.";
     } catch (e) {
       error = String(e);
@@ -80,6 +108,7 @@
   $: stacked = s?.stacked;
   $: failed  = s?.failed;
   $: isActive = stacked !== "" && stacked != null;
+  $: panelTimeDisabled = !!endLocalTime;
 </script>
 
 <div class="page-hero">
@@ -152,30 +181,82 @@
       </div>
 
       <form on:submit|preventDefault={startImaging}>
-        <div class="form-field" style="margin-bottom:1rem">
+
+        <!-- ── Target ────────────────────────────────────────────────── -->
+        <div class="section-label">Target</div>
+        <div class="form-field" style="margin-bottom:0.75rem">
           <label class="form-label" for="iname">Target Name</label>
           <input id="iname" class="form-input" bind:value={targetName} placeholder="e.g. M42, Orion Nebula" />
         </div>
 
+        <div class="coord-grid">
+          <div class="form-field">
+            <label class="form-label" for="ira">RA</label>
+            <input id="ira" class="form-input" bind:value={ra} placeholder="e.g. 05h35m17.3s" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="idec">Dec</label>
+            <input id="idec" class="form-input" bind:value={dec} placeholder="e.g. -05d23m28s" />
+          </div>
+        </div>
+
+        <div class="form-field j2000-row">
+          <span class="form-label">Coordinates</span>
+          <div class="radio-row">
+            <label class="radio-label"><input type="radio" bind:group={isJ2000} value={true} /> J2000</label>
+            <label class="radio-label"><input type="radio" bind:group={isJ2000} value={false} /> JNow</label>
+          </div>
+        </div>
+
+        <!-- ── Session ───────────────────────────────────────────────── -->
+        <div class="section-label" style="margin-top:1rem">Session</div>
+
         <div class="param-grid">
           <div class="form-field">
-            <label class="form-label" for="iexp">Exposure (ms)</label>
-            <input id="iexp" type="number" class="form-input" bind:value={expMs} min="100" max="60000" step="100" />
+            <label class="form-label" for="iptime">Panel Time (s)</label>
+            <input id="iptime" type="number" class="form-input" class:input-dim={panelTimeDisabled}
+              bind:value={panelTimeSec} min="60" max="86400" disabled={panelTimeDisabled} />
+            <span class="field-hint">{panelTimeDisabled ? "— overridden by end time" : "e.g. 3600 = 1 h"}</span>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="ietime">— or — End Time (local)</label>
+            <input id="ietime" type="time" class="form-input" bind:value={endLocalTime} />
+            <span class="field-hint">Leave blank to use panel time</span>
           </div>
           <div class="form-field">
             <label class="form-label" for="igain">Gain</label>
             <input id="igain" type="number" class="form-input" bind:value={gain} min="0" max="300" />
           </div>
-          <div class="form-field">
-            <label class="form-label" for="icount">Frame Count</label>
-            <input id="icount" type="number" class="form-input" bind:value={count} min="0" />
-            <span class="field-hint">0 = unlimited</span>
+        </div>
+
+        <div class="toggle-grid">
+          <div class="toggle-field">
+            <span class="form-label">LP Filter</span>
+            <div class="radio-row">
+              <label class="radio-label"><input type="radio" bind:group={isUseLpFilter} value={true} /> On</label>
+              <label class="radio-label"><input type="radio" bind:group={isUseLpFilter} value={false} /> Off</label>
+            </div>
+          </div>
+          <div class="toggle-field">
+            <span class="form-label">Auto Focus</span>
+            <div class="radio-row">
+              <label class="radio-label"><input type="radio" bind:group={isUseAutofocus} value={true} /> On</label>
+              <label class="radio-label"><input type="radio" bind:group={isUseAutofocus} value={false} /> Off</label>
+            </div>
           </div>
         </div>
 
-        <div class="param-summary">
-          Exposure <strong>{expMs} ms</strong> · Gain <strong>{gain}</strong>
-          {#if count > 0} · <strong>{count}</strong> frames{:else} · Continuous{/if}
+        <!-- ── Retries ───────────────────────────────────────────────── -->
+        <div class="section-label" style="margin-top:1rem">Retries</div>
+        <div class="param-grid-2">
+          <div class="form-field">
+            <label class="form-label" for="itries">Number of Retries</label>
+            <input id="itries" type="number" class="form-input" bind:value={numTries} min="1" max="10" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="iretry">Retry Delay (s)</label>
+            <input id="iretry" type="number" class="form-input" bind:value={retryWaitS} min="0" max="3600" />
+          </div>
         </div>
 
         <div class="form-actions">
@@ -210,6 +291,15 @@
   .search-coords { flex: 1; color: var(--ui-muted); font-family: "SF Mono","Fira Code",monospace; font-size: 0.78rem; }
   .btn-sm { padding: 0.2rem 0.6rem; font-size: 0.8rem; }
 
+  .section-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ui-muted);
+    margin: 0 0 0.65rem;
+  }
+
   .image-layout {
     display: flex;
     flex-direction: column;
@@ -243,28 +333,62 @@
     margin-top: 0.5rem;
   }
 
+  .coord-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .j2000-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+
+  .radio-row { display: flex; gap: 1rem; }
+  .radio-label {
+    display: flex; align-items: center; gap: 0.3rem;
+    font-size: 0.83rem; color: var(--ui-body); cursor: pointer;
+  }
+  .radio-label input[type="radio"] { accent-color: var(--ui-primary); }
+
   .param-grid {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 0.75rem;
     margin-bottom: 0.75rem;
   }
-  .field-hint { font-size: 0.72rem; color: var(--ui-muted); margin-top: 0.15rem; }
 
-  .param-summary {
-    font-size: 0.8rem;
-    color: var(--ui-muted);
-    margin-bottom: 1rem;
-    padding: 0.5rem 0.75rem;
-    background: rgba(255,255,255,0.03);
-    border-radius: 6px;
-    border: 1px solid rgba(255,255,255,0.06);
+  .toggle-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
   }
-  .param-summary strong { color: var(--ui-body); }
+  .toggle-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
 
-  .form-actions { display: flex; gap: 0.6rem; }
+  .param-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
 
-  @media (max-width: 500px) {
+  .field-hint { font-size: 0.72rem; color: var(--ui-muted); margin-top: 0.15rem; }
+  .input-dim { opacity: 0.4; cursor: not-allowed; }
+
+  .form-actions { display: flex; gap: 0.6rem; margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.06); }
+
+  @media (max-width: 600px) {
     .param-grid { grid-template-columns: 1fr; }
+    .coord-grid { grid-template-columns: 1fr; }
+    .toggle-grid { grid-template-columns: 1fr; }
+    .param-grid-2 { grid-template-columns: 1fr; }
   }
 </style>

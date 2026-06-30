@@ -28,6 +28,8 @@ def start_mosaic(dev_num: int, body: MosaicRequest):
         "stack_type": body.stack_type,
     }
 
+    if body.end_local_time:
+        params["end_local_time"] = body.end_local_time
     if body.federation_mode is not None:
         params["federation_mode"] = body.federation_mode
     if body.max_devices is not None:
