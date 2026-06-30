@@ -123,13 +123,16 @@
   // collapsing the polling interval into a tight back-to-back loop.
   $: $isConnected ? startPolling() : stopPolling();
 
+  // Auto-expand PA Refinement when polar align finishes
+  $: if (events["3PPA"]?.state === "complete" && !paOpen) paOpen = true;
+
   // onDestroy is defined below with PA cleanup included
 
   function stateClass(ev: EventState | undefined): string {
     if (!ev?.state || ev.state === "idle") return "state-idle";
-    if (ev.state === "in progress")        return "state-progress";
+    if (ev.state === "in progress" || ev.state === "working" || ev.state === "start") return "state-progress";
     if (ev.state === "complete")           return "state-complete";
-    if (ev.state === "fail")              return "state-fail";
+    if (ev.state === "fail" || ev.state === "cancel") return "state-fail";
     return "state-idle";
   }
 

@@ -882,6 +882,8 @@ class Seestar:
         self.event_state["mount"]["Event"] = "Mount"
         self.event_state["mount"]["equ_mode"] = self.is_EQ_mode
 
+        if "EqModePA" in self.event_state:
+            self.event_state["3PPA"] = dict(self.event_state["EqModePA"])
         if "3PPA" in self.event_state:
             self.event_state["3PPA"]["eq_offset_alt"] = self.cur_pa_error_y
             self.event_state["3PPA"]["eq_offset_az"] = self.cur_pa_error_x
