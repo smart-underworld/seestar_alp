@@ -1592,7 +1592,9 @@ class Seestar:
                 self.send_message_param_sync({"method": "scope_park"})
                 park_result = self.wait_end_op("ScopeHome")
                 if not park_result:
-                    self.logger.warning("scope_park did not complete successfully before PA; continuing anyway")
+                    self.logger.warning(
+                        "scope_park did not complete successfully before PA; continuing anyway"
+                    )
 
                 msg = "perform PA Alignment"
                 self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
