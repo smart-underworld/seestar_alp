@@ -1598,7 +1598,8 @@ class Seestar:
 
                 self.mark_op_state("EqModePA", "working")
                 result = self.wait_end_op("EqModePA")
-                self.mark_op_state("EqModePA", "complete")
+                if result:
+                    self.mark_op_state("EqModePA", "complete")
                 # Take us out of view mode. Can prevent successive polar alignments.
                 self.send_message_param_sync({"method": "iscope_stop_view"})
                 if not result:
