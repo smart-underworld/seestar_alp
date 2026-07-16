@@ -49,12 +49,17 @@ def test_init_logging_creates_rotating_handler_and_disables_stdout(monkeypatch):
     file_handler = FakeHandler()
 
     monkeypatch.setattr(log_mod, "logger", None)
-    monkeypatch.setattr(log_mod.logging, "basicConfig", lambda **kwargs: None)
-    monkeypatch.setattr(log_mod.logging, "getLogger", lambda: root_logger)
     monkeypatch.setattr(
-        log_mod.logging.handlers,
-        "RotatingFileHandler",
-        lambda *args, **kwargs: file_handler,
+        log_mod,
+        "logging",
+        SimpleNamespace(
+            basicConfig=lambda **kwargs: None,
+            getLogger=lambda *args, **kwargs: root_logger,
+            Formatter=logging.Formatter,
+            handlers=SimpleNamespace(
+                RotatingFileHandler=lambda *args, **kwargs: file_handler
+            ),
+        ),
     )
     monkeypatch.setattr(
         log_mod,
