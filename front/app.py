@@ -4860,6 +4860,36 @@ class ConfigResource:
         render_template(req, resp, "config.html", now=now, config=Config, **context)
 
 
+class ConfigJsonResource:
+    """Machine-readable view of the configured devices + server ports.
+
+    Lets downstream tools (e.g. a Home Assistant bridge) discover each Seestar's
+    configured network address and the Alpaca/imaging ports without scraping the
+    HTML config page or duplicating that configuration elsewhere.
+    """
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=1):
+        devices = [
+            {
+                "device_num": int(ss.get("device_num", 0)),
+                "name": ss.get("name"),
+                "ip_address": ss.get("ip_address"),
+            }
+            for ss in Config.seestars
+        ]
+        payload = {
+            "server": {
+                "alpaca_port": Config.port,
+                "imaging_port": Config.imgport,
+            },
+            "devices": devices,
+        }
+        resp.status = falcon.HTTP_200
+        resp.content_type = "application/json"
+        resp.text = json.dumps(payload)
+
+
 class BlindPolarAlignResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -5414,6 +5444,7 @@ class FrontMain:
         app.add_route("/getminorplanetcoordinates", GetMinorPlanetCoordinates())
         app.add_route("/getaavsocoordinates", GetAAVSOSearch())
         app.add_route("/config", ConfigResource())
+        app.add_route("/config.json", ConfigJsonResource())
         app.add_route("/pa_refine", BlindPolarAlignResource())
 
         try:
