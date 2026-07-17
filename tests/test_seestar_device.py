@@ -467,6 +467,17 @@ def test_get_event_state_and_is_client_master(seestar):
     assert seestar.is_client_master() is False
 
 
+def test_get_event_state_injects_mount_equ_mode(seestar):
+    seestar.is_EQ_mode = True
+    out = seestar.get_event_state()
+    assert out["result"]["mount"]["Event"] == "Mount"
+    assert out["result"]["mount"]["equ_mode"] is True
+
+    seestar.is_EQ_mode = False
+    out = seestar.get_event_state({"event_name": "mount"})
+    assert out["result"]["equ_mode"] is False
+
+
 def test_get_altaz_from_eq_paths(monkeypatch, seestar):
     seestar.site_altaz_frame = None
     assert seestar.get_altaz_from_eq(1.0, 2.0, "obs") == [9999.9, 9999.9]
