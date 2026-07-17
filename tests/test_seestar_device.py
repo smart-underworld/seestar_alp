@@ -1969,3 +1969,104 @@ def test_start_stack_set_stack_type_failure_is_non_fatal(monkeypatch, seestar):
     assert "set_stack_type" in calls
     assert "iscope_start_stack" in calls
     assert result is True
+
+
+class _AuthFakeSocket:
+    """A socket that answers the auth handshake line-by-line, like the device.
+
+    Crucially it serves replies via recv() directly -- it does NOT depend on
+    the receive_message_thread running, which is exactly the condition under
+    which authenticate() must work (auth runs before that thread starts).
+    Optionally emits an unsolicited event line ahead of a reply so we can
+    assert those bytes are preserved for the receive thread.
+    """
+
+    def __init__(self, replies, pre_events=None):
+        import json
+
+        self._json = json
+        self._replies = list(replies)
+        self._pre_events = list(pre_events or [])
+        self._outbox = b""
+        self._timeout = None
+        self.sent = []
+
+    def gettimeout(self):
+        return self._timeout
+
+    def settimeout(self, t):
+        self._timeout = t
+
+    def sendall(self, payload):
+        self.sent.append(payload)
+        try:
+            req = self._json.loads(payload.decode("utf-8").strip())
+        except Exception:
+            req = {}
+        if not self._replies:
+            return
+        reply = dict(self._replies.pop(0))
+        reply["id"] = req.get("id")  # device echoes the request id
+        chunk = b""
+        if self._pre_events:
+            ev = self._pre_events.pop(0)
+            chunk += (self._json.dumps(ev) + "\r\n").encode("utf-8")
+        chunk += (self._json.dumps(reply) + "\r\n").encode("utf-8")
+        self._outbox += chunk
+
+    def recv(self, _n):
+        if not self._outbox:
+            raise socket.timeout()
+        data, self._outbox = self._outbox, b""
+        return data
+
+    def close(self):
+        pass
+
+
+def test_authenticate_succeeds_without_receive_thread(monkeypatch, seestar):
+    """Regression: authenticate() runs inline from reconnect(), before the
+    receive_message_thread starts, so it must read its own handshake replies
+    off the socket rather than waiting on response_dict (which only the
+    receive thread populates).  Previously it used send_message_param_sync and
+    always timed out, failing with "'str' object has no attribute 'get'"."""
+    # Guard: if auth ever routes through the async path again, fail loudly.
+    def _boom(_payload):
+        raise AssertionError("authenticate must not use send_message_param_sync")
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", _boom)
+    monkeypatch.setattr(seestar, "_sign_challenge", lambda _c: "SIGNATURE")
+
+    seestar.s = _AuthFakeSocket(
+        replies=[
+            {"method": "get_verify_str", "result": {"str": "CHALLENGE"}, "code": 0},
+            {"method": "verify_client", "result": 0, "code": 0},
+            {"method": "pi_is_verified", "result": True, "code": 0},
+        ]
+    )
+
+    assert seestar.authenticate() is True
+    methods = [
+        __import__("json").loads(p.decode())["method"] for p in seestar.s.sent
+    ]
+    assert methods == ["get_verify_str", "verify_client", "pi_is_verified"]
+
+
+def test_authenticate_preserves_events_streamed_during_handshake(
+    monkeypatch, seestar
+):
+    """Events pushed by the device during the handshake must be handed to the
+    receive thread (via _auth_leftover), not silently dropped."""
+    monkeypatch.setattr(seestar, "_sign_challenge", lambda _c: "SIGNATURE")
+
+    seestar.s = _AuthFakeSocket(
+        replies=[
+            {"method": "get_verify_str", "result": {"str": "CHALLENGE"}, "code": 0},
+            {"method": "verify_client", "result": 0, "code": 0},
+            {"method": "pi_is_verified", "result": True, "code": 0},
+        ],
+        pre_events=[{"Event": "PiStatus", "temp": 42}],
+    )
+
+    assert seestar.authenticate() is True
+    assert "PiStatus" in seestar._auth_leftover
