@@ -1,4 +1,5 @@
 import collections
+import json
 import socket
 from types import SimpleNamespace
 
@@ -342,6 +343,9 @@ def test_socket_force_close_and_disconnect(seestar):
 def test_reconnect_success_and_fail_paths(monkeypatch, seestar):
     monkeypatch.setattr(seestar, "send_udp_intro", lambda: None)
     monkeypatch.setattr(seestar, "disconnect", lambda: None)
+    # Isolate from the developer's local config.toml: if interop_pem is set
+    # there, reconnect() would enter the auth handshake path.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
 
     class Sock:
         def __init__(self):
@@ -1980,3 +1984,194 @@ def test_start_stack_set_stack_type_failure_is_non_fatal(monkeypatch, seestar):
     assert "set_stack_type" in calls
     assert "iscope_start_stack" in calls
     assert result is True
+
+
+class _AuthFakeSocket:
+    """A socket that answers the auth handshake line-by-line, like the device.
+
+    Crucially it serves replies via recv() directly -- it does NOT depend on
+    the receive_message_thread running, which is exactly the condition under
+    which authenticate() must work (auth runs before that thread starts).
+    Optionally emits an unsolicited event line ahead of a reply so we can
+    assert those bytes are preserved for the receive thread.
+    """
+
+    def __init__(self, replies, pre_events=None):
+        self._replies = list(replies)
+        self._pre_events = list(pre_events or [])
+        self._outbox = b""
+        self._timeout = None
+        self.sent = []
+
+    def gettimeout(self):
+        return self._timeout
+
+    def settimeout(self, t):
+        self._timeout = t
+
+    def sendall(self, payload):
+        self.sent.append(payload)
+        try:
+            req = json.loads(payload.decode("utf-8").strip())
+        except Exception:
+            req = {}
+        if not self._replies:
+            return
+        reply = dict(self._replies.pop(0))
+        reply["id"] = req.get("id")  # device echoes the request id
+        chunk = b""
+        if self._pre_events:
+            ev = self._pre_events.pop(0)
+            chunk += (json.dumps(ev) + "\r\n").encode("utf-8")
+        chunk += (json.dumps(reply) + "\r\n").encode("utf-8")
+        self._outbox += chunk
+
+    def recv(self, _n):
+        if not self._outbox:
+            raise socket.timeout()
+        data, self._outbox = self._outbox, b""
+        return data
+
+    def close(self):
+        pass
+
+
+def test_authenticate_succeeds_without_receive_thread(monkeypatch, seestar):
+    """Regression: authenticate() runs inline from reconnect(), before the
+    receive_message_thread starts, so it must read its own handshake replies
+    off the socket rather than waiting on response_dict (which only the
+    receive thread populates).  Previously it used send_message_param_sync and
+    always timed out, failing with "'str' object has no attribute 'get'"."""
+
+    # Guard: if auth ever routes through the async path again, fail loudly.
+    def _boom(_payload):
+        raise AssertionError("authenticate must not use send_message_param_sync")
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", _boom)
+    monkeypatch.setattr(seestar, "_sign_challenge", lambda _c: "SIGNATURE")
+
+    seestar.s = _AuthFakeSocket(
+        replies=[
+            {"method": "get_verify_str", "result": {"str": "CHALLENGE"}, "code": 0},
+            {"method": "verify_client", "result": 0, "code": 0},
+            {"method": "pi_is_verified", "result": True, "code": 0},
+        ]
+    )
+
+    assert seestar.authenticate() is True
+    methods = [json.loads(p.decode())["method"] for p in seestar.s.sent]
+    assert methods == ["get_verify_str", "verify_client", "pi_is_verified"]
+
+
+def test_authenticate_preserves_events_streamed_during_handshake(monkeypatch, seestar):
+    """Events pushed by the device during the handshake must be handed to the
+    receive thread (via _auth_leftover), not silently dropped."""
+    monkeypatch.setattr(seestar, "_sign_challenge", lambda _c: "SIGNATURE")
+
+    seestar.s = _AuthFakeSocket(
+        replies=[
+            {"method": "get_verify_str", "result": {"str": "CHALLENGE"}, "code": 0},
+            {"method": "verify_client", "result": 0, "code": 0},
+            {"method": "pi_is_verified", "result": True, "code": 0},
+        ],
+        pre_events=[{"Event": "PiStatus", "temp": 42}],
+    )
+
+    assert seestar.authenticate() is True
+    assert "PiStatus" in seestar._auth_leftover
+
+    # The buffered event must actually be processed once the receive thread
+    # starts: run one iteration of receive_message_thread_fn and verify the
+    # event reaches event_state/event_queue.
+    def fake_get_socket_msg():
+        seestar.is_watch_events = False  # stop after this iteration
+        # A later chunk from the device; triggers draining of the leftover.
+        return json.dumps({"Event": "Later"}) + "\r\n"
+
+    monkeypatch.setattr(seestar, "get_socket_msg", fake_get_socket_msg)
+    seestar.is_watch_events = True
+    seestar.receive_message_thread_fn()
+
+    assert seestar._auth_leftover == ""
+    assert seestar.event_state.get("PiStatus", {}).get("temp") == 42
+    assert "Later" in seestar.event_state
+
+
+def test_auth_rpc_sync_accepts_reply_from_response_dict(seestar):
+    """Mid-session re-auth: reconnect() can also run while the receive thread
+    is alive (heartbeat thread, send_message error-recovery path).  If the
+    receive thread consumes the handshake reply into response_dict before
+    _auth_rpc_sync reads it off the socket, the reply must be accepted from
+    there instead of timing out."""
+    seestar.s = _AuthFakeSocket(replies=[])  # socket never yields the reply
+
+    stolen = {
+        "jsonrpc": "2.0",
+        "method": "get_verify_str",
+        "result": {"str": "CHALLENGE"},
+        "code": 0,
+        "id": seestar.cmdid,
+    }
+    seestar.response_dict[seestar.cmdid] = stolen
+
+    assert seestar._auth_rpc_sync("get_verify_str") is stolen
+
+
+def test_authenticate_discards_stale_leftover_from_previous_connection(
+    monkeypatch, seestar
+):
+    """authenticate() only runs right after a fresh socket is created, so
+    leftover bytes from a previous connection (stranded by a mid-session
+    re-auth) are stale and must not be replayed into the new stream."""
+    monkeypatch.setattr(seestar, "_sign_challenge", lambda _c: "SIGNATURE")
+    seestar._auth_leftover = '{"Event": "Stale"}\r\n{"partial'
+
+    seestar.s = _AuthFakeSocket(
+        replies=[
+            {"method": "get_verify_str", "result": {"str": "CHALLENGE"}, "code": 0},
+            {"method": "verify_client", "result": 0, "code": 0},
+            {"method": "pi_is_verified", "result": True, "code": 0},
+        ]
+    )
+
+    assert seestar.authenticate() is True
+    assert "Stale" not in seestar._auth_leftover
+    assert "partial" not in seestar._auth_leftover
+
+
+def test_reconnect_without_interop_pem_never_attempts_auth(monkeypatch, seestar):
+    """Auth is strictly opt-in via the interop_pem config: without it,
+    reconnect() must succeed without ever entering the handshake — older
+    firmware has none of these codepaths."""
+    monkeypatch.setattr(seestar, "send_udp_intro", lambda: None)
+    monkeypatch.setattr(seestar, "disconnect", lambda: None)
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("auth must not run when interop_pem is not configured")
+
+    monkeypatch.setattr(seestar, "authenticate", _boom)
+    monkeypatch.setattr(seestar, "_auth_rpc_sync", _boom)
+
+    class Sock:
+        def settimeout(self, _v):
+            return None
+
+        def connect(self, _addr):
+            return None
+
+    monkeypatch.setattr("device.seestar_device.socket.socket", lambda *_args: Sock())
+    seestar.is_connected = False
+    assert seestar.reconnect() is True
+
+
+def test_authenticate_fails_gracefully_on_old_firmware_error_reply(seestar):
+    """If interop_pem is configured but the firmware predates the handshake,
+    the device answers get_verify_str with an error reply (no challenge in
+    result).  authenticate() must return False promptly without raising."""
+    seestar.s = _AuthFakeSocket(
+        replies=[{"method": "get_verify_str", "code": 102, "error": "unknown method"}]
+    )
+
+    assert seestar.authenticate() is False
+    assert len(seestar.s.sent) == 1  # gave up after the challenge request

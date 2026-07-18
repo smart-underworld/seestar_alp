@@ -115,6 +115,9 @@ class Seestar:
         self.is_connected: bool = False
         # PEM key bytes (lazy loaded)
         self._interop_pem: Optional[bytes] = None
+        # Socket bytes read during the inline auth handshake, preserved for
+        # the receive_message_thread to process once it starts.
+        self._auth_leftover: str = ""
         self.is_slewing: bool = False
         self.target_dec: float = 0
         self.target_ra: float = 0
@@ -206,17 +209,89 @@ class Seestar:
         )
         return base64.b64encode(signature).decode("utf-8")
 
+    def _auth_rpc_sync(self, method: str, params=None, timeout: float = 8.0):
+        """Send one RPC and read its reply directly off the socket.
+
+        authenticate() runs inline from reconnect(), which is called *before*
+        start_watch_thread() starts the receive_message_thread.  During the
+        handshake nothing is draining the socket, so send_message_param_sync()
+        (which waits on response_dict, populated only by the receive thread)
+        can never see the reply and always times out.  We therefore read the
+        socket ourselves here.  Any other lines seen while waiting (unsolicited
+        events, etc.) are preserved in self._auth_leftover, in order, so the
+        receive thread can process them once it starts.
+        """
+        cur_cmdid = self.cmdid
+        self.cmdid += 1
+        msg = {"id": cur_cmdid, "method": method}
+        if params is not None:
+            msg["params"] = params
+        if not self.send_message(json.dumps(msg) + "\r\n"):
+            return None
+
+        prev_timeout = self.s.gettimeout() if self.s else None
+        deadline = time.monotonic() + timeout
+        buf = self._auth_leftover  # unprocessed bytes (may hold a partial line)
+        carry = ""  # complete, non-matching lines to hand back to the reader
+        self._auth_leftover = ""
+        try:
+            if self.s:
+                self.s.settimeout(1.0)
+            while time.monotonic() < deadline:
+                # During a mid-session re-auth (e.g. reconnect from the
+                # heartbeat thread) the receive thread is already running and
+                # may consume our reply into response_dict before we can read
+                # it off the socket.  Accept it from either place.
+                if cur_cmdid in self.response_dict:
+                    self._auth_leftover = carry + buf
+                    return self.response_dict[cur_cmdid]
+                while "\r\n" in buf:
+                    line, buf = buf.split("\r\n", 1)
+                    parsed = None
+                    if line.strip():
+                        try:
+                            parsed = json.loads(line)
+                        except Exception:
+                            parsed = None
+                    if (
+                        isinstance(parsed, dict)
+                        and parsed.get("id") == cur_cmdid
+                        and "Event" not in parsed
+                    ):
+                        self._auth_leftover = carry + buf
+                        return parsed
+                    carry += line + "\r\n"
+                try:
+                    chunk = self.s.recv(1024 * 60) if self.s else b""
+                except socket.timeout:
+                    continue
+                if not chunk:
+                    break
+                buf += chunk.decode("utf-8", errors="replace")
+        finally:
+            if self.s and prev_timeout is not None:
+                self.s.settimeout(prev_timeout)
+            if not self._auth_leftover:
+                self._auth_leftover = carry + buf
+        return None
+
     def authenticate(self) -> bool:
         """Perform 2-step authentication expected by firmware 7.18+.
 
         Returns True if authentication succeeded.
         """
+        # Buffer used to carry socket bytes read during the handshake over to
+        # the receive_message_thread (started after reconnect() returns).
+        # authenticate() only runs right after a fresh socket was created, so
+        # any leftover from a previous connection is stale — discard it rather
+        # than replaying possibly-partial old-session bytes into the new stream.
+        self._auth_leftover = ""
         try:
             self.logger.info("Requesting authentication challenge (get_verify_str)")
-            resp = self.send_message_param_sync({"method": "get_verify_str"})
+            resp = self._auth_rpc_sync("get_verify_str")
             challenge_str = ""
-            if isinstance(resp, dict):
-                challenge_str = resp.get("result", {}).get("str", "")
+            if isinstance(resp, dict) and isinstance(resp.get("result"), dict):
+                challenge_str = resp["result"].get("str", "")
 
             if not challenge_str:
                 self.logger.warning(f"No challenge string received: {resp}")
@@ -225,9 +300,7 @@ class Seestar:
             self.logger.info("Signing challenge and sending verify_client")
             signed = self._sign_challenge(challenge_str)
             verify_params = {"sign": signed, "data": challenge_str}
-            verify_resp = self.send_message_param_sync(
-                {"method": "verify_client", "params": verify_params}
-            )
+            verify_resp = self._auth_rpc_sync("verify_client", verify_params)
 
             # Accept either result==0 or code==0 depending on firmware responses
             ok = False
@@ -241,7 +314,7 @@ class Seestar:
 
             # sanity check
             try:
-                verified = self.send_message_param_sync({"method": "pi_is_verified"})
+                verified = self._auth_rpc_sync("pi_is_verified")
                 result_val = (
                     verified.get("result") if isinstance(verified, dict) else None
                 )
@@ -481,7 +554,11 @@ class Seestar:
         self.logger.info(f"requested plate solve for BPA: {tmp}")
 
     def receive_message_thread_fn(self) -> None:
-        msg_remainder = ""
+        # Pick up any bytes read during inline authentication (the handshake
+        # runs before this thread starts), so events streamed during auth
+        # aren't lost.
+        msg_remainder = self._auth_leftover
+        self._auth_leftover = ""
         while self.is_watch_events:
             threading.current_thread().last_run = datetime.now()
             # print("checking for msg")
