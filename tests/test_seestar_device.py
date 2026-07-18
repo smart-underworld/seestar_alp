@@ -371,6 +371,142 @@ def test_reconnect_success_and_fail_paths(monkeypatch, seestar):
     assert seestar.reconnect() is False
 
 
+# Timeout sentinel that send_message_param_sync returns when the scope stalls a
+# request (result becomes a str, not the expected dict). Auth must not choke on it.
+_AUTH_TIMEOUT_RESULT = "Error: Exceeded allotted wait time for result"
+
+
+def test_authenticate_timeout_sentinel_returns_false_without_raising(monkeypatch, seestar):
+    # A busy scope stalls get_verify_str; send_message_param_sync returns the
+    # command dict with result set to the timeout sentinel STRING. The old code
+    # did resp.get("result", {}).get("str", "") -> AttributeError on the str.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem")
+
+    def fake_sync(payload):
+        return {"method": payload["method"], "result": _AUTH_TIMEOUT_RESULT}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
+
+    # Guard: the socket must NOT be touched on an auth timeout.
+    sentinel_sock = object()
+    seestar.s = sentinel_sock
+    disconnect_calls = {"n": 0}
+    monkeypatch.setattr(
+        seestar, "disconnect", lambda: disconnect_calls.__setitem__("n", disconnect_calls["n"] + 1)
+    )
+
+    # Returns False cleanly (no AttributeError), leaves the socket alone.
+    assert seestar.authenticate() is False
+    assert disconnect_calls["n"] == 0
+    assert seestar.s is sentinel_sock
+
+
+def test_authenticate_success_path(monkeypatch, seestar):
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem")
+    # Avoid needing a real PEM: stub the signing step.
+    monkeypatch.setattr(seestar, "_sign_challenge", lambda challenge: "signed")
+
+    def fake_sync(payload):
+        method = payload["method"]
+        if method == "get_verify_str":
+            return {"method": method, "result": {"str": "challenge-abc"}}
+        if method == "verify_client":
+            return {"method": method, "result": 0}
+        if method == "pi_is_verified":
+            return {"method": method, "result": True}
+        raise AssertionError(f"unexpected method {method}")
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
+
+    assert seestar.authenticate() is True
+
+
+def test_maybe_authenticate_noop_when_pem_unset(monkeypatch, seestar):
+    monkeypatch.setattr(Config, "seestar_interop_pem", "")
+    called = {"n": 0}
+    monkeypatch.setattr(
+        seestar, "authenticate", lambda: called.__setitem__("n", called["n"] + 1) or True
+    )
+    seestar._maybe_authenticate()
+    assert called["n"] == 0
+    assert seestar.is_authenticated is False
+
+
+def test_maybe_authenticate_retries_until_scope_idle(monkeypatch, seestar):
+    # Auth is configured; first attempt times out (scope busy), a later attempt
+    # succeeds (scope idle). The socket must never be dropped in between.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem")
+
+    clock = {"t": 1000.0}
+    monkeypatch.setattr("device.seestar_device.time.time", lambda: clock["t"])
+
+    attempts = {"n": 0}
+
+    def fake_authenticate():
+        attempts["n"] += 1
+        return attempts["n"] >= 2  # busy first, idle second
+
+    monkeypatch.setattr(seestar, "authenticate", fake_authenticate)
+    disconnect_calls = {"n": 0}
+    monkeypatch.setattr(
+        seestar, "disconnect", lambda: disconnect_calls.__setitem__("n", disconnect_calls["n"] + 1)
+    )
+
+    # Attempt #1: busy -> stays unauthenticated, socket untouched.
+    seestar._maybe_authenticate()
+    assert attempts["n"] == 1
+    assert seestar.is_authenticated is False
+
+    # Immediate re-call is throttled (< _AUTH_RETRY_INTERVAL_S later): no attempt.
+    clock["t"] += 5
+    seestar._maybe_authenticate()
+    assert attempts["n"] == 1
+
+    # After the retry interval, attempt #2 succeeds.
+    clock["t"] += seestar._AUTH_RETRY_INTERVAL_S
+    seestar._maybe_authenticate()
+    assert attempts["n"] == 2
+    assert seestar.is_authenticated is True
+
+    # Once authenticated it short-circuits (no further attempts).
+    clock["t"] += 100
+    seestar._maybe_authenticate()
+    assert attempts["n"] == 2
+
+    # Never disconnected the socket across the whole retry sequence.
+    assert disconnect_calls["n"] == 0
+
+
+def test_reconnect_does_not_authenticate_or_drop_socket(monkeypatch, seestar):
+    # Regression: connect must stay up regardless of auth. Even with auth
+    # configured, reconnect() must NOT call authenticate() (that moved to the
+    # heartbeat loop) and must NOT close the socket on an auth failure.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem")
+    monkeypatch.setattr(seestar, "send_udp_intro", lambda: None)
+    monkeypatch.setattr(seestar, "disconnect", lambda: None)
+
+    auth_calls = {"n": 0}
+    monkeypatch.setattr(
+        seestar, "authenticate", lambda: auth_calls.__setitem__("n", auth_calls["n"] + 1) or False
+    )
+
+    class Sock:
+        def settimeout(self, _v):
+            return None
+
+        def connect(self, _addr):
+            return None
+
+    monkeypatch.setattr("device.seestar_device.socket.socket", lambda *_a: Sock())
+    seestar.is_connected = False
+    seestar._last_auth_attempt = 999.0
+
+    assert seestar.reconnect() is True
+    assert seestar.is_connected is True
+    assert auth_calls["n"] == 0  # reconnect no longer authenticates
+    assert seestar._last_auth_attempt == 0.0  # throttle reset for prompt re-auth
+
+
 def test_get_socket_msg_paths(monkeypatch, seestar):
     monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
 

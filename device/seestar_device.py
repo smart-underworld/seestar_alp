@@ -115,6 +115,11 @@ class Seestar:
         self.is_connected: bool = False
         # PEM key bytes (lazy loaded)
         self._interop_pem: Optional[bytes] = None
+        # Firmware 7.18+ auth is opt-in (interop_pem configured) and self-healing:
+        # the socket stays up even while unauthenticated (the event stream flows
+        # fine without auth), and the heartbeat loop retries auth until it lands.
+        self.is_authenticated: bool = False
+        self._last_auth_attempt: float = 0.0
         self.is_slewing: bool = False
         self.target_dec: float = 0
         self.target_ra: float = 0
@@ -214,12 +219,17 @@ class Seestar:
         try:
             self.logger.info("Requesting authentication challenge (get_verify_str)")
             resp = self.send_message_param_sync({"method": "get_verify_str"})
-            challenge_str = ""
-            if isinstance(resp, dict):
-                challenge_str = resp.get("result", {}).get("str", "")
+            # A busy scope (mid-imaging) stalls get_verify_str; send_message_param_sync
+            # then returns the timeout sentinel string as "result" instead of the
+            # expected {"str": ...} dict. Guard so we never call .get() on a str —
+            # return False (retry later) rather than raising AttributeError.
+            result = resp.get("result") if isinstance(resp, dict) else None
+            challenge_str = result.get("str", "") if isinstance(result, dict) else ""
 
             if not challenge_str:
-                self.logger.warning(f"No challenge string received: {resp}")
+                self.logger.warning(
+                    f"No auth challenge yet (scope busy?); will retry. response={resp}"
+                )
                 return False
 
             self.logger.info("Signing challenge and sending verify_client")
@@ -266,6 +276,45 @@ class Seestar:
         except Exception as e:
             self.logger.warning(f"Authentication error: {e}")
             return False
+
+    # Minimum seconds between auth attempts. A busy scope keeps timing out
+    # get_verify_str (~10s each); throttle so we don't hammer while waiting for
+    # it to go idle, but stay responsive enough to authenticate at the first gap.
+    _AUTH_RETRY_INTERVAL_S = 10.0
+
+    def _maybe_authenticate(self) -> None:
+        """Best-effort, self-healing firmware auth, driven by the heartbeat loop.
+
+        Never disconnects: an unauthenticated socket still carries the event
+        stream, so a busy scope that can't answer get_verify_str yet is simply
+        retried later (throttled) rather than dropped. No-op when no interop PEM
+        is configured (auth is opt-in) or once already authenticated.
+        """
+        if self.is_authenticated:
+            return
+        if not getattr(Config, "seestar_interop_pem", ""):
+            return
+        now = time.time()
+        if now - self._last_auth_attempt < self._AUTH_RETRY_INTERVAL_S:
+            return
+        self._last_auth_attempt = now
+        self.logger.info("Attempting firmware authentication")
+        try:
+            ok = self.authenticate()
+        except Exception as e:
+            # authenticate() already guards its own errors; this is a last-resort
+            # net so a surprise never takes down the heartbeat loop or the socket.
+            self.logger.warning(
+                f"Authentication attempt raised (staying connected, will retry): {e}"
+            )
+            return
+        if ok:
+            self.is_authenticated = True
+            self.logger.info("Firmware authentication succeeded")
+        else:
+            self.logger.info(
+                "Firmware authentication still busy; staying connected, will retry"
+            )
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
     #       "result":0, "error":"dummy error",
@@ -335,6 +384,8 @@ class Seestar:
     def disconnect(self) -> None:
         # Disconnect tries to clean up the socket if it exists
         self.is_connected = False
+        # A fresh socket must re-authenticate; auth state is per-connection.
+        self.is_authenticated = False
         self.socket_force_close()
 
     def send_udp_intro(self) -> None:
@@ -393,21 +444,16 @@ class Seestar:
             self.s.connect((self.host, self.port))
             # self.s.settimeout(None)
             self.is_connected = True
-            # If an interop PEM key is configured, attempt firmware 7.18+ authentication
-            try:
-                if getattr(Config, "seestar_interop_pem", ""):
-                    ok = self.authenticate()
-                    if not ok:
-                        self.logger.warning(
-                            "Authentication failed after connect; closing socket"
-                        )
-                        self.disconnect()
-                        return False
-            except Exception as e:
-                self.logger.warning(f"Authentication raised exception: {e}")
-                self.disconnect()
-                return False
-
+            # Firmware 7.18+ auth is intentionally NOT performed here. It needs a
+            # sync round-trip (so the receive thread must be running) and a busy
+            # scope can stall the get_verify_str handshake. Doing it inline made
+            # connect -> auth-fail -> disconnect loop and kill the event stream —
+            # worse than staying unauthenticated, since the event stream flows
+            # fine without auth. The heartbeat loop drives _maybe_authenticate()
+            # instead, keeping the socket up and self-healing once the scope idles.
+            # Reset the throttle so the next heartbeat tick re-auths promptly on
+            # this fresh socket.
+            self._last_auth_attempt = 0.0
             return True
         except socket.error:
             self.socket_force_close()
@@ -471,6 +517,9 @@ class Seestar:
                 sleep(5)
                 continue
 
+            # Retry firmware auth here (never in reconnect) so the socket stays
+            # up while unauthenticated and self-heals once the scope goes idle.
+            self._maybe_authenticate()
             self.heartbeat()
             time.sleep(3)
 
