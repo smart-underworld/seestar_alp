@@ -684,6 +684,15 @@ class Seestar:
             "is_stacking_paused", False
         )
 
+        # Mount mode is not carried by any firmware event, but we cache it from
+        # get_device_state during the startup sequence (is_EQ_mode). Inject it
+        # here, like the scheduler block, so pollers get it without a blocking
+        # RPC to the scope (get_device_state times out during imaging).
+        if "mount" not in self.event_state:
+            self.event_state["mount"] = {}
+        self.event_state["mount"]["Event"] = "Mount"
+        self.event_state["mount"]["equ_mode"] = self.is_EQ_mode
+
         if "3PPA" in self.event_state:
             self.event_state["3PPA"]["eq_offset_alt"] = self.cur_pa_error_y
             self.event_state["3PPA"]["eq_offset_az"] = self.cur_pa_error_x
