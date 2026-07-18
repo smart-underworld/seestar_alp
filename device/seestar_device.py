@@ -118,6 +118,11 @@ class Seestar:
         # Socket bytes read during the inline auth handshake, preserved for
         # the receive_message_thread to process once it starts.
         self._auth_leftover: str = ""
+        # Firmware 7.18+ auth is opt-in (interop_pem configured) and self-healing:
+        # the socket stays up even while unauthenticated (the event stream flows
+        # fine without auth), and the heartbeat loop retries auth until it lands.
+        self.is_authenticated: bool = False
+        self._last_auth_attempt: float = 0.0
         self.is_slewing: bool = False
         self.target_dec: float = 0
         self.target_ra: float = 0
@@ -229,6 +234,28 @@ class Seestar:
         if not self.send_message(json.dumps(msg) + "\r\n"):
             return None
 
+        # When the receive thread is already draining the socket (mid-session
+        # re-auth from the heartbeat loop or send_message error recovery),
+        # reading the socket here too would race it: each byte goes to exactly
+        # one reader, so events could be stranded in _auth_leftover (which the
+        # receive thread only drains once, at startup) and a single JSON line
+        # could be torn between the two readers.  Wait on response_dict instead,
+        # which the receive thread populates.
+        # (If we ARE the receive thread — its socket-error recovery path calls
+        # reconnect() — nobody else is reading, so fall through to the raw read.)
+        rx_thread = self.get_msg_thread
+        if (
+            rx_thread is not None
+            and rx_thread.is_alive()
+            and rx_thread is not threading.current_thread()
+        ):
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                if cur_cmdid in self.response_dict:
+                    return self.response_dict[cur_cmdid]
+                time.sleep(0.1)
+            return None
+
         prev_timeout = self.s.gettimeout() if self.s else None
         deadline = time.monotonic() + timeout
         buf = self._auth_leftover  # unprocessed bytes (may hold a partial line)
@@ -282,22 +309,29 @@ class Seestar:
         """
         # Buffer used to carry socket bytes read during the handshake over to
         # the receive_message_thread (started after reconnect() returns).
-        # authenticate() only runs right after a fresh socket was created, so
-        # any leftover from a previous connection is stale — discard it rather
-        # than replaying possibly-partial old-session bytes into the new stream.
+        # Inline auth runs right after a fresh socket was created, so any
+        # leftover from a previous connection is stale — discard it rather
+        # than replaying possibly-partial old-session bytes into the new
+        # stream.  (Heartbeat-driven retries never populate this buffer: with
+        # the receive thread running, _auth_rpc_sync waits on response_dict
+        # instead of reading the socket.)
         self._auth_leftover = ""
         try:
-            self.logger.info("Requesting authentication challenge (get_verify_str)")
+            self.logger.debug("Requesting authentication challenge (get_verify_str)")
             resp = self._auth_rpc_sync("get_verify_str")
             challenge_str = ""
             if isinstance(resp, dict) and isinstance(resp.get("result"), dict):
                 challenge_str = resp["result"].get("str", "")
 
             if not challenge_str:
-                self.logger.warning(f"No challenge string received: {resp}")
+                # debug: the busy-scope case repeats on every throttled retry;
+                # reconnect() already warns once per connection.
+                self.logger.debug(
+                    f"No auth challenge yet (scope busy?); will retry. response={resp}"
+                )
                 return False
 
-            self.logger.info("Signing challenge and sending verify_client")
+            self.logger.debug("Signing challenge and sending verify_client")
             signed = self._sign_challenge(challenge_str)
             verify_params = {"sign": signed, "data": challenge_str}
             verify_resp = self._auth_rpc_sync("verify_client", verify_params)
@@ -339,6 +373,47 @@ class Seestar:
         except Exception as e:
             self.logger.warning(f"Authentication error: {e}")
             return False
+
+    # Minimum seconds between auth attempts. A busy scope keeps timing out
+    # get_verify_str (~10s each); throttle so we don't hammer while waiting for
+    # it to go idle, but stay responsive enough to authenticate at the first gap.
+    _AUTH_RETRY_INTERVAL_S = 10.0
+
+    def _maybe_authenticate(self) -> None:
+        """Best-effort, self-healing firmware auth, driven by the heartbeat loop.
+
+        Never disconnects: an unauthenticated socket still carries the event
+        stream, so a busy scope that can't answer get_verify_str yet is simply
+        retried later (throttled) rather than dropped. No-op when no interop PEM
+        is configured (auth is opt-in) or once already authenticated.
+        """
+        if self.is_authenticated:
+            return
+        if not getattr(Config, "seestar_interop_pem", ""):
+            return
+        now = time.time()
+        if now - self._last_auth_attempt < self._AUTH_RETRY_INTERVAL_S:
+            return
+        self._last_auth_attempt = now
+        # debug level: this repeats every retry interval while the scope is
+        # busy, which can be a multi-hour imaging session.
+        self.logger.debug("Attempting firmware authentication")
+        try:
+            ok = self.authenticate()
+        except Exception as e:
+            # authenticate() already guards its own errors; this is a last-resort
+            # net so a surprise never takes down the heartbeat loop or the socket.
+            self.logger.warning(
+                f"Authentication attempt raised (staying connected, will retry): {e}"
+            )
+            return
+        if ok:
+            self.is_authenticated = True
+            self.logger.info("Firmware authentication succeeded")
+        else:
+            self.logger.debug(
+                "Firmware authentication still busy; staying connected, will retry"
+            )
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
     #       "result":0, "error":"dummy error",
@@ -408,6 +483,8 @@ class Seestar:
     def disconnect(self) -> None:
         # Disconnect tries to clean up the socket if it exists
         self.is_connected = False
+        # A fresh socket must re-authenticate; auth state is per-connection.
+        self.is_authenticated = False
         self.socket_force_close()
 
     def send_udp_intro(self) -> None:
@@ -466,21 +543,31 @@ class Seestar:
             self.s.connect((self.host, self.port))
             # self.s.settimeout(None)
             self.is_connected = True
-            # If an interop PEM key is configured, attempt firmware 7.18+ authentication
+            # If an interop PEM key is configured, attempt firmware 7.18+ auth
+            # inline so a fresh connection is authenticated before
+            # start_watch_thread() issues get_device_state etc.  Failure is
+            # non-fatal: a busy scope (mid-imaging) can stall get_verify_str,
+            # and an unauthenticated socket still carries the event stream, so
+            # closing the socket here would trade a working-but-unauthenticated
+            # connection for a connect -> auth-fail -> disconnect loop that
+            # kills live telemetry.  Stay connected and let the heartbeat loop
+            # retry via _maybe_authenticate() once the scope idles.
             try:
                 if getattr(Config, "seestar_interop_pem", ""):
-                    ok = self.authenticate()
-                    if not ok:
+                    if self.authenticate():
+                        self.is_authenticated = True
+                    else:
+                        # Scope is likely busy; throttle the heartbeat retry so
+                        # we don't immediately stall on another handshake.
+                        self._last_auth_attempt = time.time()
                         self.logger.warning(
-                            "Authentication failed after connect; closing socket"
+                            "Authentication failed after connect; staying connected, will retry from heartbeat"
                         )
-                        self.disconnect()
-                        return False
             except Exception as e:
-                self.logger.warning(f"Authentication raised exception: {e}")
-                self.disconnect()
-                return False
-
+                self._last_auth_attempt = time.time()
+                self.logger.warning(
+                    f"Authentication raised after connect (staying connected, will retry): {e}"
+                )
             return True
         except socket.error:
             self.socket_force_close()
@@ -544,6 +631,10 @@ class Seestar:
                 sleep(5)
                 continue
 
+            # Auth failure never drops the socket; if the inline attempt in
+            # reconnect() couldn't land (scope busy), retry here, throttled,
+            # until the scope goes idle.
+            self._maybe_authenticate()
             self.heartbeat()
             time.sleep(3)
 
