@@ -2363,3 +2363,54 @@ def test_authenticate_fails_gracefully_on_old_firmware_error_reply(seestar):
 
     assert seestar.authenticate() is False
     assert len(seestar.s.sent) == 1  # gave up after the challenge request
+
+
+def test_force_stop_goto_clears_wedged_state(monkeypatch, seestar):
+    """A wedged AutoGoto (state stuck on 'working') is force-cleared and the
+    firmware stop is sent with the narrow stage:AutoGoto parameter."""
+    seestar.event_state["AutoGoto"] = {"state": "working"}
+    seestar.event_state["PlateSolve"] = {"state": "fail"}
+    seestar.event_state["Exposure"] = {"state": "working"}
+    calls = []
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda p: calls.append(p) or {"result": "ok"},
+    )
+    assert seestar.is_goto() is True
+
+    result = seestar.force_stop_goto()
+
+    assert result["ok"] is True
+    assert result["stop_slew_result"] == {"result": "ok"}
+    assert seestar.is_goto() is False
+    assert seestar.event_state["AutoGoto"]["state"] == "stopped"
+    assert seestar.event_state["PlateSolve"]["state"] == "stopped"
+    assert seestar.event_state["Exposure"]["state"] == "stopped"
+    assert calls[0]["method"] == "iscope_stop_view"
+    assert calls[0]["params"] == {"stage": "AutoGoto"}
+
+
+def test_force_stop_goto_reports_failure_when_stop_slew_raises(monkeypatch, seestar):
+    def _boom():
+        raise RuntimeError("socket dead")
+
+    monkeypatch.setattr(seestar, "stop_slew", _boom)
+    seestar.event_state["AutoGoto"] = {"state": "working"}
+
+    result = seestar.force_stop_goto()
+
+    assert result["ok"] is False
+    assert result["stop_slew_result"] is None
+    # Local state is still force-cleared even though the firmware send failed,
+    # so the next goto_target is accepted.
+    assert seestar.is_goto() is False
+
+
+def test_force_stop_goto_idempotent_when_no_goto(monkeypatch, seestar):
+    monkeypatch.setattr(seestar, "stop_slew", lambda: {"result": "ok"})
+
+    result = seestar.force_stop_goto()
+
+    assert result["ok"] is True
+    assert seestar.is_goto() is False

@@ -224,6 +224,9 @@ class action:
             elif action_name == "stop_goto_target":
                 result = cur_dev.stop_goto_target()
                 resp.text = MethodResponse(req, value=result).json
+            elif action_name == "force_stop_goto":
+                result = cur_dev.force_stop_goto()
+                resp.text = MethodResponse(req, value=result).json
             elif action_name == "is_goto":
                 result = cur_dev.is_goto()
                 resp.text = MethodResponse(req, value=result).json

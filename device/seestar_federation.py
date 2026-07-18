@@ -69,6 +69,13 @@ class Seestar_Federation:
                 result[key] = self.seestar_devices[key].stop_goto_target()
         return result
 
+    def force_stop_goto(self):
+        result = {}
+        for key in self.seestar_devices:
+            if self.seestar_devices[key].is_connected:
+                result[key] = self.seestar_devices[key].force_stop_goto()
+        return result
+
     def is_goto(self):
         result = {}
         for key in self.seestar_devices:

@@ -106,9 +106,22 @@
 				{% endif %} <!-- End error modal?-->
             </div>
         </div>
-        
-    </div> 
-    <button type="submit" class="btn btn-primary">Submit</button>
+
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <button type="submit" class="btn btn-primary">Submit</button>
+        <button type="button" class="btn btn-warning"
+                id="forceStopGotoBtn"
+                hx-post="/api/{{ telescope.device_num }}/force_stop_goto"
+                hx-params="none"
+                hx-target="#forceStopGotoStatus"
+                hx-swap="innerHTML"
+                hx-disabled-elt="this"
+                title="Unconditionally stop the current goto / AutoGoto loop and force-clear the 'goto in progress' flag. Use if a goto is wedged on plate-solve and new gotos are being rejected with 'mount is in goto routine'.">
+            Stop Goto
+        </button>
+        <span id="forceStopGotoStatus" class="text-muted small ms-2"></span>
+    </div>
 </form>
 
 <!-- Modal structure -->

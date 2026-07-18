@@ -1927,3 +1927,81 @@ def test_live_wide_cam_post_returns_204_for_non_s30(monkeypatch):
     assert resp.status_code == 204
     assert resp.headers.get("hx-reswap") == "none"
     assert calls == []
+
+
+def test_force_stop_goto_endpoint_returns_json(monkeypatch):
+    seen = {}
+
+    def _do_action(action, tid, params):
+        seen["action"] = action
+        seen["tid"] = tid
+        return {"ErrorNumber": 0, "Value": {"ok": True, "stop_slew_result": {}}}
+
+    monkeypatch.setattr(front_app, "do_action_device", _do_action)
+    req = DummyHTMXReq(relative_uri="/api/1/force_stop_goto")
+    resp = DummyResp()
+
+    front_app.ForceStopGotoResource.on_post(req, resp, telescope_id=1)
+
+    assert seen == {"action": "force_stop_goto", "tid": 1}
+    assert resp.status == falcon.HTTP_200
+    assert resp.content_type == "application/json"
+    body = json.loads(resp.text)
+    assert body["Value"]["ok"] is True
+
+
+def test_force_stop_goto_endpoint_json_when_device_offline(monkeypatch):
+    monkeypatch.setattr(front_app, "do_action_device", lambda *_a, **_k: None)
+    req = DummyHTMXReq(relative_uri="/api/1/force_stop_goto")
+    resp = DummyResp()
+
+    front_app.ForceStopGotoResource.on_post(req, resp, telescope_id=1)
+
+    body = json.loads(resp.text)
+    assert body == {"ok": False, "reason": "no response"}
+
+
+def test_force_stop_goto_endpoint_htmx_fragment(monkeypatch):
+    monkeypatch.setattr(
+        front_app,
+        "do_action_device",
+        lambda *_a, **_k: {"ErrorNumber": 0, "Value": {"ok": True}},
+    )
+    req = DummyHTMXReq(
+        relative_uri="/api/1/force_stop_goto", headers={"HX-Request": "true"}
+    )
+    resp = DummyResp()
+
+    front_app.ForceStopGotoResource.on_post(req, resp, telescope_id=1)
+
+    assert resp.content_type == "text/html"
+    assert "Cleared. Mount free." in resp.text
+
+
+def test_force_stop_goto_endpoint_htmx_fragment_offline(monkeypatch):
+    monkeypatch.setattr(front_app, "do_action_device", lambda *_a, **_k: None)
+    req = DummyHTMXReq(
+        relative_uri="/api/1/force_stop_goto", headers={"HX-Request": "true"}
+    )
+    resp = DummyResp()
+
+    front_app.ForceStopGotoResource.on_post(req, resp, telescope_id=1)
+
+    assert resp.content_type == "text/html"
+    assert "No response from device." in resp.text
+
+
+def test_goto_target_template_has_htmx_force_stop_button():
+    template = front_app.fetch_template("goto_target.html")
+    html = template.render(
+        telescope={"device_num": 1},
+        values={},
+        errors={},
+        action="/1/goto",
+    )
+    assert 'id="forceStopGotoBtn"' in html
+    assert 'hx-post="/api/1/force_stop_goto"' in html
+    assert 'hx-target="#forceStopGotoStatus"' in html
+    assert 'id="forceStopGotoStatus"' in html
+    # The button must not fall back to hand-rolled fetch() wiring.
+    assert "fetch(" not in html

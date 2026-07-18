@@ -3350,6 +3350,38 @@ class LiveModeResource:
         resp.text = mode
 
 
+class ForceStopGotoResource:
+    """Unconditional stop + force-clear of the goto-in-progress state.
+
+    Use case: AutoGoto plate-solve has been retrying forever (typical
+    when the actual sky is not visible) and the device-side ``is_goto()``
+    flag is stuck on "working" — every subsequent ``goto_target`` is
+    rejected with "mount is in goto routine". The standard
+    ``stop_goto_target`` only sends ``iscope_stop_view`` to the firmware
+    if ``is_goto()`` returns True; if the state is wedged, that returns
+    "goto stopped already: no action taken" and the loop persists.
+
+    POST -> calls device.force_stop_goto which always sends the firmware
+    stop AND force-clears the local state dict. HTMX requests get a small
+    HTML status fragment for the goto page; other clients get the device
+    response as JSON.
+    """
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=1):
+        response = do_action_device("force_stop_goto", telescope_id, {})
+        resp.status = falcon.HTTP_200
+        if req.get_header("HX-Request"):
+            resp.content_type = "text/html"
+            if response is not None:
+                resp.text = '<span class="text-success">Cleared. Mount free.</span>'
+            else:
+                resp.text = '<span class="text-danger">No response from device.</span>'
+        else:
+            resp.content_type = "application/json"
+            resp.text = json.dumps(response or {"ok": False, "reason": "no response"})
+
+
 class LiveGotoResource(BaseResource):
     def on_post(self, req, resp, telescope_id=1):
         target = req.media["target"]
@@ -5350,6 +5382,10 @@ class FrontMain:
         app.add_route("/reload", ReloadResource())
         app.add_route("/{telescope_id:int}/", HomeTelescopeResource())
         app.add_route("/{telescope_id:int}/goto", GotoResource())
+        app.add_route(
+            "/api/{telescope_id:int}/force_stop_goto",
+            ForceStopGotoResource(),
+        )
         app.add_route("/{telescope_id:int}/command", CommandResource())
         app.add_route("/{telescope_id:int}/console", ConsoleResource())
         app.add_route("/{telescope_id:int}/image", ImageResource())
