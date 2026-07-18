@@ -149,6 +149,8 @@ export const api = {
       post(`/api/v1/devices/${devNum}/startup`, params),
     goto: (devNum: number, ra: string, dec: string, targetName = "", isJ2000 = true) =>
       post(`/api/v1/devices/${devNum}/goto`, { ra, dec, target_name: targetName, is_j2000: isJ2000 }),
+    forceStopGoto: (devNum: number) =>
+      post<{ ok?: boolean; reason?: string }>(`/api/v1/devices/${devNum}/goto/force-stop`),
     image: {
       start: (devNum: number, body: Record<string, unknown>) =>
         post(`/api/v1/devices/${devNum}/image/start`, body),

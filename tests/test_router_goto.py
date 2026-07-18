@@ -63,3 +63,28 @@ def test_cancel_goto_uses_stop_goto_target_action(client, monkeypatch):
     r = client.delete("/api/v1/devices/1/goto")
     assert r.status_code == 200
     assert captured["action"] == "stop_goto_target"
+
+
+def test_force_stop_goto_uses_force_action(client, monkeypatch):
+    captured = {}
+
+    def fake_do_action(action, dev_num, params):
+        captured["action"] = action
+        captured["params"] = params
+        return {"ok": True, "stop_slew_result": {"result": "ok"}}
+
+    monkeypatch.setattr(router_goto, "do_action", fake_do_action)
+
+    r = client.post("/api/v1/devices/1/goto/force-stop")
+    assert r.status_code == 200
+    assert captured["action"] == "force_stop_goto"
+    assert captured["params"] == {}
+    assert r.json()["ok"] is True
+
+
+def test_force_stop_goto_reports_no_response(client, monkeypatch):
+    monkeypatch.setattr(router_goto, "do_action", lambda *a: None)
+
+    r = client.post("/api/v1/devices/1/goto/force-stop")
+    assert r.status_code == 200
+    assert r.json() == {"ok": False, "reason": "no response"}

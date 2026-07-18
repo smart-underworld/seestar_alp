@@ -3,9 +3,10 @@ import { render, screen, waitFor } from "@testing-library/svelte";
 import { writable } from "svelte/store";
 import type { DeviceStatus } from "../lib/api";
 
-const { mockGoto, mockEvents } = vi.hoisted(() => ({
+const { mockGoto, mockEvents, mockForceStopGoto } = vi.hoisted(() => ({
   mockGoto: vi.fn(),
   mockEvents: vi.fn(),
+  mockForceStopGoto: vi.fn(),
 }));
 
 vi.mock("../lib/stores/deviceStore", () => ({
@@ -19,6 +20,7 @@ vi.mock("../lib/api", () => ({
     devices: {
       goto: mockGoto,
       events: mockEvents,
+      forceStopGoto: mockForceStopGoto,
     },
   },
 }));
@@ -48,8 +50,10 @@ beforeEach(() => {
   mockActiveDeviceStatus.set(null);
   mockGoto.mockReset();
   mockEvents.mockReset();
+  mockForceStopGoto.mockReset();
   mockGoto.mockResolvedValue({});
   mockEvents.mockResolvedValue({});
+  mockForceStopGoto.mockResolvedValue({ ok: true });
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
 });
 
@@ -81,10 +85,37 @@ describe("Goto — form", () => {
     expect(screen.getByLabelText("Target Name")).toBeInTheDocument();
   });
 
-  it("renders GoTo and Stop buttons", () => {
+  it("renders GoTo and Stop Goto buttons", () => {
     render(Goto);
     expect(screen.getByRole("button", { name: /GoTo/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Stop/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Stop Goto/ })).toBeInTheDocument();
+  });
+});
+
+describe("Goto — stop goto (force)", () => {
+  beforeEach(() => mockIsConnected.set(true));
+
+  it("calls api.devices.forceStopGoto when Stop Goto is clicked", async () => {
+    render(Goto);
+    screen.getByRole("button", { name: /Stop Goto/ }).click();
+    await waitFor(() => expect(mockForceStopGoto).toHaveBeenCalledWith(1));
+  });
+
+  it("shows mount-free status after force stop succeeds", async () => {
+    render(Goto);
+    screen.getByRole("button", { name: /Stop Goto/ }).click();
+    await waitFor(() =>
+      expect(screen.getByText(/Goto stopped — mount free/)).toBeInTheDocument(),
+    );
+  });
+
+  it("shows error when force stop fails", async () => {
+    mockForceStopGoto.mockRejectedValue(new Error("device unreachable"));
+    render(Goto);
+    screen.getByRole("button", { name: /Stop Goto/ }).click();
+    await waitFor(() =>
+      expect(screen.getByText(/device unreachable/)).toBeInTheDocument(),
+    );
   });
 });
 

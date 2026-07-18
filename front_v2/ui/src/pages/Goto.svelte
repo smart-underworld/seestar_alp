@@ -72,11 +72,16 @@
     }
   }
 
+  // Force variant of stop: always sends the firmware stop AND force-clears
+  // the device-side "goto in progress" flag, so it also recovers a wedged
+  // AutoGoto whose plate-solve loop is retrying forever (where the graceful
+  // stop reports "goto stopped already" and new gotos keep being rejected).
   async function stopGoto() {
     error = "";
+    status = "";
     try {
-      await fetch(`/api/v1/devices/${$activeDevNum}/goto`, { method: "DELETE" });
-      status = "GoTo cancelled.";
+      await api.devices.forceStopGoto($activeDevNum);
+      status = "Goto stopped — mount free.";
     } catch (e) {
       error = String(e);
     }
@@ -156,8 +161,13 @@
           <button type="submit" class="btn btn-primary" disabled={slewing}>
             {#if slewing}⏳ Slewing…{:else}⌖ GoTo{/if}
           </button>
-          <button type="button" class="btn btn-danger" on:click={stopGoto}>
-            ⏹ Stop
+          <button
+            type="button"
+            class="btn btn-danger"
+            on:click={stopGoto}
+            title="Unconditionally stop the current goto / AutoGoto loop and force-clear the 'goto in progress' flag. Use if a goto is wedged on plate-solve and new gotos are being rejected with 'mount is in goto routine'."
+          >
+            ⏹ Stop Goto
           </button>
         </div>
       </form>

@@ -261,6 +261,20 @@ def cancel_goto(dev_num: int):
     return result or {"status": "ok"}
 
 
+@router.post("/devices/{dev_num}/goto/force-stop")
+def force_stop_goto(dev_num: int):
+    """Unconditional stop + force-clear of the goto-in-progress state.
+
+    Recovers from a wedged AutoGoto (plate-solve retrying forever) where
+    ``stop_goto_target`` refuses to act because ``is_goto()`` is stuck on
+    "working" and every new goto is rejected with "mount is in goto
+    routine".  No connectivity gate: the device force-clears its local
+    state even when the firmware send fails.
+    """
+    result = do_action("force_stop_goto", dev_num, {})
+    return result or {"ok": False, "reason": "no response"}
+
+
 @router.get("/devices/{dev_num}/search")
 def search_object(dev_num: int, q: str, catalog: str = "auto"):
     """
