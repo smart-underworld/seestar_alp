@@ -88,6 +88,9 @@ def _build_front_test_app():
     )
     app.add_route("/{telescope_id:int}/startup", front_app.StartupResource())
     app.add_route("/{telescope_id:int}/auth-status", front_app.AuthStatusResource())
+    app.add_route(
+        "/api/{telescope_id:int}/force_stop_goto", front_app.ForceStopGotoResource()
+    )
     return app
 
 
@@ -1024,3 +1027,46 @@ def test_35_wide_cam_settings_round_trip_via_simulator(monkeypatch, front_sim_br
     assert setting.get("wide_cam") is True
     assert setting.get("wide_4k") is False
     assert setting.get("wide_focal_pos") == 1600
+
+
+def test_36_force_stop_goto_unwedges_device(two_device_federation):
+    """A wedged AutoGoto state on a real device (connected to the simulator)
+    is force-cleared by the force_stop_goto ALPACA action, and the firmware
+    stop round-trips through the simulator."""
+    dev1 = two_device_federation["dev1"]
+    dev1.event_state["AutoGoto"] = {"state": "working"}
+    dev1.event_state["PlateSolve"] = {"state": "fail"}
+    assert dev1.is_goto() is True
+
+    resp = two_device_federation["alpaca_action"](1, "force_stop_goto", {})
+
+    assert resp.status_code == 200
+    value = resp.json["Value"]
+    assert value["ok"] is True
+    assert value["stop_slew_result"] is not None
+    assert dev1.is_goto() is False
+    assert dev1.event_state["AutoGoto"]["state"] == "stopped"
+    assert dev1.event_state["PlateSolve"]["state"] == "stopped"
+
+
+def test_37_force_stop_goto_front_endpoint(two_device_federation):
+    """The front /api/{id}/force_stop_goto endpoint clears a wedged goto end
+    to end (front → device layer → simulator) and serves both JSON and HTMX
+    fragment responses."""
+    dev1 = two_device_federation["dev1"]
+    front_client = two_device_federation["front_client"]
+
+    dev1.event_state["AutoGoto"] = {"state": "working"}
+    resp = front_client.simulate_post("/api/1/force_stop_goto")
+    assert resp.status_code == 200
+    assert resp.json["Value"]["ok"] is True
+    assert dev1.is_goto() is False
+
+    # HTMX variant returns a status fragment for the goto page.
+    dev1.event_state["AutoGoto"] = {"state": "working"}
+    resp = front_client.simulate_post(
+        "/api/1/force_stop_goto", headers={"HX-Request": "true"}
+    )
+    assert resp.status_code == 200
+    assert "Cleared. Mount free." in resp.text
+    assert dev1.is_goto() is False

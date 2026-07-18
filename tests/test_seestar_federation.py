@@ -84,6 +84,10 @@ class FakeDevice:
         self.called.append(("stop_goto_target", None))
         return {"ok": True}
 
+    def force_stop_goto(self):
+        self.called.append(("force_stop_goto", None))
+        return {"ok": True, "stop_slew_result": {"result": "ok"}}
+
     def is_goto(self):
         self.called.append(("is_goto", None))
         return False
@@ -218,6 +222,8 @@ def test_federation_additional_fanout_methods():
 
     assert 1 in federation.stop_goto_target()
     assert 2 not in federation.stop_goto_target()
+    assert 1 in federation.force_stop_goto()
+    assert 2 not in federation.force_stop_goto()
     assert 1 in federation.is_goto()
     assert 1 in federation.is_goto_completed_ok()
 

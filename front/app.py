@@ -3362,7 +3362,8 @@ class ForceStopGotoResource:
     "goto stopped already: no action taken" and the loop persists.
 
     POST -> calls device.force_stop_goto which always sends the firmware
-    stop AND force-clears the local state dict. Returns the device
+    stop AND force-clears the local state dict. HTMX requests get a small
+    HTML status fragment for the goto page; other clients get the device
     response as JSON.
     """
 
@@ -3370,8 +3371,15 @@ class ForceStopGotoResource:
     def on_post(req, resp, telescope_id=1):
         response = do_action_device("force_stop_goto", telescope_id, {})
         resp.status = falcon.HTTP_200
-        resp.content_type = "application/json"
-        resp.text = json.dumps(response or {"ok": False, "reason": "no response"})
+        if req.get_header("HX-Request"):
+            resp.content_type = "text/html"
+            if response is not None:
+                resp.text = '<span class="text-success">Cleared. Mount free.</span>'
+            else:
+                resp.text = '<span class="text-danger">No response from device.</span>'
+        else:
+            resp.content_type = "application/json"
+            resp.text = json.dumps(response or {"ok": False, "reason": "no response"})
 
 
 class LiveGotoResource(BaseResource):

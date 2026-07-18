@@ -988,8 +988,9 @@ class Seestar:
         ``goto_target()`` consult, so the next goto is accepted
         immediately.
 
-        Returns ``{"ok": True, "stop_slew_result": <firmware reply>}``.
-        Idempotent: safe to call when no goto is in flight.
+        Returns ``{"ok": <bool>, "stop_slew_result": <firmware reply>}``
+        where ``ok`` is False if the firmware stop command could not be
+        sent. Idempotent: safe to call when no goto is in flight.
         """
         # Use the standard stop_slew (iscope_stop_view stage:AutoGoto).
         # An earlier attempt to use iscope_stop_view WITHOUT stage as a
@@ -1009,19 +1010,23 @@ class Seestar:
             self.logger.warning("force_stop_goto: stop_slew raised %s", exc)
         try:
             self.mark_goto_status_as_stopped()
-        except Exception:
-            pass
+        except Exception as exc:
+            self.logger.debug(
+                "force_stop_goto: mark_goto_status_as_stopped raised %s", exc
+            )
         try:
             self.mark_op_state("goto_target", "stopped")
-        except Exception:
-            pass
+        except Exception as exc:
+            self.logger.debug("force_stop_goto: mark_op_state raised %s", exc)
         # If state is somehow still stuck, overwrite the event dict
         # directly so is_goto() returns False.
         if self.is_goto():
             try:
                 self.event_state["AutoGoto"]["state"] = "stopped"
-            except Exception:
-                pass
+            except Exception as exc:
+                self.logger.debug(
+                    "force_stop_goto: clearing AutoGoto state raised %s", exc
+                )
         # Also clear the cached "PlateSolve fail" indicator so the
         # status panel doesn't keep showing stale red after the
         # operator has explicitly unwound the goto. The firmware
@@ -1033,10 +1038,12 @@ class Seestar:
             try:
                 if stale_key in self.event_state:
                     self.event_state[stale_key]["state"] = "stopped"
-            except Exception:
-                pass
+            except Exception as exc:
+                self.logger.debug(
+                    "force_stop_goto: clearing %s state raised %s", stale_key, exc
+                )
         self.logger.info("force_stop_goto: cleared local goto state")
-        return {"ok": True, "stop_slew_result": result}
+        return {"ok": result is not None, "stop_slew_result": result}
 
     def mark_goto_status_as_start(self):
         self.mark_op_state("AutoGoto", "start")

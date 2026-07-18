@@ -112,47 +112,17 @@
         <button type="submit" class="btn btn-primary">Submit</button>
         <button type="button" class="btn btn-warning"
                 id="forceStopGotoBtn"
+                hx-post="/api/{{ telescope.device_num }}/force_stop_goto"
+                hx-params="none"
+                hx-target="#forceStopGotoStatus"
+                hx-swap="innerHTML"
+                hx-disabled-elt="this"
                 title="Unconditionally stop the current goto / AutoGoto loop and force-clear the 'goto in progress' flag. Use if a goto is wedged on plate-solve and new gotos are being rejected with 'mount is in goto routine'.">
             Stop / Unstick Goto
         </button>
         <span id="forceStopGotoStatus" class="text-muted small ms-2"></span>
     </div>
 </form>
-<script>
-  (function () {
-    var btn = document.getElementById("forceStopGotoBtn");
-    var status = document.getElementById("forceStopGotoStatus");
-    if (!btn) return;
-    btn.addEventListener("click", function () {
-      btn.disabled = true;
-      status.textContent = "Stopping...";
-      status.classList.remove("text-success", "text-danger");
-      // Extract telescope id from the form action (".../1/goto").
-      var formAction = document.querySelector('form').getAttribute('action') || '';
-      var m = formAction.match(/\/(\d+)\//);
-      var telescopeId = m ? m[1] : 1;
-      fetch("/api/" + telescopeId + "/force_stop_goto", {method: "POST"})
-        .then(function (r) { return r.json().then(function (j) { return {ok: r.ok, body: j}; }); })
-        .then(function (res) {
-          btn.disabled = false;
-          if (res.ok && res.body && (res.body.Value || res.body.ok)) {
-            status.textContent = "Cleared. Mount free.";
-            status.classList.add("text-success");
-          } else {
-            status.textContent = "Sent (see log).";
-            status.classList.add("text-success");
-          }
-          // Auto-clear the status after a few seconds.
-          setTimeout(function () { status.textContent = ""; }, 4000);
-        })
-        .catch(function (err) {
-          btn.disabled = false;
-          status.textContent = "Error: " + err;
-          status.classList.add("text-danger");
-        });
-    });
-  })();
-</script>
 
 <!-- Modal structure -->
 <div class="modal fade" id="itemModal" tabindex="-1" aria-labelledby="itemModalLabel" aria-hidden="true">
