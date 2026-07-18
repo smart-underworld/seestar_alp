@@ -376,7 +376,9 @@ def test_reconnect_success_and_fail_paths(monkeypatch, seestar):
 _AUTH_TIMEOUT_RESULT = "Error: Exceeded allotted wait time for result"
 
 
-def test_authenticate_timeout_sentinel_returns_false_without_raising(monkeypatch, seestar):
+def test_authenticate_timeout_sentinel_returns_false_without_raising(
+    monkeypatch, seestar
+):
     # A busy scope stalls get_verify_str; send_message_param_sync returns the
     # command dict with result set to the timeout sentinel STRING. The old code
     # did resp.get("result", {}).get("str", "") -> AttributeError on the str.
@@ -392,7 +394,9 @@ def test_authenticate_timeout_sentinel_returns_false_without_raising(monkeypatch
     seestar.s = sentinel_sock
     disconnect_calls = {"n": 0}
     monkeypatch.setattr(
-        seestar, "disconnect", lambda: disconnect_calls.__setitem__("n", disconnect_calls["n"] + 1)
+        seestar,
+        "disconnect",
+        lambda: disconnect_calls.__setitem__("n", disconnect_calls["n"] + 1),
     )
 
     # Returns False cleanly (no AttributeError), leaves the socket alone.
@@ -425,7 +429,9 @@ def test_maybe_authenticate_noop_when_pem_unset(monkeypatch, seestar):
     monkeypatch.setattr(Config, "seestar_interop_pem", "")
     called = {"n": 0}
     monkeypatch.setattr(
-        seestar, "authenticate", lambda: called.__setitem__("n", called["n"] + 1) or True
+        seestar,
+        "authenticate",
+        lambda: called.__setitem__("n", called["n"] + 1) or True,
     )
     seestar._maybe_authenticate()
     assert called["n"] == 0
@@ -449,7 +455,9 @@ def test_maybe_authenticate_retries_until_scope_idle(monkeypatch, seestar):
     monkeypatch.setattr(seestar, "authenticate", fake_authenticate)
     disconnect_calls = {"n": 0}
     monkeypatch.setattr(
-        seestar, "disconnect", lambda: disconnect_calls.__setitem__("n", disconnect_calls["n"] + 1)
+        seestar,
+        "disconnect",
+        lambda: disconnect_calls.__setitem__("n", disconnect_calls["n"] + 1),
     )
 
     # Attempt #1: busy -> stays unauthenticated, socket untouched.
@@ -487,7 +495,9 @@ def test_reconnect_does_not_authenticate_or_drop_socket(monkeypatch, seestar):
 
     auth_calls = {"n": 0}
     monkeypatch.setattr(
-        seestar, "authenticate", lambda: auth_calls.__setitem__("n", auth_calls["n"] + 1) or False
+        seestar,
+        "authenticate",
+        lambda: auth_calls.__setitem__("n", auth_calls["n"] + 1) or False,
     )
 
     class Sock:
