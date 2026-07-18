@@ -1,4 +1,5 @@
 import collections
+import json
 import socket
 from types import SimpleNamespace
 
@@ -1982,9 +1983,6 @@ class _AuthFakeSocket:
     """
 
     def __init__(self, replies, pre_events=None):
-        import json
-
-        self._json = json
         self._replies = list(replies)
         self._pre_events = list(pre_events or [])
         self._outbox = b""
@@ -2000,7 +1998,7 @@ class _AuthFakeSocket:
     def sendall(self, payload):
         self.sent.append(payload)
         try:
-            req = self._json.loads(payload.decode("utf-8").strip())
+            req = json.loads(payload.decode("utf-8").strip())
         except Exception:
             req = {}
         if not self._replies:
@@ -2010,8 +2008,8 @@ class _AuthFakeSocket:
         chunk = b""
         if self._pre_events:
             ev = self._pre_events.pop(0)
-            chunk += (self._json.dumps(ev) + "\r\n").encode("utf-8")
-        chunk += (self._json.dumps(reply) + "\r\n").encode("utf-8")
+            chunk += (json.dumps(ev) + "\r\n").encode("utf-8")
+        chunk += (json.dumps(reply) + "\r\n").encode("utf-8")
         self._outbox += chunk
 
     def recv(self, _n):
@@ -2030,6 +2028,7 @@ def test_authenticate_succeeds_without_receive_thread(monkeypatch, seestar):
     off the socket rather than waiting on response_dict (which only the
     receive thread populates).  Previously it used send_message_param_sync and
     always timed out, failing with "'str' object has no attribute 'get'"."""
+
     # Guard: if auth ever routes through the async path again, fail loudly.
     def _boom(_payload):
         raise AssertionError("authenticate must not use send_message_param_sync")
@@ -2046,15 +2045,11 @@ def test_authenticate_succeeds_without_receive_thread(monkeypatch, seestar):
     )
 
     assert seestar.authenticate() is True
-    methods = [
-        __import__("json").loads(p.decode())["method"] for p in seestar.s.sent
-    ]
+    methods = [json.loads(p.decode())["method"] for p in seestar.s.sent]
     assert methods == ["get_verify_str", "verify_client", "pi_is_verified"]
 
 
-def test_authenticate_preserves_events_streamed_during_handshake(
-    monkeypatch, seestar
-):
+def test_authenticate_preserves_events_streamed_during_handshake(monkeypatch, seestar):
     """Events pushed by the device during the handshake must be handed to the
     receive thread (via _auth_leftover), not silently dropped."""
     monkeypatch.setattr(seestar, "_sign_challenge", lambda _c: "SIGNATURE")
@@ -2070,3 +2065,61 @@ def test_authenticate_preserves_events_streamed_during_handshake(
 
     assert seestar.authenticate() is True
     assert "PiStatus" in seestar._auth_leftover
+
+    # The buffered event must actually be processed once the receive thread
+    # starts: run one iteration of receive_message_thread_fn and verify the
+    # event reaches event_state/event_queue.
+    def fake_get_socket_msg():
+        seestar.is_watch_events = False  # stop after this iteration
+        # A later chunk from the device; triggers draining of the leftover.
+        return json.dumps({"Event": "Later"}) + "\r\n"
+
+    monkeypatch.setattr(seestar, "get_socket_msg", fake_get_socket_msg)
+    seestar.is_watch_events = True
+    seestar.receive_message_thread_fn()
+
+    assert seestar._auth_leftover == ""
+    assert seestar.event_state.get("PiStatus", {}).get("temp") == 42
+    assert "Later" in seestar.event_state
+
+
+def test_auth_rpc_sync_accepts_reply_from_response_dict(seestar):
+    """Mid-session re-auth: reconnect() can also run while the receive thread
+    is alive (heartbeat thread, send_message error-recovery path).  If the
+    receive thread consumes the handshake reply into response_dict before
+    _auth_rpc_sync reads it off the socket, the reply must be accepted from
+    there instead of timing out."""
+    seestar.s = _AuthFakeSocket(replies=[])  # socket never yields the reply
+
+    stolen = {
+        "jsonrpc": "2.0",
+        "method": "get_verify_str",
+        "result": {"str": "CHALLENGE"},
+        "code": 0,
+        "id": seestar.cmdid,
+    }
+    seestar.response_dict[seestar.cmdid] = stolen
+
+    assert seestar._auth_rpc_sync("get_verify_str") is stolen
+
+
+def test_authenticate_discards_stale_leftover_from_previous_connection(
+    monkeypatch, seestar
+):
+    """authenticate() only runs right after a fresh socket is created, so
+    leftover bytes from a previous connection (stranded by a mid-session
+    re-auth) are stale and must not be replayed into the new stream."""
+    monkeypatch.setattr(seestar, "_sign_challenge", lambda _c: "SIGNATURE")
+    seestar._auth_leftover = '{"Event": "Stale"}\r\n{"partial'
+
+    seestar.s = _AuthFakeSocket(
+        replies=[
+            {"method": "get_verify_str", "result": {"str": "CHALLENGE"}, "code": 0},
+            {"method": "verify_client", "result": 0, "code": 0},
+            {"method": "pi_is_verified", "result": True, "code": 0},
+        ]
+    )
+
+    assert seestar.authenticate() is True
+    assert "Stale" not in seestar._auth_leftover
+    assert "partial" not in seestar._auth_leftover

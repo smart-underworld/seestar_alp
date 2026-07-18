@@ -115,6 +115,9 @@ class Seestar:
         self.is_connected: bool = False
         # PEM key bytes (lazy loaded)
         self._interop_pem: Optional[bytes] = None
+        # Socket bytes read during the inline auth handshake, preserved for
+        # the receive_message_thread to process once it starts.
+        self._auth_leftover: str = ""
         self.is_slewing: bool = False
         self.target_dec: float = 0
         self.target_ra: float = 0
@@ -223,17 +226,25 @@ class Seestar:
         msg = {"id": cur_cmdid, "method": method}
         if params is not None:
             msg["params"] = params
-        self.send_message(json.dumps(msg) + "\r\n")
+        if not self.send_message(json.dumps(msg) + "\r\n"):
+            return None
 
         prev_timeout = self.s.gettimeout() if self.s else None
-        deadline = time.time() + timeout
+        deadline = time.monotonic() + timeout
         buf = self._auth_leftover  # unprocessed bytes (may hold a partial line)
         carry = ""  # complete, non-matching lines to hand back to the reader
         self._auth_leftover = ""
         try:
             if self.s:
                 self.s.settimeout(1.0)
-            while time.time() < deadline:
+            while time.monotonic() < deadline:
+                # During a mid-session re-auth (e.g. reconnect from the
+                # heartbeat thread) the receive thread is already running and
+                # may consume our reply into response_dict before we can read
+                # it off the socket.  Accept it from either place.
+                if cur_cmdid in self.response_dict:
+                    self._auth_leftover = carry + buf
+                    return self.response_dict[cur_cmdid]
                 while "\r\n" in buf:
                     line, buf = buf.split("\r\n", 1)
                     parsed = None
@@ -271,7 +282,10 @@ class Seestar:
         """
         # Buffer used to carry socket bytes read during the handshake over to
         # the receive_message_thread (started after reconnect() returns).
-        self._auth_leftover = getattr(self, "_auth_leftover", "")
+        # authenticate() only runs right after a fresh socket was created, so
+        # any leftover from a previous connection is stale — discard it rather
+        # than replaying possibly-partial old-session bytes into the new stream.
+        self._auth_leftover = ""
         try:
             self.logger.info("Requesting authentication challenge (get_verify_str)")
             resp = self._auth_rpc_sync("get_verify_str")
@@ -543,7 +557,7 @@ class Seestar:
         # Pick up any bytes read during inline authentication (the handshake
         # runs before this thread starts), so events streamed during auth
         # aren't lost.
-        msg_remainder = getattr(self, "_auth_leftover", "")
+        msg_remainder = self._auth_leftover
         self._auth_leftover = ""
         while self.is_watch_events:
             threading.current_thread().last_run = datetime.now()
