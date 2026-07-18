@@ -343,6 +343,9 @@ def test_socket_force_close_and_disconnect(seestar):
 def test_reconnect_success_and_fail_paths(monkeypatch, seestar):
     monkeypatch.setattr(seestar, "send_udp_intro", lambda: None)
     monkeypatch.setattr(seestar, "disconnect", lambda: None)
+    # Isolate from the developer's local config.toml: if interop_pem is set
+    # there, reconnect() would enter the auth handshake path.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
 
     class Sock:
         def __init__(self):

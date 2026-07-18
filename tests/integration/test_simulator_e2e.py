@@ -706,6 +706,11 @@ def two_device_federation(monkeypatch, two_simulator_servers):
     logger = logging.getLogger("federation-fixture")
     set_shr_logger(logger)
 
+    # Isolate from the developer's local config.toml: if interop_pem is set
+    # there, reconnect() would attempt the auth handshake against the
+    # simulator, which does not implement it, and the devices never connect.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
+
     # Clean slate for the telescope module's global device registry
     tel_module.seestar_dev.clear()
     tel_module.start_seestar_federation(logger)
