@@ -2126,3 +2126,41 @@ def test_authenticate_discards_stale_leftover_from_previous_connection(
     assert seestar.authenticate() is True
     assert "Stale" not in seestar._auth_leftover
     assert "partial" not in seestar._auth_leftover
+
+
+def test_reconnect_without_interop_pem_never_attempts_auth(monkeypatch, seestar):
+    """Auth is strictly opt-in via the interop_pem config: without it,
+    reconnect() must succeed without ever entering the handshake — older
+    firmware has none of these codepaths."""
+    monkeypatch.setattr(seestar, "send_udp_intro", lambda: None)
+    monkeypatch.setattr(seestar, "disconnect", lambda: None)
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("auth must not run when interop_pem is not configured")
+
+    monkeypatch.setattr(seestar, "authenticate", _boom)
+    monkeypatch.setattr(seestar, "_auth_rpc_sync", _boom)
+
+    class Sock:
+        def settimeout(self, _v):
+            return None
+
+        def connect(self, _addr):
+            return None
+
+    monkeypatch.setattr("device.seestar_device.socket.socket", lambda *_args: Sock())
+    seestar.is_connected = False
+    assert seestar.reconnect() is True
+
+
+def test_authenticate_fails_gracefully_on_old_firmware_error_reply(seestar):
+    """If interop_pem is configured but the firmware predates the handshake,
+    the device answers get_verify_str with an error reply (no challenge in
+    result).  authenticate() must return False promptly without raising."""
+    seestar.s = _AuthFakeSocket(
+        replies=[{"method": "get_verify_str", "code": 102, "error": "unknown method"}]
+    )
+
+    assert seestar.authenticate() is False
+    assert len(seestar.s.sent) == 1  # gave up after the challenge request
