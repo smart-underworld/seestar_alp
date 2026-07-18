@@ -1,6 +1,7 @@
 import collections
 import json
 import socket
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -373,6 +374,190 @@ def test_reconnect_success_and_fail_paths(monkeypatch, seestar):
     seestar.is_connected = False
     monkeypatch.setattr("device.seestar_device.socket.socket", lambda *_args: BadSock())
     assert seestar.reconnect() is False
+
+
+def test_authenticate_timeout_returns_false_without_raising(monkeypatch, seestar):
+    # A busy scope (mid-imaging) stalls get_verify_str; _auth_rpc_sync times
+    # out and returns None. authenticate() must return False cleanly (retry
+    # later) and must never touch the socket.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem")
+    monkeypatch.setattr(seestar, "_auth_rpc_sync", lambda *_a, **_kw: None)
+
+    # Guard: the socket must NOT be touched on an auth timeout.
+    sentinel_sock = object()
+    seestar.s = sentinel_sock
+    disconnect_calls = {"n": 0}
+    monkeypatch.setattr(
+        seestar,
+        "disconnect",
+        lambda: disconnect_calls.__setitem__("n", disconnect_calls["n"] + 1),
+    )
+
+    assert seestar.authenticate() is False
+    assert disconnect_calls["n"] == 0
+    assert seestar.s is sentinel_sock
+
+
+def test_maybe_authenticate_noop_when_pem_unset(monkeypatch, seestar):
+    monkeypatch.setattr(Config, "seestar_interop_pem", "")
+    called = {"n": 0}
+    monkeypatch.setattr(
+        seestar,
+        "authenticate",
+        lambda: called.__setitem__("n", called["n"] + 1) or True,
+    )
+    seestar._maybe_authenticate()
+    assert called["n"] == 0
+    assert seestar.is_authenticated is False
+
+
+def test_maybe_authenticate_retries_until_scope_idle(monkeypatch, seestar):
+    # Auth is configured; first attempt times out (scope busy), a later attempt
+    # succeeds (scope idle). The socket must never be dropped in between.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem")
+
+    clock = {"t": 1000.0}
+    monkeypatch.setattr("device.seestar_device.time.time", lambda: clock["t"])
+
+    attempts = {"n": 0}
+
+    def fake_authenticate():
+        attempts["n"] += 1
+        return attempts["n"] >= 2  # busy first, idle second
+
+    monkeypatch.setattr(seestar, "authenticate", fake_authenticate)
+    disconnect_calls = {"n": 0}
+    monkeypatch.setattr(
+        seestar,
+        "disconnect",
+        lambda: disconnect_calls.__setitem__("n", disconnect_calls["n"] + 1),
+    )
+
+    # Attempt #1: busy -> stays unauthenticated, socket untouched.
+    seestar._maybe_authenticate()
+    assert attempts["n"] == 1
+    assert seestar.is_authenticated is False
+
+    # Immediate re-call is throttled (< _AUTH_RETRY_INTERVAL_S later): no attempt.
+    clock["t"] += 5
+    seestar._maybe_authenticate()
+    assert attempts["n"] == 1
+
+    # After the retry interval, attempt #2 succeeds.
+    clock["t"] += seestar._AUTH_RETRY_INTERVAL_S
+    seestar._maybe_authenticate()
+    assert attempts["n"] == 2
+    assert seestar.is_authenticated is True
+
+    # Once authenticated it short-circuits (no further attempts).
+    clock["t"] += 100
+    seestar._maybe_authenticate()
+    assert attempts["n"] == 2
+
+    # Never disconnected the socket across the whole retry sequence.
+    assert disconnect_calls["n"] == 0
+
+
+def test_reconnect_auth_failure_is_non_fatal(monkeypatch, seestar):
+    # Regression: connect must stay up regardless of auth. With auth configured,
+    # reconnect() attempts the handshake inline (so a fresh connection is
+    # authenticated before start_watch_thread sends commands), but a failure
+    # must NOT close the socket — it throttles the heartbeat retry instead.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem")
+    monkeypatch.setattr(seestar, "send_udp_intro", lambda: None)
+    monkeypatch.setattr(seestar, "disconnect", lambda: None)
+
+    auth_calls = {"n": 0}
+    monkeypatch.setattr(
+        seestar,
+        "authenticate",
+        lambda: auth_calls.__setitem__("n", auth_calls["n"] + 1) or False,
+    )
+
+    class Sock:
+        def settimeout(self, _v):
+            return None
+
+        def connect(self, _addr):
+            return None
+
+    monkeypatch.setattr("device.seestar_device.socket.socket", lambda *_a: Sock())
+    seestar.is_connected = False
+    seestar._last_auth_attempt = 0.0
+
+    before = time.time()
+    assert seestar.reconnect() is True  # auth failed, connection stays up
+    assert seestar.is_connected is True
+    assert auth_calls["n"] == 1
+    assert seestar.is_authenticated is False
+    # Failed inline attempt throttles the heartbeat retry (scope is busy).
+    assert seestar._last_auth_attempt >= before
+
+
+def test_reconnect_auth_success_marks_authenticated(monkeypatch, seestar):
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem")
+    monkeypatch.setattr(seestar, "send_udp_intro", lambda: None)
+    monkeypatch.setattr(seestar, "authenticate", lambda: True)
+
+    class Sock:
+        def settimeout(self, _v):
+            return None
+
+        def connect(self, _addr):
+            return None
+
+    monkeypatch.setattr("device.seestar_device.socket.socket", lambda *_a: Sock())
+    seestar.is_connected = False
+
+    assert seestar.reconnect() is True
+    assert seestar.is_authenticated is True
+
+    # Auth state is per-connection: disconnect() must reset it.
+    seestar.disconnect()
+    assert seestar.is_authenticated is False
+
+
+def test_auth_rpc_sync_never_reads_socket_while_receive_thread_alive(seestar):
+    # With the receive thread draining the socket, a raw recv() here would race
+    # it (bytes split arbitrarily between the two readers, events stranded in
+    # _auth_leftover). _auth_rpc_sync must instead wait on response_dict, which
+    # the receive thread populates.
+    class NoRecvSock:
+        def __init__(self):
+            self.sent = []
+
+        def sendall(self, payload):
+            self.sent.append(payload)
+
+        def gettimeout(self):
+            raise AssertionError("must not touch the socket while rx thread runs")
+
+        def settimeout(self, _t):
+            raise AssertionError("must not touch the socket while rx thread runs")
+
+        def recv(self, _n):
+            raise AssertionError("raw recv would race the receive thread")
+
+    seestar.s = NoRecvSock()
+
+    class AliveThread:
+        def is_alive(self):
+            return True
+
+    seestar.get_msg_thread = AliveThread()
+
+    # Reply delivered by the receive thread into response_dict.
+    reply = {
+        "jsonrpc": "2.0",
+        "method": "get_verify_str",
+        "result": {"str": "CHALLENGE"},
+        "id": seestar.cmdid,
+    }
+    seestar.response_dict[seestar.cmdid] = reply
+    assert seestar._auth_rpc_sync("get_verify_str") is reply
+
+    # No reply arriving: times out and returns None, still no socket reads.
+    assert seestar._auth_rpc_sync("get_verify_str", timeout=0.25) is None
 
 
 def test_get_socket_msg_paths(monkeypatch, seestar):
@@ -911,6 +1096,9 @@ def test_udp_intro_and_heartbeat_helpers(monkeypatch, seestar):
 
 
 def test_heartbeat_thread_and_plate_solve(monkeypatch, seestar):
+    # Isolate from the developer's local config.toml: if interop_pem is set
+    # there, the heartbeat loop's _maybe_authenticate() would attempt real auth.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
     seestar.is_watch_events = True
     seestar.is_connected = False
     reconnect_calls = {"n": 0}
