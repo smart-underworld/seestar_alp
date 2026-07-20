@@ -54,9 +54,13 @@ def divide_into_blocks(image, block_size):
 # Function to calculate SNR for each color channel
 def calculate_snr_auto(image, block_size=(120, 120)):
     # Normalize the image data for each channel (R, G, B)
-    image = (image - np.min(image, axis=(0, 1))) / (
-        np.max(image, axis=(0, 1)) - np.min(image, axis=(0, 1))
-    )
+    channel_min = np.min(image, axis=(0, 1))
+    channel_range = np.max(image, axis=(0, 1)) - channel_min
+    with np.errstate(invalid="ignore", divide="ignore"):
+        normalized = (image - channel_min) / channel_range
+    # A flat channel (max == min, e.g. a blank frame) has zero range;
+    # there's no signal to normalize, so treat it as all-zero.
+    image = np.where(channel_range == 0, 0.0, normalized)
     # Divide the image into blocks and calculate block means for each channel
     blocks, block_means = divide_into_blocks(image, block_size)
 
@@ -79,5 +83,9 @@ def calculate_snr_auto(image, block_size=(120, 120)):
     )  # Std dev of each channel in the background block
 
     # Calculate the ratio
-    snr = signal_means / background_stds
+    with np.errstate(invalid="ignore", divide="ignore"):
+        snr = signal_means / background_stds
+    # A perfectly flat background block (e.g. from a blank frame) has zero
+    # std, making the ratio undefined; treat it as no measurable signal.
+    snr = np.where(background_stds == 0, 0.0, snr)
     return np.sqrt(np.mean(snr**2))

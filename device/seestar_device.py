@@ -2995,7 +2995,7 @@ class Seestar:
                             + b"\n\n"
                         )
 
-                print(f"Event: {event_name}: {event}")
+                self.logger.debug(f"Event: {event_name}: {event}")
 
                 yield frame
             except GeneratorExit:
