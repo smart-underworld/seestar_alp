@@ -696,6 +696,12 @@ class Seestar:
                         # {'Event': 'EqModePA', 'Timestamp': '740.411562378', 'state': 'working', 'lapse_ms': 0, 'route': []}
                         # {'Event': 'EqModePA', 'Timestamp': '6359.231750447', 'state': 'fail', 'error': 'fail to operate', 'code': 207, 'lapse_ms': 80471, 'route': []}
                         # {'Event': 'EqModePA', 'Timestamp': '876.787472028', 'state': 'complete', 'lapse_ms': 80653, 'total': 2.256415, 'x': -1.041047, 'y': -2.001906, 'route': []}
+                        # Firmware sends a SECOND "complete" event after the
+                        # gyro-assist follow-up phase that carries no x/y at
+                        # all, e.g. {'Event': 'EqModePA', 'state': 'complete',
+                        # 'lapse_ms': 22437, 'route': []} - keep the
+                        # previously measured pa_error in that case instead
+                        # of crashing or clobbering it.
 
                         if event_name == "EqModePA" and "state" in parsed_data:
                             if parsed_data["state"] == "working":
@@ -705,8 +711,9 @@ class Seestar:
                                 self.cur_pa_error_x = None
                                 self.cur_pa_error_y = None
                             elif parsed_data["state"] == "complete":
-                                self.cur_pa_error_x = parsed_data["x"]
-                                self.cur_pa_error_y = parsed_data["y"]
+                                if "x" in parsed_data and "y" in parsed_data:
+                                    self.cur_pa_error_x = parsed_data["x"]
+                                    self.cur_pa_error_y = parsed_data["y"]
                         elif (
                             event_name == "Simu_Stack"
                         ):  # The stack event is normally received in the imaging code, but the simulator will send them here
@@ -2988,7 +2995,7 @@ class Seestar:
                             + b"\n\n"
                         )
 
-                print(f"Event: {event_name}: {event}")
+                self.logger.debug(f"Event: {event_name}: {event}")
 
                 yield frame
             except GeneratorExit:

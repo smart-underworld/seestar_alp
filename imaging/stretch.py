@@ -122,8 +122,13 @@ def calculate_mtf_stretch_parameters_for_channel(stretch_params, channel):
     channel = channel.flatten()[::4]
 
     indx_clip = np.logical_and(channel < 1.0, channel > 0.0)
-    median = np.median(channel[indx_clip])
-    mad = np.median(np.abs(channel[indx_clip] - median))
+    # A fully flat/blank/saturated channel has no pixels strictly inside
+    # (0, 1), leaving indx_clip empty. Fall back to the full channel so
+    # np.median doesn't operate on an empty slice (which yields NaN and
+    # poisons the downstream midtone calculation).
+    unclipped = channel[indx_clip] if np.any(indx_clip) else channel
+    median = np.median(unclipped)
+    mad = np.median(np.abs(unclipped - median))
 
     shadow_clipping = np.clip(median - stretch_params.sigma * mad, 0, 1.0)
     highlight_clipping = 1.0
@@ -165,8 +170,15 @@ def stretch_channel(shm_name, c, mtf_stretch_params, shape, dtype):
 
 def MTF(data, midtone):
     if type(data) is np.ndarray:
-        data[:] = (midtone - 1) * data[:] / ((2 * midtone - 1) * data[:] - midtone)
+        denom = (2 * midtone - 1) * data[:] - midtone
+        with np.errstate(invalid="ignore", divide="ignore"):
+            stretched = (midtone - 1) * data[:] / denom
+        # denom is 0 at the curve's indeterminate point (e.g. midtone == 0
+        # with data == 0, from a fully blank channel); the limiting value
+        # there is 0, matching the curve's behavior at the black point.
+        data[:] = np.where(denom == 0, 0.0, stretched)
     else:
-        data = (midtone - 1) * data / ((2 * midtone - 1) * data - midtone)
+        denom = (2 * midtone - 1) * data - midtone
+        data = 0.0 if denom == 0 else (midtone - 1) * data / denom
 
     return data
