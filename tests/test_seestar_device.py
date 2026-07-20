@@ -776,6 +776,38 @@ def test_receive_message_thread_updates_state_and_callbacks(monkeypatch, seestar
     assert "EqModePA" in fired
 
 
+def test_receive_message_thread_handles_second_eqmodepa_complete_without_xy(
+    monkeypatch, seestar
+):
+    # Real firmware (v3.1.2/7.32, captured against the sandbox) sends TWO
+    # "EqModePA"/"complete" events per 3PPA run: the first (from
+    # ThreePointPaFunc) carries the measured x/y pa_error; a second one
+    # (pushed after GyroPaFunc finishes) is a bare wrap-up notification with
+    # no x/y at all:
+    #   {"Event":"EqModePA","state":"complete","lapse_ms":22437,
+    #    "total":0.162165,"x":-0.073424,"y":-0.144590,"route":[]}
+    #   {"Event":"EqModePA","state":"complete","lapse_ms":22437,"route":[]}
+    seestar.is_watch_events = True
+
+    messages = (
+        '{"Event":"EqModePA","state":"complete","lapse_ms":22437,'
+        '"total":0.162165,"x":-0.073424,"y":-0.144590,"route":[]}\r\n'
+        '{"Event":"EqModePA","state":"complete","lapse_ms":22437,"route":[]}\r\n'
+    )
+    monkeypatch.setattr(seestar, "get_socket_msg", lambda: messages)
+
+    def fake_sleep(_s):
+        seestar.is_watch_events = False
+
+    monkeypatch.setattr("device.seestar_device.time.sleep", fake_sleep)
+    monkeypatch.setattr("device.seestar_device.Config.log_events_in_info", False)
+
+    seestar.receive_message_thread_fn()
+
+    assert seestar.cur_pa_error_x == -0.073424
+    assert seestar.cur_pa_error_y == -0.144590
+
+
 def test_start_stack_and_stop_plate_and_last_image(monkeypatch, seestar):
     monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
 
