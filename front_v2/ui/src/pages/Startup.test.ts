@@ -125,6 +125,22 @@ describe("Startup — event grid", () => {
     });
   });
 
+  it("shows 3PPA firmware sub-states (delay/calc) as text and lights the tile up as progress, not idle", async () => {
+    // Regression: real firmware cycles PolarAlign through internal states
+    // like "delay1"/"delay2"/"calc3" (and PlateSolve through "solving")
+    // while it works the 3 points — none of those literal strings were in
+    // stateClass()'s enumerated "progress" list, so the tile fell through
+    // to state-idle and looked inert even though the label text was correct.
+    mockEvents
+      .mockResolvedValueOnce({ "3PPA": { state: "calc3" } })
+      .mockReturnValue(HANG);
+    render(Startup);
+    await waitFor(() => expect(screen.getByText("calc3")).toBeInTheDocument());
+    const tile = screen.getByText("calc3").closest(".event-tile");
+    expect(tile).toHaveClass("state-progress");
+    expect(tile).not.toHaveClass("state-idle");
+  });
+
   it("shows 3PPA alt/az offset errors", async () => {
     mockEvents
       .mockResolvedValueOnce({ "3PPA": { state: "in progress", eq_offset_alt: 0.123, eq_offset_az: -0.456 } })

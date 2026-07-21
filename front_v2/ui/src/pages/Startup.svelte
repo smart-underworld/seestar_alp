@@ -133,10 +133,15 @@
 
   function stateClass(ev: EventState | undefined): string {
     if (!ev?.state || ev.state === "idle") return "state-idle";
-    if (ev.state === "in progress" || ev.state === "working" || ev.state === "start") return "state-progress";
-    if (ev.state === "complete")           return "state-complete";
+    if (ev.state === "complete") return "state-complete";
     if (ev.state === "fail" || ev.state === "cancel") return "state-fail";
-    return "state-idle";
+    // Anything else present is an active sub-state — 3PPA in particular
+    // cycles through firmware-internal values like "delay1"/"delay2"/"calc3"
+    // (and PlateSolve through "solving") that aren't literally "in progress"/
+    // "working"/"start". Treat any non-terminal, non-idle state as progress
+    // rather than enumerating every sub-state literal, so the tile visibly
+    // lights up instead of looking identical to an untouched Idle tile.
+    return "state-progress";
   }
 
   function stateLabel(ev: EventState | undefined): string {

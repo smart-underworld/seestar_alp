@@ -60,6 +60,22 @@ describe("EventStatusPanel", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
   });
 
+  it("treats unrecognized firmware sub-states (e.g. 3PPA delay/calc) as progress, not idle", async () => {
+    // Regression: stateClass()'s switch only recognized the literal
+    // "in progress", so real firmware sub-states like "delay1"/"calc3"
+    // (3PPA) or "solving" (PlateSolve) fell to the "card-idle" default —
+    // visually indistinguishable from a tile with no data at all.
+    const result: Record<string, EventState> = {
+      "3PPA": { state: "calc3" },
+    };
+    mockEvents.mockResolvedValue(result);
+    render(EventStatusPanel, { events: ["3PPA"] });
+    await waitFor(() => expect(screen.getByText("calc3")).toBeInTheDocument());
+    const card = screen.getByText("calc3").closest(".event-card");
+    expect(card).toHaveClass("card-progress");
+    expect(card).not.toHaveClass("card-idle");
+  });
+
   it("groups results by DeviceID when present", async () => {
     const result: Record<string, unknown> = {
       WheelMove: { state: "complete", position: 2, DeviceID: "device-A" },

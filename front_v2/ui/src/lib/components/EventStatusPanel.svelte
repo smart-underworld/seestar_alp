@@ -15,16 +15,21 @@
   };
 
   function stateClass(ev: EventState | undefined): string {
-    if (!ev) return "card-idle";
+    if (!ev?.state || ev.state === "idle") return "card-idle";
     switch (ev.state) {
       case "complete":
         return "card-success";
       case "fail":
+      case "cancel":
         return "card-fail";
-      case "in progress":
-        return "card-progress";
       default:
-        return "card-idle";
+        // Any other present state is an active sub-state — 3PPA in
+        // particular cycles through firmware-internal values like
+        // "delay1"/"delay2"/"calc3" (and PlateSolve through "solving")
+        // that aren't literally "in progress". Treat any non-terminal,
+        // non-idle state as progress so the tile visibly lights up
+        // instead of looking identical to an untouched Idle tile.
+        return "card-progress";
     }
   }
 
