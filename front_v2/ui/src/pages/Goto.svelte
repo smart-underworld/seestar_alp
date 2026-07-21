@@ -63,8 +63,17 @@
     status = "";
     slewing = true;
     try {
-      await api.devices.goto($activeDevNum, ra, dec, targetName);
-      status = "GoTo command sent — telescope is slewing.";
+      const result = await api.devices.goto($activeDevNum, ra, dec, targetName);
+      // A 200 response only means the HTTP round-trip succeeded — the
+      // device layer's goto_target() rejects with Value:false (no
+      // exception) when a goto is already in progress, so without this
+      // check the UI claimed success while the AutoGoto tile never
+      // actually started, just sitting on "Starting" with no explanation.
+      if (result.Value === false) {
+        error = result.ErrorMessage || "GoTo rejected — a goto may already be in progress. Try Stop Goto first.";
+      } else {
+        status = "GoTo command sent — telescope is slewing.";
+      }
     } catch (e) {
       error = String(e);
     } finally {

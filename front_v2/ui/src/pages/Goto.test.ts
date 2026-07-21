@@ -162,6 +162,26 @@ describe("Goto — submit", () => {
       expect(screen.getByText(/slew failed/)).toBeInTheDocument(),
     );
   });
+
+  it("shows a rejection error instead of a false success message when the device rejects the goto", async () => {
+    // Regression: goto_target() on the device layer rejects with
+    // Value:false (no thrown error, no error text) when a goto is
+    // already in progress — the route passes that straight through as
+    // HTTP 200, so the UI used to unconditionally show "telescope is
+    // slewing" while the AutoGoto tile just sat frozen on "Starting"
+    // with no explanation.
+    mockGoto.mockResolvedValue({ Value: false, ErrorNumber: 0, ErrorMessage: "" });
+    render(Goto);
+    const ra = screen.getByLabelText("Right Ascension (J2000)") as HTMLInputElement;
+    const dec = screen.getByLabelText("Declination (J2000)") as HTMLInputElement;
+    ra.value = "10h"; dec.value = "-5deg";
+    ra.dispatchEvent(new Event("input")); dec.dispatchEvent(new Event("input"));
+    screen.getByRole("button", { name: /GoTo/ }).click();
+    await waitFor(() =>
+      expect(screen.getByText(/GoTo rejected/i)).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/telescope is slewing/i)).not.toBeInTheDocument();
+  });
 });
 
 describe("Goto — object search", () => {

@@ -122,6 +122,17 @@ export interface MosaicRequest {
   max_devices?: number;
 }
 
+// Raw Alpaca action envelope — do_action() in the Python device layer
+// always returns this shape verbatim, and several v2 routes (goto,
+// startup, force-stop) pass it straight through unwrapped. `Value` is
+// only the ACTUAL result of the requested action; a 200 response here
+// does not mean the action itself succeeded.
+export interface AlpacaActionResult<T> {
+  Value: T;
+  ErrorNumber: number;
+  ErrorMessage: string;
+}
+
 export interface EventState {
   state?: string;
   error?: string;
@@ -148,7 +159,7 @@ export const api = {
     startup: (devNum: number, params: Record<string, unknown>) =>
       post(`/api/v1/devices/${devNum}/startup`, params),
     goto: (devNum: number, ra: string, dec: string, targetName = "", isJ2000 = true) =>
-      post(`/api/v1/devices/${devNum}/goto`, { ra, dec, target_name: targetName, is_j2000: isJ2000 }),
+      post<AlpacaActionResult<boolean>>(`/api/v1/devices/${devNum}/goto`, { ra, dec, target_name: targetName, is_j2000: isJ2000 }),
     forceStopGoto: (devNum: number) =>
       post<{ ok?: boolean; reason?: string }>(`/api/v1/devices/${devNum}/goto/force-stop`),
     image: {
