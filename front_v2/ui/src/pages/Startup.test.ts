@@ -341,6 +341,46 @@ describe("Startup — start action", () => {
     expect(call).not.toHaveProperty("lat");
     expect(call).not.toHaveProperty("lon");
   });
+
+  it("keeps the Run button disabled after the start POST resolves, before isRunning is confirmed", async () => {
+    // Regression: the button used to re-enable itself as soon as the POST
+    // resolved (a couple seconds), well before the next status poll (up to
+    // 15s later) noticed the sequence was actually running — a window where
+    // a second click was possible.
+    mockStartup.mockResolvedValueOnce({});
+    render(Startup);
+    const btn = screen.getByRole("button", { name: /Run Startup Sequence/ });
+    btn.click();
+    await waitFor(() => expect(mockStartup).toHaveBeenCalled());
+    expect(btn).toBeDisabled();
+    expect(screen.getByText("Starting…")).toBeInTheDocument();
+  });
+
+  it("shows Running… and stays disabled once isRunning is confirmed, then re-enables once the sequence completes", async () => {
+    mockStartup.mockResolvedValueOnce({});
+    render(Startup);
+    const btn = screen.getByRole("button", { name: /Run Startup Sequence/ });
+    btn.click();
+    await waitFor(() => expect(btn).toBeDisabled());
+
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, schedule_state: "working" });
+    await waitFor(() => expect(screen.getByText("Running…")).toBeInTheDocument());
+    expect(btn).toBeDisabled();
+
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, schedule_state: "complete" });
+    await waitFor(() => expect(btn).not.toBeDisabled());
+  });
+
+  it("hands off to isRunning as soon as the faster local events poll sees Scheduler working", async () => {
+    // events.Scheduler is polled every 1-3s by this component itself —
+    // much faster than the 15s activeDeviceStatus poll — so it should be
+    // able to confirm isRunning well before that slower poll would.
+    mockStartup.mockResolvedValueOnce({});
+    mockEvents.mockResolvedValueOnce({ Scheduler: { state: "working" } }).mockReturnValue(HANG);
+    render(Startup);
+    screen.getByRole("button", { name: /Run Startup Sequence/ }).click();
+    await waitFor(() => expect(screen.getByText("Running…")).toBeInTheDocument());
+  });
 });
 
 // ── Stop action ───────────────────────────────────────────────────────────────
@@ -365,7 +405,10 @@ describe("Startup — stop action", () => {
   it("disables Run button while schedule is running", () => {
     mockActiveDeviceStatus.set({ ...BASE_STATUS, schedule_state: "running" });
     render(Startup);
-    expect(screen.getByRole("button", { name: /Run Startup Sequence/ })).toBeDisabled();
+    // Label switches to "Running…" while isRunning is true (see the
+    // start-action describe block below), so it's no longer queryable by
+    // its idle "Run Startup Sequence" name.
+    expect(screen.getByRole("button", { name: /Running/ })).toBeDisabled();
   });
 
   it("calls schedule.setState stop when Stop is clicked", async () => {

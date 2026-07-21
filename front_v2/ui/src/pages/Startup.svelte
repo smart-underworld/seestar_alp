@@ -75,7 +75,20 @@
 
   $: s = $activeDeviceStatus;
   $: schedState = (s as { schedule_state?: string })?.schedule_state ?? "";
-  $: isRunning = schedState === "running" || schedState === "working";
+  // events.Scheduler is polled locally every 1-3s (see below), much faster
+  // than $activeDeviceStatus's 15s poll — checking both means isRunning (and
+  // so the disabled Run button / visible Stop button) reflects reality
+  // quickly instead of lagging up to 15s behind the real backend state.
+  $: isRunning =
+    schedState === "running" ||
+    schedState === "working" ||
+    events["Scheduler"]?.state === "working";
+
+  // Once isRunning is confirmed by a poll, hand off to it entirely — clears
+  // the transient `running` flag set by start() below so a later real
+  // completion (isRunning -> false) correctly re-enables the button instead
+  // of staying stuck disabled forever.
+  $: if (isRunning && running) running = false;
 
   // ── Event status polling ───────────────────────────────────────────────────
   // Matches classic front/app.py's "command" eventlist order (WheelMove,
@@ -171,9 +184,18 @@
         params.lon = parseFloat(lon);
       }
       await api.devices.startup($activeDevNum, params);
+      // Don't clear `running` here — the POST resolving just means the
+      // request was accepted, not that the sequence is underway. Clearing it
+      // now would briefly re-enable the button for however long it takes the
+      // next poll to notice isRunning (see reactive statement above), which
+      // is exactly the "not disabled long enough" gap this fixes. `running`
+      // gets handed off to isRunning once a poll confirms it; the timeout
+      // below is only a safety net in case the sequence never actually starts
+      // (e.g. backend silently no-ops with "device busy") so the button
+      // doesn't stay disabled forever.
+      setTimeout(() => { running = false; }, 20_000);
     } catch (e) {
       error = String(e);
-    } finally {
       running = false;
     }
   }
@@ -338,7 +360,7 @@
 
       <div class="action-row">
         <button class="btn btn-primary" on:click={start} disabled={running || isRunning}>
-          {running ? "Starting…" : "▶ Run Startup Sequence"}
+          {running ? "Starting…" : isRunning ? "Running…" : "▶ Run Startup Sequence"}
         </button>
         {#if isRunning}
           <button class="btn btn-danger" on:click={stop} disabled={stopping}>
