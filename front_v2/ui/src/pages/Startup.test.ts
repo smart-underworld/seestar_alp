@@ -105,13 +105,16 @@ describe("Startup — event grid", () => {
     expect(mockEvents).toHaveBeenCalledWith(1);
   });
 
-  it("renders all six event tiles in idle state when no data", () => {
+  it("renders all five event tiles in idle state when no data", () => {
     render(Startup);
-    // Plate Solve / Filter Wheel / Scheduler are unique to the events grid
+    // Plate Solve / Filter Wheel are unique to the events grid. Scheduler
+    // isn't shown here — redundant with the Run/Stop button + label, and
+    // was silently always blank anyway (events["Scheduler"] never matched
+    // the backend's lowercase "scheduler" key).
     expect(screen.getByText("Plate Solve")).toBeInTheDocument();
     expect(screen.getByText("Filter Wheel")).toBeInTheDocument();
-    expect(screen.getByText("Scheduler")).toBeInTheDocument();
-    expect(screen.getAllByText("Idle").length).toBe(6);
+    expect(screen.queryByText("Scheduler")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Idle").length).toBe(5);
   });
 
   it("shows 3PPA state and progress percent from poll data", async () => {
@@ -191,16 +194,6 @@ describe("Startup — event grid", () => {
     render(Startup);
     await waitFor(() => {
       expect(screen.getByText("Dark")).toBeInTheDocument();
-    });
-  });
-
-  it("shows Scheduler current item type when present", async () => {
-    mockEvents
-      .mockResolvedValueOnce({ Scheduler: { state: "in progress", cur_scheduler_item: { type: "mosaic" } } })
-      .mockReturnValue(HANG);
-    render(Startup);
-    await waitFor(() => {
-      expect(screen.getByText("mosaic")).toBeInTheDocument();
     });
   });
 
@@ -373,12 +366,14 @@ describe("Startup — start action", () => {
     await waitFor(() => expect(btn).not.toBeDisabled());
   });
 
-  it("hands off to isRunning as soon as the faster local events poll sees Scheduler working", async () => {
-    // events.Scheduler is polled every 1-3s by this component itself —
-    // much faster than the 15s activeDeviceStatus poll — so it should be
-    // able to confirm isRunning well before that slower poll would.
+  it("hands off to isRunning as soon as the faster local events poll sees scheduler working", async () => {
+    // events.scheduler (lowercase — the raw backend key, unlike every other
+    // event which uses its canonical capitalized name) is polled every
+    // 1-3s by this component itself — much faster than the 15s
+    // activeDeviceStatus poll — so it should be able to confirm isRunning
+    // well before that slower poll would.
     mockStartup.mockResolvedValueOnce({});
-    mockEvents.mockResolvedValueOnce({ Scheduler: { state: "working" } }).mockReturnValue(HANG);
+    mockEvents.mockResolvedValueOnce({ scheduler: { state: "working" } }).mockReturnValue(HANG);
     render(Startup);
     screen.getByRole("button", { name: /Run Startup Sequence/ }).click();
     await waitFor(() => expect(screen.getByText("Running…")).toBeInTheDocument());

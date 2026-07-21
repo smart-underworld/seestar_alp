@@ -76,14 +76,17 @@
 
   $: s = $activeDeviceStatus;
   $: schedState = (s as { schedule_state?: string })?.schedule_state ?? "";
-  // events.Scheduler is polled locally every 1-3s (see below), much faster
+  // events.scheduler is polled locally every 1-3s (see below), much faster
   // than $activeDeviceStatus's 15s poll — checking both means isRunning (and
   // so the disabled Run button / visible Stop button) reflects reality
   // quickly instead of lagging up to 15s behind the real backend state.
+  // NB: the raw key is lowercase "scheduler" even though its own Event field
+  // reads "Scheduler" (every other event uses its canonical capitalized name
+  // as the dict key too — this one's the one legacy exception).
   $: isRunning =
     schedState === "running" ||
     schedState === "working" ||
-    events["Scheduler"]?.state === "working";
+    events["scheduler"]?.state === "working";
 
   // Once isRunning is confirmed by a poll, hand off to it entirely — clears
   // the transient `running` flag set by start() below so a later real
@@ -93,9 +96,11 @@
 
   // ── Event status polling ───────────────────────────────────────────────────
   // Matches classic front/app.py's "command" eventlist order (WheelMove,
-  // AutoFocus, DarkLibrary, 3PPA, PlateSolve, Scheduler), reused verbatim by
-  // Command/Goto/Mosaic/Image via EventStatusPanel — Startup had drifted from it.
-  const EVENT_NAMES = ["WheelMove", "AutoFocus", "DarkLibrary", "3PPA", "PlateSolve", "Scheduler"] as const;
+  // AutoFocus, DarkLibrary, 3PPA, PlateSolve), minus Scheduler — redundant on
+  // this page (the Run/Stop button + label already show whether a sequence
+  // is running) and, on top of that, was silently always blank anyway (see
+  // the events["scheduler"] key-casing note above).
+  const EVENT_NAMES = ["WheelMove", "AutoFocus", "DarkLibrary", "3PPA", "PlateSolve"] as const;
   type EventName = typeof EVENT_NAMES[number];
 
   const EVENT_LABELS: Record<EventName, string> = {
@@ -104,7 +109,6 @@
     "DarkLibrary": "Dark Frames",
     "PlateSolve":  "Plate Solve",
     "WheelMove":   "Filter Wheel",
-    "Scheduler":   "Scheduler",
   };
 
   let events: Record<string, EventState> = {};
@@ -265,9 +269,6 @@
           {/if}
           {#if name === "WheelMove" && ev?.position != null}
             <div class="event-detail">{filterName(ev.position)}</div>
-          {/if}
-          {#if name === "Scheduler" && ev?.cur_scheduler_item?.type}
-            <div class="event-detail">{ev.cur_scheduler_item.type}</div>
           {/if}
         </div>
       {/each}
@@ -445,7 +446,7 @@
 
   .events-grid {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 0.6rem;
   }
 
