@@ -53,7 +53,7 @@
     if (searchResult.ra)  ra  = String(searchResult.ra);
     if (searchResult.dec) dec = String(searchResult.dec);
     const name = searchResult.name ?? searchResult.objectName ?? searchQuery;
-    if (!targetName) targetName = String(name);
+    targetName = String(name);
     searchResult = null;
     searchQuery = "";
   }

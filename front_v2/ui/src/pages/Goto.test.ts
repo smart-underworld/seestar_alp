@@ -3,10 +3,11 @@ import { render, screen, waitFor } from "@testing-library/svelte";
 import { writable } from "svelte/store";
 import type { DeviceStatus } from "../lib/api";
 
-const { mockGoto, mockEvents, mockForceStopGoto } = vi.hoisted(() => ({
+const { mockGoto, mockEvents, mockForceStopGoto, mockSearch } = vi.hoisted(() => ({
   mockGoto: vi.fn(),
   mockEvents: vi.fn(),
   mockForceStopGoto: vi.fn(),
+  mockSearch: vi.fn(),
 }));
 
 vi.mock("../lib/stores/deviceStore", () => ({
@@ -21,6 +22,7 @@ vi.mock("../lib/api", () => ({
       goto: mockGoto,
       events: mockEvents,
       forceStopGoto: mockForceStopGoto,
+      search: mockSearch,
     },
   },
 }));
@@ -51,6 +53,7 @@ beforeEach(() => {
   mockGoto.mockReset();
   mockEvents.mockReset();
   mockForceStopGoto.mockReset();
+  mockSearch.mockReset();
   mockGoto.mockResolvedValue({});
   mockEvents.mockResolvedValue({});
   mockForceStopGoto.mockResolvedValue({ ok: true });
@@ -158,6 +161,49 @@ describe("Goto — submit", () => {
     await waitFor(() =>
       expect(screen.getByText(/slew failed/)).toBeInTheDocument(),
     );
+  });
+});
+
+describe("Goto — object search", () => {
+  beforeEach(() => mockIsConnected.set(true));
+
+  async function search(query: string, result: Record<string, unknown>) {
+    mockSearch.mockResolvedValueOnce({ query, result });
+    const input = screen.getByPlaceholderText("Object name…") as HTMLInputElement;
+    input.value = query;
+    input.dispatchEvent(new Event("input"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "🔍" })).not.toBeDisabled());
+    screen.getByRole("button", { name: "🔍" }).click();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use" })).toBeInTheDocument());
+    screen.getByRole("button", { name: "Use" }).click();
+  }
+
+  it("fills target name from the first search result", async () => {
+    render(Goto);
+    await search("polaris", { ra: "02 31 49.0945", dec: "+89 15 50.792", name: "* alf UMi" });
+    const name = screen.getByLabelText("Target Name") as HTMLInputElement;
+    await waitFor(() => expect(name.value).toBe("* alf UMi"));
+  });
+
+  it("updates target name on a second, different search instead of staying stuck", async () => {
+    // Regression: applySearch used to only set targetName when it was empty
+    // (`if (!targetName) targetName = ...`), so after the first search every
+    // later search kept whatever name was set first, no matter what was
+    // searched next — RA/Dec updated fine, only the name got stuck.
+    render(Goto);
+    await search("polaris", { ra: "02 31 49.0945", dec: "+89 15 50.792", name: "* alf UMi" });
+    await search("vega", { ra: "18 36 56.3363", dec: "+38 47 01.280", name: "* alf Lyr" });
+    const name = screen.getByLabelText("Target Name") as HTMLInputElement;
+    await waitFor(() => expect(name.value).toBe("* alf Lyr"));
+  });
+
+  it("fills RA/Dec from the search result", async () => {
+    render(Goto);
+    await search("vega", { ra: "18 36 56.3363", dec: "+38 47 01.280", name: "* alf Lyr" });
+    const ra = screen.getByLabelText("Right Ascension (J2000)") as HTMLInputElement;
+    const dec = screen.getByLabelText("Declination (J2000)") as HTMLInputElement;
+    await waitFor(() => expect(ra.value).toBe("18 36 56.3363"));
+    expect(dec.value).toBe("+38 47 01.280");
   });
 });
 
