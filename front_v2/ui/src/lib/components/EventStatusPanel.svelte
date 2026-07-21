@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { activeDevNum } from "../stores/deviceStore";
   import { api, type EventState } from "../api";
+  import { humanizeEventState } from "../utils";
 
   export let events: string[] = [];
 
@@ -87,7 +88,7 @@
           <div class="event-card {stateClass(ev)}">
             <div class="event-card-header">{DISPLAY_NAME[eventName] ?? eventName}</div>
             <div class="event-card-body">
-              <p><strong>State:</strong> {ev?.state ?? "Idle"}</p>
+              <p><strong>State:</strong> {humanizeEventState(ev?.state)}</p>
               {#if ev?.error}
                 <p><strong>Error:</strong> {ev.error}</p>
               {/if}
@@ -133,7 +134,7 @@
         <div class="event-card {stateClass(ev)}">
           <div class="event-card-header">{DISPLAY_NAME[eventName] ?? eventName}</div>
           <div class="event-card-body">
-            <p><strong>State:</strong> {ev?.state ?? "Idle"}</p>
+            <p><strong>State:</strong> {humanizeEventState(ev?.state)}</p>
             {#if ev?.error}
               <p><strong>Error:</strong> {ev.error}</p>
             {/if}

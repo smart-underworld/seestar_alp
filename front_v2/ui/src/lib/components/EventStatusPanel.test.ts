@@ -52,7 +52,9 @@ describe("EventStatusPanel", () => {
     mockEvents.mockResolvedValue(result);
     render(EventStatusPanel, { events: ["AutoFocus", "Stack"] });
     await waitFor(() => {
-      expect(screen.getByText("complete")).toBeInTheDocument();
+      // "complete" is humanized to "Complete"; "in progress" isn't in the
+      // known-states map so it passes through unchanged.
+      expect(screen.getByText("Complete")).toBeInTheDocument();
       expect(screen.getByText("in progress")).toBeInTheDocument();
     });
     expect(screen.getByText("1234")).toBeInTheDocument();
@@ -70,8 +72,10 @@ describe("EventStatusPanel", () => {
     };
     mockEvents.mockResolvedValue(result);
     render(EventStatusPanel, { events: ["3PPA"] });
-    await waitFor(() => expect(screen.getByText("calc3")).toBeInTheDocument());
-    const card = screen.getByText("calc3").closest(".event-card");
+    // humanizeEventState turns "calc3" into a friendly label but keeps the
+    // raw value visible alongside it (see utils.ts) — match on that.
+    await waitFor(() => expect(screen.getByText(/calc3/)).toBeInTheDocument());
+    const card = screen.getByText(/calc3/).closest(".event-card");
     expect(card).toHaveClass("card-progress");
     expect(card).not.toHaveClass("card-idle");
   });

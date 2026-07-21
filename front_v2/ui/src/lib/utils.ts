@@ -54,3 +54,39 @@ export function isNavActive(href: string, location: string): boolean {
   if (href === "/") return location === "/" || location === "";
   return location.startsWith(href);
 }
+
+// Documented (seestar-imager-openapi.yaml / telescope_initialization.md)
+// or self-evident event `state` values.
+const KNOWN_EVENT_STATES: Record<string, string> = {
+  idle: "Idle",
+  working: "Working",
+  start: "Starting",
+  complete: "Complete",
+  fail: "Failed",
+  cancel: "Cancelled",
+  solving: "Plate solving",
+};
+
+/**
+ * Best-effort friendly label for a firmware event `state` value.
+ *
+ * 3PPA cycles PolarAlign through per-point sub-states while measuring its 3
+ * points (e.g. "delay1", "delay2", "calc3") that ZWO doesn't document
+ * anywhere — this maps them by their literal naming pattern: "moveN"
+ * (slewing to point N), "delayN" (settling before measuring point N),
+ * "calcN" (computing the offset from point N's measurement). Since that's
+ * inferred, not authoritative, the raw value is kept alongside the guess.
+ * Anything else unrecognized falls back to the raw value, unmodified.
+ */
+export function humanizeEventState(state: string | undefined): string {
+  if (!state) return "Idle";
+  const known = KNOWN_EVENT_STATES[state];
+  if (known) return known;
+  const m = state.match(/^(move|delay|calc)(\d+)$/);
+  if (m) {
+    const [, kind, n] = m;
+    const verb = kind === "move" ? "Moving" : kind === "delay" ? "Waiting" : "Measuring";
+    return `${verb} — point ${n} of 3 (${state})`;
+  }
+  return state;
+}

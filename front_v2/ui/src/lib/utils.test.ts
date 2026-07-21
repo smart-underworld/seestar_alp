@@ -6,6 +6,7 @@ import {
   storageColor,
   settingGroupFor,
   isNavActive,
+  humanizeEventState,
 } from "./utils";
 
 // ---------------------------------------------------------------------------
@@ -167,5 +168,37 @@ describe("isNavActive", () => {
   it("sub-route does not match unrelated prefix", () => {
     expect(isNavActive("/live", "/liveview")).toBe(true); // startsWith is intentional
     expect(isNavActive("/settings", "/live")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// humanizeEventState
+// ---------------------------------------------------------------------------
+describe("humanizeEventState", () => {
+  it("returns Idle for undefined/empty", () => {
+    expect(humanizeEventState(undefined)).toBe("Idle");
+    expect(humanizeEventState("")).toBe("Idle");
+  });
+
+  it("capitalizes known terminal/documented states", () => {
+    expect(humanizeEventState("idle")).toBe("Idle");
+    expect(humanizeEventState("working")).toBe("Working");
+    expect(humanizeEventState("start")).toBe("Starting");
+    expect(humanizeEventState("complete")).toBe("Complete");
+    expect(humanizeEventState("fail")).toBe("Failed");
+    expect(humanizeEventState("cancel")).toBe("Cancelled");
+    expect(humanizeEventState("solving")).toBe("Plate solving");
+  });
+
+  it("humanizes 3PPA per-point sub-states while keeping the raw value visible", () => {
+    expect(humanizeEventState("delay1")).toBe("Waiting — point 1 of 3 (delay1)");
+    expect(humanizeEventState("delay2")).toBe("Waiting — point 2 of 3 (delay2)");
+    expect(humanizeEventState("calc3")).toBe("Measuring — point 3 of 3 (calc3)");
+    expect(humanizeEventState("move1")).toBe("Moving — point 1 of 3 (move1)");
+  });
+
+  it("passes through anything unrecognized unchanged", () => {
+    expect(humanizeEventState("in progress")).toBe("in progress");
+    expect(humanizeEventState("some_future_state")).toBe("some_future_state");
   });
 });

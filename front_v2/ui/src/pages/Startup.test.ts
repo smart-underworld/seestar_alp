@@ -135,8 +135,10 @@ describe("Startup — event grid", () => {
       .mockResolvedValueOnce({ "3PPA": { state: "calc3" } })
       .mockReturnValue(HANG);
     render(Startup);
-    await waitFor(() => expect(screen.getByText("calc3")).toBeInTheDocument());
-    const tile = screen.getByText("calc3").closest(".event-tile");
+    // humanizeEventState turns "calc3" into a friendly label but keeps the
+    // raw value visible alongside it (see utils.ts) — match on that.
+    await waitFor(() => expect(screen.getByText(/calc3/)).toBeInTheDocument());
+    const tile = screen.getByText(/calc3/).closest(".event-tile");
     expect(tile).toHaveClass("state-progress");
     expect(tile).not.toHaveClass("state-idle");
   });

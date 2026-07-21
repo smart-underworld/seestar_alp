@@ -2,6 +2,7 @@
   import { onDestroy } from "svelte";
   import { activeDevNum, isConnected, activeDeviceStatus } from "../lib/stores/deviceStore";
   import { api, type EventState } from "../lib/api";
+  import { humanizeEventState } from "../lib/utils";
 
   let polarAlign = true;
   let autoFocus = true;
@@ -158,7 +159,7 @@
   }
 
   function stateLabel(ev: EventState | undefined): string {
-    return ev?.state || "Idle";
+    return humanizeEventState(ev?.state);
   }
 
   function filterName(pos: number | undefined): string {
