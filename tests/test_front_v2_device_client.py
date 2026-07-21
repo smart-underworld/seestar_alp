@@ -131,3 +131,70 @@ def test_get_device_state_includes_model(monkeypatch):
     status = device_client.get_device_state(1)
 
     assert status["model"] == "Seestar S30 Pro"
+
+
+def _wifi_device_state(fw_int=2775, guest_mode=False, is_master=True):
+    return {
+        "device": {"firmware_ver_int": fw_int, "product_model": "Seestar S50"},
+        "setting": {"guest_mode": guest_mode},
+        "client": {"is_master": is_master},
+    }
+
+
+def _run_get_device_state(monkeypatch, device_result, station_result):
+    monkeypatch.setattr(
+        device_client, "_check_api_state_detailed", lambda dev_num: (True, True)
+    )
+
+    def fake_method_sync(method, dev_num, **kwargs):
+        if method == "get_device_state":
+            return device_result
+        if method == "get_view_state":
+            return {}
+        if method == "pi_station_state":
+            return station_result
+        raise AssertionError(f"Unexpected method: {method}")
+
+    monkeypatch.setattr(device_client, "method_sync", fake_method_sync)
+    monkeypatch.setattr(device_client, "do_action", lambda *a, **kw: None)
+
+    return device_client.get_device_state(1)
+
+
+def test_wifi_signal_shows_dbm_for_master_non_guest_station(monkeypatch):
+    status = _run_get_device_state(
+        monkeypatch,
+        _wifi_device_state(guest_mode=False, is_master=True),
+        {"server": True, "sig_lev": -41},
+    )
+    assert status["wifi_signal"] == "-41 dBm"
+
+
+def test_wifi_signal_reports_ap_mode_instead_of_going_blank(monkeypatch):
+    # Regression: v2 used to leave wifi_signal as "" (blank Home page tile)
+    # whenever "server" was falsey, instead of explaining why, like classic
+    # front/app.py does.
+    status = _run_get_device_state(
+        monkeypatch,
+        _wifi_device_state(guest_mode=False, is_master=True),
+        {"server": False, "sig_lev": "N/A"},
+    )
+    assert status["wifi_signal"] == "Unavailable in AP mode."
+
+
+def test_wifi_signal_reports_guest_mode_for_non_master_client(monkeypatch):
+    status = _run_get_device_state(
+        monkeypatch,
+        _wifi_device_state(fw_int=2775, guest_mode=True, is_master=False),
+        {"server": True, "sig_lev": -55},
+    )
+    assert status["wifi_signal"] == "Unavailable in Guest mode."
+
+
+def test_wifi_signal_shows_dbm_for_master_client_even_in_guest_mode(monkeypatch):
+    status = _run_get_device_state(
+        monkeypatch,
+        _wifi_device_state(fw_int=2775, guest_mode=True, is_master=True),
+        {"server": True, "sig_lev": -55},
+    )
+    assert status["wifi_signal"] == "-55 dBm"

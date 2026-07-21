@@ -194,10 +194,21 @@ def get_device_state(dev_num: int) -> dict:
 
     wifi_raw = method_sync("pi_station_state", dev_num)
     wifi_signal = ""
-    if wifi_raw and pydash.get(wifi_raw, "server", False):
-        sig = pydash.get(wifi_raw, "sig_lev", "")
-        if sig:
-            wifi_signal = f"{sig} dBm"
+    if wifi_raw is not None:
+        is_server = pydash.get(wifi_raw, "server", False)
+        sig_lev = pydash.get(wifi_raw, "sig_lev", "N/A")
+        # Mirrors classic front/app.py: only show the real dBm reading when
+        # this client can actually see it (master client, or non-guest-mode
+        # station); otherwise report *why* it's unavailable instead of
+        # leaving the Home page's Wi-Fi tile blank.
+        if (is_server and not guest_mode_available) or (
+            guest_mode_available and is_master
+        ):
+            wifi_signal = f"{sig_lev} dBm"
+        elif guest_mode_available:
+            wifi_signal = "Unavailable in Guest mode."
+        else:
+            wifi_signal = "Unavailable in AP mode."
 
     schedule_raw = do_action("get_schedule", dev_num, {})
     schedule_state = ""

@@ -78,7 +78,10 @@
   $: isRunning = schedState === "running" || schedState === "working";
 
   // ── Event status polling ───────────────────────────────────────────────────
-  const EVENT_NAMES = ["3PPA", "AutoFocus", "DarkLibrary", "PlateSolve", "WheelMove", "Scheduler"] as const;
+  // Matches classic front/app.py's "command" eventlist order (WheelMove,
+  // AutoFocus, DarkLibrary, 3PPA, PlateSolve, Scheduler), reused verbatim by
+  // Command/Goto/Mosaic/Image via EventStatusPanel — Startup had drifted from it.
+  const EVENT_NAMES = ["WheelMove", "AutoFocus", "DarkLibrary", "3PPA", "PlateSolve", "Scheduler"] as const;
   type EventName = typeof EVENT_NAMES[number];
 
   const EVENT_LABELS: Record<EventName, string> = {
