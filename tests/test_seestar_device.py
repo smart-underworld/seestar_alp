@@ -657,6 +657,28 @@ def test_get_event_state_and_is_client_master(seestar):
     assert seestar.is_client_master() is False
 
 
+def test_get_event_state_aliases_eqmodepa_event_field_to_3ppa(seestar):
+    # Firmware sends the raw polar-align event under "EqModePA"; get_event_state
+    # aliases it to a "3PPA" entry so classic/v2 UIs can display it. The classic
+    # UI's eventstatus.html matches entries via Jinja's
+    # `selectattr('Event', 'equalto', '3PPA')`, which inspects each entry's own
+    # embedded "Event" field -- not the dict key it's stored under. If the
+    # aliased entry still carries "Event": "EqModePA" (copied verbatim from the
+    # source), that selectattr never matches, so classic's PolarAlign card
+    # renders its default "no data" placeholder forever, even after a real,
+    # successful polar-align completion.
+    seestar.event_state["EqModePA"] = {
+        "Event": "EqModePA",
+        "state": "complete",
+        "total": 0.146283,
+        "x": 0.093825,
+        "y": 0.112230,
+    }
+    out = seestar.get_event_state({"event_name": "3PPA"})
+    assert out["result"]["state"] == "complete"
+    assert out["result"]["Event"] == "3PPA"
+
+
 def test_get_event_state_injects_mount_equ_mode(seestar):
     seestar.is_EQ_mode = True
     out = seestar.get_event_state()

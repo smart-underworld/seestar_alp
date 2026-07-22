@@ -884,6 +884,13 @@ class Seestar:
 
         if "EqModePA" in self.event_state:
             self.event_state["3PPA"] = dict(self.event_state["EqModePA"])
+            # The source dict still carries its own "Event": "EqModePA" field.
+            # Classic UI's eventstatus.html matches cards via Jinja's
+            # selectattr('Event', 'equalto', '3PPA'), which inspects this
+            # embedded field rather than the event_state key -- so it must be
+            # corrected to "3PPA" or the PolarAlign card never matches, even
+            # after polar align genuinely completes.
+            self.event_state["3PPA"]["Event"] = "3PPA"
         if "3PPA" in self.event_state:
             self.event_state["3PPA"]["eq_offset_alt"] = self.cur_pa_error_y
             self.event_state["3PPA"]["eq_offset_az"] = self.cur_pa_error_x
