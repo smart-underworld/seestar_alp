@@ -33,7 +33,7 @@ def run_startup(page: Page, base_url: str) -> None:
         # All three enabled events (AutoFocus, DarkLibrary, 3PPA) must show
         # "complete" — Scheduler/WheelMove/PlateSolve cards may stay idle.
         watched = re.findall(
-            r"(AutoFocus|DarkLibrary|PolarAlign)[\s\S]{0,120}?State:\s*(\w[\w\s]*)",
+            r"(AutoFocus|DarkLibrary|PolarAlign)[\s\S]{0,120}?State:\s*(\S+)",
             text,
         )
         if len(watched) >= 3 and all(state.strip().lower() == "complete" for _, state in watched):
@@ -57,7 +57,7 @@ def do_goto(page: Page, base_url: str, target: SystemTestTarget) -> None:
         text = status.inner_text()
         if "fail" in text.lower():
             raise AssertionError(f"Goto reported a failure:\n{text}")
-        match = re.search(r"AutoGoto[\s\S]{0,120}?State:\s*(\w[\w\s]*)", text)
+        match = re.search(r"AutoGoto[\s\S]{0,120}?State:\s*(\S+)", text)
         if match and match.group(1).strip().lower() == "complete":
             return
         page.wait_for_timeout(2000)
