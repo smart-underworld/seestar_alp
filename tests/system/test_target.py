@@ -39,15 +39,19 @@ def test_check_sandbox_renderer_fresh_raises_when_missing(tmp_path):
         check_sandbox_renderer_fresh(tmp_path, max_age_s=30.0)
 
 
-def test_check_sandbox_renderer_fresh_raises_when_stale(tmp_path):
+def test_check_sandbox_renderer_fresh_passes_when_stale(tmp_path):
+    # sim.renderd only re-renders in response to a pointing change, so an
+    # idle-but-running renderer can leave a solve.fits that's hours old with
+    # no pointing activity to trigger a fresh render. Staleness alone must
+    # not be treated as evidence the renderer is down -- only a missing file
+    # is checked.
     solve_fits = tmp_path / "solve.fits"
     solve_fits.write_bytes(b"x")
     old_time = time.time() - 3600
     import os
 
     os.utime(solve_fits, (old_time, old_time))
-    with pytest.raises(PreconditionError, match="stale"):
-        check_sandbox_renderer_fresh(tmp_path, max_age_s=30.0)
+    check_sandbox_renderer_fresh(tmp_path, max_age_s=30.0)
 
 
 def test_check_sandbox_renderer_fresh_passes_when_recent(tmp_path):

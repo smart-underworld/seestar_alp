@@ -3,7 +3,6 @@ for the tests/system/ suite (drives seestar_alp against a real Seestar or the
 QEMU sandbox from seestar-api-research)."""
 
 import socket
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,6 +31,18 @@ def probe_tcp_port(host: str, port: int, label: str, timeout: float = 3.0) -> No
 
 
 def check_sandbox_renderer_fresh(shared_dir: Path, max_age_s: float = 30.0) -> None:
+    """Verify the synthetic-sky renderer has produced output at least once.
+
+    Only checks existence, not recency: sim.renderd re-renders solve.fits
+    only in response to a pointing change (it watches pointing.json's `seq`
+    field), so an idle-but-running renderer can leave a solve.fits that's
+    hours old with no pointing activity to trigger a fresh render. A stale
+    file is not evidence the renderer is down — only a missing file is.
+    Actual renderer liveness during a run is proven by the goto/3PPA test
+    itself succeeding (or timing out with a clear failure otherwise).
+    `max_age_s` is accepted for interface stability but no longer enforced.
+    """
+    del max_age_s
     solve_fits = Path(shared_dir) / "solve.fits"
     if not solve_fits.exists():
         raise PreconditionError(
@@ -41,12 +52,6 @@ def check_sandbox_renderer_fresh(shared_dir: Path, max_age_s: float = 30.0) -> N
             f"  python3 -m sim.renderd --shared {shared_dir} --model S50 "
             f"--catalog sim/data/stars.npy\n"
             f"(run from the seestar-api-research/sandbox checkout)"
-        )
-    age = time.time() - solve_fits.stat().st_mtime
-    if age > max_age_s:
-        raise PreconditionError(
-            f"{solve_fits} is {age:.0f}s old (stale) — is sim.renderd still "
-            f"running and pointed at --renderer-shared-dir {shared_dir}?"
         )
 
 
