@@ -27,11 +27,6 @@
 
   let activeMode: LiveMode | null = null;
 
-  // Set once we've checked the device's current view state for the active
-  // device, so we only auto-sync activeMode from status once per device
-  // switch (and don't fight a user's subsequent explicit mode changes).
-  let modeInitialized = false;
-
   const LIVE_MODE_IDS = new Set<string>(modes.filter((m) => m.id !== "none").map((m) => m.id));
   function isLiveMode(mode: string): mode is Exclude<LiveMode, "none"> {
     return LIVE_MODE_IDS.has(mode);
@@ -373,18 +368,28 @@
   ].filter(Boolean).join(' ');
 
   $: s = $activeDeviceStatus;
-  $: if ($activeDevNum) { activeMode = null; focusPos = null; zoom = 1.0; panX = 0; panY = 0; modeInitialized = false; }
+  let prevViewState: string | undefined;
+  $: if ($activeDevNum) { activeMode = null; focusPos = null; zoom = 1.0; panX = 0; panY = 0; prevViewState = undefined; }
 
-  // Once status for the active device arrives, sync activeMode so the page
-  // reflects an already-running live view / imaging session instead of
-  // showing "Select a mode to begin" while a stack is in progress.
-  $: if (s && !modeInitialized && s.device_num === $activeDevNum) {
-    modeInitialized = true;
-    if (s.view_state === "working" && isLiveMode(s.mode)) {
+  // Sync activeMode from device status whenever view_state genuinely
+  // transitions into "working" while no mode is active locally, so the page
+  // reflects an already-running live view / imaging session (e.g. a
+  // schedule item elsewhere just started imaging) instead of showing
+  // "Select a mode to begin" while a stack is in progress. Tracking the
+  // transition (rather than syncing only once at mount) also covers a stale
+  // non-working snapshot still in the shared status store at mount time,
+  // which only updates to "working" once the global status poll catches
+  // up. Gating on a genuine transition (not every reactive tick) avoids
+  // fighting a user's explicit Stop -- the status store briefly still shows
+  // "working" right after stopMode() until the next poll, and by then
+  // prevViewState is already "working" too, so no transition is detected.
+  $: if (s && s.device_num === $activeDevNum) {
+    if (!activeMode && prevViewState !== "working" && s.view_state === "working" && isLiveMode(s.mode)) {
       activeMode = s.mode;
       loadFocus();
       loadExposure();
     }
+    prevViewState = s.view_state;
   }
 </script>
 

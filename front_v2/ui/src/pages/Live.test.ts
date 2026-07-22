@@ -138,6 +138,32 @@ describe("Live — syncing active mode from device status", () => {
     const starBtn = screen.getByTitle("Deep sky / star mode");
     expect(starBtn.classList.contains("active")).toBe(true);
   });
+
+  it("syncs when a stale idle snapshot at mount is followed by a working status", async () => {
+    // Unlike the cold-load case above, the store is NOT empty at mount --
+    // it holds a stale "Idle" snapshot from before this page loaded (e.g.
+    // navigating to Live right after a schedule item elsewhere just started
+    // imaging, before the shared device-status poll has refreshed). The
+    // one-shot "sync once status arrives" guard must not lock in that first,
+    // stale non-working read and then ignore the real "working" status that
+    // arrives moments later.
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, view_state: "Idle", mode: "", stacked: "" });
+
+    render(Live);
+    expect(screen.queryByText("Live Feed")).not.toBeInTheDocument();
+
+    mockActiveDeviceStatus.set({
+      ...BASE_STATUS,
+      view_state: "working",
+      mode: "star",
+      stacked: 3,
+      schedule_state: "working",
+    });
+
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+    const starBtn = screen.getByTitle("Deep sky / star mode");
+    expect(starBtn.classList.contains("active")).toBe(true);
+  });
 });
 
 describe("Live — confirmation before interrupting an active imaging session", () => {
