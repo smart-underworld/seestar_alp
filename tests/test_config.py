@@ -1,14 +1,40 @@
 import os
 
+import pytest
 import tomlkit
 
-from device.config import _Config
+from device.config import _Config, _resolve_config_path
 
 
 def make_config():
     cfg = _Config.__new__(_Config)
     cfg.path_to_dat = "/tmp/unused.toml"
     return cfg
+
+
+# ---------------------------------------------------------------------------
+# _resolve_config_path
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_config_path_uses_default_when_no_override(tmp_path, monkeypatch):
+    monkeypatch.delenv("SEESTAR_ALP_CONFIG_PATH", raising=False)
+    result = _resolve_config_path(str(tmp_path))
+    assert result == os.path.abspath(os.path.join(str(tmp_path), "config.toml"))
+
+
+def test_resolve_config_path_uses_override_when_set(tmp_path, monkeypatch):
+    override = tmp_path / "scratch.toml"
+    override.write_text("title = 'x'\n")
+    monkeypatch.setenv("SEESTAR_ALP_CONFIG_PATH", str(override))
+    result = _resolve_config_path(str(tmp_path))
+    assert result == os.path.abspath(str(override))
+
+
+def test_resolve_config_path_raises_when_override_missing(tmp_path, monkeypatch):
+    monkeypatch.setenv("SEESTAR_ALP_CONFIG_PATH", str(tmp_path / "does_not_exist.toml"))
+    with pytest.raises(FileNotFoundError):
+        _resolve_config_path(str(tmp_path))
 
 
 def test_str_to_bool_variants():
