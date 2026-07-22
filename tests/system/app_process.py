@@ -27,13 +27,18 @@ class AppProcess:
         self.base_url = f"http://127.0.0.1:{uiport}"
         self._proc: subprocess.Popen | None = None
         self._output: deque[str] = deque(maxlen=400)
+        self._output_lock = threading.Lock()
         self._ready = threading.Event()
         self._reader_thread: threading.Thread | None = None
+
+    def _append_line(self, line: str) -> None:
+        with self._output_lock:
+            self._output.append(line)
 
     def _read_output(self):
         assert self._proc is not None and self._proc.stdout is not None
         for line in self._proc.stdout:
-            self._output.append(line.rstrip("\n"))
+            self._append_line(line.rstrip("\n"))
             if READY_LINE in line:
                 self._ready.set()
 
@@ -53,16 +58,32 @@ class AppProcess:
         self._reader_thread = threading.Thread(target=self._read_output, daemon=True)
         self._reader_thread.start()
 
-        if not self._ready.wait(timeout=self.ready_timeout):
-            tail = self.log_tail()
-            self.stop()
-            raise TimeoutError(
-                f"root_app.py did not print '{READY_LINE}' within "
-                f"{self.ready_timeout}s. Captured output:\n{tail}"
-            )
+        poll_interval = 0.15
+        deadline = time.monotonic() + self.ready_timeout
+        while True:
+            if self._ready.wait(timeout=poll_interval):
+                break
+            if self._proc.poll() is not None:
+                # Child process exited without ever becoming ready — fail
+                # fast instead of waiting out the rest of ready_timeout.
+                tail = self.log_tail()
+                self.stop()
+                raise TimeoutError(
+                    f"root_app.py exited before printing '{READY_LINE}'. "
+                    f"Captured output:\n{tail}"
+                )
+            if time.monotonic() >= deadline:
+                tail = self.log_tail()
+                self.stop()
+                raise TimeoutError(
+                    f"root_app.py did not print '{READY_LINE}' within "
+                    f"{self.ready_timeout}s. Captured output:\n{tail}"
+                )
 
     def log_tail(self) -> str:
-        return "\n".join(self._output)
+        with self._output_lock:
+            lines = list(self._output)
+        return "\n".join(lines)
 
     def stop(self) -> None:
         if self._proc is None:
