@@ -326,6 +326,14 @@
   onDestroy(() => {
     if (joystickTimer !== null) clearInterval(joystickTimer);
     stopLiveRefresh();
+    // The <img> holds a long-lived multipart/x-mixed-replace connection.
+    // Removing the element from the DOM doesn't reliably abort it -- clear
+    // src explicitly so the browser actually closes the underlying request
+    // instead of leaving it open in the background, which can exhaust the
+    // per-origin connection pool and starve other pages' requests (e.g.
+    // Image's own status polling) if the user navigates to/from Live
+    // repeatedly.
+    if (imgEl) imgEl.src = "";
   });
 
   function rotateFeed() {

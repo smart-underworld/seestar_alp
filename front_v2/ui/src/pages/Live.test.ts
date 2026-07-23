@@ -297,6 +297,29 @@ describe("Live — video feed URL", () => {
     await waitFor(() => expect(img.src).not.toBe(srcAfterClick));
     nowSpy.mockRestore();
   });
+
+  it("clears the feed src on unmount so the browser aborts the connection", async () => {
+    // The <img> holds a long-lived multipart/x-mixed-replace connection.
+    // Without an explicit src clear, navigating away doesn't reliably abort
+    // it -- repeatedly visiting and leaving this page can pile up open
+    // connections and starve other pages' requests to the same origin
+    // (confirmed: Image's own status polling stalled after a few Live
+    // visits during a live system-test run).
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, view_state: "working", mode: "star" });
+
+    const { unmount } = render(Live);
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+    const img = screen.getByAltText("Live telescope feed") as HTMLImageElement;
+    expect(img.src).toMatch(/\/api\/v1\/devices\/1\/vid\?t=\d+$/);
+
+    unmount();
+
+    // Browsers (and JSDOM) resolve an empty src against the document's base
+    // URI rather than reporting a literal empty string back -- what matters
+    // is it no longer points at the vid stream, which is what actually
+    // aborts the underlying connection.
+    expect(img.src).not.toMatch(/\/vid\?t=/);
+  });
 });
 
 describe("Live — zoom and pan", () => {
