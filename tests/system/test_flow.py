@@ -63,6 +63,11 @@ def test_goto(page, app_base_url, driver, target, require_real_confirmation):
 
 def test_live_imaging_standalone(page, app_base_url, driver):
     driver.check_live_imaging(page, app_base_url)
+    # Stop the view this test started -- leaving it running was confirmed to
+    # carry over into test_schedule_capture_with_concurrent_live_check (same
+    # module-scoped app, different page/tab) and prevent its stacking
+    # progress from ever registering.
+    driver.stop_live_view(page, app_base_url)
 
 
 def test_schedule_capture_with_concurrent_live_check(
@@ -86,12 +91,19 @@ def test_schedule_capture_with_concurrent_live_check(
     # counter genuinely resets to 0 -- so look for any consecutive increase
     # across the window rather than comparing only the first and last
     # sample, which would spuriously fail across that one-time reset.
+    # window_s must comfortably exceed a single stack exposure cycle
+    # (exposure_length_stack_ms in the scratch config, 10s): during active
+    # stacking, new frames arrive roughly once per exposure, not continuously
+    # like the standalone preview/ContinuousExposure check, and the first
+    # frame is typically already delivered before monitoring starts (during
+    # the element-visibility wait) -- confirmed via a direct stream fetch
+    # that real bytes do flow, just on a ~10s cadence, not a 3s one.
     samples = []
     progressed = False
     last = None
     deadline = time.time() + target.capture_duration_s + 30
     while time.time() < deadline:
-        driver.check_live_imaging(page, app_base_url, window_s=3.0)
+        driver.check_live_imaging(page, app_base_url, window_s=15.0)
         count = driver.read_frames_processed_count(page, app_base_url)
         samples.append(count)
         if last is not None and count > last:
