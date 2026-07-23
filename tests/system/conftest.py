@@ -64,6 +64,17 @@ def pytest_addoption(parser):
     )
 
 
+def pytest_ignore_collect(collection_path: Path, config):
+    """test_flow.py imports playwright at module level (via ui_classic/
+    ui_v2), so pytest must import it to collect items even though
+    pytest_collection_modifyitems would skip those items anyway. Without
+    --target, skip collecting it outright so environments without
+    playwright installed (e.g. CI) don't hit an ImportError.
+    """
+    if collection_path.name == "test_flow.py" and config.getoption("--target") is None:
+        return True
+
+
 def pytest_collection_modifyitems(config, items):
     system_items = [
         item for item in items if str(Path(__file__).parent) in str(item.fspath)
