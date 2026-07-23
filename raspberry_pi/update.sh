@@ -123,6 +123,7 @@ _EOF
   config_toml_setup
   install_apt_packages
   python_virtualenv_setup
+  bash "${src_home}/scripts/build_ui.sh"
   network_config
   systemd_service_setup
   if [ "${WITH_PROXY}" = "true" ]; then

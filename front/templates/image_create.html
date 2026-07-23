@@ -1,33 +1,31 @@
 <script src="/public/fit_import.js"></script>
     <div class="card border-primary mb-3">
         <div class="card-body">
-            <div class="mb-3 row">
-                <div class="d-flex align-items-center">
-                    <div class="col me-3">
-                        <label for="targetName" class="form-label">Target Name</label>
-                        <input type="text" class="form-control" id="targetName" name="targetName"
-                                aria-describedby="targetNameHelp" value="{{ values.target_name }}" required>
-                        <div id="targetNameHelp" class="form-text">Enter a descriptive name for the target. (e.g. ...)</div>
+            <div class="mb-3 row g-2">
+                <div class="col-md-6">
+                    <label for="targetName" class="form-label">Target Name</label>
+                    <input type="text" class="form-control" id="targetName" name="targetName"
+                            aria-describedby="targetNameHelp" value="{{ values.target_name }}" required>
+                    <div id="targetNameHelp" class="form-text">Enter a descriptive name for the target. (e.g. ...)</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="searchFor" class="form-label">Search For</label>
+                    <div class="d-flex mb-0">
+                        <select class="form-select" id="searchFor" title="Select type of target" aria-label="Default select example">
+                            <option value="DS" selected>Simbad Deepsky (Online)</option>
+                            <option value="LS" >Local Deepsky DB</option>
+                            <option value="PL">Planet</option>
+                            <option value="MP">Minor Planet (Asteroid)</option>
+                            <option value="CO">Comet</option>
+                            <option value="VS"> AAVSO Varible Star (Online)</option>
+                        </select>
+                        <button type="button" id="getSimbad" class="btn btn-primary ms-2" title="Search for Coordinates" onclick="fetchCoordinates()">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
+                                <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
+                            </svg>
+                        </button>
                     </div>
-                    <div class="col">
-                        <label for="searchFor" class="form-label">Search For</label>
-                        <div class="d-flex mb-0">
-                            <select class="form-select" id="searchFor" title="Select type of target" aria-label="Default select example">
-                                <option value="DS" selected>Simbad Deepsky (Online)</option>
-                                <option value="LS" >Local Deepsky DB</option>
-                                <option value="PL">Planet</option>
-                                <option value="MP">Minor Planet (Asteroid)</option>
-                                <option value="CO">Comet</option>
-                                <option value="VS"> AAVSO Varible Star (Online)</option>
-                            </select>
-                            <button type="button" id="getSimbad" class="btn btn-primary ms-2" title="Search for Coordinates" onclick="fetchCoordinates()">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
-                                    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
-                                </svg>
-                            </button>
-                        </div>
-                        <div id="searchForHelp" class="form-text mb-0">Choose the type of object you are searching for.</div>
-                    </div>
+                    <div id="searchForHelp" class="form-text mb-0">Choose the type of object you are searching for.</div>
                 </div>
             </div>
 
@@ -143,9 +141,32 @@
                 <label for="panelTime" class="form-label">Panel Acquisition Time</label>
                 <input type="text" class="form-control" id="panelTime" name="panelTime"
                        aria-describedby="panelTimeHelp" value="{{ values.panel_time_sec }}" required>
-                <div id="panelTimeHelp" class="form-text">how much time to capture data for each panel (ex: 1h 30m or 5400).
+                <div id="panelTimeHelp" class="form-text">How much time to capture data (ex: 1h 30m or 5400). Disabled when End Time is set.
                 </div>
             </div>
+
+            <div class="text-center text-muted small mb-2">— or —</div>
+
+            <div class="mb-3">
+                <label for="endLocalTime" class="form-label">End Time (local)</label>
+                <input type="time" class="form-control" id="endLocalTime" name="endLocalTime"
+                       aria-describedby="endLocalTimeHelp" value="{{ values.end_local_time or '' }}"
+                       oninput="syncTimingFields()">
+                <div id="endLocalTimeHelp" class="form-text">Stop at this local time regardless of when the item started (handles midnight). Clears Panel Acquisition Time control.
+                </div>
+            </div>
+
+            <script>
+            function syncTimingFields() {
+                var endEl = document.getElementById('endLocalTime');
+                var panelEl = document.getElementById('panelTime');
+                var hasEndTime = endEl.value !== '';
+                panelEl.disabled = hasEndTime;
+                panelEl.required = !hasEndTime;
+                panelEl.closest('.mb-3').style.opacity = hasEndTime ? '0.4' : '';
+            }
+            document.addEventListener('DOMContentLoaded', syncTimingFields);
+            </script>
 
             <div class="mb-3">
                 {% if values.gain %}

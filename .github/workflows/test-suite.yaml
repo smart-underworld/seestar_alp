@@ -55,6 +55,14 @@ jobs:
         run: npm test
         working-directory: front
 
+      - name: Install front_v2 UI test dependencies
+        run: npm ci
+        working-directory: front_v2/ui
+
+      - name: Run front_v2 UI tests with coverage gate
+        run: npm run coverage
+        working-directory: front_v2/ui
+
   test-cli:
     runs-on: ubuntu-latest
 

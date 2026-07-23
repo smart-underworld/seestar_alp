@@ -1,16 +1,19 @@
 #
 # Start frontend and pass in ALP for it to manage
 #
-from flask import Flask, Response
-from flask_cors import CORS, cross_origin
+import os
+import subprocess
 import threading
 import time
-import waitress
-import sdnotify
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+import warnings
+from pathlib import Path
 
-from front.app import FrontMain, get_live_status
+import sdnotify
+import waitress
+from flask import Flask, Response
+from flask_cors import CORS, cross_origin
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 from device.app import DeviceMain  # type: ignore
 from device.config import Config  # type: ignore
@@ -18,7 +21,56 @@ from device import log  # type: ignore
 from device import telescope  # type: ignore
 
 
-import os
+def _ensure_v2_ui_built():
+    """Auto-build the Svelte UI if dist/ is missing or source is newer than dist."""
+    base = Path(__file__).parent
+    dist_dir = base / "front_v2" / "ui" / "dist"
+    src_dir = base / "front_v2" / "ui" / "src"
+    script = base / "scripts" / "build_ui.sh"
+
+    if not script.exists():
+        return  # packaged install — dist should already be present
+
+    if not dist_dir.exists():
+        print(
+            "v2 UI dist/ not found — building now (this may take ~30 s on first run)…"
+        )
+        subprocess.run(["bash", str(script)], check=True)
+        return
+
+    if src_dir.exists():
+        dist_mtime = max(
+            (f.stat().st_mtime for f in dist_dir.rglob("*") if f.is_file()), default=0
+        )
+        src_mtime = max(
+            (f.stat().st_mtime for f in src_dir.rglob("*") if f.is_file()), default=0
+        )
+        if src_mtime > dist_mtime:
+            print("v2 UI source changed — rebuilding…")
+            ui_dir = base / "front_v2" / "ui"
+            node_modules = ui_dir / "node_modules"
+            if node_modules.exists():
+                # node_modules present — skip npm ci, just rebuild
+                subprocess.run(["npm", "run", "build"], cwd=str(ui_dir), check=True)
+            else:
+                subprocess.run(["bash", str(script)], check=True)
+
+
+_frontend = getattr(Config, "frontend", "classic")
+if _frontend == "v2":
+    _ensure_v2_ui_built()
+    try:
+        from front_v2.app import FrontMainV2 as FrontMain
+        from front.app import get_live_status
+    except ImportError as _e:
+        warnings.warn(
+            f"frontend = 'v2' selected but v2 deps not installed ({_e}). "
+            "Falling back to classic. Run: pip install -e '.[v2]'",
+            stacklevel=1,
+        )
+        from front.app import FrontMain, get_live_status  # type: ignore[assignment]
+else:
+    from front.app import FrontMain, get_live_status  # type: ignore[assignment]
 
 
 class AppRunner:

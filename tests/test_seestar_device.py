@@ -313,7 +313,7 @@ def test_send_message_paths(monkeypatch, seestar):
     monkeypatch.setattr(
         seestar, "disconnect", lambda: disconnected.__setitem__("count", 1)
     )
-    monkeypatch.setattr(seestar, "reconnect", lambda: False)
+    monkeypatch.setattr(seestar, "reconnect", lambda **kw: False)
     seestar.is_watch_events = True
     seestar.s = _DummySocket(send_error=socket.error("boom"))
     assert seestar.send_message("x") is False
@@ -359,6 +359,7 @@ def test_reconnect_success_and_fail_paths(monkeypatch, seestar):
             self.connected = addr
 
     monkeypatch.setattr("device.seestar_device.socket.socket", lambda *_args: Sock())
+    monkeypatch.setattr(seestar, "authenticate", lambda: True)
     seestar.is_connected = False
     assert seestar.reconnect() is True
 
@@ -573,7 +574,7 @@ def test_get_socket_msg_paths(monkeypatch, seestar):
     monkeypatch.setattr(
         seestar, "disconnect", lambda: disconnected.__setitem__("count", 1)
     )
-    monkeypatch.setattr(seestar, "reconnect", lambda: False)
+    monkeypatch.setattr(seestar, "reconnect", lambda **kw: False)
     seestar.is_watch_events = True
     seestar.s = _DummySocket(recv_error=socket.error("x"))
     assert seestar.get_socket_msg() is None
@@ -654,6 +655,28 @@ def test_get_event_state_and_is_client_master(seestar):
     assert seestar.is_client_master() is True
     seestar.event_state["Client"] = {"is_master": False}
     assert seestar.is_client_master() is False
+
+
+def test_get_event_state_aliases_eqmodepa_event_field_to_3ppa(seestar):
+    # Firmware sends the raw polar-align event under "EqModePA"; get_event_state
+    # aliases it to a "3PPA" entry so classic/v2 UIs can display it. The classic
+    # UI's eventstatus.html matches entries via Jinja's
+    # `selectattr('Event', 'equalto', '3PPA')`, which inspects each entry's own
+    # embedded "Event" field -- not the dict key it's stored under. If the
+    # aliased entry still carries "Event": "EqModePA" (copied verbatim from the
+    # source), that selectattr never matches, so classic's PolarAlign card
+    # renders its default "no data" placeholder forever, even after a real,
+    # successful polar-align completion.
+    seestar.event_state["EqModePA"] = {
+        "Event": "EqModePA",
+        "state": "complete",
+        "total": 0.146283,
+        "x": 0.093825,
+        "y": 0.112230,
+    }
+    out = seestar.get_event_state({"event_name": "3PPA"})
+    assert out["result"]["state"] == "complete"
+    assert out["result"]["Event"] == "3PPA"
 
 
 def test_get_event_state_injects_mount_equ_mode(seestar):
@@ -844,6 +867,21 @@ def test_start_stack_and_stop_plate_and_last_image(monkeypatch, seestar):
 
     assert seestar.stop_plate_solve_loop() is True
     assert any(c["method"] == "stop_polar_align" for c in calls)
+
+
+def test_start_stack_defaults_restart_when_missing(monkeypatch, seestar):
+    """front_v2's image router omitted "restart"; start_stack must not KeyError."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+
+    calls = []
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda payload: calls.append(payload) or {"result": "ok"},
+    )
+
+    assert seestar.start_stack({"exp_ms": 10000, "gain": 80, "count": 0}) is True
+    assert calls[0]["params"]["restart"] is True
 
 
 def test_start_stack_failure_path(monkeypatch, seestar):
@@ -1135,7 +1173,7 @@ def test_heartbeat_thread_and_plate_solve(monkeypatch, seestar):
     seestar.is_connected = False
     reconnect_calls = {"n": 0}
 
-    def fake_reconnect():
+    def fake_reconnect(**kw):
         reconnect_calls["n"] += 1
         seestar.is_connected = True
         return True
@@ -1487,7 +1525,7 @@ def test_stop_scheduler_mark_wait_guest_and_watch(monkeypatch, seestar, tmp_path
             return False
 
     monkeypatch.setattr("device.seestar_device.threading.Thread", FakeThread)
-    monkeypatch.setattr(seestar, "reconnect", lambda: True)
+    monkeypatch.setattr(seestar, "reconnect", lambda **kw: True)
     monkeypatch.setattr(seestar, "guest_mode_init", lambda: None)
     monkeypatch.setattr(seestar, "event_callbacks_init", lambda _s: None)
     monkeypatch.setattr(
@@ -1548,6 +1586,76 @@ def test_mosaic_thread_fn_happy_path(monkeypatch, seestar):
         seestar.event_state["scheduler"]["cur_scheduler_item"]["action"] == "complete"
     )
     assert seestar.is_cur_scheduler_item_working is False
+
+
+def test_mosaic_thread_fn_checks_end_local_time_even_with_zero_panel_time(
+    monkeypatch, seestar
+):
+    """Regression: panel_time_sec=0 must not skip the end_local_time deadline.
+
+    Combining a degenerate panel_time_sec with an end_local_time used to make
+    the per-panel `for i in range(round(panel_time_sec / 5))` loop run zero
+    times, so the deadline check inside it never executed and the mosaic
+    just completed instantly instead of honoring the requested stop time.
+    """
+    import datetime as dt
+
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "device.seestar_device.Util.mosaic_next_center_spacing", lambda *_a: [0.1, 0.2]
+    )
+    monkeypatch.setattr(seestar, "mosaic_goto_inner_worker", lambda *_a, **_k: True)
+    monkeypatch.setattr(seestar, "set_target_name", lambda _n: {"ok": True})
+    monkeypatch.setattr(seestar, "start_stack", lambda _p: True)
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {"ok": True})
+
+    stopped = []
+    monkeypatch.setattr(
+        seestar, "stop_stack", lambda: stopped.append(True) or {"ok": True}
+    )
+
+    class _FixedNow(dt.datetime):
+        _tick = 0
+
+        @classmethod
+        def now(cls, tz=None):
+            _FixedNow._tick += 1
+            base = cls(2024, 1, 1, 22, 59, 50)
+            return base + dt.timedelta(seconds=10 * (_FixedNow._tick - 1))
+
+    monkeypatch.setattr("device.seestar_device.datetime", _FixedNow)
+
+    seestar.schedule["state"] = "working"
+    seestar.schedule["is_skip_requested"] = False
+    seestar.schedule["current_item_id"] = "m1"
+    seestar.event_state["scheduler"] = {"cur_scheduler_item": {}}
+
+    seestar.mosaic_thread_fn(
+        "T1",
+        1.0,
+        2.0,
+        False,
+        0,  # panel_time_sec — degenerate; end_local_time must still be honored
+        1,
+        1,
+        10,
+        80,
+        False,
+        "",
+        1,
+        5,
+        end_local_time="23:00",
+    )
+
+    assert stopped == [True]
+    # The deadline branch returns immediately and never reaches the
+    # "Finished mosaic." / action="complete" code at the end of the
+    # function — unlike the old bug, where a zero-length panel loop fell
+    # straight through to a normal completion.
+    assert (
+        seestar.event_state["scheduler"]["cur_scheduler_item"]["action"] != "complete"
+    )
 
 
 def test_start_mosaic_item_paths(monkeypatch, seestar):
@@ -1830,6 +1938,71 @@ def test_scheduler_thread_extra_branches(monkeypatch, seestar):
     assert seestar.schedule["state"] == "complete"
 
 
+def test_wait_until_skips_if_in_recent_past(monkeypatch, seestar):
+    """wait_until whose target is 0–8 h in the past is skipped; subsequent items still run."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    import datetime as _dt
+
+    calls = []
+    seestar.schedule["list"] = collections.deque(
+        [
+            {
+                "schedule_item_id": "u1",
+                "action": "wait_until",
+                "params": {"local_time": "08:00"},
+            },
+            {"schedule_item_id": "o1", "action": "scope_get_equ_coord"},
+        ]
+    )
+    seestar.schedule["state"] = "stopped"
+    seestar.schedule["item_number"] = 1
+    seestar.schedule["is_skip_requested"] = False
+    seestar.play_sound = lambda _sid: None
+    seestar.send_message_param_sync = lambda p: calls.append(p) or {"ok": True}
+
+    # 12:00 — target 08:00 is 4 h in the past; should be skipped
+    monkeypatch.setattr(
+        "device.seestar_device.datetime",
+        SimpleNamespace(now=lambda: _dt.datetime(2000, 1, 1, 12, 0)),
+    )
+
+    seestar.scheduler_thread_fn()
+
+    assert seestar.schedule["state"] == "complete"
+    assert any(c.get("method") == "scope_get_equ_coord" for c in calls)
+
+
+def test_wait_until_not_skipped_if_more_than_8h_past(monkeypatch, seestar):
+    """wait_until more than 8 h in the past is NOT skipped (treated as a future occurrence)."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    import datetime as _dt
+
+    seestar.schedule["list"] = collections.deque(
+        [
+            {
+                "schedule_item_id": "u1",
+                "action": "wait_until",
+                "params": {"local_time": "08:00"},
+            },
+        ]
+    )
+    seestar.schedule["state"] = "stopped"
+    seestar.schedule["item_number"] = 1
+    seestar.schedule["is_skip_requested"] = True  # exits the wait loop immediately
+    seestar.play_sound = lambda _sid: None
+    seestar.send_message_param_sync = lambda _p: {"ok": True}
+
+    # 22:00 — target 08:00 is 14 h in the past; should NOT be skipped
+    monkeypatch.setattr(
+        "device.seestar_device.datetime",
+        SimpleNamespace(now=lambda: _dt.datetime(2000, 1, 1, 22, 0)),
+    )
+
+    seestar.scheduler_thread_fn()
+
+    assert seestar.schedule["state"] == "complete"
+
+
 def test_wait_guest_watch_and_events_extra(monkeypatch, seestar, tmp_path):
     monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
 
@@ -1882,7 +2055,7 @@ def test_wait_guest_watch_and_events_extra(monkeypatch, seestar, tmp_path):
     seestar.is_watch_events = True
     assert seestar.start_watch_thread() is None
     seestar.is_watch_events = False
-    monkeypatch.setattr(seestar, "reconnect", lambda: False)
+    monkeypatch.setattr(seestar, "reconnect", lambda **kw: False)
     monkeypatch.setattr(
         "device.seestar_device.threading.Thread",
         lambda *a, **k: (_ for _ in ()).throw(Exception("thread boom")),
@@ -1990,7 +2163,12 @@ def test_get_events_focus_empty_queue_and_watch_firmware_init(monkeypatch, seest
             return None
 
     monkeypatch.setattr("device.seestar_device.threading.Thread", FakeThread)
-    monkeypatch.setattr(seestar, "reconnect", lambda: True)
+
+    def fake_reconnect_connected(**kw):
+        seestar.is_connected = True
+        return True
+
+    monkeypatch.setattr(seestar, "reconnect", fake_reconnect_connected)
     monkeypatch.setattr(seestar, "guest_mode_init", lambda: None)
     monkeypatch.setattr(seestar, "event_callbacks_init", lambda _s: None)
     seestar.is_watch_events = False
@@ -2151,8 +2329,11 @@ def _setup_mosaic_item_test(monkeypatch, seestar):
     )
 
     def fake_mosaic_thread_fn(*args, **kwargs):
-        # stack_type is the last positional arg passed by the lambda in start_mosaic_item
-        received["stack_type"] = args[-1] if args else kwargs.get("stack_type")
+        # end_local_time is last, stack_type is second-to-last
+        received["stack_type"] = (
+            args[-2] if len(args) >= 2 else kwargs.get("stack_type")
+        )
+        received["end_local_time"] = args[-1] if args else kwargs.get("end_local_time")
 
     class FakeThread:
         def __init__(self, target=None):
@@ -2446,3 +2627,195 @@ def test_force_stop_goto_idempotent_when_no_goto(monkeypatch, seestar):
 
     assert result["ok"] is True
     assert seestar.is_goto() is False
+
+
+# ---------------------------------------------------------------------------
+# exec scheduler action
+# ---------------------------------------------------------------------------
+
+
+def _exec_schedule(filepath="/usr/bin/true", timeout_sec=10):
+    return collections.deque(
+        [
+            {
+                "schedule_item_id": "e1",
+                "action": "exec",
+                "params": {"filepath": filepath, "timeout_sec": timeout_sec},
+            }
+        ]
+    )
+
+
+def _base_sched_state(seestar):
+    seestar.schedule["item_number"] = 1
+    seestar.schedule["state"] = "stopped"
+    seestar.schedule["is_skip_requested"] = False
+    seestar.play_sound = lambda _: None
+
+
+def test_scheduler_exec_completes_normally(monkeypatch, seestar):
+    """exec action: process exits cleanly, scheduler reaches 'complete'."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _: None)
+
+    class _Proc:
+        returncode = 0
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def poll(self):
+            return 0
+
+        def kill(self):
+            pass
+
+        def communicate(self, timeout=None):
+            return (b"ok\n", b"")
+
+    monkeypatch.setattr("device.seestar_device.subprocess.Popen", _Proc)
+    seestar.schedule["list"] = _exec_schedule()
+    _base_sched_state(seestar)
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {})
+
+    seestar.scheduler_thread_fn()
+    assert seestar.schedule["state"] == "complete"
+
+
+def test_scheduler_exec_timeout_kills_process(monkeypatch, seestar):
+    """exec action: process exceeds timeout → killed, scheduler reaches 'complete'."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _: None)
+    killed = []
+
+    class _Proc:
+        returncode = -9
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def poll(self):
+            return None  # never finishes on its own
+
+        def kill(self):
+            killed.append(True)
+
+        def communicate(self, timeout=None):
+            return (b"", b"")
+
+    monkeypatch.setattr("device.seestar_device.subprocess.Popen", _Proc)
+    # First call → start_time=0; second call → 9999 so elapsed > timeout_sec=1
+    _times = iter([0, 9999])
+    monkeypatch.setattr("device.seestar_device.time.time", lambda: next(_times, 9999))
+    seestar.schedule["list"] = _exec_schedule(timeout_sec=1)
+    _base_sched_state(seestar)
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {})
+
+    seestar.scheduler_thread_fn()
+    assert killed, "process should have been killed on timeout"
+    assert seestar.schedule["state"] == "complete"
+
+
+def test_scheduler_exec_skip_kills_process(monkeypatch, seestar):
+    """exec action: is_skip_requested → process killed before timeout check."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _: None)
+    killed = []
+
+    class _Proc:
+        returncode = -9
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def poll(self):
+            return None
+
+        def kill(self):
+            killed.append(True)
+
+        def communicate(self, timeout=None):
+            return (b"", b"")
+
+    monkeypatch.setattr("device.seestar_device.subprocess.Popen", _Proc)
+    seestar.schedule["list"] = _exec_schedule(timeout_sec=300)
+    _base_sched_state(seestar)
+    seestar.schedule["is_skip_requested"] = True
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {})
+
+    seestar.scheduler_thread_fn()
+    assert killed, "process should have been killed on skip"
+    assert seestar.schedule["state"] == "complete"
+
+
+def test_scheduler_exec_file_not_found_is_non_fatal(monkeypatch, seestar):
+    """exec action: FileNotFoundError is caught, scheduler continues to 'complete'."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _: None)
+
+    def _bad_popen(*a, **kw):
+        raise FileNotFoundError("no such file")
+
+    monkeypatch.setattr("device.seestar_device.subprocess.Popen", _bad_popen)
+    seestar.schedule["list"] = _exec_schedule(filepath="/nonexistent/script.sh")
+    _base_sched_state(seestar)
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {})
+
+    seestar.scheduler_thread_fn()
+    assert seestar.schedule["state"] == "complete"
+
+
+# ---------------------------------------------------------------------------
+# raw_command scheduler action
+# ---------------------------------------------------------------------------
+
+
+def test_scheduler_raw_command_sends_method_and_params(monkeypatch, seestar):
+    """raw_command: correct method + params forwarded to send_message_param_sync."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _: None)
+    sent = []
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda p: sent.append(p) or {"result": 0},
+    )
+    seestar.schedule["list"] = collections.deque(
+        [
+            {
+                "schedule_item_id": "r1",
+                "action": "raw_command",
+                "params": {"method": "iscope_start_view", "params": {"mode": "star"}},
+            }
+        ]
+    )
+    _base_sched_state(seestar)
+
+    seestar.scheduler_thread_fn()
+    assert seestar.schedule["state"] == "complete"
+    assert any(
+        m.get("method") == "iscope_start_view" and m.get("params") == {"mode": "star"}
+        for m in sent
+    ), f"expected iscope_start_view in {sent}"
+
+
+def test_scheduler_raw_command_missing_params_defaults_to_empty(monkeypatch, seestar):
+    """raw_command: absent 'params' key sends empty dict to the device."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _: None)
+    sent = []
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda p: sent.append(p) or {"result": 0},
+    )
+    seestar.schedule["list"] = collections.deque(
+        [
+            {
+                "schedule_item_id": "r1",
+                "action": "raw_command",
+                "params": {"method": "pi_get_network_setting"},
+            }
+        ]
+    )
+    _base_sched_state(seestar)
+
+    seestar.scheduler_thread_fn()
+    assert any(
+        m.get("method") == "pi_get_network_setting" and m.get("params") == {}
+        for m in sent
+    ), f"expected pi_get_network_setting with empty params in {sent}"

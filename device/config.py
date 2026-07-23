@@ -62,10 +62,29 @@ else:
     search_path = path.join(path.dirname(__file__))
 
 
+def _resolve_config_path(search_path: str) -> str:
+    """Resolve the config.toml path, honoring SEESTAR_ALP_CONFIG_PATH for testability.
+
+    Set by system tests (tests/system/) to point at a scratch config without
+    touching the developer's real device/config.toml.
+    """
+    override = os.environ.get("SEESTAR_ALP_CONFIG_PATH")
+    if override:
+        override = os.path.abspath(override)
+        if not os.path.exists(override):
+            raise FileNotFoundError(
+                f"SEESTAR_ALP_CONFIG_PATH points at a missing file: {override}"
+            )
+        return override
+    return os.path.abspath(os.path.join(search_path, "config.toml"))
+
+
 class _Config:
     def __init__(self):
-        self.path_to_dat = os.path.abspath(os.path.join(search_path, "config.toml"))
-        if not os.path.exists(self.path_to_dat):
+        self.path_to_dat = _resolve_config_path(search_path)
+        if not os.environ.get("SEESTAR_ALP_CONFIG_PATH") and not os.path.exists(
+            self.path_to_dat
+        ):
             path_to_ex = os.path.abspath(
                 os.path.join(search_path, "config.toml.example")
             )
@@ -136,6 +155,7 @@ class _Config:
         self.webui_accent_color: str = self.get_toml(
             "webui_settings", "accent_color", ""
         )
+        self.frontend: str = self.get_toml("webui_settings", "frontend", "classic")
 
         # Fixup bad configs
         if f"{self.save_frames_dir}" == "True" or f"{self.save_frames_dir}" == "False":

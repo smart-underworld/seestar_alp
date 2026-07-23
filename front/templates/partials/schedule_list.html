@@ -52,7 +52,12 @@
                   </div>
 
                   <!-- Fifth Column: Panel Time -->
-                  <div class="col align-self-start">{{ seconds_to_hms(item["params"]["panel_time_sec"]) }}</div>
+                  <div class="col align-self-start">
+                    {{ seconds_to_hms(item["params"]["panel_time_sec"]) }}
+                    {% if item["params"].get("end_local_time") %}
+                      <span class="badge bg-secondary ms-1" title="Stops at this local time">⏹ {{ item["params"]["end_local_time"] }}</span>
+                    {% endif %}
+                  </div>
 
                   <!-- Sixth Column: Gain -->
                   <div class="col align-self-start">{{ item["params"]["gain"] }}</div>
@@ -172,7 +177,12 @@
                   </div>
 
                   <!-- Fifth Column: Panel Time -->
-                  <div class="col align-self-start">{{ seconds_to_hms(item["params"]["panel_time_sec"]) }}</div>
+                  <div class="col align-self-start">
+                    {{ seconds_to_hms(item["params"]["panel_time_sec"]) }}
+                    {% if item["params"].get("end_local_time") %}
+                      <span class="badge bg-secondary ms-1" title="Stops at this local time">⏹ {{ item["params"]["end_local_time"] }}</span>
+                    {% endif %}
+                  </div>
 
                   <!-- Sixth Column: Gain -->
                   <div class="col align-self-start">{{ item["params"]["gain"] }}</div>

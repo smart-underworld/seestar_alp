@@ -83,7 +83,8 @@ function setup_brew {
   fi
 
   brew update
-  brew install readline xz
+  brew install readline xz node@22
+  brew link --overwrite node@22 2>/dev/null || true
 }
 
 function print_banner {
@@ -126,6 +127,7 @@ function setup() {
   config_toml_setup
   setup_brew
   python_virtualenv_setup
+  bash "${src_home}/scripts/build_ui.sh"
   print_banner "${action}"
 }
 

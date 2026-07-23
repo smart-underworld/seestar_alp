@@ -1,0 +1,424 @@
+<script lang="ts">
+  import { activeDeviceStatus, isConnected, activeDevNum, deviceList, deviceStatuses } from "../lib/stores/deviceStore";
+  import { batteryColor, storagePct, storageColor } from "../lib/utils";
+
+  $: s = $activeDeviceStatus;
+  $: device = $deviceList.find((d) => d.device_num === $activeDevNum);
+  $: isFederation = $activeDevNum === 0;
+  $: realDevices = $deviceList.filter((d) => d.device_num !== 0);
+
+  function wifiColor(signal: string): "success" | "warning" | "danger" {
+    if (!signal) return "danger";
+    const m = signal.match(/-?\d+/);
+    if (!m) return "danger";
+    const dbm = parseInt(m[0], 10);
+    if (dbm >= -69) return "success";
+    if (dbm >= -80) return "warning";
+    return "danger";
+  }
+
+  function wifiBars(signal: string): number {
+    if (!signal) return 0;
+    const m = signal.match(/-?\d+/);
+    if (!m) return 0;
+    const dbm = parseInt(m[0], 10);
+    if (dbm >= -69) return 3;
+    if (dbm >= -80) return 2;
+    return 1;
+  }
+
+  function fmt(v: unknown, unit = ""): string {
+    if (v == null || v === "") return "—";
+    return `${v}${unit}`;
+  }
+</script>
+
+<div class="page-hero">
+  <p class="page-kicker">Dashboard</p>
+  <h1 class="page-title">{device?.name ?? "Telescope"}</h1>
+  {#if device}
+    <p class="page-subtitle">{isFederation ? `${realDevices.length} device${realDevices.length !== 1 ? "s" : ""}` : device.ip_address}</p>
+  {/if}
+</div>
+
+{#if isFederation}
+  <div class="fed-grid">
+    {#each realDevices as dev}
+      {@const ds = $deviceStatuses[dev.device_num]}
+      <div class="panel-card fed-card">
+        <div class="fed-header">
+          <span class="fed-name">{dev.name}</span>
+          <span class="fed-dot {ds?.is_connected ? 'online' : 'offline'}" title={ds?.is_connected ? 'Connected' : 'Offline'}></span>
+        </div>
+        <div class="fed-ip">{dev.ip_address}</div>
+        {#if !ds || !ds.is_connected}
+          <div class="fed-offline">Offline</div>
+        {:else}
+          <div class="fed-row">
+            <span class="fed-key">State</span>
+            <span class="fed-val">{ds.view_state || "Idle"}</span>
+          </div>
+          <div class="fed-row">
+            <span class="fed-key">Mount</span>
+            <span class="fed-val">
+              <svg class="mode-icon {ds.mount_mode === 'Equatorial' ? 'success' : ds.mount_mode === 'Alt Azimuth' ? 'warning' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+                <line x1="12" y1="2" x2="12" y2="12"/>
+              </svg>
+              {ds.mount_mode}
+            </span>
+          </div>
+          {#if ds.battery_capacity != null}
+            <div class="fed-row">
+              <span class="fed-key">Battery</span>
+              <span class="fed-val {batteryColor(ds.battery_capacity)}">{ds.battery_capacity}%</span>
+            </div>
+          {/if}
+          {#if ds.wifi_signal}
+            <div class="fed-row">
+              <span class="fed-key">Wi-Fi</span>
+              <span class="fed-val">{ds.wifi_signal}</span>
+            </div>
+          {/if}
+          {#if ds.view_state && ds.view_state !== "Idle" && ds.mode}
+            <div class="fed-row">
+              <span class="fed-key">Mode</span>
+              <span class="fed-val">{ds.mode}{ds.stage ? ` · ${ds.stage}` : ""}</span>
+            </div>
+          {/if}
+        {/if}
+      </div>
+    {/each}
+  </div>
+{:else if !s || !s.backend_ready}
+  <div class="panel-card init-card">
+    <div class="init-spinner"></div>
+    <div>
+      <div class="init-title">Initializing…</div>
+      <div class="init-sub">Seestar ALP is starting up. The telescope will connect automatically.</div>
+    </div>
+  </div>
+{:else if !s.is_connected}
+  <div class="panel-card offline-card">
+    <div class="offline-icon">📡</div>
+    <div>
+      <div class="offline-title">Telescope Offline</div>
+      <div class="offline-sub">
+        {device?.name ?? `Device ${$activeDevNum}`} is not reachable.
+        Check that the telescope is powered on and connected to your network.
+      </div>
+    </div>
+  </div>
+{:else}
+  <div class="stat-grid">
+
+    <!-- Card 1: State -->
+    <div class="panel-card stat-card">
+      <p class="panel-title">State</p>
+      <div class="big-value">{s.view_state || "Idle"}</div>
+      {#if s.mode}
+        <div class="sub-line">{s.mode}{s.stage ? ` · ${s.stage}` : ""}</div>
+      {/if}
+      {#if s.target}
+        <div class="sub-line target">&#x2316; {s.target}</div>
+      {/if}
+      {#if s.schedule_state}
+        <div class="badge">{s.schedule_state}</div>
+      {/if}
+    </div>
+
+    <!-- Card 2: Mount -->
+    <div class="panel-card stat-card">
+      <p class="panel-title">Mount</p>
+      <div class="big-value">
+        <svg class="mode-icon {s.mount_mode === 'Equatorial' ? 'success' : s.mount_mode === 'Alt Azimuth' ? 'warning' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+          <line x1="12" y1="2" x2="12" y2="12"/>
+        </svg>
+        {s.mount_mode}
+      </div>
+      {#if s.ra != null}
+        <div class="sub-line coord">RA &nbsp;&nbsp;{s.ra.toFixed(5)}&deg;</div>
+      {/if}
+      {#if s.dec != null}
+        <div class="sub-line coord">Dec &nbsp;{s.dec >= 0 ? "+" : ""}{s.dec.toFixed(5)}&deg;</div>
+      {/if}
+    </div>
+
+    <!-- Card 3: Capture -->
+    <div class="panel-card stat-card">
+      <p class="panel-title">Capture</p>
+      {#if s.stacked !== "" && s.stacked != null}
+        <div class="big-value success">{s.stacked} <span class="unit">stacked</span></div>
+        {#if s.failed !== "" && s.failed != null && +s.failed > 0}
+          <div class="sub-line danger">{s.failed} failed</div>
+        {/if}
+      {:else}
+        <div class="big-value muted">—</div>
+        <div class="sub-line">No active imaging session</div>
+      {/if}
+    </div>
+
+    <!-- Card 4: Power -->
+    <div class="panel-card stat-card">
+      <p class="panel-title">Power</p>
+      {#if s.battery_capacity != null}
+        <div class="stat-row">
+          <div class="stat-key">Battery</div>
+          <div class="stat-value {batteryColor(s.battery_capacity)}">
+            {s.battery_capacity}%
+            <div class="metric-bar">
+              <div class="metric-bar-fill {batteryColor(s.battery_capacity)}" style="width:{Math.min(100, s.battery_capacity)}%"></div>
+            </div>
+          </div>
+        </div>
+      {/if}
+      <div class="stat-row">
+        <div class="stat-key">Charge</div>
+        <div class="stat-value">{fmt(s.charge_status)}</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-key">Batt Temp</div>
+        <div class="stat-value">{s.battery_temp != null ? `${Number(s.battery_temp).toFixed(1)}°C` : "—"}</div>
+      </div>
+      {#if s.temp != null}
+        <div class="stat-row">
+          <div class="stat-key">CPU Temp</div>
+          <div class="stat-value">{s.temp.toFixed(1)}°C</div>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Card 5: Storage & Network -->
+    <div class="panel-card stat-card">
+      <p class="panel-title">Storage &amp; Network</p>
+      <div class="icon-metrics">
+        {#if s.free_storage && s.free_storage !== "Unknown"}
+          <div class="icon-metric">
+            <svg class="big-icon {storageColor(s.free_storage)}" viewBox="0 0 24 24" fill="none" stroke-linecap="round" aria-label="Storage: {s.free_storage}">
+              <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="3" opacity="0.2"/>
+              <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="3"
+                stroke-dasharray="{(storagePct(s.free_storage) / 100 * 50.265).toFixed(1)} 50.265"
+                transform="rotate(-90 12 12)"/>
+            </svg>
+            <div class="icon-label">{s.free_storage}</div>
+          </div>
+        {/if}
+        <div class="icon-metric">
+          <svg class="big-icon {wifiColor(s.wifi_signal)}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Wi-Fi: {fmt(s.wifi_signal)}">
+            <path d="M1.42 9a16 16 0 0 1 21.16 0"    opacity={wifiBars(s.wifi_signal) >= 3 ? 1 : 0.2}/>
+            <path d="M5 12.55a11 11 0 0 1 14.08 0"   opacity={wifiBars(s.wifi_signal) >= 2 ? 1 : 0.2}/>
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"   opacity={wifiBars(s.wifi_signal) >= 1 ? 1 : 0.2}/>
+            <line x1="12" y1="20" x2="12.01" y2="20" stroke-width="3" opacity={wifiBars(s.wifi_signal) >= 1 ? 1 : 0.2}/>
+          </svg>
+          <div class="icon-label">{fmt(s.wifi_signal)}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 6: Telescope -->
+    <div class="panel-card stat-card">
+      <p class="panel-title">Telescope</p>
+      <div class="stat-row">
+        <div class="stat-key">Model</div>
+        <div class="stat-value">{fmt(s.model)}</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-key">Firmware</div>
+        <div class="stat-value">{fmt(s.firmware_ver)}</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-key">Focus</div>
+        <div class="stat-value">{fmt(s.focal_position)}</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-key">Balance</div>
+        <div class="stat-value">{s.balance_angle != null ? s.balance_angle : "—"}</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-key">Compass</div>
+        <div class="stat-value">{s.compass_direction != null ? s.compass_direction : "—"}</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-key">Auto Off</div>
+        <div class="stat-value">{s.auto_power_off ? "On" : "Off"}</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-key">Heater</div>
+        <div class="stat-value">{s.heater_enable ? "On" : "Off"}</div>
+      </div>
+    </div>
+
+  </div>
+{/if}
+
+<style>
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 1rem;
+  }
+  .stat-card { display: flex; flex-direction: column; }
+
+  .big-value {
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: var(--ui-body);
+    margin: 0.1rem 0 0.25rem;
+    line-height: 1.2;
+  }
+  .big-value.success { color: var(--ui-success); }
+  .big-value.muted   { color: var(--ui-muted); }
+
+  .mode-icon.success { color: var(--ui-success); }
+  .mode-icon.warning { color: var(--ui-warning); }
+  .big-value .unit   { font-size: 0.78rem; font-weight: 400; color: var(--ui-muted); }
+
+  .mode-icon {
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.15em;
+    margin-right: 0.25em;
+  }
+
+  .icon-metrics {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    margin-top: 0.5rem;
+  }
+  .icon-metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .big-icon {
+    width: 3rem;
+    height: 3rem;
+    flex-shrink: 0;
+  }
+  .big-icon.success { color: var(--ui-success); }
+  .big-icon.warning { color: var(--ui-warning); }
+  .big-icon.danger  { color: var(--ui-danger); }
+  .icon-label {
+    font-size: 0.68rem;
+    color: var(--ui-muted);
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  .sub-line { font-size: 0.82rem; color: var(--ui-muted); margin: 0.1rem 0; }
+  .sub-line.target { color: var(--ui-primary); }
+  .sub-line.danger { color: var(--ui-danger); }
+  .sub-line.coord  { font-variant-numeric: tabular-nums; font-family: "SF Mono", monospace; font-size: 0.78rem; }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin: 0.2rem 0;
+    font-size: 0.82rem;
+  }
+  .stat-key   { color: var(--ui-muted); white-space: nowrap; flex-shrink: 0; }
+  .stat-value { color: var(--ui-body); text-align: right; word-break: break-word; }
+  .stat-value.success { color: var(--ui-success); }
+  .stat-value.warning { color: var(--ui-warning); }
+  .stat-value.danger  { color: var(--ui-danger); }
+
+  .metric-bar {
+    height: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    margin-top: 3px;
+    width: 100%;
+    min-width: 60px;
+  }
+  .metric-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+  .metric-bar-fill.success { background: var(--ui-success); }
+  .metric-bar-fill.warning { background: var(--ui-warning); }
+  .metric-bar-fill.danger  { background: var(--ui-danger); }
+
+  .badge {
+    display: inline-block;
+    margin-top: 0.4rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--ui-primary);
+    text-transform: capitalize;
+    letter-spacing: 0.03em;
+  }
+
+  /* Federation summary */
+  .fed-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+  .fed-card { display: flex; flex-direction: column; gap: 0.2rem; }
+  .fed-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.15rem;
+  }
+  .fed-name   { font-weight: 600; font-size: 0.92rem; color: var(--ui-body); }
+  .fed-ip     { font-size: 0.75rem; color: var(--ui-muted); margin-bottom: 0.4rem; }
+  .fed-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .fed-dot.online  { background: var(--ui-success); }
+  .fed-dot.offline { background: var(--ui-danger); }
+  .fed-offline { font-size: 0.82rem; color: var(--ui-danger); margin-top: 0.2rem; }
+  .fed-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+  }
+  .fed-key { color: var(--ui-muted); white-space: nowrap; flex-shrink: 0; }
+  .fed-val {
+    color: var(--ui-body);
+    text-align: right;
+    word-break: break-word;
+    display: flex;
+    align-items: center;
+    gap: 0.2em;
+    justify-content: flex-end;
+  }
+  .fed-val.success { color: var(--ui-success); }
+  .fed-val.warning { color: var(--ui-warning); }
+  .fed-val.danger  { color: var(--ui-danger); }
+
+  .init-card, .offline-card {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    max-width: 540px;
+  }
+  .init-spinner {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--ui-primary);
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .init-title { font-weight: 600; color: var(--ui-muted); margin-bottom: 0.25rem; }
+  .init-sub   { font-size: 0.85rem; color: var(--ui-muted); line-height: 1.5; opacity: 0.7; }
+
+  .offline-icon  { font-size: 2rem; flex-shrink: 0; }
+  .offline-title { font-weight: 600; color: var(--ui-danger); margin-bottom: 0.25rem; }
+  .offline-sub   { font-size: 0.85rem; color: var(--ui-muted); line-height: 1.5; }
+</style>

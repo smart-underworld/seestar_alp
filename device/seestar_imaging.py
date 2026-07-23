@@ -294,6 +294,7 @@ class SeestarImaging:
         # - https://issues.chromium.org/issues/40791855 "multipart/x-mixed-replace images have 1 frame delay" from 2021
         # - https://issues.chromium.org/issues/41199053 "mjpeg image always shows the second to last image" from 2015
         # - https://issues.chromium.org/issues/40277613 "multipart/x-mixed-replace no longer working reliably" from 2012!
+        self.update_live_status()
         yield b"\r\n--frame\r\n"
         image, width, height = self.comm.get_image()
         if image is not None:

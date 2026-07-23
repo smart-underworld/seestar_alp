@@ -1,9 +1,10 @@
 import socket
 import json
+import subprocess
 import time
 import base64
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import threading
 import os
 import math
@@ -525,7 +526,9 @@ class Seestar:
             if sock is not None:
                 sock.close()
 
-    def reconnect(self) -> bool:
+    def reconnect(
+        self, connect_timeout: float | None = None, skip_auth: bool = False
+    ) -> bool:
         if self.is_connected:
             return True
 
@@ -539,10 +542,12 @@ class Seestar:
 
             # note: the below isn't thread safe!  (Reconnect can be called from different threads.)
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.s.settimeout(Config.timeout)
+            self.s.settimeout(
+                connect_timeout if connect_timeout is not None else Config.timeout
+            )
             self.s.connect((self.host, self.port))
-            # self.s.settimeout(None)
             self.is_connected = True
+
             # If an interop PEM key is configured, attempt firmware 7.18+ auth
             # inline so a fresh connection is authenticated before
             # start_watch_thread() issues get_device_state etc.  Failure is
@@ -552,9 +557,17 @@ class Seestar:
             # connection for a connect -> auth-fail -> disconnect loop that
             # kills live telemetry.  Stay connected and let the heartbeat loop
             # retry via _maybe_authenticate() once the scope idles.
-            try:
-                if getattr(Config, "seestar_interop_pem", ""):
-                    if self.authenticate():
+            # skip_auth=True is used during the startup reachability loop: the scope accepts
+            # TCP connections before its auth handler is ready, so we close the socket and
+            # return True to signal "reachable"; the heartbeat thread does the full auth.
+            if getattr(Config, "seestar_interop_pem", ""):
+                if skip_auth:
+                    self.socket_force_close()
+                    self.is_connected = False
+                    return True
+                try:
+                    ok = self.authenticate()
+                    if ok:
                         self.is_authenticated = True
                     else:
                         # Scope is likely busy; throttle the heartbeat retry so
@@ -563,11 +576,12 @@ class Seestar:
                         self.logger.warning(
                             "Authentication failed after connect; staying connected, will retry from heartbeat"
                         )
-            except Exception as e:
-                self._last_auth_attempt = time.time()
-                self.logger.warning(
-                    f"Authentication raised after connect (staying connected, will retry): {e}"
-                )
+                except Exception as e:
+                    self._last_auth_attempt = time.time()
+                    self.logger.warning(
+                        f"Authentication raised after connect (staying connected, will retry): {e}"
+                    )
+
             return True
         except socket.error:
             self.socket_force_close()
@@ -868,6 +882,15 @@ class Seestar:
         self.event_state["mount"]["Event"] = "Mount"
         self.event_state["mount"]["equ_mode"] = self.is_EQ_mode
 
+        if "EqModePA" in self.event_state:
+            self.event_state["3PPA"] = dict(self.event_state["EqModePA"])
+            # The source dict still carries its own "Event": "EqModePA" field.
+            # Classic UI's eventstatus.html matches cards via Jinja's
+            # selectattr('Event', 'equalto', '3PPA'), which inspects this
+            # embedded field rather than the event_state key -- so it must be
+            # corrected to "3PPA" or the PolarAlign card never matches, even
+            # after polar align genuinely completes.
+            self.event_state["3PPA"]["Event"] = "3PPA"
         if "3PPA" in self.event_state:
             self.event_state["3PPA"]["eq_offset_alt"] = self.cur_pa_error_y
             self.event_state["3PPA"]["eq_offset_az"] = self.cur_pa_error_x
@@ -1352,8 +1375,9 @@ class Seestar:
             self.send_message_param_sync(
                 {"method": "set_stack_type", "params": {"type": stack_type}}
             )
+        restart = params.get("restart", True)
         result = self.send_message_param_sync(
-            {"method": "iscope_start_stack", "params": {"restart": params["restart"]}}
+            {"method": "iscope_start_stack", "params": {"restart": restart}}
         )
         if "error" in result:
             # try again:
@@ -1362,7 +1386,7 @@ class Seestar:
             result = self.send_message_param_sync(
                 {
                     "method": "iscope_start_stack",
-                    "params": {"restart": params["restart"]},
+                    "params": {"restart": restart},
                 }
             )
             if "error" in result:
@@ -1581,7 +1605,8 @@ class Seestar:
 
                 self.mark_op_state("EqModePA", "working")
                 result = self.wait_end_op("EqModePA")
-                self.mark_op_state("EqModePA", "complete")
+                if result:
+                    self.mark_op_state("EqModePA", "complete")
                 # Take us out of view mode. Can prevent successive polar alignments.
                 self.send_message_param_sync({"method": "iscope_stop_view"})
                 if not result:
@@ -1809,6 +1834,15 @@ class Seestar:
             is_LP = [False, False, True, False, False, False, True, False]
             num_segments = len(spacing)
 
+            end_local_time = params.get("end_local_time")
+            end_deadline = None
+            if end_local_time:
+                h, m = map(int, end_local_time.split(":"))
+                now = datetime.now()
+                end_deadline = now.replace(hour=h, minute=m, second=0, microsecond=0)
+                if end_deadline <= now:
+                    end_deadline += timedelta(days=1)
+
             parsed_coord = Util.parse_coordinate(is_j2000, center_RA, center_Dec)
             center_RA = parsed_coord.ra.hour
             center_Dec = parsed_coord.dec.deg
@@ -1878,6 +1912,13 @@ class Seestar:
                         return
                     elif self.schedule["is_skip_requested"]:
                         self.logger.info("requested to skip. Stopping spectra_thread.")
+                        return
+                    elif end_deadline and datetime.now() >= end_deadline:
+                        self.logger.info(
+                            "End time %s reached. Stopping spectra item.",
+                            end_local_time,
+                        )
+                        self.stop_stack()
                         return
                     time_remaining -= count_down
                     time.sleep(10)
@@ -1968,8 +2009,16 @@ class Seestar:
         num_tries,
         retry_wait_s,
         stack_type="DeepSky",
+        end_local_time=None,
     ):
         try:
+            end_deadline = None
+            if end_local_time:
+                h, m = map(int, end_local_time.split(":"))
+                now = datetime.now()
+                end_deadline = now.replace(hour=h, minute=m, second=0, microsecond=0)
+                if end_deadline <= now:
+                    end_deadline += timedelta(days=1)
             spacing_result = Util.mosaic_next_center_spacing(
                 center_RA, center_Dec, overlap_percent
             )
@@ -2126,7 +2175,14 @@ class Seestar:
                         continue
 
                     panel_remaining_time_s = sleep_time_per_panel
-                    for i in range(round(sleep_time_per_panel / 5)):
+                    panel_iterations = round(sleep_time_per_panel / 5)
+                    # When an end time is set, that deadline -- not panel_time_sec --
+                    # governs when to stop (the UI presents them as alternatives, "—
+                    # or —"). A degenerate panel_time_sec (e.g. 0, used as a
+                    # placeholder when only an end time is wanted) must not cause
+                    # the deadline check below to be skipped entirely.
+                    i = 0
+                    while end_deadline is not None or i < panel_iterations:
                         self.event_state["scheduler"]["cur_scheduler_item"][
                             "panel_remaining_time_s"
                         ] = panel_remaining_time_s
@@ -2156,10 +2212,18 @@ class Seestar:
                                 "current mosaic stacking was requested to skip. Stopping at current mosaic."
                             )
                             return
+                        elif end_deadline and datetime.now() >= end_deadline:
+                            self.logger.info(
+                                "End time %s reached. Stopping mosaic item.",
+                                end_local_time,
+                            )
+                            self.stop_stack()
+                            return
 
                         time.sleep(5)
                         panel_remaining_time_s -= 5
                         item_remaining_time_s -= 5
+                        i += 1
                     self.event_state["scheduler"]["cur_scheduler_item"][
                         "panel_remaining_time_s"
                     ] = 0
@@ -2206,6 +2270,7 @@ class Seestar:
         num_tries = params.get("num_tries", 1)
         retry_wait_s = params.get("retry_wait_s", 300)
         stack_type = params.get("stack_type", "DeepSky")
+        end_local_time = params.get("end_local_time")
 
         # verify mosaic pattern
         if nRA < 1 or nDec < 0:
@@ -2273,6 +2338,7 @@ class Seestar:
                 num_tries,
                 retry_wait_s,
                 stack_type,
+                end_local_time,
             )
         )
         self.mosaic_thread.name = f"MosaicThread:{self.device_name}"
@@ -2659,7 +2725,21 @@ class Seestar:
                 wait_until_time = cur_schedule_item["params"]["local_time"].split(":")
                 wait_until_hour = int(wait_until_time[0])
                 wait_until_minute = int(wait_until_time[1])
-                local_time = local_time = datetime.now()
+                local_time = datetime.now()
+                target_time = local_time.replace(
+                    hour=wait_until_hour,
+                    minute=wait_until_minute,
+                    second=0,
+                    microsecond=0,
+                )
+                past_delta = local_time - target_time
+                if timedelta(0) < past_delta <= timedelta(hours=8):
+                    self.logger.info(
+                        f"wait_until {cur_schedule_item['params']['local_time']} is "
+                        f"{int(past_delta.total_seconds() / 60)} min in the past, skipping."
+                    )
+                    index += 1
+                    continue
                 item_state: SchedulerItemState = {
                     "type": "wait_until",
                     "schedule_item_id": self.schedule["current_item_id"],
@@ -2721,6 +2801,69 @@ class Seestar:
                     f"Trying to set exposure to {cur_schedule_item['params']}"
                 )
                 self.action_set_exposure(cur_schedule_item["params"])
+            elif action == "exec":
+                filepath = cur_schedule_item["params"].get("filepath", "")
+                timeout_sec = int(cur_schedule_item["params"].get("timeout_sec", 300))
+                item_state: SchedulerItemState = {
+                    "type": "exec",
+                    "schedule_item_id": self.schedule["current_item_id"],
+                    "action": f"exec {filepath}",
+                }
+                self.update_scheduler_state_obj(item_state)
+                try:
+                    proc = subprocess.Popen(
+                        [filepath],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                    start_time = time.time()
+                    while proc.poll() is None:
+                        update_time()
+                        if self.schedule["is_skip_requested"]:
+                            proc.kill()
+                            self.logger.info(
+                                "Exec: skip requested, killed %s", filepath
+                            )
+                            break
+                        if time.time() - start_time >= timeout_sec:
+                            proc.kill()
+                            self.logger.warning(
+                                "Exec: timeout after %ds, killed %s",
+                                timeout_sec,
+                                filepath,
+                            )
+                            break
+                        time.sleep(2)
+                    stdout, stderr = proc.communicate(timeout=5)
+                    self.logger.info(
+                        "Exec %s exit=%d stdout=%s",
+                        filepath,
+                        proc.returncode,
+                        stdout[:500].decode(errors="replace"),
+                    )
+                    if stderr:
+                        self.logger.warning(
+                            "Exec %s stderr=%s",
+                            filepath,
+                            stderr[:500].decode(errors="replace"),
+                        )
+                except FileNotFoundError:
+                    self.logger.error("Exec: file not found: %s", filepath)
+                except Exception as exc:
+                    self.logger.error("Exec %s failed: %s", filepath, exc)
+            elif action == "raw_command":
+                method = cur_schedule_item["params"].get("method", "")
+                cmd_params = cur_schedule_item["params"].get("params", {})
+                item_state: SchedulerItemState = {
+                    "type": "raw_command",
+                    "schedule_item_id": self.schedule["current_item_id"],
+                    "action": f"raw: {method}",
+                }
+                self.update_scheduler_state_obj(item_state)
+                self.logger.info("raw_command: %s params=%s", method, cmd_params)
+                request: MessageParams = {"method": method, "params": cmd_params}
+                result = self.send_message_param_sync(request)
+                self.logger.info("raw_command %s result: %s", method, result)
             else:
                 if "params" in cur_schedule_item:
                     request: MessageParams = {
@@ -2881,8 +3024,15 @@ class Seestar:
         else:
             self.is_watch_events = True
 
+            # Use a short connect timeout and skip auth during startup: the scope accepts
+            # TCP connections before its auth handler is ready (auth times out at ~10s per
+            # attempt). We just check TCP reachability here; the heartbeat thread does the
+            # full auth once the scope is ready.
+            _startup_connect_timeout = 2.0
             for i in range(3, 0, -1):
-                if self.reconnect():
+                if self.reconnect(
+                    connect_timeout=_startup_connect_timeout, skip_auth=True
+                ):
                     self.logger.info(f"{self.device_name} Connected")
                     break
                 else:
@@ -2910,21 +3060,24 @@ class Seestar:
                 self.heartbeat_msg_thread.name = (
                     f"HeartbeatMsgThread:{self.device_name}"
                 )
-                # self.heartbeat_msg_thread.start()
 
-                initial_state = self.send_message_param_sync(
-                    {"method": "get_device_state"}
-                )
-                if self.firmware_ver_int == 0:
-                    try:
-                        self.firmware_ver_int = initial_state["result"]["device"][
-                            "firmware_ver_int"
-                        ]
-                        self.logger.info(
-                            f"Firmware version (watch init): {self.firmware_ver_int}"
-                        )
-                    except Exception:
-                        pass
+                if self.is_connected:
+                    initial_state = self.send_message_param_sync(
+                        {"method": "get_device_state"}
+                    )
+                    if self.firmware_ver_int == 0:
+                        try:
+                            self.firmware_ver_int = initial_state["result"]["device"][
+                                "firmware_ver_int"
+                            ]
+                            self.logger.info(
+                                f"Firmware version (watch init): {self.firmware_ver_int}"
+                            )
+                        except Exception:
+                            pass
+                else:
+                    initial_state = {"result": {}}
+
                 # move start of heartbeat thread to here to avoid error with simulator
                 self.heartbeat_msg_thread.start()
 

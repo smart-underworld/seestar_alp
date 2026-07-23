@@ -26,6 +26,20 @@ jobs:
           pip install -r requirements.txt
           python -m pip install pyinstaller
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: front_v2/ui/package-lock.json
+
+      - name: Build v2 UI
+        run: |
+          cd front_v2/ui
+          npm ci
+          npm run build
+        shell: bash
+
       - name: Download astroquery data
         run: |
           $url = "https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
@@ -43,8 +57,9 @@ jobs:
           --add-data="device/config.toml.example;." --add-data="./version.txt;." --add-data="front/citation;astroquery" --add-data="front/templates;front/templates" --add-data="front/public;front/public" `
           --add-data="front/planning.json.example;." --add-data="front/csc_sites.json;." --add-data="data/de440s.bsp;data/de440s.bsp" --add-data="data/alp.dat:data/alp.dat" `
           --add-data="downloaded_data/astroquery/simbad/data/query_criteria_fields.json;astroquery/simbad/data" `
-          --paths=./front --paths=./device `
-          --collect-all=geomag `
+          --add-data="front_v2/ui/dist;front_v2/ui/dist" `
+          --paths=./front --paths=./device --paths=./front_v2 `
+          --collect-all=geomag --collect-all=uvicorn --collect-all=fastapi `
           root_app.py
           Compress-Archive -Path ./dist/seestar_alp/* -DestinationPath win_seestar_alp.zip
           echo "device_script_result=win_seestar_alp.zip" >> $env:GITHUB_ENV
@@ -86,6 +101,20 @@ jobs:
           pip install -r requirements.txt
           python -m pip install pyinstaller
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: front_v2/ui/package-lock.json
+
+      - name: Build v2 UI
+        run: |
+          cd front_v2/ui
+          npm ci
+          npm run build
+        shell: bash
+
       - name: Download astroquery data
         run: |
           url="https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
@@ -103,8 +132,9 @@ jobs:
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
           --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat:data/alp.dat" \
           --add-data="downloaded_data/astroquery/simbad/data/query_criteria_fields.json:astroquery/simbad/data" \
-          --paths=./front --paths=./device \
-          --collect-all=geomag \
+          --add-data="front_v2/ui/dist:front_v2/ui/dist" \
+          --paths=./front --paths=./device --paths=./front_v2 \
+          --collect-all=geomag --collect-all=uvicorn --collect-all=fastapi \
           root_app.py
           cd dist
           zip -r ../MacOS_arm64_seestar_alp.zip ./seestar_alp/*
@@ -144,6 +174,13 @@ jobs:
       - name: Install build dependencies
         run: sudo apt-get install -y --no-install-recommends rsync python3-pip
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: front_v2/ui/package-lock.json
+
       - name: Build .deb (${{ matrix.arch }})
         run: |
           ARCH=${{ matrix.arch }} ./linux/deb/build-deb.sh
@@ -181,6 +218,20 @@ jobs:
           pip install -r requirements.txt
           python -m pip install pyinstaller
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: front_v2/ui/package-lock.json
+
+      - name: Build v2 UI
+        run: |
+          cd front_v2/ui
+          npm ci
+          npm run build
+        shell: bash
+
       - name: Download astroquery data
         run: |
           url="https://raw.githubusercontent.com/astropy/astroquery/main/astroquery/simbad/data/query_criteria_fields.json"
@@ -198,8 +249,9 @@ jobs:
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
           --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat:data/alp.dat" \
           --add-data="downloaded_data/astroquery/simbad/data/query_criteria_fields.json:astroquery/simbad/data" \
-          --paths=./front --paths=./device \
-          --collect-all=geomag \
+          --add-data="front_v2/ui/dist:front_v2/ui/dist" \
+          --paths=./front --paths=./device --paths=./front_v2 \
+          --collect-all=geomag --collect-all=uvicorn --collect-all=fastapi \
           root_app.py
           cd dist
           zip -r ../MacOS_x86_seestar_alp.zip ./seestar_alp/*

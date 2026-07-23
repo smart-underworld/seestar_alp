@@ -74,6 +74,11 @@ DEB_FILE="${REPO_ROOT}/${PKG_NAME}_${DEB_VERSION}_${ARCH}.deb"
 echo "Building ${PKG_NAME} ${DEB_VERSION} (${ARCH})  [app version: ${APP_VERSION}]..."
 
 # ---------------------------------------------------------------------------
+# Build Svelte UI (arch-independent; done once regardless of ARCH target)
+# ---------------------------------------------------------------------------
+"$REPO_ROOT/scripts/build_ui.sh"
+
+# ---------------------------------------------------------------------------
 # Staging tree
 # ---------------------------------------------------------------------------
 STAGE=$(mktemp -d)
@@ -97,6 +102,7 @@ rsync -a --delete \
     --exclude='.venv/' \
     --exclude='.pyenv/' \
     --exclude='node_modules/' \
+    --exclude='front_v2/ui/node_modules/' \
     --exclude='__pycache__/' \
     --exclude='*.pyc' \
     --exclude='*.pyo' \

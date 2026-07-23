@@ -1,0 +1,143 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/svelte";
+import { writable } from "svelte/store";
+import Nav from "./Nav.svelte";
+
+const { mockPlatformGet } = vi.hoisted(() => ({ mockPlatformGet: vi.fn() }));
+
+// Mock the deviceStore so we can inject test values
+vi.mock("../stores/deviceStore", () => ({
+  deviceList:     writable([]),
+  activeDevNum:   writable(1),
+  deviceStatuses: writable({}),
+}));
+
+vi.mock("../api", async () => {
+  const actual = await vi.importActual<typeof import("../api")>("../api");
+  return {
+    ...actual,
+    api: { ...actual.api, platform: { get: mockPlatformGet, action: vi.fn() } },
+  };
+});
+
+import * as deviceStore from "../stores/deviceStore";
+
+const { deviceList, activeDevNum, deviceStatuses } = deviceStore as {
+  deviceList:     ReturnType<typeof writable>;
+  activeDevNum:   ReturnType<typeof writable>;
+  deviceStatuses: ReturnType<typeof writable>;
+};
+
+beforeEach(() => {
+  deviceList.set([]);
+  activeDevNum.set(1);
+  deviceStatuses.set({});
+  mockPlatformGet.mockReset();
+  mockPlatformGet.mockResolvedValue({ platform: "other" });
+});
+
+describe("Nav", () => {
+  it("renders the brand link", () => {
+    render(Nav);
+    expect(screen.getByText(/seestar alp/i)).toBeInTheDocument();
+  });
+
+  it("renders all primary nav links", () => {
+    render(Nav);
+    // Use getByRole("link") — respects aria-hidden, filtering out ghost-span duplicates and
+    // the collapsed mobile-menu (aria-hidden="true") so each label resolves to exactly one element.
+    const labels = [
+      "Home", "Startup", "Commands", "Goto", "Image", "Live",
+      "Mosaic", "Planning", "Schedule", "Settings", "SSC Config", "Stats", "Support",
+    ];
+    for (const label of labels) {
+      expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
+    }
+  });
+
+  it("shows 'No devices' chip when device list is empty", () => {
+    render(Nav);
+    expect(screen.getByText(/no devices/i)).toBeInTheDocument();
+  });
+
+  it("shows a single device chip when one device is configured", () => {
+    deviceList.set([{ device_num: 1, name: "Seestar S50", ip_address: "192.168.1.10", is_connected: true }]);
+    render(Nav);
+    expect(screen.getByText(/seestar s50/i)).toBeInTheDocument();
+  });
+
+  it("shows a connected dot indicator for a connected device", () => {
+    deviceList.set([{ device_num: 1, name: "MyStar", ip_address: "10.0.0.1", is_connected: true }]);
+    // devState() checks backend_ready — without it the dot stays in "loading" state, not "online"
+    deviceStatuses.set({ 1: { backend_ready: true, is_connected: true } as any });
+    const { container } = render(Nav);
+    const dot = container.querySelector(".dot.online");
+    expect(dot).toBeInTheDocument();
+  });
+
+  it("shows an offline dot indicator for an offline device", () => {
+    deviceList.set([{ device_num: 1, name: "MyStar", ip_address: "10.0.0.1", is_connected: false }]);
+    const { container } = render(Nav);
+    const dot = container.querySelector(".dot");
+    expect(dot).toBeInTheDocument();
+    expect(dot).not.toHaveClass("online");
+  });
+
+  it("renders a select when multiple devices are present", () => {
+    deviceList.set([
+      { device_num: 1, name: "Seestar A", ip_address: "10.0.0.1", is_connected: true },
+      { device_num: 2, name: "Seestar B", ip_address: "10.0.0.2", is_connected: false },
+    ]);
+    const { container } = render(Nav);
+    expect(container.querySelector("select.device-select")).toBeInTheDocument();
+  });
+
+  it("multi-device select contains each device name", () => {
+    deviceList.set([
+      { device_num: 1, name: "Alpha", ip_address: "10.0.0.1", is_connected: true },
+      { device_num: 2, name: "Beta",  ip_address: "10.0.0.2", is_connected: false },
+    ]);
+    // devState() needs backend_ready to resolve offline vs loading; without it both show " …"
+    deviceStatuses.set({
+      1: { backend_ready: true, is_connected: true } as any,
+      2: { backend_ready: true, is_connected: false } as any,
+    });
+    render(Nav);
+    expect(screen.getByText(/alpha/i)).toBeInTheDocument();
+    expect(screen.getByText(/beta.*offline/i)).toBeInTheDocument();
+  });
+
+  it("shows Guest Mode link when device status reports it available", () => {
+    activeDevNum.set(1);
+    deviceStatuses.set({ 1: { backend_ready: true, is_connected: true, guest_mode_available: true } as any });
+    const { container } = render(Nav);
+    expect(container.querySelector('a[href="#/guestmode"]')).toBeInTheDocument();
+  });
+
+  it("hides Guest Mode link when device status reports it unavailable", () => {
+    activeDevNum.set(1);
+    deviceStatuses.set({ 1: { backend_ready: true, is_connected: true, guest_mode_available: false } as any });
+    const { container } = render(Nav);
+    expect(container.querySelector('a[href="#/guestmode"]')).not.toBeInTheDocument();
+  });
+
+  it("shows Guest Mode link when device status is not yet loaded", () => {
+    activeDevNum.set(1);
+    deviceStatuses.set({});
+    const { container } = render(Nav);
+    expect(container.querySelector('a[href="#/guestmode"]')).toBeInTheDocument();
+  });
+
+  it("hides Platform link when host platform is not a Raspberry Pi", async () => {
+    mockPlatformGet.mockResolvedValue({ platform: "other" });
+    const { container } = render(Nav);
+    await waitFor(() => expect(mockPlatformGet).toHaveBeenCalled());
+    expect(container.querySelector('a[href="#/platform"]')).not.toBeInTheDocument();
+  });
+
+  it("shows Platform link when host platform is a Raspberry Pi", async () => {
+    mockPlatformGet.mockResolvedValue({ platform: "raspberry_pi" });
+    const { container } = render(Nav);
+    await waitFor(() => expect(container.querySelector('a[href="#/platform"]')).toBeInTheDocument());
+  });
+});
