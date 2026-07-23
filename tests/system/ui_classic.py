@@ -69,6 +69,26 @@ def check_live_imaging(page: Page, base_url: str, window_s: float = 5.0, min_byt
     assert_stream_liveness(page, "#liveViewImg", window_s=window_s, min_bytes=min_bytes)
 
 
+def stop_live_view(page: Page, base_url: str) -> None:
+    # Only call this for a standalone check (no schedule running) -- the
+    # Stop button's backend route stops the *scheduler* instead of the view
+    # if one is currently working, so calling this during the concurrent
+    # schedule-capture check would cancel the very capture being tested.
+    #
+    # .live-quickbar (which holds this button) is "display: none" by default
+    # and only "display: flex" under a mobile-width media query -- it's a
+    # real, mobile-only control, not a timing issue. Use a narrow viewport
+    # so it's actually rendered, matching how a real user would reach it.
+    original_size = page.viewport_size
+    page.set_viewport_size({"width": 420, "height": 900})
+    try:
+        page.once("dialog", lambda dialog: dialog.accept())
+        page.locator(".live-quickbar button", has_text="Stop").click()
+    finally:
+        if original_size:
+            page.set_viewport_size(original_size)
+
+
 def add_and_start_schedule_capture(page: Page, base_url: str, target: SystemTestTarget) -> None:
     page.goto(_device_path(base_url, "/schedule/image"))
     page.fill("#targetName", target.goto_target_name)
