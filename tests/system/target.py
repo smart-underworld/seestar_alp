@@ -30,7 +30,7 @@ def probe_tcp_port(host: str, port: int, label: str, timeout: float = 3.0) -> No
         ) from exc
 
 
-def check_sandbox_renderer_fresh(shared_dir: Path, max_age_s: float = 30.0) -> None:
+def check_sandbox_renderer_fresh(shared_dir: Path) -> None:
     """Verify the synthetic-sky renderer has produced output at least once.
 
     Only checks existence, not recency: sim.renderd re-renders solve.fits
@@ -40,9 +40,7 @@ def check_sandbox_renderer_fresh(shared_dir: Path, max_age_s: float = 30.0) -> N
     file is not evidence the renderer is down — only a missing file is.
     Actual renderer liveness during a run is proven by the goto/3PPA test
     itself succeeding (or timing out with a clear failure otherwise).
-    `max_age_s` is accepted for interface stability but no longer enforced.
     """
-    del max_age_s
     solve_fits = Path(shared_dir) / "solve.fits"
     if not solve_fits.exists():
         raise PreconditionError(

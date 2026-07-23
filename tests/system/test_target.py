@@ -36,7 +36,7 @@ def test_probe_tcp_port_raises_actionable_error_against_closed_port():
 
 def test_check_sandbox_renderer_fresh_raises_when_missing(tmp_path):
     with pytest.raises(PreconditionError, match="renderd"):
-        check_sandbox_renderer_fresh(tmp_path, max_age_s=30.0)
+        check_sandbox_renderer_fresh(tmp_path)
 
 
 def test_check_sandbox_renderer_fresh_passes_when_stale(tmp_path):
@@ -51,13 +51,13 @@ def test_check_sandbox_renderer_fresh_passes_when_stale(tmp_path):
     import os
 
     os.utime(solve_fits, (old_time, old_time))
-    check_sandbox_renderer_fresh(tmp_path, max_age_s=30.0)
+    check_sandbox_renderer_fresh(tmp_path)
 
 
 def test_check_sandbox_renderer_fresh_passes_when_recent(tmp_path):
     solve_fits = tmp_path / "solve.fits"
     solve_fits.write_bytes(b"x")
-    check_sandbox_renderer_fresh(tmp_path, max_age_s=30.0)
+    check_sandbox_renderer_fresh(tmp_path)
 
 
 def test_build_config_toml_produces_parseable_toml_with_expected_fields(tmp_path):

@@ -5,6 +5,7 @@ Never auto-selected: everything under tests/system/ is skipped unless
 AGENTS.md) never reaches out to real hardware or the sandbox.
 """
 
+import shutil
 import sys
 from pathlib import Path
 
@@ -140,6 +141,7 @@ def require_real_confirmation(target):
 @pytest.fixture(scope="module")
 def running_app(request, target):
     started: dict[str, AppProcess] = {}
+    config_dirs: list[Path] = []
 
     def _start(frontend: str) -> AppProcess:
         if frontend in started:
@@ -159,6 +161,7 @@ def running_app(request, target):
         config_dir.mkdir(parents=True, exist_ok=True)
         config_path = config_dir / "config.toml"
         config_path.write_text(config_text)
+        config_dirs.append(config_dir)
 
         proc = AppProcess(REPO_ROOT, config_path, uiport, ready_timeout=45.0)
         proc.start()
@@ -169,3 +172,5 @@ def running_app(request, target):
 
     for proc in started.values():
         proc.stop()
+    for config_dir in config_dirs:
+        shutil.rmtree(config_dir, ignore_errors=True)
