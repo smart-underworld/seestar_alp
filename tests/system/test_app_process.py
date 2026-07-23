@@ -3,7 +3,6 @@ import time
 from pathlib import Path
 
 import pytest
-import tomlkit
 
 from tests.system.app_process import AppProcess
 from tests.system.target import SystemTestTarget, build_config_toml, find_free_port
@@ -30,7 +29,11 @@ def unreachable_target_config(tmp_path):
     imgport = find_free_port()
     alpaca_port = find_free_port()
     text = build_config_toml(
-        target, frontend="classic", uiport=uiport, imgport=imgport, alpaca_port=alpaca_port
+        target,
+        frontend="classic",
+        uiport=uiport,
+        imgport=imgport,
+        alpaca_port=alpaca_port,
     )
     config_path = tmp_path / "config.toml"
     config_path.write_text(text)
@@ -137,5 +140,7 @@ def test_app_process_fails_fast_on_immediate_crash(tmp_path):
     elapsed = time.monotonic() - start_time
 
     assert len(str(excinfo.value)) > 0
-    assert elapsed < 5.0, f"start() took {elapsed:.1f}s to fail, expected fail-fast (<5s)"
+    assert elapsed < 5.0, (
+        f"start() took {elapsed:.1f}s to fail, expected fail-fast (<5s)"
+    )
     proc.stop()

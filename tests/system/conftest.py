@@ -127,7 +127,9 @@ def require_real_confirmation(target):
     def _confirm(action_description: str) -> None:
         if target.kind != "real":
             return
-        print(f"\n[system-test] About to run against REAL hardware: {action_description}")
+        print(
+            f"\n[system-test] About to run against REAL hardware: {action_description}"
+        )
         response = input("Type 'yes' to proceed, anything else aborts: ")
         if response.strip().lower() != "yes":
             pytest.fail(f"Aborted by user before: {action_description}")
@@ -146,7 +148,11 @@ def running_app(request, target):
         imgport = find_free_port()
         alpaca_port = find_free_port()
         config_text = build_config_toml(
-            target, frontend=frontend, uiport=uiport, imgport=imgport, alpaca_port=alpaca_port
+            target,
+            frontend=frontend,
+            uiport=uiport,
+            imgport=imgport,
+            alpaca_port=alpaca_port,
         )
         config_dir = Path(request.node.name.replace("/", "_") + f"_{frontend}_scratch")
         config_dir = Path("/tmp") / "seestar_alp_system_test" / config_dir.name

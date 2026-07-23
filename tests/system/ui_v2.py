@@ -18,8 +18,12 @@ def run_startup(page: Page, base_url: str) -> None:
     page.goto(f"{base_url}/#/startup")
 
     # Auto Focus: On (default true, but set explicitly for determinism)
-    page.locator(".option-row", has_text="Auto Focus").get_by_text("On", exact=True).click()
-    page.locator(".option-row", has_text="Dark Frames").get_by_text("On", exact=True).click()
+    page.locator(".option-row", has_text="Auto Focus").get_by_text(
+        "On", exact=True
+    ).click()
+    page.locator(".option-row", has_text="Dark Frames").get_by_text(
+        "On", exact=True
+    ).click()
     # Polar Align left at its default (true) — full startup sequence.
 
     page.get_by_role("button", name=re.compile("Run Startup Sequence")).click()
@@ -34,7 +38,9 @@ def run_startup(page: Page, base_url: str) -> None:
                 break
             state_text = tile.inner_text()
             if "fail" in state_text.lower():
-                raise AssertionError(f"Startup sequence reported a failure for {label}:\n{state_text}")
+                raise AssertionError(
+                    f"Startup sequence reported a failure for {label}:\n{state_text}"
+                )
             if "complete" not in state_text.lower():
                 tiles_ok = False
         if tiles_ok:
@@ -63,7 +69,9 @@ def do_goto(page: Page, base_url: str, target: SystemTestTarget) -> None:
     raise AssertionError("Goto did not complete within 120s")
 
 
-def check_live_imaging(page: Page, base_url: str, window_s: float = 5.0, min_bytes: int = 2048) -> None:
+def check_live_imaging(
+    page: Page, base_url: str, window_s: float = 5.0, min_bytes: int = 2048
+) -> None:
     page.goto(f"{base_url}/#/live")  # hash route -- see run_startup's comment
     assert_stream_liveness(page, "img", window_s=window_s, min_bytes=min_bytes)
 
@@ -80,7 +88,9 @@ def stop_live_view(page: Page, base_url: str) -> None:
     page.get_by_title("Stop live view").click()
 
 
-def add_and_start_schedule_capture(page: Page, base_url: str, target: SystemTestTarget) -> None:
+def add_and_start_schedule_capture(
+    page: Page, base_url: str, target: SystemTestTarget
+) -> None:
     page.goto(f"{base_url}/#/schedule")  # hash route -- see run_startup's comment
     page.get_by_role("button", name="Image (1×1)").click()
     page.fill("#field-target_name", target.goto_target_name)

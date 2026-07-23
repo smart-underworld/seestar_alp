@@ -36,10 +36,14 @@ def run_startup(page: Page, base_url: str) -> None:
             r"(AutoFocus|DarkLibrary|PolarAlign)[\s\S]{0,120}?State:\s*(\S+)",
             text,
         )
-        if len(watched) >= 3 and all(state.strip().lower() == "complete" for _, state in watched):
+        if len(watched) >= 3 and all(
+            state.strip().lower() == "complete" for _, state in watched
+        ):
             return
         page.wait_for_timeout(2000)
-    raise AssertionError(f"Startup sequence did not complete within 180s:\n{status.inner_text()}")
+    raise AssertionError(
+        f"Startup sequence did not complete within 180s:\n{status.inner_text()}"
+    )
 
 
 def do_goto(page: Page, base_url: str, target: SystemTestTarget) -> None:
@@ -64,7 +68,9 @@ def do_goto(page: Page, base_url: str, target: SystemTestTarget) -> None:
     raise AssertionError(f"Goto did not complete within 120s:\n{status.inner_text()}")
 
 
-def check_live_imaging(page: Page, base_url: str, window_s: float = 5.0, min_bytes: int = 2048) -> None:
+def check_live_imaging(
+    page: Page, base_url: str, window_s: float = 5.0, min_bytes: int = 2048
+) -> None:
     page.goto(_device_path(base_url, "/live/star"))
     assert_stream_liveness(page, "#liveViewImg", window_s=window_s, min_bytes=min_bytes)
 
@@ -89,7 +95,9 @@ def stop_live_view(page: Page, base_url: str) -> None:
             page.set_viewport_size(original_size)
 
 
-def add_and_start_schedule_capture(page: Page, base_url: str, target: SystemTestTarget) -> None:
+def add_and_start_schedule_capture(
+    page: Page, base_url: str, target: SystemTestTarget
+) -> None:
     page.goto(_device_path(base_url, "/schedule/image"))
     page.fill("#targetName", target.goto_target_name)
     page.fill("#ra", target.goto_ra)
