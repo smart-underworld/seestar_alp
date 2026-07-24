@@ -1,0 +1,120 @@
+name: Emulator full regression (goto/3PPA)
+
+on:
+  pull_request:
+    types: [labeled]
+  schedule:
+    - cron: "0 7 * * *"  # nightly, 07:00 UTC
+
+jobs:
+  full:
+    if: github.event_name == 'schedule' || github.event.label.name == 'run-full-system'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        firmware: ${{ fromJSON(needs.matrix.outputs.versions) }}
+    needs: matrix
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up QEMU (armhf emulation)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+
+      - name: Install backend + emulator + system-test dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -e '.[emulator,system]'
+          playwright install --with-deps chromium
+
+      - name: Cache firmware XAPK
+        uses: actions/cache@v4
+        with:
+          path: /tmp/emulator-fw/unpacked/_xapk_cache
+          key: firmware-xapk-${{ matrix.firmware.version_code }}
+
+      - name: Cache astrometry index files
+        uses: actions/cache@v4
+        with:
+          path: emulator/astrometry/index
+          key: astrometry-index-4100-series-v1
+
+      - name: Download astrometry index files (cache miss only)
+        run: emulator/astrometry/download_index.sh
+
+      - name: Provision firmware
+        run: |
+          python3 -m emulator.firmware.provision \
+            --version "${{ matrix.firmware.version }}" \
+            --version-code "${{ matrix.firmware.version_code }}" \
+            --work-dir /tmp/emulator-fw/unpacked
+
+      - name: Build emulator image
+        run: docker build --platform linux/arm/v7 -t seestar-emulator emulator/
+
+      - name: Rebuild renderer star catalog for this run
+        run: |
+          docker run --rm --platform linux/arm/v7 \
+            -v "$PWD/emulator/sim:/sim" \
+            -v "$PWD/emulator/astrometry/index:/usr/local/astrometry/data:ro" \
+            --entrypoint python3 seestar-emulator \
+            /sim/build_catalog.py /usr/local/astrometry/data/index-4107.fits /sim/data/stars.npy
+
+      - name: Launch emulator container
+        run: |
+          cd emulator
+          ./run.sh --firmware-dir /tmp/emulator-fw --model S50 "${{ matrix.firmware.version }}" &
+          echo $! > /tmp/emulator.pid
+
+      - name: Wait for emulator ports
+        run: |
+          timeout 120 bash -c 'until nc -z 127.0.0.1 4700 && nc -z 127.0.0.1 4800; do sleep 2; done'
+
+      - name: Launch synthetic-sky renderer
+        run: |
+          cd emulator
+          python3 -m sim.renderd --shared sim/shared --model S50 --catalog sim/data/stars.npy &
+          echo $! > /tmp/renderd.pid
+
+      - name: Run full regression tests
+        run: |
+          pytest tests/system --target emulator --host 127.0.0.1 \
+            --renderer-shared-dir emulator/sim/shared \
+            -m full \
+            --screenshot=on --video=on -q
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-full-playwright-artifacts-${{ matrix.firmware.version }}
+          path: test-results/
+
+      - name: Stop renderer and emulator container
+        if: always()
+        run: |
+          kill "$(cat /tmp/renderd.pid)" 2>/dev/null || true
+          docker stop seestar-emulator 2>/dev/null || true
+
+  matrix:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.label.name == 'run-full-system'
+    outputs:
+      versions: ${{ steps.read.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          python3 -c "
+          import json, yaml
+          doc = yaml.safe_load(open('emulator/firmware/versions.yaml'))
+          print('versions=' + json.dumps(doc['full_versions']))
+          " >> "$GITHUB_OUTPUT"
