@@ -1,7 +1,7 @@
 # System tests
 
 Drives the real seestar_alp application (both classic and v2 frontends)
-against either the seestar-api-research QEMU sandbox or a real Seestar,
+against either the in-repo QEMU emulator (`emulator/`) or a real Seestar,
 through actual browser automation (Playwright) — the full app is launched
 as a real subprocess (`root_app.py`) and driven by clicking through the
 actual rendered pages, not by calling internal functions or HTTP APIs
@@ -32,7 +32,7 @@ tests/integration`) and from a bare `pytest` invocation — a
 `pytest_collection_modifyitems` hook in `conftest.py` skips every test here
 unless `--target` is explicitly passed. There is no configuration that
 makes this suite run unattended; it always requires a live target (the
-sandbox or a real Seestar) reachable at the time it's invoked, and
+emulator or a real Seestar) reachable at the time it's invoked, and
 `--target real` additionally blocks on an interactive confirmation.
 
 Run it yourself, locally, whenever you want to validate a real end-to-end
@@ -40,6 +40,11 @@ flow — e.g. before a release, after changing anything in `device/`,
 `front/`, or `front_v2/`, or when you suspect a regression that only shows
 up against the real protocol (as opposed to the in-repo fake simulator
 `tests/integration/` uses).
+
+This suite also runs in CI — see `.github/workflows/emulator-smoke.yml`
+(every PR, no plate-solving) and `.github/workflows/emulator-full.yml` (the
+`run-full-system` PR label, or nightly). See
+[CI lanes](#ci-lanes) below for details.
 
 ## One-time setup
 
@@ -52,11 +57,11 @@ You need a firmware 7.18+ interop PEM key (see repo root `seestar_private_key.pe
 or wherever yours lives) — pass its path via `--pem` if it's not at
 `~/dev/seestar_private_key.pem`.
 
-## Against the sandbox
+## Against the emulator
 
-1. Start the sandbox (from the `seestar-api-research` checkout):
+1. Start the emulator (from the repo root):
    ```bash
-   cd ~/dev/seestar-api-research/sandbox
+   cd emulator
    ./run.sh
    ```
 2. Start the synthetic-sky renderer **on the host** (goto/3PPA is closed-loop
@@ -66,8 +71,8 @@ or wherever yours lives) — pass its path via `--pem` if it's not at
    ```
 3. Run the suite:
    ```bash
-   pytest tests/system --target sandbox \
-     --renderer-shared-dir ~/dev/seestar-api-research/sandbox/sim/shared
+   pytest tests/system --target emulator \
+     --renderer-shared-dir emulator/sim/shared
    ```
 
 ## Against a real Seestar
@@ -84,19 +89,20 @@ physically move/operate the telescope.
 
 | Flag | Default | Notes |
 |---|---|---|
-| `--target` | *(none — suite is skipped)* | `sandbox` or `real` |
-| `--host` | `127.0.0.1` | device/sandbox host |
+| `--target` | *(none — suite is skipped)* | `emulator` or `real` |
+| `--host` | `127.0.0.1` | device/emulator host |
 | `--frontend` | `both` | `classic`, `v2`, or `both` |
 | `--pem` | `~/dev/seestar_private_key.pem` | interop PEM path |
 | `--goto-target-name` | `Vega` | display name only |
 | `--goto-ra` / `--goto-dec` | Vega's coords | decimal degrees |
 | `--capture-duration` | `120` | seconds, scheduled star-capture item |
-| `--renderer-shared-dir` | *(none)* | required for `--target sandbox` |
+| `--renderer-shared-dir` | *(none)* | required for `--target emulator` |
+| `--startup-polar-align` / `--no-startup-polar-align` | polar align on | skip 3PPA in the startup flow (used by the smoke CI lane) |
 
-## Known limitations (sandbox)
+## Known limitations (emulator)
 
 - **The scheduled capture never actually stacks a frame against the
-  sandbox.** The sandbox's synthetic star field is injected only into the
+  emulator.** The emulator's synthetic star field is injected only into the
   offline `solve-field` FITS read (used for plate-solving/goto/3PPA), never
   into the live camera/stacking frame buffer, which is always a flat gray
   test pattern by design. So the capture step asserts on frames *processed*
@@ -108,10 +114,33 @@ physically move/operate the telescope.
   there's no server-side deep-link fallback, so a bare path 404s. The
   drivers already account for this; if you're extending `ui_v2.py`, always
   navigate via the `#/...` hash form.
-- **Timings tuned for the sandbox's ~10s stack exposure cycle** (the
+- **Timings tuned for the emulator's ~10s stack exposure cycle** (the
   `exposure_length_stack_ms` in the scratch config) may need adjusting for
   a real device with different exposure settings — see `--capture-duration`
   and the `window_s` used in `test_schedule_capture_with_concurrent_live_check`.
+
+## CI lanes
+
+This suite also runs in CI, in two lanes driven off the same `pytest
+tests/system --target emulator` invocation used locally:
+
+- **`.github/workflows/emulator-smoke.yml`** — runs on every PR. Provisions
+  the smoke firmware version (`versions.yaml`'s `smoke_version`), builds and
+  launches the emulator, and runs `pytest tests/system -m smoke
+  --no-startup-polar-align` (no `--renderer-shared-dir`, since plate solving
+  and goto aren't exercised here — no astrometry index files are downloaded
+  for this lane).
+- **`.github/workflows/emulator-full.yml`** — runs on the `run-full-system`
+  PR label, or nightly on a schedule. Downloads the astrometry index files,
+  rebuilds the renderer's star catalog, launches both the emulator and
+  `sim.renderd`, and runs `pytest tests/system -m full
+  --renderer-shared-dir emulator/sim/shared` across every firmware version
+  listed in `versions.yaml`'s `full_versions`.
+
+The `smoke`/`full` pytest markers select which tests each lane runs;
+goto/3PPA-driving tests are marked `full` since they need the renderer and
+astrometry data, while tests that don't depend on plate solving are marked
+`smoke`.
 
 ## Diagnosing a failed run
 
@@ -120,5 +149,5 @@ screenshot and video of the failing page, alongside the `AppProcess` log
 tail included in any startup-timeout error message:
 
 ```bash
-pytest tests/system --target sandbox --renderer-shared-dir ... --screenshot=on --video=on
+pytest tests/system --target emulator --renderer-shared-dir ... --screenshot=on --video=on
 ```
