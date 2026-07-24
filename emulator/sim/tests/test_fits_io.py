@@ -3,7 +3,8 @@ from astropy.io import fits
 from sim.fits_io import write_solve_fits, write_raw_frame
 
 def test_write_solve_fits_portrait_uint16(tmp_path):
-    img = np.zeros((1920, 1080), dtype=np.uint16); img[100, 50] = 60000
+    img = np.zeros((1920, 1080), dtype=np.uint16)
+    img[100, 50] = 60000
     seq = write_solve_fits(str(tmp_path), img, header={"BAYERPAT": "GRBG"})
     assert (tmp_path / "solve.seq").read_text().strip() == str(seq)
     with fits.open(tmp_path / "solve.fits") as h:
@@ -16,7 +17,8 @@ def test_write_solve_fits_portrait_uint16(tmp_path):
     assert write_solve_fits(str(tmp_path), img) == seq + 1
 
 def test_write_raw_frame_native_endian(tmp_path):
-    img = np.zeros((1920, 1080), dtype=np.uint16); img[100, 50] = 60000
+    img = np.zeros((1920, 1080), dtype=np.uint16)
+    img[100, 50] = 60000
     seq = write_raw_frame(str(tmp_path), img)
     assert (tmp_path / "live.seq").read_text().strip() == str(seq)
     raw = (tmp_path / "live.raw").read_bytes()

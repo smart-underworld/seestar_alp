@@ -1,5 +1,4 @@
 import json
-import pytest
 from sim.geometry import SENSOR, frame_format, frame_nbytes, load_frame_format
 
 def test_s50_is_1920x1080():

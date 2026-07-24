@@ -1,4 +1,3 @@
-import numpy as np
 from sim import catalog, gen_catalog
 
 def test_build_and_near(tmp_path):

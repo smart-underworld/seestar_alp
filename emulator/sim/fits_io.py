@@ -1,16 +1,19 @@
-import os, numpy as np
+import os
+import numpy as np
 from astropy.io import fits
 
 def _next_seq(shared_dir, name):
     p = os.path.join(shared_dir, name)
     try:
-        with open(p) as f: return int(f.read().strip()) + 1
+        with open(p) as f:
+            return int(f.read().strip()) + 1
     except (FileNotFoundError, ValueError):
         return 1
 
 def _write_seq(shared_dir, name, seq):
     tmp = os.path.join(shared_dir, name + ".tmp")
-    with open(tmp, "w") as f: f.write(str(seq))
+    with open(tmp, "w") as f:
+        f.write(str(seq))
     os.replace(tmp, os.path.join(shared_dir, name))
 
 def write_solve_fits(shared_dir, image, *, header=None):

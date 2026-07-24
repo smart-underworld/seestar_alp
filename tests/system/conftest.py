@@ -37,7 +37,7 @@ def pytest_addoption(parser):
         help="Run tests/system/ against the QEMU emulator or a real Seestar. "
         "Omitting this skips the entire tests/system/ directory.",
     )
-    group.addoption("--host", default="127.0.0.1", help="Device/sandbox host.")
+    group.addoption("--host", default="127.0.0.1", help="Device/emulator host.")
     group.addoption(
         "--frontend",
         choices=["classic", "v2", "both"],

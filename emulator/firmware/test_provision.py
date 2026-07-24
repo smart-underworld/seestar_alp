@@ -1,6 +1,5 @@
 import io
 import subprocess
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
