@@ -5,10 +5,11 @@ on:
     types: [labeled]
   schedule:
     - cron: "0 7 * * *"  # nightly, 07:00 UTC
+  workflow_dispatch: {}
 
 jobs:
   full:
-    if: github.event_name == 'schedule' || github.event.label.name == 'run-full-system'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-full-system'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -106,7 +107,7 @@ jobs:
 
   matrix:
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event.label.name == 'run-full-system'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-full-system'
     outputs:
       versions: ${{ steps.read.outputs.versions }}
     steps:
