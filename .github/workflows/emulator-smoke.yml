@@ -13,6 +13,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: TEMPORARY diagnostic - test APK mirror reachability from a real runner
+        run: |
+          echo "=== egress IP ==="
+          curl -s -m 10 https://ifconfig.me || true
+          echo
+          echo "=== APKPure direct download (known failing) ==="
+          curl -sD - -m 15 -A "Mozilla/5.0" -o /tmp/apkpure_body.html \
+            "https://d.apkpure.com/b/XAPK/com.zwo.seestar?versionCode=2846" | head -20
+          echo "--- body head (first 500 bytes, to check for JS-challenge markers) ---"
+          head -c 500 /tmp/apkpure_body.html; echo
+          echo "--- challenge marker check ---"
+          grep -io "just a moment\|checking your browser\|cf-turnstile\|challenges.cloudflare\|cf-error" /tmp/apkpure_body.html | sort -u || echo "(no challenge markers found)"
+          echo
+          echo "=== APKCombo app page ==="
+          curl -sD - -m 15 -A "Mozilla/5.0" -o /tmp/apkcombo_body.html \
+            "https://apkcombo.com/seestar/com.zwo.seestar/download/phone-3.3.0-apk" | head -20
+          echo "--- body size ---"
+          wc -c /tmp/apkcombo_body.html
+          echo "--- challenge marker check ---"
+          grep -io "just a moment\|checking your browser\|cf-turnstile\|challenges.cloudflare\|cf-error" /tmp/apkcombo_body.html | sort -u || echo "(no challenge markers found)"
+          echo "--- any embedded direct apk/xapk link? ---"
+          grep -io 'href="[^"]*\.apk[^"]*"\|href="[^"]*\.xapk[^"]*"\|"downloadUrl"[^,}]*\|/dld/[a-z0-9/_.-]*' /tmp/apkcombo_body.html | sort -u | head -10 || echo "(none found)"
+        continue-on-error: true
+
       - name: Set up Python 3.13
         uses: actions/setup-python@v5
         with:
