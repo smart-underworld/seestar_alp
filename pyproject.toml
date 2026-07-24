@@ -83,6 +83,10 @@ v2 = [
 system = [
     "pytest-playwright>=0.5",
 ]
+emulator = [
+    "cloudscraper>=1.2.71",
+    "beautifulsoup4>=4.12.0",
+]
 
 [dependency-groups]
 dev = [
@@ -96,7 +100,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 markers = [
     "integration: end-to-end integration tests that may use sockets/processes",
-    "system: manual-only system tests against a real Seestar or the QEMU sandbox; never auto-selected, requires --target",
+    "system: manual-only system tests against a real Seestar or the QEMU emulator; never auto-selected, requires --target",
+    "smoke: tests/system subset requiring no plate-solving (startup w/o 3PPA, live-view) — used by the always-on CI emulator-smoke lane",
+    "full: tests/system subset requiring plate-solving (3PPA, goto, schedule) — used by the label/nightly-gated CI emulator-full lane",
 ]
 filterwarnings = [
     "ignore:datetime\\.datetime\\.utcfromtimestamp\\(\\) is deprecated.*:DeprecationWarning",
