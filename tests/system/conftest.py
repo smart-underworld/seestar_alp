@@ -64,6 +64,19 @@ def pytest_addoption(parser):
         help="Path to emulator/sim/shared "
         "(required when --target emulator, for the goto precondition check).",
     )
+    group.addoption(
+        "--startup-polar-align",
+        action="store_true",
+        default=True,
+        help="Run the startup flow's 3-point polar alignment (default: True). "
+        "CI's smoke lane passes --no-startup-polar-align.",
+    )
+    group.addoption(
+        "--no-startup-polar-align",
+        action="store_false",
+        dest="startup_polar_align",
+        help="Skip 3PPA in the startup flow (used by the smoke CI lane).",
+    )
 
 
 def pytest_ignore_collect(collection_path: Path, config):

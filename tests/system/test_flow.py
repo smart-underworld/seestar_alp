@@ -2,6 +2,12 @@
 scheduled star capture with a concurrent live-imaging check.
 
 Runs once per frontend selected via --frontend (classic, v2, or both).
+
+test_startup and test_live_imaging_standalone are @pytest.mark.smoke: no
+plate-solving is involved (startup runs with polar_align=False, skipping
+3PPA). test_goto and test_schedule_capture_with_concurrent_live_check are
+@pytest.mark.full: both target an RA/Dec and exercise the plate-solving-
+dependent path (goto/3PPA against the emulator's synthetic-sky renderer).
 """
 
 import time
@@ -50,10 +56,14 @@ def app_base_url(app):
     return app.base_url
 
 
-def test_startup(page, app_base_url, driver):
-    driver.run_startup(page, app_base_url)
+@pytest.mark.smoke
+@pytest.mark.full
+def test_startup(page, app_base_url, driver, request):
+    polar_align = request.config.getoption("--startup-polar-align")
+    driver.run_startup(page, app_base_url, polar_align=polar_align)
 
 
+@pytest.mark.full
 def test_goto(page, app_base_url, driver, target, require_real_confirmation):
     require_real_confirmation(
         f"slew to {target.goto_target_name} (ra={target.goto_ra}, dec={target.goto_dec})"
@@ -61,6 +71,8 @@ def test_goto(page, app_base_url, driver, target, require_real_confirmation):
     driver.do_goto(page, app_base_url, target)
 
 
+@pytest.mark.smoke
+@pytest.mark.full
 def test_live_imaging_standalone(page, app_base_url, driver):
     driver.check_live_imaging(page, app_base_url)
     # Stop the view this test started -- leaving it running was confirmed to
@@ -70,6 +82,7 @@ def test_live_imaging_standalone(page, app_base_url, driver):
     driver.stop_live_view(page, app_base_url)
 
 
+@pytest.mark.full
 def test_schedule_capture_with_concurrent_live_check(
     page, app_base_url, driver, target, require_real_confirmation
 ):
