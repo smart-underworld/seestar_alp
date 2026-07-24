@@ -8,7 +8,7 @@ from tests.system.target import (
     PreconditionError,
     SystemTestTarget,
     build_config_toml,
-    check_sandbox_renderer_fresh,
+    check_emulator_renderer_fresh,
     find_free_port,
     probe_tcp_port,
 )
@@ -34,12 +34,12 @@ def test_probe_tcp_port_raises_actionable_error_against_closed_port():
         probe_tcp_port("127.0.0.1", port, "test-thing", timeout=0.5)
 
 
-def test_check_sandbox_renderer_fresh_raises_when_missing(tmp_path):
+def test_check_emulator_renderer_fresh_raises_when_missing(tmp_path):
     with pytest.raises(PreconditionError, match="renderd"):
-        check_sandbox_renderer_fresh(tmp_path)
+        check_emulator_renderer_fresh(tmp_path)
 
 
-def test_check_sandbox_renderer_fresh_passes_when_stale(tmp_path):
+def test_check_emulator_renderer_fresh_passes_when_stale(tmp_path):
     # sim.renderd only re-renders in response to a pointing change, so an
     # idle-but-running renderer can leave a solve.fits that's hours old with
     # no pointing activity to trigger a fresh render. Staleness alone must
@@ -51,18 +51,18 @@ def test_check_sandbox_renderer_fresh_passes_when_stale(tmp_path):
     import os
 
     os.utime(solve_fits, (old_time, old_time))
-    check_sandbox_renderer_fresh(tmp_path)
+    check_emulator_renderer_fresh(tmp_path)
 
 
-def test_check_sandbox_renderer_fresh_passes_when_recent(tmp_path):
+def test_check_emulator_renderer_fresh_passes_when_recent(tmp_path):
     solve_fits = tmp_path / "solve.fits"
     solve_fits.write_bytes(b"x")
-    check_sandbox_renderer_fresh(tmp_path)
+    check_emulator_renderer_fresh(tmp_path)
 
 
 def test_build_config_toml_produces_parseable_toml_with_expected_fields(tmp_path):
     target = SystemTestTarget(
-        kind="sandbox",
+        kind="emulator",
         host="127.0.0.1",
         pem_path=str(tmp_path / "key.pem"),
         goto_target_name="Vega",

@@ -1,8 +1,10 @@
 """pytest configuration for the manual-only system test suite.
 
 Never auto-selected: everything under tests/system/ is skipped unless
---target is explicitly passed, so a bare `pytest` run (or the CI lanes in
-AGENTS.md) never reaches out to real hardware or the sandbox.
+--target is explicitly passed, so a bare `pytest` run (or the fast/simulator
+CI lanes in AGENTS.md) never reaches out to real hardware or the emulator.
+The CI lanes that DO exercise this suite (emulator-smoke.yml,
+emulator-full.yml) pass --target emulator explicitly, same as a human would.
 """
 
 import shutil
@@ -18,7 +20,7 @@ from tests.system.target import (  # noqa: E402
     PreconditionError,
     SystemTestTarget,
     build_config_toml,
-    check_sandbox_renderer_fresh,
+    check_emulator_renderer_fresh,
     find_free_port,
     probe_tcp_port,
 )
@@ -30,9 +32,9 @@ def pytest_addoption(parser):
     group = parser.getgroup("system")
     group.addoption(
         "--target",
-        choices=["sandbox", "real"],
+        choices=["emulator", "real"],
         default=None,
-        help="Run tests/system/ against the QEMU sandbox or a real Seestar. "
+        help="Run tests/system/ against the QEMU emulator or a real Seestar. "
         "Omitting this skips the entire tests/system/ directory.",
     )
     group.addoption("--host", default="127.0.0.1", help="Device/sandbox host.")
@@ -59,8 +61,8 @@ def pytest_addoption(parser):
     group.addoption(
         "--renderer-shared-dir",
         default=None,
-        help="Path to seestar-api-research/sandbox/sim/shared "
-        "(required when --target sandbox, for the goto precondition check).",
+        help="Path to emulator/sim/shared "
+        "(required when --target emulator, for the goto precondition check).",
     )
 
 
@@ -83,7 +85,7 @@ def pytest_collection_modifyitems(config, items):
         return
     if config.getoption("--target") is None:
         skip = pytest.mark.skip(
-            reason="tests/system/ requires --target sandbox|real; skipped by default"
+            reason="tests/system/ requires --target emulator|real; skipped by default"
         )
         for item in system_items:
             item.add_marker(skip)
@@ -122,14 +124,14 @@ def target(request) -> SystemTestTarget:
 
     probe_tcp_port(t.host, 4700, "device control port")
     probe_tcp_port(t.host, 4800, "device imaging port")
-    if kind == "sandbox":
+    if kind == "emulator":
         if t.renderer_shared_dir is None:
             raise PreconditionError(
-                "--target sandbox requires --renderer-shared-dir pointing at "
-                "seestar-api-research/sandbox/sim/shared (goto/3PPA there is "
+                "--target emulator requires --renderer-shared-dir pointing at "
+                "emulator/sim/shared (goto/3PPA there is "
                 "closed-loop and needs sim.renderd running on the host)."
             )
-        check_sandbox_renderer_fresh(t.renderer_shared_dir)
+        check_emulator_renderer_fresh(t.renderer_shared_dir)
 
     return t
 

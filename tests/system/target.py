@@ -30,7 +30,7 @@ def probe_tcp_port(host: str, port: int, label: str, timeout: float = 3.0) -> No
         ) from exc
 
 
-def check_sandbox_renderer_fresh(shared_dir: Path) -> None:
+def check_emulator_renderer_fresh(shared_dir: Path) -> None:
     """Verify the synthetic-sky renderer has produced output at least once.
 
     Only checks existence, not recency: sim.renderd re-renders solve.fits
@@ -44,18 +44,18 @@ def check_sandbox_renderer_fresh(shared_dir: Path) -> None:
     solve_fits = Path(shared_dir) / "solve.fits"
     if not solve_fits.exists():
         raise PreconditionError(
-            f"{solve_fits} does not exist. Goto/3PPA against the sandbox is "
+            f"{solve_fits} does not exist. Goto/3PPA against the emulator is "
             f"closed-loop and needs the synthetic-sky renderer running on the "
             f"host first:\n"
             f"  python3 -m sim.renderd --shared {shared_dir} --model S50 "
             f"--catalog sim/data/stars.npy\n"
-            f"(run from the seestar-api-research/sandbox checkout)"
+            f"(run from the emulator/ checkout)"
         )
 
 
 @dataclass
 class SystemTestTarget:
-    kind: str  # "sandbox" | "real"
+    kind: str  # "emulator" | "real"
     host: str
     pem_path: str
     goto_target_name: str

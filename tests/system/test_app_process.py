@@ -16,7 +16,7 @@ def unreachable_target_config(tmp_path):
     # keep retrying in the background but must never block root_app.py's own
     # HTTP servers from binding and printing "Startup Complete".
     target = SystemTestTarget(
-        kind="sandbox",
+        kind="emulator",
         host="127.0.0.1",
         pem_path=str(tmp_path / "unused.pem"),
         goto_target_name="Vega",
