@@ -35,3 +35,5 @@ test_schedule_1.json
 test_schedule.json
 schedule/*.json
 alpyca_EQFirmware.log
+emulator/astrometry/index/
+emulator/sim/data/*.npy
