@@ -1,6 +1,6 @@
 """Target selection, precondition checks, and scratch config.toml generation
 for the tests/system/ suite (drives seestar_alp against a real Seestar or the
-QEMU sandbox from seestar-api-research)."""
+in-repo QEMU emulator, `emulator/`)."""
 
 import socket
 from dataclasses import dataclass
@@ -25,7 +25,7 @@ def probe_tcp_port(host: str, port: int, label: str, timeout: float = 3.0) -> No
             return
     except OSError as exc:
         raise PreconditionError(
-            f"Cannot reach {label} at {host}:{port} ({exc}). Is the sandbox/device "
+            f"Cannot reach {label} at {host}:{port} ({exc}). Is the emulator/device "
             f"running and are ports forwarded?"
         ) from exc
 

@@ -20,7 +20,6 @@ from tests.system.target import (  # noqa: E402
     PreconditionError,
     SystemTestTarget,
     build_config_toml,
-    check_emulator_renderer_fresh,
     find_free_port,
     probe_tcp_port,
 )
@@ -61,8 +60,11 @@ def pytest_addoption(parser):
     group.addoption(
         "--renderer-shared-dir",
         default=None,
-        help="Path to emulator/sim/shared "
-        "(required when --target emulator, for the goto precondition check).",
+        help="Path to emulator/sim/shared (optional; stored on the target for "
+        "diagnostics. sim.renderd must be pointed at this same directory for "
+        "the goto/3PPA tests to actually solve, but this suite does not "
+        "enforce that as a precondition — a stuck goto/3PPA test is itself "
+        "the liveness signal if the renderer isn't running).",
     )
     group.addoption(
         "--startup-polar-align",
@@ -137,14 +139,6 @@ def target(request) -> SystemTestTarget:
 
     probe_tcp_port(t.host, 4700, "device control port")
     probe_tcp_port(t.host, 4800, "device imaging port")
-    if kind == "emulator":
-        if t.renderer_shared_dir is None:
-            raise PreconditionError(
-                "--target emulator requires --renderer-shared-dir pointing at "
-                "emulator/sim/shared (goto/3PPA there is "
-                "closed-loop and needs sim.renderd running on the host)."
-            )
-        check_emulator_renderer_fresh(t.renderer_shared_dir)
 
     return t
 

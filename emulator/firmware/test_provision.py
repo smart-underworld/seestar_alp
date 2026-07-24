@@ -1,10 +1,11 @@
 import io
+import shutil
 import subprocess
 from unittest.mock import patch
 
 import pytest
 
-from emulator.firmware.provision import download_xapk, provision_firmware
+from emulator.firmware.provision import _unpack_debs, download_xapk, provision_firmware
 
 
 def test_download_xapk_reuses_existing_cached_file(tmp_path):
@@ -80,3 +81,16 @@ def test_provision_firmware_extracts_and_unpacks_debs(tmp_path):
 
     assert deb_out == work_dir / "9.9.9" / "iscope" / "deb" / "out"
     assert (deb_out / "usr" / "bin" / "hello").exists()
+
+
+def test_unpack_debs_raises_when_a_package_fails_to_unpack(tmp_path):
+    if shutil.which("dpkg") is None:
+        pytest.skip("dpkg not available on this machine")
+
+    deb_dir = tmp_path / "deb"
+    deb_dir.mkdir()
+    # Not a real .deb archive, so `dpkg -x` will fail against it.
+    (deb_dir / "broken.deb").write_bytes(b"not a deb archive")
+
+    with pytest.raises(RuntimeError, match="broken.deb"):
+        _unpack_debs(deb_dir, tmp_path / "out")

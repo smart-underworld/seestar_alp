@@ -125,7 +125,7 @@ def add_and_start_schedule_capture(
 
 
 def read_frames_processed_count(page: Page, base_url: str) -> int:
-    # Counts stacked + dropped frames, not just stacked_frame: the sandbox's
+    # Counts stacked + dropped frames, not just stacked_frame: the emulator's
     # synthetic star field is injected only into the offline solve-field FITS
     # read, never into the live camera/stack frame buffer (always a flat gray
     # test pattern by design), so real stacking success (stacked_frame > 0) is

@@ -12,7 +12,7 @@ def assert_stream_liveness(
 ) -> None:
     """Assert the element at `locator` is visible and its network stream
     keeps delivering bytes over `window_s` seconds (liveness, not pixel
-    content — the sandbox's camera stream is a static synthetic pattern,
+    content — the emulator's camera stream is a static synthetic pattern,
     so pixel-change would be a false negative there)."""
     img = page.locator(locator).first
     expect(img).to_be_visible(timeout=10000)

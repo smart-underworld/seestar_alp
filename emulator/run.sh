@@ -24,7 +24,7 @@ usage() {
   cat <<EOF
 Usage: ./run.sh [--model MODEL] [--firmware-dir DIR] [version]
 
-Build and launch zwoair_imager in an armhf Debian Buster sandbox container.
+Build and launch zwoair_imager in an armhf Debian Buster emulator container.
 
 Arguments:
   version             Firmware version directory under <firmware-dir>/unpacked/

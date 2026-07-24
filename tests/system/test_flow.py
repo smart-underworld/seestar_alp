@@ -93,7 +93,7 @@ def test_schedule_capture_with_concurrent_live_check(
     driver.add_and_start_schedule_capture(page, app_base_url, target)
 
     # Asserts on frames *processed* (stacked + dropped), not frames actually
-    # stacked: the sandbox never injects its synthetic star field into the
+    # stacked: the emulator never injects its synthetic star field into the
     # live camera/stack pipeline (only into the offline solve-field FITS
     # read), so stacked_frame stays 0 there by architectural design. Total
     # processed frames still proves the schedule genuinely executes and the

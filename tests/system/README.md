@@ -96,7 +96,7 @@ physically move/operate the telescope.
 | `--goto-target-name` | `Vega` | display name only |
 | `--goto-ra` / `--goto-dec` | Vega's coords | decimal degrees |
 | `--capture-duration` | `120` | seconds, scheduled star-capture item |
-| `--renderer-shared-dir` | *(none)* | required for `--target emulator` |
+| `--renderer-shared-dir` | *(none)* | optional; not enforced as a precondition — pass it (pointing at `emulator/sim/shared`) so `sim.renderd` and the suite agree on where solved frames land when running `-m full`. A stuck `test_goto` is itself the liveness proof if the renderer isn't running. |
 | `--startup-polar-align` / `--no-startup-polar-align` | polar align on | skip 3PPA in the startup flow (used by the smoke CI lane) |
 
 ## Known limitations (emulator)

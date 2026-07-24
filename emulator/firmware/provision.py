@@ -55,10 +55,17 @@ def _unpack_debs(deb_dir: Path, out_dir: Path) -> None:
         raise RuntimeError(f"No .deb files found in {deb_dir}")
     if shutil.which("dpkg") is None:
         raise RuntimeError("'dpkg' not found on PATH — required to unpack firmware .deb files")
+    failed: list[str] = []
     for deb in debs:
         result = subprocess.run(["dpkg", "-x", str(deb), str(out_dir)])
         if result.returncode != 0:
             print(f"  Warning: dpkg failed for {deb.name} (exit {result.returncode})", file=sys.stderr)
+            failed.append(deb.name)
+    if failed:
+        raise RuntimeError(
+            f"dpkg -x failed for {len(failed)} package(s), unpacked tree at "
+            f"{out_dir} is incomplete: {', '.join(failed)}"
+        )
 
 
 def provision_firmware(version: str, version_code: str, work_dir: Path) -> Path:
