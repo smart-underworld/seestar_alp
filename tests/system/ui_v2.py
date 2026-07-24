@@ -9,7 +9,7 @@ from tests.system.live_check import assert_stream_liveness
 from tests.system.target import SystemTestTarget
 
 
-def run_startup(page: Page, base_url: str) -> None:
+def run_startup(page: Page, base_url: str, polar_align: bool = True) -> None:
     # v2 is a client-side-routed SPA (svelte-spa-router, hash mode) with no
     # server-side deep-link fallback -- a bare "/startup" 404s at the FastAPI
     # layer (StaticFiles only serves index.html for "/" itself). The hash
@@ -24,14 +24,29 @@ def run_startup(page: Page, base_url: str) -> None:
     page.locator(".option-row", has_text="Dark Frames").get_by_text(
         "On", exact=True
     ).click()
-    # Polar Align left at its default (true) — full startup sequence.
+    if polar_align:
+        pass  # Polar Align left at its default (true) — full startup sequence.
+    else:
+        # has_text is a case-insensitive substring match, and the Dec Offset
+        # row's help text ("...EQ polar alignment") would also match a plain
+        # has_text="Polar Align" filter -- anchor on the exact option-label
+        # text instead of relying on "Off" being unique across both rows.
+        page.locator(".option-row").filter(
+            has=page.get_by_text("Polar Align", exact=True)
+        ).get_by_text("Off", exact=True).click()
 
     page.get_by_role("button", name=re.compile("Run Startup Sequence")).click()
+
+    watched_labels = (
+        ["Auto Focus", "Dark Frames", "Polar Align"]
+        if polar_align
+        else ["Auto Focus", "Dark Frames"]
+    )
 
     deadline = time.time() + 180
     while time.time() < deadline:
         tiles_ok = True
-        for label in ["Auto Focus", "Dark Frames", "Polar Align"]:
+        for label in watched_labels:
             tile = page.locator(".event-tile", has_text=label)
             if tile.count() == 0:
                 tiles_ok = False

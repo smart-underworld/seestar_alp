@@ -15,28 +15,33 @@ def _device_path(base_url: str, suffix: str) -> str:
     return f"{base_url}/{DEVICE_ID}{suffix}"
 
 
-def run_startup(page: Page, base_url: str) -> None:
+def run_startup(page: Page, base_url: str, polar_align: bool = True) -> None:
     page.goto(_device_path(base_url, "/startup"))
     page.check("#auto_focus")
     page.check("#dark_frames")
-    # Leave #polar_align at its default (checked) — full startup sequence.
+    if polar_align:
+        pass  # #polar_align defaults to checked — full startup sequence.
+    else:
+        page.uncheck("#polar_align")
     page.click("button[type='submit'][value='start']")
 
     status = page.locator("#eventStatusContent")
     expect(status).to_contain_text("AutoFocus", timeout=5000)
+
+    watched_events = ["AutoFocus", "DarkLibrary", "PolarAlign"] if polar_align else ["AutoFocus", "DarkLibrary"]
+    pattern = re.compile(
+        r"(" + "|".join(watched_events) + r")[\s\S]{0,120}?State:\s*(\S+)"
+    )
 
     deadline = time.time() + 180
     while time.time() < deadline:
         text = status.inner_text()
         if "fail" in text.lower():
             raise AssertionError(f"Startup sequence reported a failure:\n{text}")
-        # All three enabled events (AutoFocus, DarkLibrary, 3PPA) must show
-        # "complete" — Scheduler/WheelMove/PlateSolve cards may stay idle.
-        watched = re.findall(
-            r"(AutoFocus|DarkLibrary|PolarAlign)[\s\S]{0,120}?State:\s*(\S+)",
-            text,
-        )
-        if len(watched) >= 3 and all(
+        # All enabled events must show "complete" — Scheduler/WheelMove/
+        # PlateSolve cards may stay idle regardless.
+        watched = pattern.findall(text)
+        if len(watched) >= len(watched_events) and all(
             state.strip().lower() == "complete" for _, state in watched
         ):
             return
