@@ -1,0 +1,85 @@
+name: Emulator smoke test
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up QEMU (armhf emulation)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+
+      - name: Install backend + emulator + system-test dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -e '.[emulator,system]'
+          playwright install --with-deps chromium
+
+      - name: Read smoke firmware version
+        id: fw
+        run: |
+          python3 -c "
+          import yaml
+          doc = yaml.safe_load(open('emulator/firmware/versions.yaml'))
+          version = doc['smoke_version']
+          entry = next(v for v in doc['full_versions'] if v['version'] == version)
+          print(f'version={entry[\"version\"]}')
+          print(f'version_code={entry[\"version_code\"]}')
+          " >> "$GITHUB_OUTPUT"
+
+      - name: Cache firmware XAPK
+        uses: actions/cache@v4
+        with:
+          path: /tmp/emulator-fw/unpacked/_xapk_cache
+          key: firmware-xapk-${{ steps.fw.outputs.version_code }}
+
+      - name: Provision firmware
+        id: provision
+        run: |
+          python3 -m emulator.firmware.provision \
+            --version "${{ steps.fw.outputs.version }}" \
+            --version-code "${{ steps.fw.outputs.version_code }}" \
+            --work-dir /tmp/emulator-fw/unpacked
+
+      - name: Build emulator image
+        run: docker build --platform linux/arm/v7 -t seestar-emulator emulator/
+
+      - name: Launch emulator container
+        run: |
+          cd emulator
+          ./run.sh --firmware-dir /tmp/emulator-fw --model S50 "${{ steps.fw.outputs.version }}" &
+          echo $! > /tmp/emulator.pid
+
+      - name: Wait for emulator ports
+        run: |
+          timeout 120 bash -c 'until nc -z 127.0.0.1 4700 && nc -z 127.0.0.1 4800; do sleep 2; done'
+
+      - name: Run smoke tests
+        run: |
+          pytest tests/system --target emulator --host 127.0.0.1 \
+            -m smoke --no-startup-polar-align \
+            --screenshot=on --video=on -q
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-smoke-playwright-artifacts
+          path: test-results/
+
+      - name: Stop emulator container
+        if: always()
+        run: docker stop seestar-emulator 2>/dev/null || true
