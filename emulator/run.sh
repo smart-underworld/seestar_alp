@@ -22,7 +22,7 @@ set -euo pipefail
 
 usage() {
   cat <<EOF
-Usage: ./run.sh [--model MODEL] [--firmware-dir DIR] [version]
+Usage: ./run.sh [--model MODEL] [--firmware-dir DIR] [--skip-build] [version]
 
 Build and launch zwoair_imager in an armhf Debian Buster emulator container.
 
@@ -35,6 +35,13 @@ Options:
   --model=MODEL         S50V2, S50P, S30, S30P. Overrides SEESTAR_MODEL.
   --firmware-dir DIR    Root of extracted firmware (default: ${HOME}/dev/firmware)
   --firmware-dir=DIR
+  --skip-build          Skip the docker build step and launch the
+                         already-built seestar-emulator image directly. For
+                         callers (e.g. CI) that already built the image
+                         themselves — this script's own `docker build` uses
+                         a separate, uncached builder/cache store from
+                         buildx, so calling it again after an external
+                         buildx build wastefully rebuilds from scratch.
   -h, --help           Show this help and exit
 
 Environment variables:
@@ -55,6 +62,7 @@ EOF
 VERSION=""
 MODEL_OPT=""
 FIRMWARE_DIR=""
+SKIP_BUILD=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help)
@@ -75,6 +83,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --firmware-dir=*)
       FIRMWARE_DIR="${1#--firmware-dir=}"
+      shift
+      ;;
+    --skip-build)
+      SKIP_BUILD=1
       shift
       ;;
     -*)
@@ -119,13 +131,17 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# One-time: register armhf binfmt_misc handler in Docker's Linux VM.
-# Safe to run repeatedly — tonistiigi/binfmt is idempotent.
-echo "==> Ensuring arm/v7 binfmt support..."
-docker run --privileged --rm tonistiigi/binfmt --install arm 2>/dev/null || true
+if [[ "${SKIP_BUILD}" -eq 0 ]]; then
+  # One-time: register armhf binfmt_misc handler in Docker's Linux VM.
+  # Safe to run repeatedly — tonistiigi/binfmt is idempotent.
+  echo "==> Ensuring arm/v7 binfmt support..."
+  docker run --privileged --rm tonistiigi/binfmt --install arm 2>/dev/null || true
 
-echo "==> Building image (seestar-emulator)..."
-docker build --platform linux/arm/v7 -t seestar-emulator "${SCRIPT_DIR}"
+  echo "==> Building image (seestar-emulator)..."
+  docker build --platform linux/arm/v7 -t seestar-emulator "${SCRIPT_DIR}"
+else
+  echo "==> --skip-build: using already-built seestar-emulator image"
+fi
 
 # libonnxruntime.so is named without the version suffix in the firmware deb,
 # but the binary NEEDS libonnxruntime.so.1.14.1 — create a symlink inside a

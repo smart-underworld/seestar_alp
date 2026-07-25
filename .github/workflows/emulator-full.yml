@@ -93,7 +93,7 @@ jobs:
           # so `docker logs` after the fact can race a container that's
           # already gone. Redirect to a file now — captures the container's
           # own console output regardless of whether it's still around later.
-          ./run.sh --firmware-dir /tmp/emulator-fw --model S50 "${{ matrix.version }}" \
+          ./run.sh --skip-build --firmware-dir /tmp/emulator-fw --model S50 "${{ matrix.version }}" \
             > /tmp/emulator-launch.log 2>&1 &
           echo $! > /tmp/emulator.pid
 
