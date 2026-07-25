@@ -23,6 +23,9 @@ jobs:
         with:
           platforms: arm
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Install backend + system-test dependencies
         run: |
           pip install -r requirements.txt
@@ -52,7 +55,14 @@ jobs:
             --work-dir /tmp/emulator-fw/unpacked
 
       - name: Build emulator image
-        run: docker build --platform linux/arm/v7 -t seestar-emulator emulator/
+        uses: docker/build-push-action@v6
+        with:
+          context: emulator/
+          platforms: linux/arm/v7
+          tags: seestar-emulator:latest
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Launch emulator container
         run: |
