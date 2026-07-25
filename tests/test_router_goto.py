@@ -139,7 +139,32 @@ def test_search_local_ignores_spacing_and_case(alp_dat):
     assert result["objectName"] == "Crescent Nebula"
 
 
-def test_search_local_falls_back_to_prefix_match(alp_dat):
-    # No exact/normalized token matches "M82X" -- prefix match on "M82" should win.
+def test_search_local_no_match_when_query_exceeds_token_length(alp_dat):
+    """Verify we don't over-match: 'M82X' has no token that starts with it.
+
+    Even though 'M82' exists, 'M82X' is not a prefix of any token (it's
+    longer and diverges), so we correctly return None instead of matching
+    'M82' and over-matching.
+    """
     result = _rg._search_local("M82X")
-    assert result is None  # no prefix match either -- confirms we don't over-match
+    assert result is None
+
+
+def test_search_local_prefix_match(alp_dat):
+    """Verify prefix-tier matching: 'NGC688' doesn't exist as exact token,
+    but 'NGC6888' starts with 'NGC688', so it should return Crescent Nebula.
+    This would only work if the implementation explicitly ranks prefix matches
+    over other tiers."""
+    result = _rg._search_local("NGC688")
+    assert result is not None
+    assert result["objectName"] == "Crescent Nebula"
+
+
+def test_search_local_substring_match(alp_dat):
+    """Verify substring-tier matching: '6523' doesn't exist as exact token or
+    prefix of any token, but it is a substring of 'NGC6523', so it should
+    return Lagoon Nebula. This would only work if the implementation has an
+    explicit substring-match tier after prefix."""
+    result = _rg._search_local("6523")
+    assert result is not None
+    assert result["objectName"] == "Lagoon Nebula"
