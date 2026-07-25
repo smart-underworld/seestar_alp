@@ -125,6 +125,23 @@ def test_app_process_log_tail_thread_safe_during_concurrent_writes(tmp_path):
     assert errors == [], f"log_tail() raised during concurrent writes: {errors}"
 
 
+def test_app_process_writes_full_log_to_file_when_log_file_given(
+    unreachable_target_config, tmp_path
+):
+    config_path, uiport = unreachable_target_config
+    log_file = tmp_path / "app.log"
+    proc = AppProcess(
+        REPO_ROOT, config_path, uiport, ready_timeout=30.0, log_file=log_file
+    )
+    try:
+        proc.start()
+    finally:
+        proc.stop()
+
+    assert log_file.exists()
+    assert "Startup Complete" in log_file.read_text()
+
+
 def test_app_process_fails_fast_on_immediate_crash(tmp_path):
     # Regression test: start() must not block for the full ready_timeout if
     # the child process has already exited (e.g. immediate crash on bad

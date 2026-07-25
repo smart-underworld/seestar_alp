@@ -19,21 +19,27 @@ class AppProcess:
         config_path: Path,
         uiport: int,
         ready_timeout: float = 30.0,
+        log_file: Path | None = None,
     ):
         self.repo_root = repo_root
         self.config_path = config_path
         self.uiport = uiport
         self.ready_timeout = ready_timeout
         self.base_url = f"http://127.0.0.1:{uiport}"
+        self.log_file = log_file
         self._proc: subprocess.Popen | None = None
         self._output: deque[str] = deque(maxlen=400)
         self._output_lock = threading.Lock()
         self._ready = threading.Event()
         self._reader_thread: threading.Thread | None = None
+        self._log_fh = None
 
     def _append_line(self, line: str) -> None:
         with self._output_lock:
             self._output.append(line)
+            if self._log_fh is not None:
+                self._log_fh.write(line + "\n")
+                self._log_fh.flush()
 
     def _read_output(self):
         assert self._proc is not None and self._proc.stdout is not None
@@ -46,6 +52,10 @@ class AppProcess:
         env = dict(os.environ)
         env["SEESTAR_ALP_CONFIG_PATH"] = str(self.config_path)
         env["PYTHONUNBUFFERED"] = "1"
+
+        if self.log_file is not None:
+            self.log_file.parent.mkdir(parents=True, exist_ok=True)
+            self._log_fh = open(self.log_file, "w")
 
         self._proc = subprocess.Popen(
             [sys.executable, "-u", "root_app.py"],
@@ -86,13 +96,15 @@ class AppProcess:
         return "\n".join(lines)
 
     def stop(self) -> None:
-        if self._proc is None:
-            return
-        if self._proc.poll() is None:
-            self._proc.terminate()
-            try:
-                self._proc.wait(timeout=5.0)
-            except subprocess.TimeoutExpired:
-                self._proc.kill()
-                self._proc.wait(timeout=5.0)
-        self._proc = None
+        if self._proc is not None:
+            if self._proc.poll() is None:
+                self._proc.terminate()
+                try:
+                    self._proc.wait(timeout=5.0)
+                except subprocess.TimeoutExpired:
+                    self._proc.kill()
+                    self._proc.wait(timeout=5.0)
+            self._proc = None
+        if self._log_fh is not None:
+            self._log_fh.close()
+            self._log_fh = None

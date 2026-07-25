@@ -81,12 +81,19 @@ jobs:
             -m smoke --no-startup-polar-align \
             --screenshot=on --video=on -q
 
-      - name: Upload Playwright artifacts on failure
+      - name: Capture emulator container log on failure
+        if: failure()
+        run: docker logs seestar-emulator > /tmp/emulator-container.log 2>&1 || true
+
+      - name: Upload diagnostic artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: emulator-smoke-playwright-artifacts
-          path: test-results/
+          path: |
+            test-results/
+            /tmp/seestar_alp_system_test/
+            /tmp/emulator-container.log
 
       - name: Stop emulator container
         if: always()

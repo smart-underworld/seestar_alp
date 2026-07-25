@@ -183,7 +183,13 @@ def running_app(request, target):
         config_path.write_text(config_text)
         config_dirs.append(config_dir)
 
-        proc = AppProcess(REPO_ROOT, config_path, uiport, ready_timeout=45.0)
+        proc = AppProcess(
+            REPO_ROOT,
+            config_path,
+            uiport,
+            ready_timeout=45.0,
+            log_file=config_dir / "app.log",
+        )
         proc.start()
         started[frontend] = proc
         return proc
@@ -192,5 +198,9 @@ def running_app(request, target):
 
     for proc in started.values():
         proc.stop()
-    for config_dir in config_dirs:
-        shutil.rmtree(config_dir, ignore_errors=True)
+    # Preserve scratch dirs (including app.log) when something in this
+    # session failed, so CI can pick up the backend log as a diagnostic
+    # artifact — only clean up on a fully clean run.
+    if request.session.testsfailed == 0:
+        for config_dir in config_dirs:
+            shutil.rmtree(config_dir, ignore_errors=True)
