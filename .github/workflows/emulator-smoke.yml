@@ -67,7 +67,12 @@ jobs:
       - name: Launch emulator container
         run: |
           cd emulator
-          ./run.sh --firmware-dir /tmp/emulator-fw --model S50 "${{ steps.fw.outputs.version }}" &
+          # run.sh's `docker run --rm` removes a crashed container immediately,
+          # so `docker logs` after the fact can race a container that's
+          # already gone. Redirect to a file now — captures the container's
+          # own console output regardless of whether it's still around later.
+          ./run.sh --firmware-dir /tmp/emulator-fw --model S50 "${{ steps.fw.outputs.version }}" \
+            > /tmp/emulator-launch.log 2>&1 &
           echo $! > /tmp/emulator.pid
 
       - name: Wait for emulator ports
@@ -81,9 +86,16 @@ jobs:
             -m smoke --no-startup-polar-align \
             --screenshot=on --video=on -q
 
-      - name: Capture emulator container log on failure
+      - name: Print emulator container log on failure
         if: failure()
-        run: docker logs seestar-emulator > /tmp/emulator-container.log 2>&1 || true
+        run: |
+          echo "::group::emulator-launch.log (run.sh's own output, incl. container console)"
+          cat /tmp/emulator-launch.log 2>/dev/null || echo "(no log file — run.sh never started)"
+          echo "::endgroup::"
+          # Best-effort — races run.sh's `docker run --rm` if the container
+          # already crashed and was removed; emulator-launch.log is the
+          # reliable source, this is a bonus if it's still around.
+          docker logs seestar-emulator > /tmp/emulator-container.log 2>&1 || true
 
       - name: Upload diagnostic artifacts on failure
         if: failure()
@@ -93,6 +105,7 @@ jobs:
           path: |
             test-results/
             /tmp/seestar_alp_system_test/
+            /tmp/emulator-launch.log
             /tmp/emulator-container.log
 
       - name: Stop emulator container
