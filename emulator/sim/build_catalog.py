@@ -25,6 +25,7 @@ The index startree only stores positions, so magnitudes are a deterministic
 placeholder spread (seeded) — solving depends on positions, not brightness (the
 end-to-end solve was validated this way).
 """
+
 import ctypes
 import sys
 
@@ -41,8 +42,10 @@ def read_index_radec(index_path, lib_path=DEFAULT_LIB):
     lib.startree_N.argtypes = [ctypes.c_void_p]
     lib.startree_get_radec.restype = ctypes.c_int
     lib.startree_get_radec.argtypes = [
-        ctypes.c_void_p, ctypes.c_int,
-        ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double),
+        ctypes.c_void_p,
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_double),
+        ctypes.POINTER(ctypes.c_double),
     ]
     s = lib.startree_open(index_path.encode())
     if not s:
@@ -72,7 +75,11 @@ def build(index_path, out_npy, lib_path=DEFAULT_LIB):
 
 
 if __name__ == "__main__":
-    idx = sys.argv[1] if len(sys.argv) > 1 else "/usr/local/astrometry/data/index-4107-Vt.fits"
+    idx = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else "/usr/local/astrometry/data/index-4107-Vt.fits"
+    )
     out = sys.argv[2] if len(sys.argv) > 2 else "sim/data/stars.npy"
     lib = sys.argv[3] if len(sys.argv) > 3 else DEFAULT_LIB
     build(idx, out, lib)

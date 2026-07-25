@@ -47,7 +47,9 @@ def _read_zip_entry(z, name):
             if not chunk:
                 break
             buf.write(chunk)
-            _progress(label, buf.tell(), total, f"  {buf.tell() >> 20}/{total >> 20} MB")
+            _progress(
+                label, buf.tell(), total, f"  {buf.tell() >> 20}/{total >> 20} MB"
+            )
     _done(label, f"{total >> 20} MB read")
     buf.seek(0)
     return buf.read()
@@ -66,7 +68,9 @@ def _extract_tar(data: bytes, variant: str, subdir: Path) -> None:
         _done(label, str(subdir) + "/")
 
 
-def extract_iscope_from_apk(apk_path: str, output_dir: str, variant: str | None = None) -> Path:
+def extract_iscope_from_apk(
+    apk_path: str, output_dir: str, variant: str | None = None
+) -> Path:
     """Extract the iscope tar(s) from an APK/XAPK into output_dir.
 
     Returns the path to the extracted variant directory (output_dir/iscope
@@ -93,10 +97,14 @@ def extract_iscope_from_apk(apk_path: str, output_dir: str, variant: str | None 
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Extract iscope assets from a Seestar APK/XAPK")
+    parser = argparse.ArgumentParser(
+        description="Extract iscope assets from a Seestar APK/XAPK"
+    )
     parser.add_argument("--apk", required=True, help="Path to the APK or XAPK file")
     parser.add_argument(
-        "--variant", choices=["iscope", "iscope_64"], help="Extract only this variant (default: both)"
+        "--variant",
+        choices=["iscope", "iscope_64"],
+        help="Extract only this variant (default: both)",
     )
     parser.add_argument("output_dir", help="Directory to extract into")
     args = parser.parse_args()

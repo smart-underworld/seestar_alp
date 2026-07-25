@@ -31,7 +31,9 @@ def test_download_xapk_reuses_existing_cached_file(tmp_path):
 def test_download_xapk_fetches_on_cache_miss(tmp_path):
     dest_dir = tmp_path / "cache"
 
-    with patch("emulator.firmware.provision._fetch_xapk_bytes", return_value=b"fresh-bytes") as mock_fetch:
+    with patch(
+        "emulator.firmware.provision._fetch_xapk_bytes", return_value=b"fresh-bytes"
+    ) as mock_fetch:
         result = download_xapk(version="3.1.2", dest_dir=dest_dir)
 
     mock_fetch.assert_called_once_with("3.1.2")

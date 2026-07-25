@@ -2,6 +2,7 @@
 
 Catalog format: float32 ndarray, shape (N, 3), columns [ra_deg, dec_deg, mag].
 """
+
 import numpy as np
 
 

@@ -61,10 +61,14 @@ def _extract_download_url(body: bytes, version: str) -> str:
     inside "23.0.0") followed by ":" and, somewhere after it, that version's
     download URL.
     """
-    pattern = re.compile(rb"[^0-9]" + re.escape(version.encode()) + rb":(?s:.)+?" + _DOWNLOAD_URL_RE)
+    pattern = re.compile(
+        rb"[^0-9]" + re.escape(version.encode()) + rb":(?s:.)+?" + _DOWNLOAD_URL_RE
+    )
     match = pattern.search(body)
     if not match:
-        raise RuntimeError(f"Could not find a download URL for version {version} in the app_version API response")
+        raise RuntimeError(
+            f"Could not find a download URL for version {version} in the app_version API response"
+        )
     return match.group(2).decode()
 
 
@@ -77,12 +81,16 @@ def _fetch_xapk_bytes(version: str) -> bytes:
         timeout=30,
     )
     if response.status_code != 200:
-        raise RuntimeError(f"Could not query app_version for {SEESTAR_PACKAGE} (HTTP {response.status_code})")
+        raise RuntimeError(
+            f"Could not query app_version for {SEESTAR_PACKAGE} (HTTP {response.status_code})"
+        )
     download_url = _extract_download_url(response.content, version)
 
     file_response = requests.get(download_url, timeout=120)
     if file_response.status_code != 200:
-        raise RuntimeError(f"Could not download version={version} from {download_url} (HTTP {file_response.status_code})")
+        raise RuntimeError(
+            f"Could not download version={version} from {download_url} (HTTP {file_response.status_code})"
+        )
     return file_response.content
 
 
@@ -108,12 +116,17 @@ def _unpack_debs(deb_dir: Path, out_dir: Path) -> None:
     if not debs:
         raise RuntimeError(f"No .deb files found in {deb_dir}")
     if shutil.which("dpkg") is None:
-        raise RuntimeError("'dpkg' not found on PATH — required to unpack firmware .deb files")
+        raise RuntimeError(
+            "'dpkg' not found on PATH — required to unpack firmware .deb files"
+        )
     failed: list[str] = []
     for deb in debs:
         result = subprocess.run(["dpkg", "-x", str(deb), str(out_dir)])
         if result.returncode != 0:
-            print(f"  Warning: dpkg failed for {deb.name} (exit {result.returncode})", file=sys.stderr)
+            print(
+                f"  Warning: dpkg failed for {deb.name} (exit {result.returncode})",
+                file=sys.stderr,
+            )
             failed.append(deb.name)
     if failed:
         raise RuntimeError(
@@ -133,7 +146,9 @@ def provision_firmware(version: str, work_dir: Path) -> Path:
     version_dir.mkdir(parents=True, exist_ok=True)
 
     xapk_path = download_xapk(version=version, dest_dir=work_dir / "_xapk_cache")
-    iscope_dir = extract_iscope_from_apk(str(xapk_path), str(version_dir), variant="iscope")
+    iscope_dir = extract_iscope_from_apk(
+        str(xapk_path), str(version_dir), variant="iscope"
+    )
 
     deb_dir = iscope_dir / "deb"
     out_dir = deb_dir / "out"
@@ -144,7 +159,9 @@ def provision_firmware(version: str, work_dir: Path) -> Path:
 def main():
     parser = argparse.ArgumentParser(description="Provision emulator firmware for CI")
     parser.add_argument("--version", required=True, help='e.g. "3.1.2"')
-    parser.add_argument("--work-dir", required=True, help="Directory to download/extract into")
+    parser.add_argument(
+        "--work-dir", required=True, help="Directory to download/extract into"
+    )
     args = parser.parse_args()
     deb_out = provision_firmware(version=args.version, work_dir=Path(args.work_dir))
     print(deb_out)

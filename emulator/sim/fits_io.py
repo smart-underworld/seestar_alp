@@ -2,6 +2,7 @@ import os
 import numpy as np
 from astropy.io import fits
 
+
 def _next_seq(shared_dir, name):
     p = os.path.join(shared_dir, name)
     try:
@@ -10,17 +11,21 @@ def _next_seq(shared_dir, name):
     except (FileNotFoundError, ValueError):
         return 1
 
+
 def _write_seq(shared_dir, name, seq):
     tmp = os.path.join(shared_dir, name + ".tmp")
     with open(tmp, "w") as f:
         f.write(str(seq))
     os.replace(tmp, os.path.join(shared_dir, name))
 
+
 def write_solve_fits(shared_dir, image, *, header=None):
     os.makedirs(shared_dir, exist_ok=True)
     if image.dtype != np.uint16:
         image = np.clip(image, 0, 0xFFFF).astype(np.uint16)
-    hdu = fits.PrimaryHDU(data=image)   # astropy encodes uint16 as BITPIX=16 + BZERO=32768
+    hdu = fits.PrimaryHDU(
+        data=image
+    )  # astropy encodes uint16 as BITPIX=16 + BZERO=32768
     if header:
         for k, v in header.items():
             hdu.header[k] = v
@@ -30,6 +35,7 @@ def write_solve_fits(shared_dir, image, *, header=None):
     seq = _next_seq(shared_dir, "solve.seq")
     _write_seq(shared_dir, "solve.seq", seq)
     return seq
+
 
 def write_raw_frame(shared_dir, image):
     """Write image's native-endian uint16 bytes (no FITS wrapper) to

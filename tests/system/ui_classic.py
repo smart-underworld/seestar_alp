@@ -28,7 +28,11 @@ def run_startup(page: Page, base_url: str, polar_align: bool = True) -> None:
     status = page.locator("#eventStatusContent")
     expect(status).to_contain_text("AutoFocus", timeout=5000)
 
-    watched_events = ["AutoFocus", "DarkLibrary", "PolarAlign"] if polar_align else ["AutoFocus", "DarkLibrary"]
+    watched_events = (
+        ["AutoFocus", "DarkLibrary", "PolarAlign"]
+        if polar_align
+        else ["AutoFocus", "DarkLibrary"]
+    )
     pattern = re.compile(
         r"(" + "|".join(watched_events) + r")[\s\S]{0,120}?State:\s*(\S+)"
     )

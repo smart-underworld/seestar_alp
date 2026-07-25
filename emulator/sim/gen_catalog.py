@@ -27,6 +27,7 @@ build() below is the small CSV-based builder used by the unit test
 astrometry-index source above.
 --------------------------------------------------------------------------
 """
+
 import csv
 import numpy as np
 
@@ -61,4 +62,9 @@ def build_from_radec(ra_npy, dec_npy, out_npy, seed=0):
 
 if __name__ == "__main__":
     import sys
-    print(build(sys.argv[1], sys.argv[2], float(sys.argv[3]) if len(sys.argv) > 3 else 11.0))
+
+    print(
+        build(
+            sys.argv[1], sys.argv[2], float(sys.argv[3]) if len(sys.argv) > 3 else 11.0
+        )
+    )
