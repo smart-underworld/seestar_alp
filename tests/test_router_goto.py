@@ -88,3 +88,58 @@ def test_force_stop_goto_reports_no_response(client, monkeypatch):
     r = client.post("/api/v1/devices/1/goto/force-stop")
     assert r.status_code == 200
     assert r.json() == {"ok": False, "reason": "no response"}
+
+
+import sqlite3
+
+from front_v2.api import router_goto as _rg
+
+
+@pytest.fixture
+def alp_dat(tmp_path, monkeypatch):
+    """A tiny objects DB reproducing the real M8/M82 collision: both an
+    exact-token collision (M8 vs M82) and a comma-joined multi-identifier
+    row, so the ranking logic is exercised for both shapes."""
+    db_path = tmp_path / "alp.dat"
+    con = sqlite3.connect(str(db_path))
+    con.execute(
+        "CREATE TABLE objects (ra varchar(12), dec varchar(12), "
+        "constellation varchar(5), objectType varchar(15), "
+        "commonNames varchar(30), identifiers varchar(30))"
+    )
+    con.executemany(
+        "INSERT INTO objects (ra, dec, commonNames, identifiers) VALUES (?, ?, ?, ?)",
+        [
+            ("09h55m52.73s", "+69d40m45.8s", "Cigar Galaxy", "M82"),
+            ("18h03m37.00s", "-24d23m12.0s", "Lagoon Nebula", "M8,NGC6523"),
+            ("20h12m06.55s", "+38d21m17.8s", "Crescent Nebula", "NGC6888"),
+        ],
+    )
+    con.commit()
+    con.close()
+    monkeypatch.setattr(_rg, "_ALP_DAT", db_path)
+    return db_path
+
+
+def test_search_local_m8_returns_exact_match_not_m82(alp_dat):
+    result = _rg._search_local("M8")
+    assert result is not None
+    assert result["objectName"] == "Lagoon Nebula"
+
+
+def test_search_local_handles_comma_joined_identifiers(alp_dat):
+    result = _rg._search_local("NGC6523")
+    assert result is not None
+    assert result["objectName"] == "Lagoon Nebula"
+
+
+def test_search_local_ignores_spacing_and_case(alp_dat):
+    result = _rg._search_local("ngc 6888")
+    assert result is not None
+    assert result["objectName"] == "Crescent Nebula"
+
+
+def test_search_local_falls_back_to_prefix_match(alp_dat):
+    # No exact/normalized token matches "M82X" -- prefix match on "M82" should win.
+    result = _rg._search_local("M82X")
+    assert result is None  # no prefix match either -- confirms we don't over-match

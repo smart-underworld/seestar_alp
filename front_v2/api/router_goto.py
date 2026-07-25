@@ -44,29 +44,62 @@ def _fmt_dec(dec_obj) -> str:
 # ── catalog search functions ─────────────────────────────────────────────────
 
 
+def _normalize_token(s: str) -> str:
+    return "".join(s.split()).upper()
+
+
 def _search_local(query: str) -> dict | None:
-    """Search the local object catalogue. Returns first match as {ra, dec, objectName} or None."""
+    """Search the local object catalogue. Returns first match as {ra, dec, objectName} or None.
+
+    Tiered lookup (exact -> prefix -> substring) over every row's identifier
+    and common-name tokens, normalized (whitespace stripped, uppercased) on
+    both sides. A plain `LIKE '%q%' LIMIT 1` with no ORDER BY returns
+    SQLite's arbitrary scan order, which resolves "M8" to "M82" before ever
+    reaching the actual M8 row -- this fixes that by only returning a match
+    from the highest-priority tier that has one. The catalog is small
+    (~15k rows, ~1.6MB) and this runs once per human-triggered search, so a
+    full-table scan in Python is simpler and more correct here than trying
+    to express comma-joined multi-identifier exact-matching in SQL.
+    """
     if not _ALP_DAT.exists():
+        return None
+    norm = _normalize_token(query)
+    if not norm:
         return None
     try:
         con = sqlite3.connect(str(_ALP_DAT))
         cur = con.cursor()
-        q = f"%{query}%"
-        cur.execute(
-            "SELECT ra, dec, commonNames, identifiers FROM objects "
-            "WHERE identifiers LIKE ? OR commonNames LIKE ? COLLATE NOCASE LIMIT 1",
-            (q, q),
-        )
-        row = cur.fetchone()
+        cur.execute("SELECT ra, dec, commonNames, identifiers FROM objects")
+        rows = cur.fetchall()
         con.close()
-        if row:
-            name = row[2] or row[3] or query
-            if isinstance(name, str) and "," in name:
-                name = name.split(",")[0].strip()
-            return {"ra": row[0], "dec": row[1], "objectName": name}
     except Exception as exc:
         logger.warning("local object search failed: %s", exc)
-    return None
+        return None
+
+    def _tokens(row) -> list[str]:
+        raw = f"{row[2] or ''},{row[3] or ''}"
+        return [_normalize_token(t) for t in raw.split(",") if t.strip()]
+
+    prefix_match = None
+    substring_match = None
+    for row in rows:
+        tokens = _tokens(row)
+        if norm in tokens:
+            return _row_to_result(row, query)
+        if prefix_match is None and any(t.startswith(norm) for t in tokens):
+            prefix_match = row
+        if substring_match is None and any(norm in t for t in tokens):
+            substring_match = row
+
+    match = prefix_match or substring_match
+    return _row_to_result(match, query) if match else None
+
+
+def _row_to_result(row, query: str) -> dict:
+    name = row[2] or row[3] or query
+    if isinstance(name, str) and "," in name:
+        name = name.split(",")[0].strip()
+    return {"ra": row[0], "dec": row[1], "objectName": name}
 
 
 def _search_simbad(query: str) -> dict | None:
