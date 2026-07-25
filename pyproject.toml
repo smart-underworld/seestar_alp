@@ -83,10 +83,6 @@ v2 = [
 system = [
     "pytest-playwright>=0.5",
 ]
-emulator = [
-    "cloudscraper>=1.2.71",
-    "beautifulsoup4>=4.12.0",
-]
 
 [dependency-groups]
 dev = [

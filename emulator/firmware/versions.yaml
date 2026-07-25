@@ -1,8 +1,8 @@
 # Pinned firmware versions for the CI regression suite (tests/system).
 #
-# version_code is APKPure's numeric build identifier, required to fetch a
-# specific historical release via https://d.apkpure.com/b/XAPK/com.zwo.seestar?versionCode=<code>
-# (APKPure's UI only shows the latest version by default). Update this list
+# emulator/firmware/provision.py resolves each version string directly
+# against api.pureapk.com's app_version API (APKPure's Android-app-facing
+# backend) — no separate numeric build identifier needed. Update this list
 # via PR when a new firmware ships or an old one should be dropped —
 # human-curated, per the project's design doc.
 #
@@ -12,9 +12,6 @@
 smoke_version: "3.3.0"
 
 full_versions:
-  - version: "3.3.0"
-    version_code: "2846"
-  - version: "3.1.2"
-    version_code: "2732"
-  - version: "3.0.0"
-    version_code: "2645"
+  - "3.3.0"
+  - "3.1.2"
+  - "3.0.0"

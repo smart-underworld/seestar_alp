@@ -75,13 +75,16 @@ for deb in ~/dev/firmware/unpacked/v3.1.2/iscope/deb/*.deb; do
 done
 ```
 
-For the fully-automated version (downloads a pinned APKPure release by
-version/version_code, extracts, and unpacks in one step — what CI uses), see
-`emulator/firmware/provision.py`:
+For the fully-automated version (downloads a pinned release by version
+string, extracts, and unpacks in one step — what CI uses), see
+`emulator/firmware/provision.py`. It resolves the version against
+`api.pureapk.com` (APKPure's Android-app-facing backend API) rather than
+the consumer website, which is fronted by a Cloudflare bot challenge that
+blocks GitHub Actions runners:
 
 ```bash
 python3 -m emulator.firmware.provision \
-  --version 3.1.2 --version-code 2732 \
+  --version 3.1.2 \
   --work-dir ~/dev/firmware/unpacked
 ```
 

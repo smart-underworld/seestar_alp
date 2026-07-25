@@ -23,10 +23,10 @@ jobs:
         with:
           platforms: arm
 
-      - name: Install backend + emulator + system-test dependencies
+      - name: Install backend + system-test dependencies
         run: |
           pip install -r requirements.txt
-          pip install -e '.[emulator,system]'
+          pip install -e '.[system]'
           playwright install --with-deps chromium
 
       - name: Read smoke firmware version
@@ -35,24 +35,20 @@ jobs:
           python3 -c "
           import yaml
           doc = yaml.safe_load(open('emulator/firmware/versions.yaml'))
-          version = doc['smoke_version']
-          entry = next(v for v in doc['full_versions'] if v['version'] == version)
-          print(f'version={entry[\"version\"]}')
-          print(f'version_code={entry[\"version_code\"]}')
+          print(f'version={doc[\"smoke_version\"]}')
           " >> "$GITHUB_OUTPUT"
 
       - name: Cache firmware XAPK
         uses: actions/cache@v4
         with:
           path: /tmp/emulator-fw/unpacked/_xapk_cache
-          key: firmware-xapk-${{ steps.fw.outputs.version_code }}
+          key: firmware-xapk-${{ steps.fw.outputs.version }}
 
       - name: Provision firmware
         id: provision
         run: |
           python3 -m emulator.firmware.provision \
             --version "${{ steps.fw.outputs.version }}" \
-            --version-code "${{ steps.fw.outputs.version_code }}" \
             --work-dir /tmp/emulator-fw/unpacked
 
       - name: Build emulator image

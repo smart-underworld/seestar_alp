@@ -5,17 +5,23 @@ from unittest.mock import patch
 
 import pytest
 
-from emulator.firmware.provision import _unpack_debs, download_xapk, provision_firmware
+from emulator.firmware.provision import (
+    _extract_download_url,
+    _fetch_xapk_bytes,
+    _unpack_debs,
+    download_xapk,
+    provision_firmware,
+)
 
 
 def test_download_xapk_reuses_existing_cached_file(tmp_path):
     dest_dir = tmp_path / "cache"
     dest_dir.mkdir()
-    cached = dest_dir / "firmware-2732.xapk"
+    cached = dest_dir / "firmware-3.1.2.xapk"
     cached.write_bytes(b"cached-bytes")
 
     with patch("emulator.firmware.provision._fetch_xapk_bytes") as mock_fetch:
-        result = download_xapk(version="3.1.2", version_code="2732", dest_dir=dest_dir)
+        result = download_xapk(version="3.1.2", dest_dir=dest_dir)
 
     mock_fetch.assert_not_called()
     assert result == cached
@@ -26,11 +32,60 @@ def test_download_xapk_fetches_on_cache_miss(tmp_path):
     dest_dir = tmp_path / "cache"
 
     with patch("emulator.firmware.provision._fetch_xapk_bytes", return_value=b"fresh-bytes") as mock_fetch:
-        result = download_xapk(version="3.1.2", version_code="2732", dest_dir=dest_dir)
+        result = download_xapk(version="3.1.2", dest_dir=dest_dir)
 
-    mock_fetch.assert_called_once_with("2732")
-    assert result == dest_dir / "firmware-2732.xapk"
+    mock_fetch.assert_called_once_with("3.1.2")
+    assert result == dest_dir / "firmware-3.1.2.xapk"
     assert result.read_bytes() == b"fresh-bytes"
+
+
+def test_extract_download_url_finds_url_for_matching_version():
+    # Synthetic blob shaped like the real api.pureapk.com response: for each
+    # version, a "<version>:" marker (preceded by a non-digit byte, matching
+    # the app_version API's protobuf-ish framing) followed by padding bytes,
+    # then an "XAPKJ"-prefixed download URL two bytes later.
+    blob = (
+        b"\x08\x011.2.0:\x00\x00garbage-between-fieldsXAPKJ\x01\x02"
+        b"https://download.pureapk.com/old-url?x=1"
+        b"\x08\x023.3.0:\x00\x00more-binary-noiseXAPKJ\x03\x04"
+        b"https://download.pureapk.com/b/XAPK/newversion?y=2"
+    )
+
+    url = _extract_download_url(blob, "3.3.0")
+
+    assert url == "https://download.pureapk.com/b/XAPK/newversion?y=2"
+
+
+def test_extract_download_url_raises_when_version_not_found():
+    blob = b"\x081.0.0:\x00\x00XAPKJ\x01\x02https://download.pureapk.com/x"
+
+    with pytest.raises(RuntimeError, match="9.9.9"):
+        _extract_download_url(blob, "9.9.9")
+
+
+def test_fetch_xapk_bytes_queries_app_version_api_and_downloads_file(monkeypatch):
+    blob = b"\x08\x023.3.0:\x00\x00noiseXAPKJ\x01\x02https://download.pureapk.com/fake?token=abc"
+
+    class FakeResponse:
+        def __init__(self, content, status_code=200):
+            self.content = content
+            self.status_code = status_code
+
+    calls = []
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        calls.append(url)
+        if "api.pureapk.com" in url:
+            return FakeResponse(blob)
+        return FakeResponse(b"fake-xapk-bytes")
+
+    monkeypatch.setattr("emulator.firmware.provision.requests.get", fake_get)
+
+    data = _fetch_xapk_bytes("3.3.0")
+
+    assert data == b"fake-xapk-bytes"
+    assert any("api.pureapk.com" in c for c in calls)
+    assert any("download.pureapk.com/fake" in c for c in calls)
 
 
 def test_provision_firmware_extracts_and_unpacks_debs(tmp_path):
@@ -68,7 +123,7 @@ def test_provision_firmware_extracts_and_unpacks_debs(tmp_path):
     with tarfile.open(tar_path, "w:bz2") as tar:
         tar.add(iscope_dir / "deb", arcname="deb")
 
-    xapk_path = tmp_path / "firmware-9999.xapk"
+    xapk_path = tmp_path / "firmware-9.9.9.xapk"
     with zipfile.ZipFile(xapk_path, "w") as z:
         z.writestr("manifest.json", "{}")
         io_buf = io.BytesIO()
@@ -77,7 +132,7 @@ def test_provision_firmware_extracts_and_unpacks_debs(tmp_path):
         z.writestr("base.apk", io_buf.getvalue())
 
     with patch("emulator.firmware.provision.download_xapk", return_value=xapk_path):
-        deb_out = provision_firmware(version="9.9.9", version_code="9999", work_dir=work_dir)
+        deb_out = provision_firmware(version="9.9.9", work_dir=work_dir)
 
     assert deb_out == work_dir / "9.9.9" / "iscope" / "deb" / "out"
     assert (deb_out / "usr" / "bin" / "hello").exists()

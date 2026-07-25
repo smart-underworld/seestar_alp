@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        firmware: ${{ fromJSON(needs.matrix.outputs.versions) }}
+        version: ${{ fromJSON(needs.matrix.outputs.versions) }}
     needs: matrix
     steps:
       - name: Checkout code
@@ -30,17 +30,17 @@ jobs:
         with:
           platforms: arm
 
-      - name: Install backend + emulator + system-test dependencies
+      - name: Install backend + system-test dependencies
         run: |
           pip install -r requirements.txt
-          pip install -e '.[emulator,system]'
+          pip install -e '.[system]'
           playwright install --with-deps chromium
 
       - name: Cache firmware XAPK
         uses: actions/cache@v4
         with:
           path: /tmp/emulator-fw/unpacked/_xapk_cache
-          key: firmware-xapk-${{ matrix.firmware.version_code }}
+          key: firmware-xapk-${{ matrix.version }}
 
       - name: Cache astrometry index files
         uses: actions/cache@v4
@@ -54,8 +54,7 @@ jobs:
       - name: Provision firmware
         run: |
           python3 -m emulator.firmware.provision \
-            --version "${{ matrix.firmware.version }}" \
-            --version-code "${{ matrix.firmware.version_code }}" \
+            --version "${{ matrix.version }}" \
             --work-dir /tmp/emulator-fw/unpacked
 
       - name: Build emulator image
@@ -72,7 +71,7 @@ jobs:
       - name: Launch emulator container
         run: |
           cd emulator
-          ./run.sh --firmware-dir /tmp/emulator-fw --model S50 "${{ matrix.firmware.version }}" &
+          ./run.sh --firmware-dir /tmp/emulator-fw --model S50 "${{ matrix.version }}" &
           echo $! > /tmp/emulator.pid
 
       - name: Wait for emulator ports
@@ -96,7 +95,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: emulator-full-playwright-artifacts-${{ matrix.firmware.version }}
+          name: emulator-full-playwright-artifacts-${{ matrix.version }}
           path: test-results/
 
       - name: Stop renderer and emulator container
