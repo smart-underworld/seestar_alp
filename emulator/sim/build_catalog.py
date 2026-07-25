@@ -28,6 +28,7 @@ end-to-end solve was validated this way).
 
 import ctypes
 import sys
+from pathlib import Path
 
 import numpy as np
 
@@ -69,6 +70,9 @@ def build(index_path, out_npy, lib_path=DEFAULT_LIB):
     rng = np.random.RandomState(0)
     mag = 8.0 + 4.0 * rng.random_sample(len(ra))
     cat = np.column_stack([ra, dec, mag]).astype(np.float32)
+    # sim/data/ is gitignored (derived artifact) and so doesn't exist on a
+    # fresh checkout — np.save doesn't create parent directories itself.
+    Path(out_npy).parent.mkdir(parents=True, exist_ok=True)
     np.save(out_npy, cat)
     print(f"wrote {out_npy}: {len(cat)} stars")
     return len(cat)
