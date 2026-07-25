@@ -31,6 +31,7 @@ from pathlib import Path
 
 import requests
 
+from emulator.firmware.apk_utils import NoMatchingSplitError
 from emulator.firmware.extract_iscope import extract_iscope_from_apk
 from emulator.firmware.extract_pem import extract_interop_pem
 
@@ -141,8 +142,12 @@ def provision_firmware(version: str, work_dir: Path) -> Path:
 
     Also extracts the firmware's interop private key (see extract_pem.py)
     from the same XAPK, writing it to <work_dir>/<version>/interop.pem —
-    firmware 7.18+ requires interop authentication, and the emulator is no
-    exception. tests/system's --pem option should point at that file.
+    firmware 7.18+ requires interop authentication and the emulator is no
+    exception, but older firmware (pre-7.18) doesn't ship libopenssllib.so
+    at all, so no key exists to extract. tests/system's --pem option should
+    point at that file; device/seestar_device.py already treats a missing
+    file at that path as "no interop auth needed" (self-healing), so it's
+    fine for interop.pem to simply not exist for those versions.
 
     Returns the path to <work_dir>/<version>/iscope/deb/out, matching what
     emulator/run.sh's FW_BASE expects.
@@ -152,7 +157,13 @@ def provision_firmware(version: str, work_dir: Path) -> Path:
     version_dir.mkdir(parents=True, exist_ok=True)
 
     xapk_path = download_xapk(version=version, dest_dir=work_dir / "_xapk_cache")
-    extract_interop_pem(str(xapk_path), str(version_dir / "interop.pem"))
+    try:
+        extract_interop_pem(str(xapk_path), str(version_dir / "interop.pem"))
+    except NoMatchingSplitError:
+        print(
+            f"  No libopenssllib.so in firmware {version} -- assuming pre-7.18 "
+            f"(no interop auth), skipping PEM extraction"
+        )
     iscope_dir = extract_iscope_from_apk(
         str(xapk_path), str(version_dir), variant="iscope"
     )

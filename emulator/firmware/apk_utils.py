@@ -6,6 +6,12 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
+class NoMatchingSplitError(ValueError):
+    """Raised when `containing` was given but no split APK has any of those
+    paths -- distinct from a structurally broken XAPK, so callers can treat
+    it as "this build doesn't have that content" rather than a real error."""
+
+
 def _is_xapk(z: zipfile.ZipFile) -> bool:
     names = z.namelist()
     return "manifest.json" in names and any(n.endswith(".apk") for n in names)
@@ -44,7 +50,9 @@ def open_apk(path, containing=None):
                             chosen = entry
                             break
                 if chosen is None:
-                    raise ValueError(f"No split APK in {path} contains: {needles}")
+                    raise NoMatchingSplitError(
+                        f"No split APK in {path} contains: {needles}"
+                    )
             else:
                 chosen = "base.apk" if "base.apk" in apk_entries else apk_entries[0]
 

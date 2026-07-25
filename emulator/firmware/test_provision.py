@@ -149,6 +149,55 @@ def test_provision_firmware_extracts_and_unpacks_debs(tmp_path):
     assert pem_path.read_text().strip() == interop_key
 
 
+def test_provision_firmware_skips_pem_when_openssllib_absent(tmp_path):
+    # Firmware predating the 7.18+ interop-auth requirement (e.g. an old
+    # 2.x/3.0.x build) doesn't ship libopenssllib.so at all -- provisioning
+    # must not fail for that, since device/seestar_device.py already treats
+    # a missing/absent interop.pem as "no auth needed" (self-healing).
+    import tarfile
+    import zipfile
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+
+    if subprocess.run(["which", "dpkg-deb"], capture_output=True).returncode != 0:
+        pytest.skip("dpkg-deb not available on this machine")
+
+    pkg_root = tmp_path / "pkg_root"
+    (pkg_root / "DEBIAN").mkdir(parents=True)
+    (pkg_root / "DEBIAN" / "control").write_text(
+        "Package: testpkg\nVersion: 1.0\nArchitecture: armhf\nMaintainer: test\nDescription: test\n"
+    )
+    (pkg_root / "usr" / "bin").mkdir(parents=True)
+    (pkg_root / "usr" / "bin" / "hello").write_text("#!/bin/sh\necho hi\n")
+    deb_path = tmp_path / "testpkg.deb"
+    subprocess.run(["dpkg-deb", "--build", str(pkg_root), str(deb_path)], check=True)
+
+    iscope_dir = tmp_path / "iscope_src"
+    (iscope_dir / "deb").mkdir(parents=True)
+    (iscope_dir / "deb" / "testpkg.deb").write_bytes(deb_path.read_bytes())
+
+    tar_path = tmp_path / "iscope.tar.bz2"
+    with tarfile.open(tar_path, "w:bz2") as tar:
+        tar.add(iscope_dir / "deb", arcname="deb")
+
+    # No libopenssllib.so anywhere in this XAPK.
+    xapk_path = tmp_path / "firmware-1.0.0.xapk"
+    with zipfile.ZipFile(xapk_path, "w") as z:
+        z.writestr("manifest.json", "{}")
+        io_buf = io.BytesIO()
+        with zipfile.ZipFile(io_buf, "w") as inner:
+            inner.writestr("assets/iscope", tar_path.read_bytes())
+        z.writestr("base.apk", io_buf.getvalue())
+
+    with patch("emulator.firmware.provision.download_xapk", return_value=xapk_path):
+        deb_out = provision_firmware(version="1.0.0", work_dir=work_dir)
+
+    assert deb_out == work_dir / "1.0.0" / "iscope" / "deb" / "out"
+    assert (deb_out / "usr" / "bin" / "hello").exists()
+    assert not (work_dir / "1.0.0" / "interop.pem").exists()
+
+
 def test_unpack_debs_raises_when_a_package_fails_to_unpack(tmp_path):
     if shutil.which("dpkg") is None:
         pytest.skip("dpkg not available on this machine")
