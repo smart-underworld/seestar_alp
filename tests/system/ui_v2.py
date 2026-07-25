@@ -37,10 +37,12 @@ def run_startup(page: Page, base_url: str, polar_align: bool = True) -> None:
 
     page.get_by_role("button", name=re.compile("Run Startup Sequence")).click()
 
+    # device/seestar_device.py's start_up_sequence explicitly skips AutoFocus
+    # when polar alignment is off ("Seestar starts in a parked position...
+    # Skipping.") — no completing event is ever emitted for it in that case,
+    # so it must not be watched, or this would hang until the 180s timeout.
     watched_labels = (
-        ["Auto Focus", "Dark Frames", "Polar Align"]
-        if polar_align
-        else ["Auto Focus", "Dark Frames"]
+        ["Auto Focus", "Dark Frames", "Polar Align"] if polar_align else ["Dark Frames"]
     )
 
     deadline = time.time() + 180

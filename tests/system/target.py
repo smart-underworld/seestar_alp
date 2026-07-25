@@ -115,7 +115,11 @@ def build_config_toml(
     doc["logging"] = {
         "log_level": "INFO",
         "log_prefix": "",
-        "log_to_stdout": False,
+        # True so AppProcess's stdout capture (log_tail() / log_file tee)
+        # carries the real backend log, not just the sparse handful of
+        # lines root_app.py itself prints directly — needed to diagnose
+        # failures like a startup step that never completes.
+        "log_to_stdout": True,
         "max_size_mb": 5,
         "num_keep_logs": 3,
         "log_events_in_info": True,

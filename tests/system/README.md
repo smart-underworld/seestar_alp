@@ -42,8 +42,9 @@ up against the real protocol (as opposed to the in-repo fake simulator
 `tests/integration/` uses).
 
 This suite also runs in CI — see `.github/workflows/emulator-smoke.yml`
-(every PR, no plate-solving) and `.github/workflows/emulator-full.yml` (the
-`run-full-system` PR label, or nightly). See
+(every PR — startup + live-view) and `.github/workflows/emulator-full.yml`
+(the `run-full-system` PR label, or nightly — adds goto + a scheduled
+capture, across every pinned firmware version). See
 [CI lanes](#ci-lanes) below for details.
 
 ## One-time setup
@@ -97,7 +98,7 @@ physically move/operate the telescope.
 | `--goto-ra` / `--goto-dec` | Vega's coords | decimal degrees |
 | `--capture-duration` | `120` | seconds, scheduled star-capture item |
 | `--renderer-shared-dir` | *(none)* | optional; not enforced as a precondition — pass it (pointing at `emulator/sim/shared`) so `sim.renderd` and the suite agree on where solved frames land when running `-m full`. A stuck `test_goto` is itself the liveness proof if the renderer isn't running. |
-| `--startup-polar-align` / `--no-startup-polar-align` | polar align on | skip 3PPA in the startup flow (used by the smoke CI lane) |
+| `--startup-polar-align` / `--no-startup-polar-align` | polar align on | skip 3PPA in the startup flow. Neither CI lane uses `--no-startup-polar-align` (device/seestar_device.py skips AutoFocus too when polar align is off, so a partial startup check isn't useful there) — this remains available for a faster manual/local check. |
 
 ## Known limitations (emulator)
 
@@ -125,17 +126,24 @@ This suite also runs in CI, in two lanes driven off the same `pytest
 tests/system --target emulator` invocation used locally:
 
 - **`.github/workflows/emulator-smoke.yml`** — runs on every PR. Provisions
-  the smoke firmware version (`versions.yaml`'s `smoke_version`), builds and
-  launches the emulator, and runs `pytest tests/system -m smoke
-  --no-startup-polar-align` (no `--renderer-shared-dir`, since plate solving
-  and goto aren't exercised here — no astrometry index files are downloaded
-  for this lane).
+  the smoke firmware version (`versions.yaml`'s `smoke_version`), downloads
+  the astrometry index files, rebuilds the renderer's star catalog, launches
+  both the emulator and `sim.renderd`, and runs `pytest tests/system -m
+  smoke --renderer-shared-dir emulator/sim/shared` — the full startup
+  sequence (AutoFocus + DarkLibrary + 3-point polar alignment) plus a
+  live-view liveness check, but not goto or a scheduled capture.
 - **`.github/workflows/emulator-full.yml`** — runs on the `run-full-system`
-  PR label, or nightly on a schedule. Downloads the astrometry index files,
-  rebuilds the renderer's star catalog, launches both the emulator and
-  `sim.renderd`, and runs `pytest tests/system -m full
-  --renderer-shared-dir emulator/sim/shared` across every firmware version
-  listed in `versions.yaml`'s `full_versions`.
+  PR label, or nightly on a schedule. Same astrometry/renderer setup as the
+  smoke lane, and runs `pytest tests/system -m full --renderer-shared-dir
+  emulator/sim/shared` (startup, goto, live-view, and a full scheduled
+  capture) across every firmware version listed in `versions.yaml`'s
+  `full_versions`.
+
+Both lanes need plate-solving: `device/seestar_device.py`'s startup sequence
+skips AutoFocus outright when polar alignment is off ("Seestar starts in a
+parked position... Skipping."), so a smoke lane without 3PPA couldn't
+meaningfully validate AutoFocus either — the astrometry/renderer setup cost
+is paid on every PR to keep that coverage.
 
 Neither lane needs a pre-existing interop PEM key: `provision.py` extracts
 one fresh from the same XAPK it downloads (see `extract_pem.py` — the key is
