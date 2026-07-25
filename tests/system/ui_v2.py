@@ -73,6 +73,17 @@ def check_live_imaging(
     page: Page, base_url: str, window_s: float = 5.0, min_bytes: int = 2048
 ) -> None:
     page.goto(f"{base_url}/#/live")  # hash route -- see run_startup's comment
+    # Unlike classic's action URL (/live/star), v2's #/live is just a page --
+    # it renders a feed only once a mode is actively selected and never
+    # starts one on its own (confirmed via CI: after goto/3PPA leave the
+    # device idle, the page shows only the mode-selector chips, no <img>).
+    # Start star mode explicitly, but only if nothing is streaming yet: this
+    # driver is also called repeatedly from the concurrent schedule-capture
+    # check, where a mode is already active (synced from device state) and
+    # re-clicking "Star" would prompt to interrupt -- and if confirmed,
+    # actually interrupt -- the in-progress stack.
+    if page.locator("img").count() == 0:
+        page.get_by_role("button", name=re.compile(r"Star")).click()
     assert_stream_liveness(page, "img", window_s=window_s, min_bytes=min_bytes)
 
 
