@@ -99,7 +99,10 @@ from front_v2.api import router_goto as _rg
 def alp_dat(tmp_path, monkeypatch):
     """A tiny objects DB reproducing the real M8/M82 collision: both an
     exact-token collision (M8 vs M82) and a comma-joined multi-identifier
-    row, so the ranking logic is exercised for both shapes."""
+    row, so the ranking logic is exercised for both shapes. A fourth
+    "Decoy Object" row (identifier "XNGC688") is inserted before the
+    Crescent Nebula row specifically to test that prefix-tier matches
+    outrank substring-tier matches regardless of row order."""
     db_path = tmp_path / "alp.dat"
     con = sqlite3.connect(str(db_path))
     con.execute(
@@ -112,6 +115,7 @@ def alp_dat(tmp_path, monkeypatch):
         [
             ("09h55m52.73s", "+69d40m45.8s", "Cigar Galaxy", "M82"),
             ("18h03m37.00s", "-24d23m12.0s", "Lagoon Nebula", "M8,NGC6523"),
+            ("21h00m00.00s", "+40d00m00.0s", "Decoy Object", "XNGC688"),
             ("20h12m06.55s", "+38d21m17.8s", "Crescent Nebula", "NGC6888"),
         ],
     )
@@ -127,10 +131,24 @@ def test_search_local_m8_returns_exact_match_not_m82(alp_dat):
     assert result["objectName"] == "Lagoon Nebula"
 
 
-def test_search_local_handles_comma_joined_identifiers(alp_dat):
-    result = _rg._search_local("NGC6523")
-    assert result is not None
-    assert result["objectName"] == "Lagoon Nebula"
+def test_search_local_comma_delimiter_is_not_a_real_substring(alp_dat):
+    """Verify comma-joined identifiers are split into real tokens, not
+    treated as one raw string.
+
+    "8,NGC" is a literal substring of the raw stored identifiers field
+    "M8,NGC6523" (characters at index 1-5 are '8', ',', 'N', 'G', 'C'), so
+    the old pre-fix code (LIKE '%q%' against the raw unsplit
+    identifiers/commonNames columns) would incorrectly match this row and
+    return "Lagoon Nebula". But once "M8,NGC6523" is split on its comma
+    into the real tokens "M8" and "NGC6523", neither individual token
+    contains "8,NGC" as a substring -- so the fixed, correctly-tokenized
+    code returns None. Verified this query doesn't accidentally match any
+    other fixture row either way. This is the one query in the suite that
+    actually depends on comma-splitting rather than matching the raw
+    concatenated/unsplit field.
+    """
+    result = _rg._search_local("8,NGC")
+    assert result is None
 
 
 def test_search_local_ignores_spacing_and_case(alp_dat):
@@ -150,21 +168,33 @@ def test_search_local_no_match_when_query_exceeds_token_length(alp_dat):
     assert result is None
 
 
-def test_search_local_prefix_match(alp_dat):
-    """Verify prefix-tier matching: 'NGC688' doesn't exist as exact token,
-    but 'NGC6888' starts with 'NGC688', so it should return Crescent Nebula.
-    This would only work if the implementation explicitly ranks prefix matches
-    over other tiers."""
+def test_search_local_prefix_match_beats_substring_match(alp_dat):
+    """Verify prefix-tier matching outranks substring-tier matching.
+
+    Querying "NGC688" matches two rows: "XNGC688" only as a substring (it
+    does NOT start with "NGC688" -- it starts with "X"), and "NGC6888" as a
+    genuine prefix. The decoy row is inserted with a LOWER rowid than the
+    "NGC6888" row (see fixture), so the old unranked `LIKE '%q%' LIMIT 1`
+    query (no ORDER BY) returns the decoy "Decoy Object" first in scan
+    order. This test only returns the correct "Crescent Nebula" if prefix
+    tier is explicitly ranked above substring tier -- verified by hand
+    tracing both the old and new code against this exact fixture.
+    """
     result = _rg._search_local("NGC688")
     assert result is not None
     assert result["objectName"] == "Crescent Nebula"
 
 
 def test_search_local_substring_match(alp_dat):
-    """Verify substring-tier matching: '6523' doesn't exist as exact token or
-    prefix of any token, but it is a substring of 'NGC6523', so it should
-    return Lagoon Nebula. This would only work if the implementation has an
-    explicit substring-match tier after prefix."""
+    """Verify the substring-tier return path works: '6523' is not an exact
+    token nor a prefix of any token, but it is a substring of 'NGC6523', so
+    it should return Lagoon Nebula via the substring fallback tier.
+
+    Note: this query has only one matching row, so unlike
+    test_search_local_prefix_match_beats_substring_match above, it does not
+    by itself discriminate old vs. new behavior -- it only confirms the
+    substring tier's positive-match return path still works.
+    """
     result = _rg._search_local("6523")
     assert result is not None
     assert result["objectName"] == "Lagoon Nebula"
