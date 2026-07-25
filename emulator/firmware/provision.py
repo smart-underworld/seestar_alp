@@ -32,6 +32,7 @@ from pathlib import Path
 import requests
 
 from emulator.firmware.extract_iscope import extract_iscope_from_apk
+from emulator.firmware.extract_pem import extract_interop_pem
 
 SEESTAR_PACKAGE = "com.zwo.seestar"
 
@@ -138,6 +139,11 @@ def _unpack_debs(deb_dir: Path, out_dir: Path) -> None:
 def provision_firmware(version: str, work_dir: Path) -> Path:
     """Ensure firmware `version` is downloaded and extracted under work_dir.
 
+    Also extracts the firmware's interop private key (see extract_pem.py)
+    from the same XAPK, writing it to <work_dir>/<version>/interop.pem —
+    firmware 7.18+ requires interop authentication, and the emulator is no
+    exception. tests/system's --pem option should point at that file.
+
     Returns the path to <work_dir>/<version>/iscope/deb/out, matching what
     emulator/run.sh's FW_BASE expects.
     """
@@ -146,6 +152,7 @@ def provision_firmware(version: str, work_dir: Path) -> Path:
     version_dir.mkdir(parents=True, exist_ok=True)
 
     xapk_path = download_xapk(version=version, dest_dir=work_dir / "_xapk_cache")
+    extract_interop_pem(str(xapk_path), str(version_dir / "interop.pem"))
     iscope_dir = extract_iscope_from_apk(
         str(xapk_path), str(version_dir), variant="iscope"
     )

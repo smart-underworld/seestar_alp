@@ -87,6 +87,7 @@ jobs:
       - name: Run full regression tests
         run: |
           pytest tests/system --target emulator --host 127.0.0.1 \
+            --pem /tmp/emulator-fw/unpacked/${{ matrix.version }}/interop.pem \
             --renderer-shared-dir emulator/sim/shared \
             -m full \
             --screenshot=on --video=on -q

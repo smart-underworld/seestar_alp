@@ -67,6 +67,7 @@ jobs:
       - name: Run smoke tests
         run: |
           pytest tests/system --target emulator --host 127.0.0.1 \
+            --pem /tmp/emulator-fw/unpacked/${{ steps.fw.outputs.version }}/interop.pem \
             -m smoke --no-startup-polar-align \
             --screenshot=on --video=on -q
 

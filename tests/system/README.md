@@ -137,6 +137,11 @@ tests/system --target emulator` invocation used locally:
   --renderer-shared-dir emulator/sim/shared` across every firmware version
   listed in `versions.yaml`'s `full_versions`.
 
+Neither lane needs a pre-existing interop PEM key: `provision.py` extracts
+one fresh from the same XAPK it downloads (see `extract_pem.py` — the key is
+baked into the app's own `libopenssllib.so`, not a secret CI needs to
+manage) and passes it via `--pem`.
+
 The `smoke`/`full` pytest markers select which tests each lane runs;
 goto/3PPA-driving tests are marked `full` since they need the renderer and
 astrometry data, while tests that don't depend on plate solving are marked

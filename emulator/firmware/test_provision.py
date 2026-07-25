@@ -125,12 +125,18 @@ def test_provision_firmware_extracts_and_unpacks_debs(tmp_path):
     with tarfile.open(tar_path, "w:bz2") as tar:
         tar.add(iscope_dir / "deb", arcname="deb")
 
+    interop_key = (
+        "-----BEGIN PRIVATE KEY-----\nFAKEKEYFORTESTING\n-----END PRIVATE KEY-----"
+    )
+    fake_so = b"\x7fELF\x00\x00noise" + interop_key.encode() + b"\x00trailing"
+
     xapk_path = tmp_path / "firmware-9.9.9.xapk"
     with zipfile.ZipFile(xapk_path, "w") as z:
         z.writestr("manifest.json", "{}")
         io_buf = io.BytesIO()
         with zipfile.ZipFile(io_buf, "w") as inner:
             inner.writestr("assets/iscope", tar_path.read_bytes())
+            inner.writestr("lib/armeabi-v7a/libopenssllib.so", fake_so)
         z.writestr("base.apk", io_buf.getvalue())
 
     with patch("emulator.firmware.provision.download_xapk", return_value=xapk_path):
@@ -138,6 +144,9 @@ def test_provision_firmware_extracts_and_unpacks_debs(tmp_path):
 
     assert deb_out == work_dir / "9.9.9" / "iscope" / "deb" / "out"
     assert (deb_out / "usr" / "bin" / "hello").exists()
+
+    pem_path = work_dir / "9.9.9" / "interop.pem"
+    assert pem_path.read_text().strip() == interop_key
 
 
 def test_unpack_debs_raises_when_a_package_fails_to_unpack(tmp_path):
