@@ -361,3 +361,25 @@ at all across any firmware version, only on `View` — so static
 View-preference is very likely correct in practice, not merely a
 convenient simplification. Revisit only if an `Exposure`-carried `gain` is
 ever observed for real.
+
+### Fixed during implementation (2026-07-26): Task 2's `set_exposure` never reached the firmware
+
+While writing Task 9's real end-to-end system test, discovered that
+`set_exposure` (`front_v2/api/router_live.py`, from Task 2) called
+`do_action("set_setting", dev_num, {...})` directly — but `"set_setting"`
+is a firmware *method* name, not a registered Alpaca *action* in
+`device/telescope.py`'s dispatcher, so the write silently no-op'd against
+real firmware (confirmed via a genuine emulator round-trip: the value
+never changed). This is the identical bug pattern already fixed once
+before in this repo (commit `ae54037`, "settings saves now reach
+firmware", for `save_device_settings`) — reintroduced here, and uncaught
+by Task 2's own tests since they mock `do_action` directly rather than
+exercising the real dispatcher. Fixed by routing through
+`method_sync(..., params=...)`, matching `ae54037`'s exact precedent;
+re-verified end-to-end against a real emulator.
+
+**Follow-up, not fixed in this round**: `front_v2/api/router_guestmode.py`
+has the identical `do_action("set_setting", ...)` direct-dispatch bug
+(two call sites, master_cli true/false) — found while checking for
+sibling instances of the `set_exposure` bug, but unrelated to this batch
+and out of scope to fix here.
