@@ -148,12 +148,20 @@
     ],
   };
 
-  // Known per-field constraints (min/max) matching the classic UI
+  // Known per-field constraints (min/max) matching the classic UI. The
+  // isp_exp_ms/isp_gain ranges (isp_range_exp_us: [30, 1000000] -- note
+  // MICROseconds -- and isp_range_gain: [0, 400]) come from the device's
+  // own settings but aren't currently forwarded by the backend merge
+  // (device_client.py filters out list-typed values), so they're hardcoded
+  // here to match the observed device-reported values, same as the other
+  // static entries below.
   const CONSTRAINTS: Record<string, { min?: number; max?: number }> = {
-    exp_ms_stack_l:        { min: 5,  max: 90000 },
-    exp_ms_continuous:     { min: 5,  max: 90000 },
-    stack_dither_pix:      { min: 10, max: 200   },
-    stack_dither_interval: { min: 1              },
+    exp_ms_stack_l:        { min: 5,    max: 90000 },
+    exp_ms_continuous:     { min: 5,    max: 90000 },
+    stack_dither_pix:      { min: 10,   max: 200   },
+    stack_dither_interval: { min: 1                },
+    isp_exp_ms:            { min: 0.03, max: 1000  },
+    isp_gain:              { min: 0,    max: 400   },
   };
 
   // Minimum firmware_ver_int required for a field to be shown. Populate as
@@ -223,6 +231,21 @@
 
   function setVal(key: string, val: unknown) {
     merged = { ...merged, [key]: val };
+  }
+
+  // Device-reported "auto" sentinels (see REQUIRES_MANUAL_EXP below) --
+  // seeded away from these the moment the user turns Manual Exposure on,
+  // so the field never shows a nonsense starting value.
+  const SENTINEL_ISP_EXP_MS = -999000;
+  const SENTINEL_ISP_GAIN = -9990;
+  const DEFAULT_ISP_EXP_MS = 10;
+  const DEFAULT_ISP_GAIN = 80;
+
+  function enableManualExposure() {
+    const next = { ...merged, manual_exp: true };
+    if (next.isp_exp_ms === SENTINEL_ISP_EXP_MS) next.isp_exp_ms = DEFAULT_ISP_EXP_MS;
+    if (next.isp_gain === SENTINEL_ISP_GAIN) next.isp_gain = DEFAULT_ISP_GAIN;
+    merged = next;
   }
 
   $: navGuardMessage.set(isDirty ? "You have unsaved changes. Leave this page?" : null);
@@ -308,7 +331,7 @@
                     <label class="radio-label">
                       <input type="radio" name={key} value="true"
                         checked={val === true}
-                        on:change={() => setVal(key, true)} />
+                        on:change={() => key === "manual_exp" ? enableManualExposure() : setVal(key, true)} />
                       Enable
                     </label>
                     <label class="radio-label">

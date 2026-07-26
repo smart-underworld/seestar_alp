@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/svelte";
+import { render, screen, waitFor, fireEvent } from "@testing-library/svelte";
 import { writable } from "svelte/store";
 
 const { mockSettingsGet, mockSettingsSave } = vi.hoisted(() => ({
@@ -345,5 +345,41 @@ describe("Settings — firmware_ver_int plumbing", () => {
     });
     render(Settings);
     await waitFor(() => expect(screen.getByText("Dew Heater")).toBeInTheDocument());
+  });
+});
+
+describe("Settings — Manual Exposure", () => {
+  it("seeds a real value instead of the auto sentinel when enabled", async () => {
+    mockIsConnected.set(true);
+    mockSettingsGet.mockResolvedValue({
+      merged: {
+        manual_exp: false,
+        isp_exp_ms: -999000,
+        isp_gain: -9990,
+      },
+      firmware_ver_int: 2582,
+    });
+    const { container } = render(Settings);
+    await waitFor(() => screen.getByText("ISP Exposure (ms)"));
+
+    const enableRadio = container.querySelector(
+      'input[name="manual_exp"][value="true"]',
+    ) as HTMLInputElement;
+    await fireEvent.click(enableRadio);
+
+    await waitFor(() => expect(screen.getByDisplayValue("10")).toBeInTheDocument());
+  });
+
+  it("rejects an isp_exp_ms value above the device's real range", async () => {
+    mockIsConnected.set(true);
+    mockSettingsGet.mockResolvedValue({
+      merged: { manual_exp: true, isp_exp_ms: 10, isp_gain: 80 },
+      firmware_ver_int: 2582,
+    });
+    render(Settings);
+    await waitFor(() => screen.getByDisplayValue("10"));
+
+    const ispExpInput = screen.getByDisplayValue("10") as HTMLInputElement;
+    expect(ispExpInput.max).toBe("1000");
   });
 });
