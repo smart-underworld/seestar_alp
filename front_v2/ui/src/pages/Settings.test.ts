@@ -382,4 +382,34 @@ describe("Settings — Manual Exposure", () => {
     const ispExpInput = screen.getByDisplayValue("10") as HTMLInputElement;
     expect(ispExpInput.max).toBe("1000");
   });
+
+  it("preserves real isp_exp_ms/isp_gain values when enabling Manual Exposure", async () => {
+    mockIsConnected.set(true);
+    mockSettingsGet.mockResolvedValue({
+      merged: {
+        manual_exp: false,
+        isp_exp_ms: 500,
+        isp_gain: 200,
+      },
+      firmware_ver_int: 2582,
+    });
+    const { container } = render(Settings);
+    await waitFor(() => screen.getByText("ISP Exposure (ms)"));
+
+    // Initially, the isp_exp_ms/isp_gain fields should be disabled (showing Auto)
+    const disabledInputs = screen.getAllByPlaceholderText("Auto");
+    expect(disabledInputs.length).toBe(2);
+
+    // Click the enable radio to turn on Manual Exposure
+    const enableRadio = container.querySelector(
+      'input[name="manual_exp"][value="true"]',
+    ) as HTMLInputElement;
+    await fireEvent.click(enableRadio);
+
+    // After enabling, the values should remain 500 and 200 (not reset to 10/80)
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("500")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("200")).toBeInTheDocument();
+    });
+  });
 });
