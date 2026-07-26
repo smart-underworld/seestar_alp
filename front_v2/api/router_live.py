@@ -111,7 +111,9 @@ def get_exposure(dev_num: int):
 def set_exposure(dev_num: int, body: ExposureRequest):
     _require_connected(dev_num)
     key = "stack_l" if _current_stage(dev_num) == "Stack" else "continuous"
-    do_action("set_setting", dev_num, {"exp_ms": {key: body.exp_ms}})
+    # "set_setting" is a firmware method, not a device-layer action — must go
+    # through method_sync (which routes via the method_sync action handler).
+    method_sync("set_setting", dev_num, params={"exp_ms": {key: body.exp_ms}})
     return {"status": "ok", "exp_ms": body.exp_ms}
 
 

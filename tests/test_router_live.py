@@ -65,35 +65,37 @@ def test_get_exposure_returns_continuous_when_not_stacking(client, monkeypatch):
 
 
 def test_set_exposure_writes_stack_l_while_stacking(client, monkeypatch):
-    monkeypatch.setattr(
-        router_live, "method_sync", _fake_method_sync("Stack", {})
-    )
     captured = {}
 
-    def fake_do_action(action, dev_num, params):
-        captured["action"] = action
-        captured["params"] = params
-        return {"ok": True}
+    def fake_method_sync(method, dev_num, **kwargs):
+        if method == "get_view_state":
+            return {"View": {"stage": "Stack"}}
+        if method == "set_setting":
+            captured["method"] = method
+            captured["params"] = kwargs.get("params")
+            return {"ok": True}
+        return None
 
-    monkeypatch.setattr(router_live, "do_action", fake_do_action)
+    monkeypatch.setattr(router_live, "method_sync", fake_method_sync)
 
     r = client.post("/api/v1/devices/1/live/exposure", json={"exp_ms": 20000})
     assert r.status_code == 200
-    assert captured["action"] == "set_setting"
+    assert captured["method"] == "set_setting"
     assert captured["params"] == {"exp_ms": {"stack_l": 20000}}
 
 
 def test_set_exposure_writes_continuous_when_not_stacking(client, monkeypatch):
-    monkeypatch.setattr(
-        router_live, "method_sync", _fake_method_sync("Idle", {})
-    )
     captured = {}
 
-    def fake_do_action(action, dev_num, params):
-        captured["params"] = params
-        return {"ok": True}
+    def fake_method_sync(method, dev_num, **kwargs):
+        if method == "get_view_state":
+            return {"View": {"stage": "Idle"}}
+        if method == "set_setting":
+            captured["params"] = kwargs.get("params")
+            return {"ok": True}
+        return None
 
-    monkeypatch.setattr(router_live, "do_action", fake_do_action)
+    monkeypatch.setattr(router_live, "method_sync", fake_method_sync)
 
     r = client.post("/api/v1/devices/1/live/exposure", json={"exp_ms": 2000})
     assert r.status_code == 200
