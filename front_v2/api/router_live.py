@@ -88,19 +88,27 @@ def auto_focus(dev_num: int):
     return {"status": "ok"}
 
 
+def _current_stage(dev_num: int) -> str:
+    view_state = method_sync("get_view_state", dev_num) or {}
+    return view_state.get("View", {}).get("stage", "")
+
+
 @router.get("/devices/{dev_num}/live/exposure")
 def get_exposure(dev_num: int):
     _require_connected(dev_num)
     result = method_sync("get_setting", dev_num) or {}
-    exp_ms = result.get("exp_ms_continuous") or result.get("exp_ms_stack_l") or 10000
+    exp_ms = result.get("exp_ms") or {}
+    key = "stack_l" if _current_stage(dev_num) == "Stack" else "continuous"
+    exp = exp_ms.get(key, 10000)
     gain = result.get("gain", 80)
-    return {"exp_ms": exp_ms, "gain": gain}
+    return {"exp_ms": exp, "gain": gain}
 
 
 @router.post("/devices/{dev_num}/live/exposure")
 def set_exposure(dev_num: int, body: ExposureRequest):
     _require_connected(dev_num)
-    do_action("set_setting", dev_num, {"exp_ms_continuous": body.exp_ms})
+    key = "stack_l" if _current_stage(dev_num) == "Stack" else "continuous"
+    do_action("set_setting", dev_num, {"exp_ms": {key: body.exp_ms}})
     return {"status": "ok", "exp_ms": body.exp_ms}
 
 
