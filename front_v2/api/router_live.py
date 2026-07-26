@@ -102,7 +102,7 @@ def get_exposure(dev_num: int):
     exp = exp_ms.get(key, 10000)
     gain_result = do_action("get_last_gain", dev_num, {}) or {}
     gain = gain_result.get("Value")
-    if gain is None:
+    if not isinstance(gain, int):
         gain = 80
     return {"exp_ms": exp, "gain": gain}
 

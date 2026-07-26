@@ -116,6 +116,40 @@ def test_get_exposure_reads_gain_from_get_last_gain_action(client, monkeypatch):
     assert r.json()["gain"] == 42
 
 
+def test_get_exposure_gain_zero_passthrough(client, monkeypatch):
+    """Verify that a real gain=0 reading (valid, not missing) passes through unchanged."""
+    monkeypatch.setattr(
+        router_live,
+        "method_sync",
+        _fake_method_sync("Idle", {"stack_l": 20000, "continuous": 2000}),
+    )
+    monkeypatch.setattr(
+        router_live,
+        "do_action",
+        lambda action, dev_num, params: {"Value": 0} if action == "get_last_gain" else None,
+    )
+    r = client.get("/api/v1/devices/1/live/exposure")
+    assert r.status_code == 200
+    assert r.json()["gain"] == 0
+
+
+def test_get_exposure_rejects_federation_dict_gain(client, monkeypatch):
+    """Verify that federation fan-out dict (dev_num=0 case) is rejected and falls back to 80."""
+    monkeypatch.setattr(
+        router_live,
+        "method_sync",
+        _fake_method_sync("Idle", {"stack_l": 20000, "continuous": 2000}),
+    )
+    monkeypatch.setattr(
+        router_live,
+        "do_action",
+        lambda action, dev_num, params: {"Value": {"1": 80}} if action == "get_last_gain" else None,
+    )
+    r = client.get("/api/v1/devices/1/live/exposure")
+    assert r.status_code == 200
+    assert r.json()["gain"] == 80  # should fallback, not return {"1": 80}
+
+
 def test_set_gain_uses_set_control_value(client, monkeypatch):
     captured = {}
 
