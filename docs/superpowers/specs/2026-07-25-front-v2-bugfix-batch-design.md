@@ -305,10 +305,24 @@ Non-matrix.
   `"exp_ms":{"stack_l":10000,"continuous":500}` on every version, against
   the real `zwoair_imager` binary in the emulator. v2.6.4 also emitted a
   push `"Event":"Setting"` with nested `exp_ms` during boot, independent
-  corroboration of the same shape outside the RPC path.
-- gain present on View/Exposure events: confirmed on v2.6.4 / v3.2.0 /
-  v3.3.0 — every version's `"Event":"View"` push notification (triggered by
+  corroboration of the same shape outside the RPC path. (v2.6.4's
+  `get_device_state` additionally reported `firmware_ver_int:2582` /
+  `firmware_ver_string:"5.82"`, an exact match to the original tester's
+  real-device log — confirms this is genuinely the reported version, not
+  just a same-numbered rebuild.)
+- gain present on View events: confirmed on v2.6.4 / v3.2.0 / v3.3.0 —
+  every version's `"Event":"View"` push notification (triggered by
   `iscope_start_view {"mode":"star"}`) carried a `"gain"` field (value `0`
-  at view start in this short observation window); no version's
-  `get_setting` response contained a flat `gain` key. Full transcripts in
-  `.superpowers/sdd/task-7-report.md`.
+  at view start in this short observation window); `"Event":"Exposure"`
+  was not observed in this preview-only window (only a gain-less
+  `ContinuousExposure` fired alongside `View`) — not fixed-dependent, since
+  `View` alone already carries `gain`. No version's `get_setting` response
+  contained a flat `gain` key.
+- **Open Item #1 resolved**: `get_stack_setting` was probed directly on
+  v2.6.4 — it is a real, implemented method (`code:0`) but its result
+  object contains only `save_discrete_frame`/`save_discrete_ok_frame`/
+  `light_duration_min`, no `gain` key. Gain is confirmed obtainable *only*
+  via the live push-event stream (`View`'s `gain` field), not via
+  `get_stack_setting` or any other RPC observed. The recommended
+  event-stream approach is the only viable source, not merely the
+  fallback default. Full transcripts in `.superpowers/sdd/task-7-report.md`.
