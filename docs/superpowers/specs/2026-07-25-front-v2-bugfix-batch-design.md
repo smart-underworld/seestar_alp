@@ -297,3 +297,18 @@ Non-matrix.
   buttons. Worth a small standalone follow-up fix (mirroring Task 6's
   `is_j2000: false` fix, scoped to wherever `Goto.svelte` learned the
   result came from the `"planet"` catalog) — not fixed in this round.
+
+### Verification results (2026-07-26, emulator spike)
+
+- exp_ms nested shape: confirmed on v2.6.4 / v3.2.0 / v3.3.0 (all three
+  CI-matrix versions) — `get_setting` returned
+  `"exp_ms":{"stack_l":10000,"continuous":500}` on every version, against
+  the real `zwoair_imager` binary in the emulator. v2.6.4 also emitted a
+  push `"Event":"Setting"` with nested `exp_ms` during boot, independent
+  corroboration of the same shape outside the RPC path.
+- gain present on View/Exposure events: confirmed on v2.6.4 / v3.2.0 /
+  v3.3.0 — every version's `"Event":"View"` push notification (triggered by
+  `iscope_start_view {"mode":"star"}`) carried a `"gain"` field (value `0`
+  at view start in this short observation window); no version's
+  `get_setting` response contained a flat `gain` key. Full transcripts in
+  `.superpowers/sdd/task-7-report.md`.
