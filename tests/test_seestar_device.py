@@ -995,7 +995,11 @@ def test_get_last_gain_reads_from_view_event(seestar):
 
 def test_get_last_gain_falls_back_to_exposure_event(seestar):
     seestar.event_state.pop("View", None)
-    seestar.event_state["Exposure"] = {"Event": "Exposure", "exp_us": 2000000, "gain": 0}
+    seestar.event_state["Exposure"] = {
+        "Event": "Exposure",
+        "exp_us": 2000000,
+        "gain": 0,
+    }
     assert seestar.get_last_gain() == 0
 
 

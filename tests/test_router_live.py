@@ -32,7 +32,10 @@ def client(monkeypatch):
 def _fake_method_sync(stage: str, exp_ms: dict):
     def _inner(method, dev_num, **kwargs):
         if method == "get_setting":
-            return {"exp_ms": exp_ms, "gain": 999}  # gain intentionally wrong shape here
+            return {
+                "exp_ms": exp_ms,
+                "gain": 999,
+            }  # gain intentionally wrong shape here
         if method == "get_view_state":
             return {"View": {"stage": stage}}
         return None
@@ -111,7 +114,9 @@ def test_get_exposure_reads_gain_from_get_last_gain_action(client, monkeypatch):
     monkeypatch.setattr(
         router_live,
         "do_action",
-        lambda action, dev_num, params: {"Value": 42} if action == "get_last_gain" else None,
+        lambda action, dev_num, params: {"Value": 42}
+        if action == "get_last_gain"
+        else None,
     )
     r = client.get("/api/v1/devices/1/live/exposure")
     assert r.status_code == 200
@@ -128,7 +133,9 @@ def test_get_exposure_gain_zero_passthrough(client, monkeypatch):
     monkeypatch.setattr(
         router_live,
         "do_action",
-        lambda action, dev_num, params: {"Value": 0} if action == "get_last_gain" else None,
+        lambda action, dev_num, params: {"Value": 0}
+        if action == "get_last_gain"
+        else None,
     )
     r = client.get("/api/v1/devices/1/live/exposure")
     assert r.status_code == 200
@@ -145,7 +152,9 @@ def test_get_exposure_rejects_federation_dict_gain(client, monkeypatch):
     monkeypatch.setattr(
         router_live,
         "do_action",
-        lambda action, dev_num, params: {"Value": {"1": 80}} if action == "get_last_gain" else None,
+        lambda action, dev_num, params: {"Value": {"1": 80}}
+        if action == "get_last_gain"
+        else None,
     )
     r = client.get("/api/v1/devices/1/live/exposure")
     assert r.status_code == 200

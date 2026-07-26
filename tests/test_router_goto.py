@@ -7,6 +7,8 @@ Regression coverage for the action name bugs:
 Both produced empty Alpaca responses → JSONDecodeError in do_action.
 """
 
+import sqlite3
+
 import pytest
 
 pytest.importorskip(
@@ -17,6 +19,8 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from front_v2.api import router_goto  # noqa: E402
+
+_rg = router_goto
 
 
 @pytest.fixture
@@ -88,11 +92,6 @@ def test_force_stop_goto_reports_no_response(client, monkeypatch):
     r = client.post("/api/v1/devices/1/goto/force-stop")
     assert r.status_code == 200
     assert r.json() == {"ok": False, "reason": "no response"}
-
-
-import sqlite3
-
-from front_v2.api import router_goto as _rg
 
 
 @pytest.fixture
