@@ -383,3 +383,19 @@ has the identical `do_action("set_setting", ...)` direct-dispatch bug
 (two call sites, master_cli true/false) — found while checking for
 sibling instances of the `set_exposure` bug, but unrelated to this batch
 and out of scope to fix here.
+
+### Follow-up, not fixed in this round: `start_scheduler` transient rejection race
+
+While writing Task 10's back-to-back scheduled-run system test, found that
+`start_scheduler` (`device/seestar_device.py`, ~line 2626) rejects a
+restart with `code: -1` ("Scheduler thread is still winding down") for a
+short window after a *previous* schedule run's state already flips to
+`stopped`/`complete`, but before its `scheduler_thread` has actually
+exited — `scheduler_thread_fn`'s tail end calls `play_sound()`, which
+includes a 1s `time.sleep(1)` before the thread genuinely finishes. Any
+caller (UI or API) that reads `state == "stopped"` as "safe to start a new
+schedule immediately" can hit this transient rejection. Worked around in
+the test itself with a bounded retry (not a device-code fix, out of scope
+for this batch) — worth a real product-level fix (e.g. `start_scheduler`
+retrying internally, or `scheduler_thread_fn` flipping state only after
+fully winding down) in a future task.
