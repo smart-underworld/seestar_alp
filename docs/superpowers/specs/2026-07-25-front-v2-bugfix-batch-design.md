@@ -274,3 +274,26 @@ Non-matrix.
   (zooming out while already fullscreen is an unusual combination, and this
   is CSS static analysis, not a rendered/visual confirmation). Revisit if a
   real report surfaces it.
+- **Lunar/solar goto feature, missing `Value: false` handling.** `Live.svelte`'s
+  new `gotoBody()` (Task 6) awaits `api.devices.goto(...)` and treats any
+  non-throwing response as success — it never checks `result.Value === false`,
+  which is how the device layer signals "a goto is already in progress" (no
+  exception, no non-2xx status). `Goto.svelte:66-76` already handles this
+  correctly and documents why. Tapping Goto Moon/Sun while a goto is already
+  running will silently no-op instead of showing an error. Pre-existing gap
+  in this task's own new code, confirmed by the final reviewer, not fixed in
+  this round (doesn't block Task 6, since it was never a regression — the
+  behavior simply hasn't been built yet).
+- **`Goto.svelte`'s existing planet-catalog searches have the same
+  double-precession bug Task 6 fixed for Live View.** `Goto.svelte:66`
+  calls `api.devices.goto($activeDevNum, ra, dec, targetName)` with no
+  `isJ2000` argument, which defaults to `true` — but its catalog dropdown's
+  `"planet"` option resolves via the same `_search_planet`, which returns
+  JNow coordinates. Confirmed as a real, pre-existing bug (predates this
+  entire batch) by the Task 6 final reviewer, not something Task 6
+  introduced or is in scope to fix. A user searching Moon/Sun/a planet via
+  the Planning/Goto page's catalog dropdown and hitting "GoTo" would hit
+  the same pointing error Task 6 just fixed for the two new Live View
+  buttons. Worth a small standalone follow-up fix (mirroring Task 6's
+  `is_j2000: false` fix, scoped to wherever `Goto.svelte` learned the
+  result came from the `"planet"` catalog) — not fixed in this round.
