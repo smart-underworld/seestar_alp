@@ -80,6 +80,30 @@ def v2_app(monkeypatch):
         dc, "do_action", lambda action, dev_num, params: {"Value": {"result": {}}}
     )
 
+    # router modules do `from front_v2.device_client import check_api_state`,
+    # which binds their own local name at import time -- patching it on the
+    # dc module (above) doesn't reach those already-bound references. Patch
+    # each router module directly so import order across test files (e.g.
+    # tests/test_router_live.py importing front_v2.api.router_live at
+    # collection time, before this fixture's monkeypatch runs) can't leave
+    # a router's check_api_state pointing at the real function. This must
+    # come after all of the dc.* patches above: setattr on a string target
+    # imports the module immediately if it isn't already imported, and that
+    # first-time import would otherwise bind a router's OTHER from-imported
+    # names (e.g. router_device's get_device_list/get_device_state) to the
+    # real, unpatched dc functions.
+    for router_module in (
+        "front_v2.api.router_goto",
+        "front_v2.api.router_device",
+        "front_v2.api.router_settings",
+        "front_v2.api.router_guestmode",
+        "front_v2.api.router_mosaic",
+        "front_v2.api.router_schedule",
+        "front_v2.api.router_live",
+        "front_v2.api.router_image",
+    ):
+        monkeypatch.setattr(f"{router_module}.check_api_state", lambda dev_num: True)
+
     from front_v2.app import build_app
 
     return build_app()
