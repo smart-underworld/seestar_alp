@@ -374,6 +374,7 @@
     zoom !== 1 ? `scale(${zoom})` : '',
     rotation   ? `rotate(${rotation}deg)` : '',
   ].filter(Boolean).join(' ');
+  $: feedWrapStyle = zoom < 1 ? `width:${zoom * 100}%;margin:0 auto;` : '';
 
   $: s = $activeDeviceStatus;
   let prevViewState: string | undefined;
@@ -488,7 +489,12 @@
               </button>
             </div>
           </div>
-          <div class="feed-wrap" class:feed-wrap-quarter={isQuarterTurn} class:feed-wrap-fs={isFullscreen}>
+          <div
+            class="feed-wrap"
+            class:feed-wrap-quarter={isQuarterTurn}
+            class:feed-wrap-fs={isFullscreen}
+            style={feedWrapStyle}
+          >
             <img
               bind:this={imgEl}
               src={vidUrl}

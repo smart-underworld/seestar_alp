@@ -388,3 +388,32 @@ describe("Live — zoom and pan", () => {
     expect(img.style.transform).not.toContain("translate");
   });
 });
+
+describe("Live — zoom below 1x", () => {
+  beforeEach(() => {
+    mockActiveDeviceStatus.set({ ...BASE_STATUS, view_state: "working", mode: "star" });
+  });
+
+  it("shrinks the feed-wrap container width instead of only the image", async () => {
+    const { container } = render(Live);
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+
+    screen.getByRole("button", { name: "Zoom out" }).click();
+
+    const feedWrap = container.querySelector(".feed-wrap") as HTMLElement;
+    await waitFor(() => expect(feedWrap.style.width).toBe("75%"));
+  });
+
+  it("leaves feed-wrap at full width at 1x and above", async () => {
+    const { container } = render(Live);
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+
+    const feedWrap = container.querySelector(".feed-wrap") as HTMLElement;
+    expect(feedWrap.style.width).toBe("");
+
+    const img = screen.getByAltText("Live telescope feed");
+    screen.getByRole("button", { name: "Zoom in" }).click();
+    await waitFor(() => expect(img.classList.contains("pannable")).toBe(true));
+    expect(feedWrap.style.width).toBe("");
+  });
+});
