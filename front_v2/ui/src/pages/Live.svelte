@@ -73,7 +73,7 @@
         gotoError = `Could not resolve the ${body === "moon" ? "Moon" : "Sun"}'s position.`;
         return;
       }
-      await api.devices.goto($activeDevNum, result.ra, result.dec, result.name, true);
+      await api.devices.goto($activeDevNum, result.ra, result.dec, result.name, false);
     } catch (e) {
       gotoError = String(e);
     } finally {

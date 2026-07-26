@@ -129,7 +129,7 @@ def _search_planet(name: str) -> dict | None:
         eph = load("de440s.bsp")
         earth = eph["earth"]
         body = name.strip()
-        if body.lower() != "moon":
+        if body.lower() not in ("moon", "sun"):
             body = body + " BARYCENTER"
         planet = eph[body]
         ts = load.timescale()

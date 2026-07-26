@@ -198,3 +198,19 @@ def test_search_local_substring_match(alp_dat):
     result = _rg._search_local("6523")
     assert result is not None
     assert result["objectName"] == "Lagoon Nebula"
+
+
+def test_search_planet_resolves_sun():
+    result = _rg._search_planet("sun")
+    assert result is not None
+    assert result["name"] == "Sun"
+    assert result["ra"]
+    assert result["dec"]
+
+
+def test_search_planet_resolves_moon():
+    result = _rg._search_planet("moon")
+    assert result is not None
+    assert result["name"] == "Moon"
+    assert result["ra"]
+    assert result["dec"]

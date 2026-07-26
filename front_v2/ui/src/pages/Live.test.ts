@@ -457,7 +457,7 @@ describe("Live — lunar/solar goto shortcuts", () => {
     screen.getByRole("button", { name: /Goto Moon/i }).click();
 
     await waitFor(() => expect(mockGoto).toHaveBeenCalledWith(
-      1, "10h00m00.0s", "+10d00m00.0s", "Moon", true,
+      1, "10h00m00.0s", "+10d00m00.0s", "Moon", false,
     ));
     expect(mockSearch).toHaveBeenCalledWith(1, "moon", "planet");
   });
