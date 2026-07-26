@@ -80,6 +80,7 @@
       group: "setup",
       fields: [
         { key: "exp", label: "Exposure (ms)", type: "int", default: 10000, min: 100, max: 60000 },
+        { key: "dark_frames", label: "Dark Frames", type: "bool", default: false },
       ],
     },
     {
