@@ -326,3 +326,38 @@ Non-matrix.
   `get_stack_setting` or any other RPC observed. The recommended
   event-stream approach is the only viable source, not merely the
   fallback default. Full transcripts in `.superpowers/sdd/task-7-report.md`.
+
+### Correction (2026-07-26): `AbstractDevice`/ABC claim in the Task 8 plan
+
+The implementation plan's Task 8 justified implementing `get_last_gain` on
+`SeestarDevice`, `SeestarRemote`, and `SeestarFederation` alike by claiming
+`AbstractDevice` is a real `ABC` that all three subclass, so skipping any
+one would break instantiation. Task 8's reviewer found this is only true
+for `SeestarRemote` — `SeestarDevice` (the `Seestar` class) and
+`SeestarFederation` (`Seestar_Federation`) don't inherit from
+`AbstractDevice` at all. The resulting code is still correct and
+consistent (matching the existing `action_set_exposure` pattern in all
+three), just built on an inaccurate premise for two of the three classes.
+No code change needed; noted here so the premise isn't relied on again in
+a future task.
+
+### Follow-up (2026-07-26): federation `dev_num=0` gain type contract — fixed
+
+Task 8's reviewer found `get_exposure` would leak a federation-fan-out
+dict (`{"1": 80, ...}`) through as the `gain` field for `dev_num=0`
+requests, since the original guard only checked for `None`. Unreachable
+via the current Live View UI (which already blocks `dev_num=0` with "Live
+view requires a single telescope"), but fixed anyway as API-boundary
+hardening: `get_exposure` now rejects any non-`int` gain value (falls back
+to 80), verified not to reject a real `gain=0` reading.
+
+### Accepted as-is (2026-07-26): `get_last_gain` doesn't compare event recency
+
+`get_last_gain` statically prefers `View`'s gain over `Exposure`'s
+whenever both are present, rather than comparing timestamps to pick
+whichever event is genuinely newer (no timestamps are tracked). Accepted:
+Task 7's emulator spike never observed a `gain` field on `Exposure` events
+at all across any firmware version, only on `View` — so static
+View-preference is very likely correct in practice, not merely a
+convenient simplification. Revisit only if an `Exposure`-carried `gain` is
+ever observed for real.
