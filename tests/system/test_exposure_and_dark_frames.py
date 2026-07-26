@@ -82,12 +82,15 @@ def _add_and_run_exposure_item(app_base_url, dark_frames: bool) -> None:
         time.sleep(1)
     assert started, "scheduler never accepted start (still winding down)"
 
+    finished = False
     deadline = time.time() + 30
     while time.time() < deadline:
         state = requests.get(f"{app_base_url}/api/v1/devices/1/schedule").json()
         if state.get("state") in ("stopped", "complete"):
+            finished = True
             break
         time.sleep(1)
+    assert finished, "schedule item never reached stopped/complete"
 
 
 @pytest.mark.smoke
