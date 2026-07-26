@@ -988,6 +988,23 @@ def test_action_set_exposure_runs_dark_frame_when_requested(monkeypatch, seestar
     assert out["dark_response"]["method"] == "start_create_dark"
 
 
+def test_get_last_gain_reads_from_view_event(seestar):
+    seestar.event_state["View"] = {"Event": "View", "state": "working", "gain": 80}
+    assert seestar.get_last_gain() == 80
+
+
+def test_get_last_gain_falls_back_to_exposure_event(seestar):
+    seestar.event_state.pop("View", None)
+    seestar.event_state["Exposure"] = {"Event": "Exposure", "exp_us": 2000000, "gain": 0}
+    assert seestar.get_last_gain() == 0
+
+
+def test_get_last_gain_returns_none_when_no_event_seen(seestar):
+    seestar.event_state.pop("View", None)
+    seestar.event_state.pop("Exposure", None)
+    assert seestar.get_last_gain() is None
+
+
 def test_action_start_up_sequence_paths(monkeypatch, seestar):
     seestar.schedule["state"] = "working"
     busy = seestar.action_start_up_sequence({})

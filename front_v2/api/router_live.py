@@ -100,7 +100,10 @@ def get_exposure(dev_num: int):
     exp_ms = result.get("exp_ms") or {}
     key = "stack_l" if _current_stage(dev_num) == "Stack" else "continuous"
     exp = exp_ms.get(key, 10000)
-    gain = result.get("gain", 80)
+    gain_result = do_action("get_last_gain", dev_num, {}) or {}
+    gain = gain_result.get("Value")
+    if gain is None:
+        gain = 80
     return {"exp_ms": exp, "gain": gain}
 
 
@@ -115,7 +118,11 @@ def set_exposure(dev_num: int, body: ExposureRequest):
 @router.post("/devices/{dev_num}/live/gain")
 def set_gain(dev_num: int, body: GainRequest):
     _require_connected(dev_num)
-    do_action("set_setting", dev_num, {"gain": body.gain})
+    do_action(
+        "method_sync",
+        dev_num,
+        {"method": "set_control_value", "params": ["gain", body.gain]},
+    )
     return {"status": "ok", "gain": body.gain}
 
 

@@ -1786,6 +1786,18 @@ class Seestar:
         }
         return response
 
+    def get_last_gain(self) -> int | None:
+        """Most recently observed live-view gain, from whichever of the
+        View/Exposure push events was seen more recently -- gain has no
+        queryable get_setting field of its own (confirmed against a real
+        device log and the emulator, see docs/superpowers/specs/
+        2026-07-25-front-v2-bugfix-batch-design.md)."""
+        view_gain = self.event_state.get("View", {}).get("gain")
+        exposure_gain = self.event_state.get("Exposure", {}).get("gain")
+        if view_gain is not None:
+            return view_gain
+        return exposure_gain
+
     def action_start_up_sequence(self, params):
         if self.schedule["state"] != "stopped" and self.schedule["state"] != "complete":
             return self.json_result(

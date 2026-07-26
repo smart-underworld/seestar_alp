@@ -162,6 +162,13 @@ class Seestar_Federation:
                 result[key] = self.seestar_devices[key].action_set_exposure(params)
         return result
 
+    def get_last_gain(self):
+        result = {}
+        for key in self.seestar_devices:
+            if self.seestar_devices[key].is_connected:
+                result[key] = self.seestar_devices[key].get_last_gain()
+        return result
+
     def action_start_up_sequence(self, params):
         result = {}
         for key in self.seestar_devices:

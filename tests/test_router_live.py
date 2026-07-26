@@ -46,6 +46,7 @@ def test_get_exposure_returns_stack_l_while_stacking(client, monkeypatch):
         "method_sync",
         _fake_method_sync("Stack", {"stack_l": 20000, "continuous": 2000}),
     )
+    monkeypatch.setattr(router_live, "do_action", lambda action, dev_num, params: None)
     r = client.get("/api/v1/devices/1/live/exposure")
     assert r.status_code == 200
     assert r.json()["exp_ms"] == 20000
@@ -57,6 +58,7 @@ def test_get_exposure_returns_continuous_when_not_stacking(client, monkeypatch):
         "method_sync",
         _fake_method_sync("", {"stack_l": 20000, "continuous": 2000}),
     )
+    monkeypatch.setattr(router_live, "do_action", lambda action, dev_num, params: None)
     r = client.get("/api/v1/devices/1/live/exposure")
     assert r.status_code == 200
     assert r.json()["exp_ms"] == 2000
@@ -96,3 +98,36 @@ def test_set_exposure_writes_continuous_when_not_stacking(client, monkeypatch):
     r = client.post("/api/v1/devices/1/live/exposure", json={"exp_ms": 2000})
     assert r.status_code == 200
     assert captured["params"] == {"exp_ms": {"continuous": 2000}}
+
+
+def test_get_exposure_reads_gain_from_get_last_gain_action(client, monkeypatch):
+    monkeypatch.setattr(
+        router_live,
+        "method_sync",
+        _fake_method_sync("Idle", {"stack_l": 20000, "continuous": 2000}),
+    )
+    monkeypatch.setattr(
+        router_live,
+        "do_action",
+        lambda action, dev_num, params: {"Value": 42} if action == "get_last_gain" else None,
+    )
+    r = client.get("/api/v1/devices/1/live/exposure")
+    assert r.status_code == 200
+    assert r.json()["gain"] == 42
+
+
+def test_set_gain_uses_set_control_value(client, monkeypatch):
+    captured = {}
+
+    def fake_do_action(action, dev_num, params):
+        captured["action"] = action
+        captured["params"] = params
+        return {"ok": True}
+
+    monkeypatch.setattr(router_live, "do_action", fake_do_action)
+
+    r = client.post("/api/v1/devices/1/live/gain", json={"gain": 120})
+    assert r.status_code == 200
+    assert captured["action"] == "method_sync"
+    assert captured["params"]["method"] == "set_control_value"
+    assert captured["params"]["params"] == ["gain", 120]

@@ -278,6 +278,9 @@ class action:
             elif action_name == "action_set_exposure":
                 result = cur_dev.action_set_exposure(params)
                 resp.text = MethodResponse(req, value=result).json
+            elif action_name == "get_last_gain":
+                result = cur_dev.get_last_gain()
+                resp.text = MethodResponse(req, value=result).json
             elif action_name == "get_last_image":
                 redirect_url = cur_dev.get_last_image(params)
                 resp.text = MethodResponse(req, value=redirect_url).json
