@@ -255,3 +255,22 @@ Non-matrix.
    version — the emulator runs actual firmware code under stubbed hardware
    rather than a hand-written fixture, so this should hold, but must be
    checked rather than assumed.
+
+### Follow-ups noted during implementation (2026-07-25), not fixed in this round
+
+- **Bug 4 (zoom), `min-height: 200px` floor on `.live-feed`.** Below a
+  certain zoom-out width, this pre-existing CSS floor could in principle
+  reintroduce a small letterbox on a *different* axis than the one this
+  round's fix addressed. Low priority: for the tester's actual portrait-
+  aspect feed, the natural (aspect-ratio-derived) height only drops below
+  200px once the box narrows to roughly ~110px wide — far narrower than
+  any realistic "smaller window" use case — so this is unlikely to matter
+  in practice. Not fixed; revisit only if a real report surfaces it.
+- **Bug 4 (zoom), fullscreen + zoom < 1 interaction.** `.feed-wrap-fs`'s
+  `flex: 1` and `.live-feed-fs`'s `height: 100%` derive the image's height
+  from the fullscreen container's own flex sizing, independent of the
+  zoom-driven `feedWrapStyle` width shrink — so a border could reappear on
+  the vertical axis specifically while fullscreen. Not fixed in this round
+  (zooming out while already fullscreen is an unusual combination, and this
+  is CSS static analysis, not a rendered/visual confirmation). Revisit if a
+  real report surfaces it.
