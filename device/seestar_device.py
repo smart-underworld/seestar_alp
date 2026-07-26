@@ -1772,7 +1772,14 @@ class Seestar:
         set_response = self.send_message_param_sync(
             {"method": "set_setting", "params": {"exp_ms": {"stack_l": params["exp"]}}}
         )
-        dark_response = self.send_message_param_sync({"method": "start_create_dark"})
+        dark_response = None
+        if params.get("dark_frames", False):
+            self.logger.info(
+                "action_set_exposure: dark_frames requested, running start_create_dark"
+            )
+            dark_response = self.send_message_param_sync(
+                {"method": "start_create_dark"}
+            )
         response = {
             "set_response": set_response,
             "dark_response": dark_response,

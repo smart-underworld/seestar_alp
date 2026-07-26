@@ -974,6 +974,17 @@ def test_scheduler_pause_continue_skip_and_actions(monkeypatch, seestar):
     assert seestar.action_set_dew_heater({"heater": 0})["method"] == "pi_output_set2"
     out = seestar.action_set_exposure({"exp": 1200})
     assert out["set_response"]["method"] == "set_setting"
+    assert out["dark_response"] is None
+
+
+def test_action_set_exposure_runs_dark_frame_when_requested(monkeypatch, seestar):
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda payload: {"method": payload["method"]},
+    )
+    out = seestar.action_set_exposure({"exp": 1200, "dark_frames": True})
+    assert out["set_response"]["method"] == "set_setting"
     assert out["dark_response"]["method"] == "start_create_dark"
 
 
