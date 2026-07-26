@@ -416,4 +416,22 @@ describe("Live — zoom below 1x", () => {
     await waitFor(() => expect(img.classList.contains("pannable")).toBe(true));
     expect(feedWrap.style.width).toBe("");
   });
+
+  it("does not double-apply scale() to the image below 1x (container-shrink handles it)", async () => {
+    render(Live);
+    await waitFor(() => expect(screen.getByText("Live Feed")).toBeInTheDocument());
+
+    const img = screen.getByAltText("Live telescope feed") as HTMLImageElement;
+    screen.getByRole("button", { name: "Zoom out" }).click();
+
+    // waitFor's first check runs synchronously, before Svelte's reactive flush --
+    // a bare `not.toContain("scale")` check here would trivially pass against the
+    // pre-click (zoom===1, no-scale) DOM state without ever observing the
+    // post-click render. Settle on the post-click zoom value first so the
+    // subsequent transform check actually reflects the zoomed-out state.
+    const zoomLabel = screen.getByRole("button", { name: "Reset zoom to 1×" });
+    await waitFor(() => expect(zoomLabel.textContent).toContain("0.75"));
+
+    await waitFor(() => expect(img.style.transform).not.toContain("scale"));
+  });
 });

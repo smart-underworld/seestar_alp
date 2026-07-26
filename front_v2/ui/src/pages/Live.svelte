@@ -371,7 +371,7 @@
     // translate() listed before scale() so the pan offset is applied in
     // final screen pixels — otherwise a 1px drag would move (1 * zoom)px.
     (panX || panY) ? `translate(${panX}px, ${panY}px)` : '',
-    zoom !== 1 ? `scale(${zoom})` : '',
+    zoom > 1 ? `scale(${zoom})` : '',
     rotation   ? `rotate(${rotation}deg)` : '',
   ].filter(Boolean).join(' ');
   $: feedWrapStyle = zoom < 1 ? `width:${zoom * 100}%;margin:0 auto;` : '';
