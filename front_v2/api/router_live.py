@@ -88,9 +88,13 @@ def auto_focus(dev_num: int):
     return {"status": "ok"}
 
 
-def _current_stage(dev_num: int) -> str:
+def _view_state(dev_num: int) -> dict:
     view_state = method_sync("get_view_state", dev_num) or {}
-    return view_state.get("View", {}).get("stage", "")
+    return view_state.get("View", {})
+
+
+def _current_stage(dev_num: int) -> str:
+    return _view_state(dev_num).get("stage", "")
 
 
 @router.get("/devices/{dev_num}/live/exposure")
@@ -98,10 +102,15 @@ def get_exposure(dev_num: int):
     _require_connected(dev_num)
     result = method_sync("get_setting", dev_num) or {}
     exp_ms = result.get("exp_ms") or {}
-    key = "stack_l" if _current_stage(dev_num) == "Stack" else "continuous"
+    view = _view_state(dev_num)
+    key = "stack_l" if view.get("stage") == "Stack" else "continuous"
     exp = exp_ms.get(key, 10000)
-    gain_result = do_action("get_last_gain", dev_num, {}) or {}
-    gain = gain_result.get("Value")
+    # get_view_state's "View" is a live query with the device's current gain
+    # -- unlike push events (Event: "View"/"Exposure"), which only fire on
+    # view-state transitions and never reflect a later gain write. gain has
+    # no field in get_setting/get_stack_setting at all (confirmed against
+    # real firmware and the emulator).
+    gain = view.get("gain")
     if not isinstance(gain, int):
         gain = 80
     return {"exp_ms": exp, "gain": gain}

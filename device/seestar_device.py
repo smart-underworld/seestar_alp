@@ -803,9 +803,19 @@ class Seestar:
                     if existing_params[-1] == "verify":
                         return data
 
-                if data.get("method") == "set_wheel_position" and isinstance(
-                    existing_params, list
-                ):
+                # set_wheel_position and set_control_value both take a flat
+                # list of positional args (e.g. ["gain", 80]); the firmware
+                # rejects the generic [existing_params, "verify"] wrap for
+                # these with code 105 "expected string param" -- confirmed
+                # directly against the emulator's real firmware binary (a
+                # raw ["gain", 120, "verify"] call succeeds with code 0,
+                # while [["gain", 120], "verify"] fails). Append "verify" to
+                # the flat list instead, matching how set_wheel_position was
+                # already handled.
+                if data.get("method") in (
+                    "set_wheel_position",
+                    "set_control_value",
+                ) and isinstance(existing_params, list):
                     data["params"] = existing_params + ["verify"]
                 else:
                     data["params"] = [existing_params, "verify"]
@@ -1785,18 +1795,6 @@ class Seestar:
             "dark_response": dark_response,
         }
         return response
-
-    def get_last_gain(self) -> int | None:
-        """Most recently observed live-view gain, from whichever of the
-        View/Exposure push events was seen more recently -- gain has no
-        queryable get_setting field of its own (confirmed against a real
-        device log and the emulator, see docs/superpowers/specs/
-        2026-07-25-front-v2-bugfix-batch-design.md)."""
-        view_gain = self.event_state.get("View", {}).get("gain")
-        exposure_gain = self.event_state.get("Exposure", {}).get("gain")
-        if view_gain is not None:
-            return view_gain
-        return exposure_gain
 
     def action_start_up_sequence(self, params):
         if self.schedule["state"] != "stopped" and self.schedule["state"] != "complete":

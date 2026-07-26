@@ -29,15 +29,15 @@ def client(monkeypatch):
     return TestClient(app)
 
 
-def _fake_method_sync(stage: str, exp_ms: dict):
+def _fake_method_sync(stage: str, exp_ms: dict, gain=999):
     def _inner(method, dev_num, **kwargs):
         if method == "get_setting":
             return {
                 "exp_ms": exp_ms,
                 "gain": 999,
-            }  # gain intentionally wrong shape here
+            }  # gain intentionally wrong shape here -- get_setting never has it
         if method == "get_view_state":
-            return {"View": {"stage": stage}}
+            return {"View": {"stage": stage, "gain": gain}}
         return None
 
     return _inner
@@ -49,7 +49,6 @@ def test_get_exposure_returns_stack_l_while_stacking(client, monkeypatch):
         "method_sync",
         _fake_method_sync("Stack", {"stack_l": 20000, "continuous": 2000}),
     )
-    monkeypatch.setattr(router_live, "do_action", lambda action, dev_num, params: None)
     r = client.get("/api/v1/devices/1/live/exposure")
     assert r.status_code == 200
     assert r.json()["exp_ms"] == 20000
@@ -61,7 +60,6 @@ def test_get_exposure_returns_continuous_when_not_stacking(client, monkeypatch):
         "method_sync",
         _fake_method_sync("", {"stack_l": 20000, "continuous": 2000}),
     )
-    monkeypatch.setattr(router_live, "do_action", lambda action, dev_num, params: None)
     r = client.get("/api/v1/devices/1/live/exposure")
     assert r.status_code == 200
     assert r.json()["exp_ms"] == 2000
@@ -105,18 +103,16 @@ def test_set_exposure_writes_continuous_when_not_stacking(client, monkeypatch):
     assert captured["params"] == {"exp_ms": {"continuous": 2000}}
 
 
-def test_get_exposure_reads_gain_from_get_last_gain_action(client, monkeypatch):
+def test_get_exposure_reads_gain_from_view_state(client, monkeypatch):
+    """gain has no field in get_setting/get_stack_setting on any firmware
+    version -- it's read from get_view_state's live "View" object, the same
+    call already used for stage. Unlike push events (Event: "View"/
+    "Exposure", which only fire on view-state transitions), get_view_state
+    is an on-demand query that reflects the current gain."""
     monkeypatch.setattr(
         router_live,
         "method_sync",
-        _fake_method_sync("Idle", {"stack_l": 20000, "continuous": 2000}),
-    )
-    monkeypatch.setattr(
-        router_live,
-        "do_action",
-        lambda action, dev_num, params: {"Value": 42}
-        if action == "get_last_gain"
-        else None,
+        _fake_method_sync("Idle", {"stack_l": 20000, "continuous": 2000}, gain=42),
     )
     r = client.get("/api/v1/devices/1/live/exposure")
     assert r.status_code == 200
@@ -128,37 +124,28 @@ def test_get_exposure_gain_zero_passthrough(client, monkeypatch):
     monkeypatch.setattr(
         router_live,
         "method_sync",
-        _fake_method_sync("Idle", {"stack_l": 20000, "continuous": 2000}),
-    )
-    monkeypatch.setattr(
-        router_live,
-        "do_action",
-        lambda action, dev_num, params: {"Value": 0}
-        if action == "get_last_gain"
-        else None,
+        _fake_method_sync("Idle", {"stack_l": 20000, "continuous": 2000}, gain=0),
     )
     r = client.get("/api/v1/devices/1/live/exposure")
     assert r.status_code == 200
     assert r.json()["gain"] == 0
 
 
-def test_get_exposure_rejects_federation_dict_gain(client, monkeypatch):
-    """Verify that federation fan-out dict (dev_num=0 case) is rejected and falls back to 80."""
+def test_get_exposure_falls_back_to_80_when_gain_missing(client, monkeypatch):
+    """If get_view_state's View has no gain field (e.g. no view active),
+    fall back to the same 80 default as before rather than raising."""
     monkeypatch.setattr(
         router_live,
         "method_sync",
-        _fake_method_sync("Idle", {"stack_l": 20000, "continuous": 2000}),
-    )
-    monkeypatch.setattr(
-        router_live,
-        "do_action",
-        lambda action, dev_num, params: {"Value": {"1": 80}}
-        if action == "get_last_gain"
-        else None,
+        lambda method, dev_num, **kwargs: {
+            "exp_ms": {"stack_l": 20000, "continuous": 2000}
+        }
+        if method == "get_setting"
+        else ({"View": {}} if method == "get_view_state" else None),
     )
     r = client.get("/api/v1/devices/1/live/exposure")
     assert r.status_code == 200
-    assert r.json()["gain"] == 80  # should fallback, not return {"1": 80}
+    assert r.json()["gain"] == 80
 
 
 def test_set_gain_uses_set_control_value(client, monkeypatch):

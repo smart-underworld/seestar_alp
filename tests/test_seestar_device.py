@@ -97,6 +97,15 @@ def test_transform_message_for_verify_list_params(seestar):
             {"method": "set_wheel_position", "params": [1]}
         )
         assert wheel["params"] == [1, "verify"]
+
+        # set_control_value takes the same flat positional-list shape as
+        # set_wheel_position (e.g. ["gain", 80]) -- the firmware rejects the
+        # generic [existing_params, "verify"] wrap for it with code 105
+        # "expected string param" (confirmed against a real emulator run).
+        gain = seestar.transform_message_for_verify(
+            {"method": "set_control_value", "params": ["gain", 80]}
+        )
+        assert gain["params"] == ["gain", 80, "verify"]
     finally:
         Config.verify_injection = old_setting
 
@@ -986,27 +995,6 @@ def test_action_set_exposure_runs_dark_frame_when_requested(monkeypatch, seestar
     out = seestar.action_set_exposure({"exp": 1200, "dark_frames": True})
     assert out["set_response"]["method"] == "set_setting"
     assert out["dark_response"]["method"] == "start_create_dark"
-
-
-def test_get_last_gain_reads_from_view_event(seestar):
-    seestar.event_state["View"] = {"Event": "View", "state": "working", "gain": 80}
-    assert seestar.get_last_gain() == 80
-
-
-def test_get_last_gain_falls_back_to_exposure_event(seestar):
-    seestar.event_state.pop("View", None)
-    seestar.event_state["Exposure"] = {
-        "Event": "Exposure",
-        "exp_us": 2000000,
-        "gain": 0,
-    }
-    assert seestar.get_last_gain() == 0
-
-
-def test_get_last_gain_returns_none_when_no_event_seen(seestar):
-    seestar.event_state.pop("View", None)
-    seestar.event_state.pop("Exposure", None)
-    assert seestar.get_last_gain() is None
 
 
 def test_action_start_up_sequence_paths(monkeypatch, seestar):

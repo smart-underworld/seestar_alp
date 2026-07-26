@@ -117,10 +117,6 @@ class AbstractDevice(ABC):
         pass
 
     @abstractmethod
-    def get_last_gain(self) -> int | None:
-        pass
-
-    @abstractmethod
     def action_start_up_sequence(self, params):
         pass
 

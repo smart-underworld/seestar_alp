@@ -194,6 +194,13 @@ against a field named/labeled `isp_exp_ms`, with no `CONSTRAINTS` entry at
 all today, and `isp_range_gain: [0,400]` vs. the unrelated Live View gain
 slider's 0–300 max.
 
+**Related follow-up (2026-07-26, not verified):** Finding 3's fix
+confirmed `set_control_value ["gain", 120]` round-trips correctly, but
+nothing in this batch established the real accepted upper bound for that
+write against firmware (whether it's 300, 400 per `isp_range_gain`, or
+something else) — worth an emulator probe before trusting either
+slider's max as authoritative. 0–300 max.
+
 **Decision (confirmed with project owner):** fix the obvious/confirmed part
 now; explicitly flag the write-path as unverified rather than guessing
 further.
@@ -315,17 +322,29 @@ Non-matrix.
   `iscope_start_view {"mode":"star"}`) carried a `"gain"` field (value `0`
   at view start in this short observation window); `"Event":"Exposure"`
   was not observed in this preview-only window (only a gain-less
-  `ContinuousExposure` fired alongside `View`) — not fixed-dependent, since
-  `View` alone already carries `gain`. No version's `get_setting` response
-  contained a flat `gain` key.
+  `ContinuousExposure` fired alongside `View`). No version's `get_setting`
+  response contained a flat `gain` key.
 - **Open Item #1 resolved**: `get_stack_setting` was probed directly on
   v2.6.4 — it is a real, implemented method (`code:0`) but its result
   object contains only `save_discrete_frame`/`save_discrete_ok_frame`/
-  `light_duration_min`, no `gain` key. Gain is confirmed obtainable *only*
-  via the live push-event stream (`View`'s `gain` field), not via
-  `get_stack_setting` or any other RPC observed. The recommended
-  event-stream approach is the only viable source, not merely the
-  fallback default. Full transcripts in `.superpowers/sdd/task-7-report.md`.
+  `light_duration_min`, no `gain` key. Full transcripts in
+  `.superpowers/sdd/task-7-report.md`.
+
+  **Correction (2026-07-26, final-review fix pass, Finding 3):** the
+  claim above that gain is obtainable *only* via the push-event stream
+  was wrong — this spike never probed `get_view_state`. Direct emulator
+  probing during Finding 3's investigation found `get_view_state`'s
+  `"View"` object also carries a live `"gain"` field, and — critically —
+  it's a synchronous, on-demand query, unlike `View`/`Exposure` push
+  events, which fire only on view-state transitions (mode start/stop) and
+  never reflect a later gain-only write. Confirmed directly: after a bare
+  `set_control_value ["gain", N]` write, no `View` event arrived within 6s,
+  while an immediate `get_view_state` call already showed the new gain.
+  Task 8's `get_last_gain` (reading `self.event_state["View"]["gain"]`,
+  a snapshot frozen at the last view-state transition) could therefore
+  never observe a live gain change — this is what Finding 3's system test
+  caught. See the Finding 3 fix note below; Task 8's device-layer
+  `get_last_gain` was removed rather than extended.
 
 ### Correction (2026-07-26): `AbstractDevice`/ABC claim in the Task 8 plan
 
@@ -399,3 +418,30 @@ the test itself with a bounded retry (not a device-code fix, out of scope
 for this batch) — worth a real product-level fix (e.g. `start_scheduler`
 retrying internally, or `scheduler_thread_fn` flipping state only after
 fully winding down) in a future task.
+
+### Fixed during final-review pass (2026-07-26): Task 8's gain design read a frozen event snapshot, not live state
+
+The final-review fix pass added a real emulator round-trip test for the
+gain write (Finding 3) and it failed: after `set_gain` wrote gain=120, the
+exposure endpoint kept reporting the old value for the full 15s poll
+window. Root cause: `get_last_gain()` read `self.event_state["View"]`,
+which is only updated when a `View` push event arrives — and `View`
+events fire on view-state transitions (mode start/stop), never on a bare
+gain write. So the cached gain was frozen at whatever it was when the
+view last started, and could never reflect a later `set_control_value`
+write. Confirmed directly against the emulator (see the correction note
+under "Verification results" above): no `View` event followed the write
+within 6s, while `get_view_state` immediately reflected it.
+
+Fixed by removing `get_last_gain` entirely (from
+`SeestarDevice`/`SeestarRemote`/`SeestarFederation`/`AbstractDevice`/
+`telescope.py`'s dispatcher, plus its tests) and having
+`front_v2/api/router_live.py::get_exposure` read gain from the same
+`get_view_state` call it already makes for stage — a live, on-demand
+query rather than a cached push-event snapshot. `set_gain`'s
+`set_control_value` write path was unaffected (already verified correct)
+and unchanged. Re-verified end-to-end against a freshly-restarted
+emulator (no carryover state) — the gain round-trip now passes without
+polling delay. Presented to the user as a design-revision decision (not a
+routine fix) since it reverted the core of an already-approved task; user
+chose "revert & simplify."

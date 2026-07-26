@@ -45,6 +45,29 @@ def test_live_exposure_change_is_reflected_by_firmware(app_base_url):
     assert get_resp.status_code == 200
     assert get_resp.json()["exp_ms"] == 3000
 
+    gain_resp = requests.post(
+        f"{app_base_url}/api/v1/devices/1/live/gain", json={"gain": 120}
+    )
+    assert gain_resp.status_code == 200
+
+    # gain is read via get_view_state, a live on-demand query (not the
+    # View/Exposure push-event stream, which only fires on view-state
+    # transitions and would never reflect a later gain-only write) -- so it
+    # should reflect the write almost immediately. Still poll briefly to
+    # absorb any firmware-side propagation delay.
+    deadline = time.time() + 10
+    observed_gain = None
+    while time.time() < deadline:
+        observed_gain = requests.get(
+            f"{app_base_url}/api/v1/devices/1/live/exposure"
+        ).json()["gain"]
+        if observed_gain == 120:
+            break
+        time.sleep(1)
+    assert observed_gain == 120, (
+        f"gain never reflected the write, last seen: {observed_gain}"
+    )
+
     requests.delete(f"{app_base_url}/api/v1/devices/1/live/mode")
 
 
