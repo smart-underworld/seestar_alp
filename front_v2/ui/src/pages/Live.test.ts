@@ -15,6 +15,8 @@ const {
   mockMove,
   mockRecord,
   mockStatus,
+  mockSearch,
+  mockGoto,
 } = vi.hoisted(() => ({
   mockStartMode: vi.fn(),
   mockStopMode: vi.fn(),
@@ -27,6 +29,8 @@ const {
   mockMove: vi.fn(),
   mockRecord: vi.fn(),
   mockStatus: vi.fn(),
+  mockSearch: vi.fn(),
+  mockGoto: vi.fn(),
 }));
 
 vi.mock("../lib/stores/deviceStore", () => ({
@@ -41,6 +45,8 @@ vi.mock("../lib/api", () => ({
   api: {
     devices: {
       status: mockStatus,
+      search: mockSearch,
+      goto: mockGoto,
       live: {
         startMode: mockStartMode,
         stopMode: mockStopMode,
@@ -91,6 +97,8 @@ beforeEach(() => {
   mockMove.mockReset().mockResolvedValue({});
   mockRecord.mockReset().mockResolvedValue({});
   mockStatus.mockReset().mockResolvedValue(BASE_STATUS);
+  mockSearch.mockReset();
+  mockGoto.mockReset().mockResolvedValue({});
 });
 
 describe("Live — syncing active mode from device status", () => {
@@ -433,5 +441,38 @@ describe("Live — zoom below 1x", () => {
     await waitFor(() => expect(zoomLabel.textContent).toContain("0.75"));
 
     await waitFor(() => expect(img.style.transform).not.toContain("scale"));
+  });
+});
+
+describe("Live — lunar/solar goto shortcuts", () => {
+  it("resolves and gotos the Moon", async () => {
+    mockSearch.mockResolvedValue({
+      query: "moon",
+      result: { ra: "10h00m00.0s", dec: "+10d00m00.0s", name: "Moon" },
+    });
+
+    render(Live);
+    await waitFor(() => screen.getByRole("button", { name: /Goto Moon/i }));
+
+    screen.getByRole("button", { name: /Goto Moon/i }).click();
+
+    await waitFor(() => expect(mockGoto).toHaveBeenCalledWith(
+      1, "10h00m00.0s", "+10d00m00.0s", "Moon", true,
+    ));
+    expect(mockSearch).toHaveBeenCalledWith(1, "moon", "planet");
+  });
+
+  it("shows an error if the Sun can't be resolved", async () => {
+    mockSearch.mockResolvedValue({ query: "sun", result: null });
+
+    render(Live);
+    await waitFor(() => screen.getByRole("button", { name: /Goto Sun/i }));
+
+    screen.getByRole("button", { name: /Goto Sun/i }).click();
+
+    await waitFor(() =>
+      expect(screen.getByText(/could not resolve/i)).toBeInTheDocument(),
+    );
+    expect(mockGoto).not.toHaveBeenCalled();
   });
 });

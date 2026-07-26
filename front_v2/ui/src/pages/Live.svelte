@@ -59,6 +59,27 @@
   let focusError = "";
   let focusing = false;
   let autoFocusing = false;
+  let gotoError = "";
+  let gotoing = false;
+
+  async function gotoBody(body: "moon" | "sun") {
+    gotoError = "";
+    gotoing = true;
+    try {
+      const { result } = await api.devices.search($activeDevNum, body, "planet") as {
+        result: { ra: string; dec: string; name: string } | null;
+      };
+      if (!result) {
+        gotoError = `Could not resolve the ${body === "moon" ? "Moon" : "Sun"}'s position.`;
+        return;
+      }
+      await api.devices.goto($activeDevNum, result.ra, result.dec, result.name, true);
+    } catch (e) {
+      gotoError = String(e);
+    } finally {
+      gotoing = false;
+    }
+  }
 
   // One-shot status refresh 2 s after starting a live mode — catches the initial
   // state transition without overlapping the 15 s global poll.  Ongoing updates
@@ -444,6 +465,17 @@
         {#if modeError}
           <div class="alert alert-error" style="margin-top:0.5rem;margin-bottom:0">{modeError}</div>
         {/if}
+        {#if gotoError}
+          <div class="alert alert-error" style="margin-top:0.5rem;margin-bottom:0">{gotoError}</div>
+        {/if}
+        <div class="mode-strip" style="margin-top:0.5rem">
+          <button class="mode-chip" on:click={() => gotoBody("moon")} disabled={gotoing}>
+            🌙 Goto Moon
+          </button>
+          <button class="mode-chip" on:click={() => gotoBody("sun")} disabled={gotoing}>
+            ☀ Goto Sun
+          </button>
+        </div>
       </div>
 
       <!-- Live feed (always visible once mode is set) -->
