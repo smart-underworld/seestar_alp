@@ -1306,9 +1306,7 @@ def test_start_up_thread_full_sequence(monkeypatch, seestar):
     assert seestar.schedule["state"] == "complete"
 
 
-def test_start_up_thread_restores_view_before_publishing_complete(
-    monkeypatch, seestar
-):
+def test_start_up_thread_restores_view_before_publishing_complete(monkeypatch, seestar):
     # Regression test: the view restore after 3PPA/dark-frame measurement
     # used to happen in a trailing `finally`, after the sequence had already
     # published "complete" to the status page. A caller (e.g. goto) that
