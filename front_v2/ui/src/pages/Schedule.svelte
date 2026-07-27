@@ -191,7 +191,10 @@
 
   // ---- Component state --------------------------------------------------
 
-  type DndItem = ScheduleItem & { id: string };
+  // _localOnly marks an item added while disconnected (see addItem()) that
+  // was never sent to the device -- load() uses it to warn instead of
+  // silently dropping the draft on the next server-confirmed reload.
+  type DndItem = ScheduleItem & { id: string; _localOnly?: boolean };
 
   let items: DndItem[] = [];
   let schedState = "";
@@ -371,11 +374,22 @@
     try {
       if ($isConnected) {
         const sched = await api.devices.schedule.get($activeDevNum);
+        // Items added while disconnected (addItem()'s offline branch) were
+        // never sent to the device -- this fetch is the server's authoritative
+        // list and is about to replace them. Warn rather than silently
+        // dropping the user's draft.
+        const droppedDrafts = items.filter((i) => i._localOnly).length;
         schedState = (sched.state as string) ?? "";
         items = toDndItems((sched.list as ScheduleItem[]) ?? []);
         isStackingPaused = Boolean(sched.is_stacking_paused);
         currentItemId = (sched.current_item_id as string) ?? "";
         curSchedulerItem = (sched.cur_scheduler_item as Record<string, unknown>) ?? null;
+        if (droppedDrafts > 0) {
+          error =
+            droppedDrafts === 1
+              ? "1 item added while disconnected was not saved to the device and has been discarded. Please re-add it."
+              : `${droppedDrafts} items added while disconnected were not saved to the device and have been discarded. Please re-add them.`;
+        }
       } else {
         schedState = "";
         isStackingPaused = false;
@@ -447,13 +461,18 @@
         await api.devices.schedule.addItem($activeDevNum, action, params);
         await load();
       } else {
+        // Not sent to the device -- kept as a local draft only. Flagged
+        // _localOnly so load() can warn (rather than silently drop it) once
+        // reconnecting fetches the device's real, item-less schedule.
         const newId = crypto.randomUUID();
         items = [...items, {
           id: newId,
           schedule_item_id: newId,
           action,
           params: params as Record<string, unknown>,
+          _localOnly: true,
         }];
+        error = "Device not connected -- item saved as a local draft only, not sent to the device.";
       }
     } catch (e) {
       error = String(e);
@@ -622,7 +641,7 @@
       version: "1.0",
       Event: "Scheduler",
       state: "stopped",
-      list: items.map(({ id: _id, ...item }) => item),
+      list: items.map(({ id: _id, _localOnly, ...item }) => item),
     };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -663,10 +682,18 @@
         await load();
       }
     } else {
+      // Not sent to the device -- kept as local drafts only. Flagged
+      // _localOnly so load() can warn (rather than silently drop them) once
+      // reconnecting fetches the device's real, item-less schedule.
       items = toDndItems(rawList.map((item) => ({
         ...item,
         schedule_item_id: item.schedule_item_id ?? crypto.randomUUID(),
+        _localOnly: true,
       })));
+      error =
+        rawList.length === 1
+          ? "Device not connected -- item saved as a local draft only, not sent to the device."
+          : `Device not connected -- ${rawList.length} items saved as local drafts only, not sent to the device.`;
     }
   }
 
@@ -738,7 +765,7 @@
       version: "1.0",
       Event: "Scheduler",
       state: "stopped",
-      list: items.map(({ id: _id, ...item }) => item),
+      list: items.map(({ id: _id, _localOnly, ...item }) => item),
     };
     try {
       await api.devices.scheduleLibrary.save(filename, JSON.stringify(exportData, null, 2));

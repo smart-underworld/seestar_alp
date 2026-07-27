@@ -302,6 +302,84 @@ describe("Schedule — offline building", () => {
     await waitFor(() => expect(screen.getByText("1 item in queue")).toBeInTheDocument());
     expect(screen.getByTitle(/Download schedule/i)).toBeInTheDocument();
   });
+
+  it("warns immediately that an offline add is a local draft, not sent to the device", async () => {
+    render(Schedule);
+    const parkChip = await waitFor(() => screen.getByRole("button", { name: /^Park$/i }));
+    parkChip.click();
+    await waitFor(() => screen.getByRole("button", { name: /\+ Add to Schedule/i })).then(b => b.click());
+    await waitFor(() =>
+      expect(screen.getByText(/local draft only, not sent to the device/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("warns and discards the draft when reconnecting reveals the device never received it", async () => {
+    render(Schedule);
+    const parkChip = await waitFor(() => screen.getByRole("button", { name: /^Park$/i }));
+    parkChip.click();
+    await waitFor(() => screen.getByRole("button", { name: /\+ Add to Schedule/i })).then(b => b.click());
+    await waitFor(() => expect(screen.getByText("1 item in queue")).toBeInTheDocument());
+
+    // Reconnect: the device's real schedule never had the item.
+    mockScheduleGet.mockResolvedValue(EMPTY_SCHEDULE);
+    mockIsConnected.set(true);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/1 item added while disconnected was not saved to the device/i),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/queue is empty/i)).toBeInTheDocument();
+  });
+
+  it("does not warn on reconnect when the queue has no local-only drafts", async () => {
+    mockScheduleGet.mockResolvedValue(EMPTY_SCHEDULE);
+    render(Schedule);
+    mockIsConnected.set(true);
+    await waitFor(() => expect(screen.getByText(/queue is empty/i)).toBeInTheDocument());
+    expect(
+      screen.queryByText(/was not saved to the device/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not warn when a reload drops a real (non-draft) item the server already had", async () => {
+    mockScheduleGet.mockResolvedValue({
+      state: "idle",
+      list: [{ schedule_item_id: "srv-1", action: "park", params: {} }],
+    });
+    mockIsConnected.set(true);
+    render(Schedule);
+    await waitFor(() => expect(screen.getByText("1 item in queue")).toBeInTheDocument());
+
+    // Server-side removal (e.g. consumed by the scheduler) -- not a local draft loss.
+    mockScheduleGet.mockResolvedValue(EMPTY_SCHEDULE);
+    mockIsConnected.set(false);
+    mockIsConnected.set(true);
+
+    await waitFor(() => expect(screen.getByText(/queue is empty/i)).toBeInTheDocument());
+    expect(
+      screen.queryByText(/was not saved to the device/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("excludes the local-only marker from exported schedule files", async () => {
+    let capturedParts: string[] | null = null;
+    class MockBlob {
+      constructor(parts: string[]) {
+        capturedParts = parts;
+      }
+    }
+    vi.stubGlobal("Blob", MockBlob);
+    render(Schedule);
+    const parkChip = await waitFor(() => screen.getByRole("button", { name: /^Park$/i }));
+    parkChip.click();
+    await waitFor(() => screen.getByRole("button", { name: /\+ Add to Schedule/i })).then(b => b.click());
+    await waitFor(() => expect(screen.getByText("1 item in queue")).toBeInTheDocument());
+    screen.getByTitle(/Download schedule/i).click();
+    const parsed = JSON.parse((capturedParts as unknown as string[]).join(""));
+    expect(parsed.list[0]).not.toHaveProperty("_localOnly");
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("Schedule — server library", () => {
@@ -361,6 +439,19 @@ describe("Schedule — server library", () => {
       expect(screen.getByText("1 item in queue")).toBeInTheDocument(),
     );
     expect(mockScheduleImport).not.toHaveBeenCalled(); // offline — local only
+    expect(
+      screen.getByText(/saved as a local draft only, not sent to the device/i),
+    ).toBeInTheDocument();
+
+    // Reconnect: the device's real schedule never had these loaded items.
+    mockScheduleGet.mockResolvedValue(EMPTY_SCHEDULE);
+    mockIsConnected.set(true);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/1 item added while disconnected was not saved to the device/i),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/queue is empty/i)).toBeInTheDocument();
   });
 });
 
