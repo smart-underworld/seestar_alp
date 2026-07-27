@@ -1306,6 +1306,67 @@ def test_start_up_thread_full_sequence(monkeypatch, seestar):
     assert seestar.schedule["state"] == "complete"
 
 
+def test_start_up_thread_restores_view_before_publishing_complete(
+    monkeypatch, seestar
+):
+    # Regression test: the view restore after 3PPA/dark-frame measurement
+    # used to happen in a trailing `finally`, after the sequence had already
+    # published "complete" to the status page. A caller (e.g. goto) that
+    # started as soon as it saw "complete" could race that late restore's
+    # iscope_start_view, which stops any view already in progress -- this
+    # cancelled a real AutoGoto in CI (PR #747). The restore must happen
+    # while the sequence still owns the device, i.e. before "complete".
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone_name", lambda: "UTC"
+    )
+    import datetime as _dt
+
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone", lambda: _dt.timezone.utc
+    )
+    monkeypatch.setattr("device.seestar_device.EarthLocation", lambda **_k: object())
+    monkeypatch.setattr(seestar, "play_sound", lambda _sid: None)
+    monkeypatch.setattr(seestar, "set_setting", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(seestar, "mark_op_state", lambda *a, **k: None)
+    monkeypatch.setattr(seestar, "wait_end_op", lambda _e: True)
+    monkeypatch.setattr(seestar, "try_auto_focus", lambda _n: True)
+    monkeypatch.setattr(seestar, "_try_dark_frame", lambda: True)
+    monkeypatch.setattr("device.seestar_device.Config.init_lat", 1.0)
+    monkeypatch.setattr("device.seestar_device.Config.init_long", 2.0)
+    seestar.is_EQ_mode = True  # 3PPA is force-disabled otherwise
+
+    action_at_start_view_call = []
+
+    def fake_sync(payload):
+        if payload["method"] == "get_device_state":
+            return {"result": {"device": {"firmware_ver_int": 2600}}}
+        if payload["method"] == "iscope_start_view":
+            action_at_start_view_call.append(
+                seestar.event_state["scheduler"]["cur_scheduler_item"].get("action")
+            )
+        return {"result": "ok"}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
+    seestar.schedule["state"] = "stopped"
+    seestar.start_up_thread_fn(
+        {
+            "lat": 1.1,
+            "lon": 2.2,
+            "auto_focus": True,
+            "3ppa": True,
+            "dark_frames": True,
+            "dec_pos_index": 3,
+        }
+    )
+    assert seestar.schedule["state"] == "complete"
+    # One restore for AF ("need to make sure we are in star mode"), one for
+    # dark frames -- and neither happens after "complete" is published, so
+    # there's no late, racy `finally`-block restore.
+    assert len(action_at_start_view_call) == 2
+    assert all(action != "complete" for action in action_at_start_view_call)
+
+
 def test_schedule_crud_import_export_and_shortcuts(monkeypatch, seestar, tmp_path):
     seestar.schedule["state"] = "working"
     assert seestar.create_schedule({}) == "scheduler is still active"

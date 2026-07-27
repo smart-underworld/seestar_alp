@@ -1623,6 +1623,16 @@ class Seestar:
                     msg = "Failed to perform polar alignment."
                     self.logger.warning(msg)
                     self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+                if not do_AF:
+                    # The Auto Focus branch below restarts the view itself
+                    # when it runs; when it won't, restore it here, while
+                    # this sequence still owns the device. Restoring later
+                    # (e.g. in a trailing `finally`, after completion is
+                    # already published) can race a caller's own goto/view
+                    # request that starts as soon as it sees "complete".
+                    self.send_message_param_sync(
+                        {"method": "iscope_start_view", "params": {"mode": "star"}}
+                    )
 
             if self.schedule["state"] != "working":
                 return
@@ -1679,7 +1689,13 @@ class Seestar:
                     self.schedule["state"] = "stopping"
                     return
                 else:
-                    time.sleep(1)
+                    # _try_dark_frame() stops the view to run the dark
+                    # calibration; restore it now, while this sequence still
+                    # owns the device (see the do_3PPA branch above for why
+                    # this can't safely wait for the trailing `finally`).
+                    self.send_message_param_sync(
+                        {"method": "iscope_start_view", "params": {"mode": "star"}}
+                    )
 
             if self.schedule["state"] != "working":
                 return
@@ -1688,16 +1704,21 @@ class Seestar:
             self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "complete"
 
         finally:
-            time.sleep(1)
-            if (
-                "View" not in self.event_state
-                or "mode" not in self.event_state["View"]
-                or self.event_state["View"]["mode"] != "star"
-            ):
-                self.send_message_param_sync(
-                    {"method": "iscope_start_view", "params": {"mode": "star"}}
-                )
-                time.sleep(2)
+            if not do_3PPA and not do_dark_frames:
+                # Neither branch above stopped the view, so there's nothing
+                # this sequence itself needs to undo -- just make sure we
+                # end in star mode (e.g. a bare AF-without-3PPA request,
+                # which is skipped entirely, or all steps disabled). This
+                # is the only view-restore left this late, since it's not
+                # undoing anything this sequence did.
+                if (
+                    "View" not in self.event_state
+                    or "mode" not in self.event_state["View"]
+                    or self.event_state["View"]["mode"] != "star"
+                ):
+                    self.send_message_param_sync(
+                        {"method": "iscope_start_view", "params": {"mode": "star"}}
+                    )
             if self.schedule["state"] == "stopping":
                 self.schedule["state"] = "stopped"
                 self.play_sound(82)
