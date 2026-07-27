@@ -189,6 +189,8 @@ def running_app(request, target):
             uiport,
             ready_timeout=45.0,
             log_file=config_dir / "app.log",
+            alpaca_port=alpaca_port,
+            wait_for_device_connected=True,
         )
         proc.start()
         started[frontend] = proc

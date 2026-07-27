@@ -33,7 +33,10 @@ def app_base_url(app):
 @pytest.mark.smoke
 @pytest.mark.full
 def test_live_exposure_change_is_reflected_by_firmware(app_base_url):
-    requests.post(f"{app_base_url}/api/v1/devices/1/live/mode", json={"mode": "star"})
+    mode_resp = requests.post(
+        f"{app_base_url}/api/v1/devices/1/live/mode", json={"mode": "star"}
+    )
+    assert mode_resp.status_code == 200
     time.sleep(3)  # let iscope_start_view settle before touching settings
 
     set_resp = requests.post(

@@ -9,7 +9,11 @@ import time
 from collections import deque
 from pathlib import Path
 
+import requests
+
 READY_LINE = "Startup Complete"
+# All tests/system/ configs (see target.py) use a single device, numbered 1.
+DEVICE_NUM = 1
 
 
 class AppProcess:
@@ -20,10 +24,14 @@ class AppProcess:
         uiport: int,
         ready_timeout: float = 30.0,
         log_file: Path | None = None,
+        alpaca_port: int | None = None,
+        wait_for_device_connected: bool = False,
     ):
         self.repo_root = repo_root
         self.config_path = config_path
         self.uiport = uiport
+        self.alpaca_port = alpaca_port
+        self.wait_for_device_connected = wait_for_device_connected
         self.ready_timeout = ready_timeout
         self.base_url = f"http://127.0.0.1:{uiport}"
         self.log_file = log_file
@@ -89,6 +97,63 @@ class AppProcess:
                     f"root_app.py did not print '{READY_LINE}' within "
                     f"{self.ready_timeout}s. Captured output:\n{tail}"
                 )
+
+        if self.wait_for_device_connected:
+            self._wait_device_connected()
+
+    # "connected" (device/telescope.py's `connected` GET resource) reflects
+    # only the raw TCP-level `is_connected` flag -- NOT `is_authenticated`,
+    # which has no HTTP-exposed signal at all. The device's auth handshake
+    # (get_verify_str -> verify_client -> pi_is_verified, run by
+    # HeartbeatMsgThread) can still be in flight after "connected" is
+    # already True. Confirmed directly: a diagnostic print in
+    # device/seestar_device.py's send_message showed iscope_start_view
+    # dispatched with is_authenticated=False in a failing run, vs. True in
+    # a passing one -- an unauthenticated-connection iscope_start_view is
+    # accepted (code 0) but never actually starts a live view, leaving
+    # get_view_state empty for the rest of the test. get_device_state's
+    # firmware-reported "is_verified" field looked like a usable per-request
+    # signal but isn't: it read True even on a brand new, never-handshaked
+    # raw connection, so it can't be polled to detect this app's own
+    # handshake completing. No production-code signal exists for this
+    # without adding one, so this buffer is a deliberate, documented
+    # test-harness compromise: give the handshake, observed completing in
+    # ~2.7s, generous headroom rather than trying to detect it precisely.
+    _POST_CONNECTED_AUTH_BUFFER_S = 5.0
+
+    def _wait_device_connected(self) -> None:
+        """READY_LINE only means the web server is up -- the device's own
+        auth handshake (get_verify_str/verify_client/pi_is_verified) runs
+        concurrently and is not guaranteed to finish first. A test that
+        fires its first device-touching request (e.g. POST .../live/mode)
+        before "connected" flips True gets a silent 503 from
+        _require_connected -- caught once for real via Finding 3's gain
+        round-trip test, see docs/superpowers/specs/
+        2026-07-25-front-v2-bugfix-batch-design.md."""
+        # The raw Alpaca backend route (device/telescope.py), reachable
+        # identically for both the "classic" and "v2" frontends -- unlike a
+        # frontend-specific status route, which would only exist for one of
+        # them.
+        url = (
+            f"http://127.0.0.1:{self.alpaca_port}/api/v1/telescope/"
+            f"{DEVICE_NUM}/connected?ClientID=1&ClientTransactionID=999"
+        )
+        deadline = time.monotonic() + self.ready_timeout
+        while time.monotonic() < deadline:
+            try:
+                r = requests.get(url, timeout=2)
+                if r.json().get("Value"):
+                    time.sleep(self._POST_CONNECTED_AUTH_BUFFER_S)
+                    return
+            except Exception:
+                pass
+            time.sleep(0.2)
+        tail = self.log_tail()
+        self.stop()
+        raise TimeoutError(
+            f"device never reported connected within {self.ready_timeout}s "
+            f"after {READY_LINE!r}. Captured output:\n{tail}"
+        )
 
     def log_tail(self) -> str:
         with self._output_lock:
