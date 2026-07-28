@@ -9,6 +9,10 @@ on:
       - main
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -119,7 +123,15 @@ jobs:
             --pem /tmp/emulator-fw/unpacked/${{ steps.fw.outputs.version }}/interop.pem \
             --renderer-shared-dir emulator/sim/shared \
             -m smoke \
-            --screenshot=on --video=on -q
+            --screenshot=on --video=on --junit-xml=test-results/emulator-smoke.xml -q
+
+      - name: Publish emulator smoke test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Emulator Smoke Test Results
+          path: 'test-results/emulator-smoke.xml'
+          reporter: java-junit
 
       - name: Print emulator container log on failure
         if: failure()

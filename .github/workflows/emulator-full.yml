@@ -7,6 +7,10 @@ on:
     - cron: "0 7 * * *"  # nightly, 07:00 UTC
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   full:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-full-system'
@@ -113,7 +117,16 @@ jobs:
             --pem /tmp/emulator-fw/unpacked/${{ matrix.version }}/interop.pem \
             --renderer-shared-dir emulator/sim/shared \
             -m full \
-            --screenshot=on --video=on -q
+            --screenshot=on --video=on \
+            --junit-xml=test-results/emulator-full-${{ matrix.version }}.xml -q
+
+      - name: Publish emulator full regression results (${{ matrix.version }})
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Emulator Full Regression (${{ matrix.version }})
+          path: 'test-results/emulator-full-${{ matrix.version }}.xml'
+          reporter: java-junit
 
       - name: Print emulator container log on failure
         if: failure()
