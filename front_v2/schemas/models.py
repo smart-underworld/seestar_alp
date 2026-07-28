@@ -63,6 +63,7 @@ class GotoRequest(BaseModel):
     dec: str
     target_name: str = ""
     is_j2000: bool = True
+    mode: str = "star"
 
 
 class ImageRequest(BaseModel):

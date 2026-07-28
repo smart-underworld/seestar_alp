@@ -232,6 +232,42 @@ def test_goto_target_sends_expected_request(monkeypatch, seestar):
     assert req["method"] == "iscope_start_view"
     assert req["params"]["target_ra_dec"] == [1.5, 22.25]
     assert req["params"]["target_name"] == "M42"
+    assert req["params"]["mode"] == "star"
+
+
+def test_goto_target_uses_requested_mode(monkeypatch, seestar):
+    """Goto Moon/Sun (Live.svelte) must not silently force deep-sky star mode.
+
+    goto_target() previously hardcoded mode="star" regardless of target,
+    so the one-tap Goto Moon/Sun buttons left the scope (and its
+    exposure-key selection) stuck in star/stack mode.
+    """
+
+    class FakeCoord:
+        ra = SimpleNamespace(hour=10.0)
+        dec = SimpleNamespace(deg=10.0)
+
+    captured = {}
+    seestar.is_goto = lambda: False
+    seestar.mark_op_state = lambda *args, **kwargs: None
+    seestar.send_message_param_sync = lambda payload: (
+        captured.setdefault("payload", payload) or {"result": "ok"}
+    )
+    monkeypatch.setattr(
+        "device.seestar_device.Util.parse_coordinate", lambda *args, **kwargs: FakeCoord
+    )
+
+    ok = seestar.goto_target(
+        {
+            "is_j2000": True,
+            "ra": "10h00m00s",
+            "dec": "+10d00m00s",
+            "target_name": "Moon",
+            "mode": "moon",
+        }
+    )
+    assert ok is True
+    assert captured["payload"]["params"]["mode"] == "moon"
 
 
 def test_parse_dec_to_float_positive_and_negative(seestar):

@@ -1124,6 +1124,7 @@ class Seestar:
         in_ra = parsed_coord.ra.hour
         in_dec = parsed_coord.dec.deg
         target_name = params.get("target_name", "unknown")
+        mode = params.get("mode", "star")
         self.logger.info(
             "%s: going to target... %s %s %s",
             self.device_name,
@@ -1135,7 +1136,7 @@ class Seestar:
         data: MessageParams = {
             "method": "iscope_start_view",
             "params": {
-                "mode": "star",
+                "mode": mode,
                 "target_ra_dec": [in_ra, in_dec],
                 "target_name": target_name,
                 "lp_filter": False,

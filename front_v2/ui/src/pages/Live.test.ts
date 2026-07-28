@@ -457,9 +457,25 @@ describe("Live — lunar/solar goto shortcuts", () => {
     screen.getByRole("button", { name: /Goto Moon/i }).click();
 
     await waitFor(() => expect(mockGoto).toHaveBeenCalledWith(
-      1, "10h00m00.0s", "+10d00m00.0s", "Moon", false,
+      1, "10h00m00.0s", "+10d00m00.0s", "Moon", false, "moon",
     ));
     expect(mockSearch).toHaveBeenCalledWith(1, "moon", "planet");
+  });
+
+  it("gotos the Sun with mode 'sun', not the default star mode", async () => {
+    mockSearch.mockResolvedValue({
+      query: "sun",
+      result: { ra: "05h00m00.0s", dec: "+20d00m00.0s", name: "Sun" },
+    });
+
+    render(Live);
+    await waitFor(() => screen.getByRole("button", { name: /Goto Sun/i }));
+
+    screen.getByRole("button", { name: /Goto Sun/i }).click();
+
+    await waitFor(() => expect(mockGoto).toHaveBeenCalledWith(
+      1, "05h00m00.0s", "+20d00m00.0s", "Sun", false, "sun",
+    ));
   });
 
   it("shows an error if the Sun can't be resolved", async () => {

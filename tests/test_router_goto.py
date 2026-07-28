@@ -53,6 +53,32 @@ def test_goto_uses_goto_target_action(client, monkeypatch):
     assert r.status_code == 200
     assert captured["action"] == "goto_target"
     assert captured["params"]["target_name"] == "Moon"
+    assert captured["params"]["mode"] == "star"
+
+
+def test_goto_passes_requested_mode_through(client, monkeypatch):
+    """Goto Moon/Sun (Live.svelte) sends mode="moon"/"sun" and it must reach
+    do_action's params -- goto_target() used to hardcode "star" regardless."""
+    captured = {}
+
+    def fake_do_action(action, dev_num, params):
+        captured["params"] = params
+        return {"ErrorNumber": 0, "Value": ""}
+
+    monkeypatch.setattr(router_goto, "do_action", fake_do_action)
+
+    r = client.post(
+        "/api/v1/devices/1/goto",
+        json={
+            "ra": "10h00m00.0s",
+            "dec": "+10d00m00.0s",
+            "target_name": "Moon",
+            "is_j2000": False,
+            "mode": "moon",
+        },
+    )
+    assert r.status_code == 200
+    assert captured["params"]["mode"] == "moon"
 
 
 def test_cancel_goto_uses_stop_goto_target_action(client, monkeypatch):

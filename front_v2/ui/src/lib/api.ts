@@ -158,8 +158,8 @@ export const api = {
       post(`/api/v1/devices/${devNum}/command`, { method, params }),
     startup: (devNum: number, params: Record<string, unknown>) =>
       post(`/api/v1/devices/${devNum}/startup`, params),
-    goto: (devNum: number, ra: string, dec: string, targetName = "", isJ2000 = true) =>
-      post<AlpacaActionResult<boolean>>(`/api/v1/devices/${devNum}/goto`, { ra, dec, target_name: targetName, is_j2000: isJ2000 }),
+    goto: (devNum: number, ra: string, dec: string, targetName = "", isJ2000 = true, mode = "star") =>
+      post<AlpacaActionResult<boolean>>(`/api/v1/devices/${devNum}/goto`, { ra, dec, target_name: targetName, is_j2000: isJ2000, mode }),
     forceStopGoto: (devNum: number) =>
       post<{ ok?: boolean; reason?: string }>(`/api/v1/devices/${devNum}/goto/force-stop`),
     image: {

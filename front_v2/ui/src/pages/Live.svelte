@@ -73,7 +73,16 @@
         gotoError = `Could not resolve the ${body === "moon" ? "Moon" : "Sun"}'s position.`;
         return;
       }
-      await api.devices.goto($activeDevNum, result.ra, result.dec, result.name, false);
+      await api.devices.goto($activeDevNum, result.ra, result.dec, result.name, false, body);
+      // goto_target's iscope_start_view already puts the device in the
+      // requested mode -- mirror setMode()'s post-start bookkeeping so the
+      // mode strip / feed / exposure sidebar reflect it immediately instead
+      // of waiting on the next poll.
+      activeMode = body;
+      vidNonce = Date.now();
+      startLiveRefresh();
+      loadFocus();
+      loadExposure();
     } catch (e) {
       gotoError = String(e);
     } finally {

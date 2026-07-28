@@ -279,6 +279,7 @@ def goto_target(dev_num: int, body: GotoRequest):
         "dec": body.dec,
         "target_name": body.target_name,
         "is_j2000": body.is_j2000,
+        "mode": body.mode,
     }
     result = do_action("goto_target", dev_num, params)
     if result is None:
