@@ -770,6 +770,33 @@ def test_set_setting_emits_expected_sequence(monkeypatch, seestar):
     assert out == {"ok": True}
     assert len(calls) == 6
     assert calls[-1]["method"] == "get_setting"
+    dbe_call = next(c for c in calls if c["method"] == "set_setting" and "stack" in c["params"])
+    assert dbe_call["params"]["frame_calib"] is True
+
+
+def test_set_setting_leaves_frame_calib_untouched_when_not_specified(
+    monkeypatch, seestar
+):
+    """start_up_thread_fn must not force frame_calib back to a config
+    default on every Startup run -- that silently undoes whatever the user
+    set via the Settings page's "Frame Calibration" toggle, and (per a real
+    device log) the firmware runs a full DarkLibrary recalibration on every
+    subsequent stack start while frame_calib is enabled. Omitting the
+    argument must leave the device's current frame_calib value alone.
+    """
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    calls = []
+
+    def fake_sync(payload):
+        calls.append(payload)
+        if payload["method"] == "get_setting":
+            return {"result": {"ok": True}}
+        return {"ok": True}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
+    seestar.set_setting(1, 2, 3, 4, True, False)
+    dbe_call = next(c for c in calls if c["method"] == "set_setting" and "stack" in c["params"])
+    assert "frame_calib" not in dbe_call["params"]
 
 
 def test_sync_and_move_helpers(monkeypatch, seestar):
@@ -1114,6 +1141,63 @@ def test_start_up_thread_fn_success_and_old_firmware(monkeypatch, seestar):
     seestar.schedule["state"] = "stopped"
     seestar.start_up_thread_fn({"lat": 1.1, "lon": 2.2}, is_from_schedule=True)
     assert seestar.schedule["state"] == "stopped"
+
+
+def test_start_up_thread_fn_does_not_force_frame_calib(monkeypatch, seestar):
+    """Regression: Startup used to pass Config.is_frame_calibrated into every
+    set_setting() call, silently overwriting whatever the user configured
+    via the Settings page's Frame Calibration toggle on every single Startup
+    run. A real device log showed the firmware running a full DarkLibrary
+    recalibration on every subsequent stack start while that stayed enabled.
+    Startup must leave the device's current frame_calib value alone.
+    """
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone_name", lambda: "UTC"
+    )
+
+    import datetime as _dt
+
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone", lambda: _dt.timezone.utc
+    )
+    monkeypatch.setattr("device.seestar_device.EarthLocation", lambda **_k: object())
+    monkeypatch.setattr(
+        "device.seestar_device.Util.get_current_gps_coordinates", lambda: [3.0, 4.0]
+    )
+
+    set_setting_calls = []
+    monkeypatch.setattr(
+        seestar,
+        "set_setting",
+        lambda *a, **k: set_setting_calls.append((a, k)) or {"ok": True},
+    )
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda payload: {"result": {"device": {"firmware_ver_int": 2500}}},
+    )
+    monkeypatch.setattr(seestar, "play_sound", lambda _sid: None)
+
+    seestar.start_up_thread_fn(
+        {
+            "lat": 1.1,
+            "lon": 2.2,
+            "auto_focus": False,
+            "3ppa": False,
+            "dark_frames": False,
+        }
+    )
+
+    assert set_setting_calls, "start_up_thread_fn should call set_setting"
+    for args, kwargs in set_setting_calls:
+        is_frame_calibrated = args[6] if len(args) > 6 else kwargs.get(
+            "is_frame_calibrated"
+        )
+        assert is_frame_calibrated is None, (
+            "Startup must not force frame_calib -- it should leave whatever "
+            "the user configured via Settings untouched"
+        )
 
 
 def test_spectra_thread_and_start_item(monkeypatch, seestar):

@@ -246,6 +246,13 @@ class _Config:
         self.init_guest_mode: bool = self.get_toml(section, "guest_mode_init", True)
         self.battery_low_limit: int = self.get_toml(section, "battery_low_limit", 3)
         self.dec_pos_index: int = self.get_toml(section, "dec_pos_index", 3)
+        # No longer applied automatically: start_up_thread_fn used to pass this
+        # into set_setting() on every Startup run, which silently overwrote
+        # whatever the user set via the Settings page's Frame Calibration
+        # toggle -- the device's own frame_calib setting is the one that
+        # actually governs firmware dark-recalibration behavior now. Kept
+        # here only for config.toml backward-compatibility; no code path
+        # reads it.
         self.is_frame_calibrated: bool = self.get_toml(
             section, "is_frame_calibrated", True
         )

@@ -950,7 +950,7 @@ class Seestar:
         d_interval,
         d_enable,
         l_enhance,
-        is_frame_calibrated,
+        is_frame_calibrated=None,
         auto_af=False,
         stack_after_goto=False,
     ):
@@ -995,10 +995,13 @@ class Seestar:
         )
         self.logger.info(f"result for set setting for dither: {result}")
 
+        dbe_params = {"stack": {"dbe": False}}
+        if is_frame_calibrated is not None:
+            dbe_params["frame_calib"] = is_frame_calibrated
         result = self.send_message_param_sync(
             {
                 "method": "set_setting",
-                "params": {"stack": {"dbe": False}, "frame_calib": is_frame_calibrated},
+                "params": dbe_params,
             }
         )
         self.logger.info(
@@ -1566,7 +1569,12 @@ class Seestar:
                 }
             )
 
-            # Put this here for people not running PA
+            # Put this here for people not running PA. Deliberately omits
+            # frame_calib: forcing it to a config default on every Startup
+            # silently overwrote whatever the user set via the Settings
+            # page's Frame Calibration toggle, and a real device log showed
+            # the firmware running a full DarkLibrary recalibration on every
+            # subsequent stack start while it stayed enabled.
             self.set_setting(
                 Config.init_expo_stack_ms,
                 Config.init_expo_preview_ms,
@@ -1574,7 +1582,6 @@ class Seestar:
                 Config.init_dither_frequency,
                 Config.init_dither_enabled,
                 Config.init_activate_LP_filter,
-                Config.is_frame_calibrated,
             )
 
             response = self.send_message_param_sync({"method": "get_device_state"})
@@ -1638,7 +1645,9 @@ class Seestar:
             if self.schedule["state"] != "working":
                 return
 
-            # This needs to be after polar align.  Some values are reset by the polar align routine.
+            # This needs to be after polar align.  Some values are reset by the
+            # polar align routine. frame_calib deliberately omitted here too --
+            # see the comment on the earlier set_setting call above.
             self.set_setting(
                 Config.init_expo_stack_ms,
                 Config.init_expo_preview_ms,
@@ -1646,7 +1655,6 @@ class Seestar:
                 Config.init_dither_frequency,
                 Config.init_dither_enabled,
                 Config.init_activate_LP_filter,
-                Config.is_frame_calibrated,
             )
 
             if do_AF:
