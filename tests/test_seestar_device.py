@@ -770,7 +770,9 @@ def test_set_setting_emits_expected_sequence(monkeypatch, seestar):
     assert out == {"ok": True}
     assert len(calls) == 6
     assert calls[-1]["method"] == "get_setting"
-    dbe_call = next(c for c in calls if c["method"] == "set_setting" and "stack" in c["params"])
+    dbe_call = next(
+        c for c in calls if c["method"] == "set_setting" and "stack" in c["params"]
+    )
     assert dbe_call["params"]["frame_calib"] is True
 
 
@@ -795,7 +797,9 @@ def test_set_setting_leaves_frame_calib_untouched_when_not_specified(
 
     monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
     seestar.set_setting(1, 2, 3, 4, True, False)
-    dbe_call = next(c for c in calls if c["method"] == "set_setting" and "stack" in c["params"])
+    dbe_call = next(
+        c for c in calls if c["method"] == "set_setting" and "stack" in c["params"]
+    )
     assert "frame_calib" not in dbe_call["params"]
 
 
@@ -1191,8 +1195,8 @@ def test_start_up_thread_fn_does_not_force_frame_calib(monkeypatch, seestar):
 
     assert set_setting_calls, "start_up_thread_fn should call set_setting"
     for args, kwargs in set_setting_calls:
-        is_frame_calibrated = args[6] if len(args) > 6 else kwargs.get(
-            "is_frame_calibrated"
+        is_frame_calibrated = (
+            args[6] if len(args) > 6 else kwargs.get("is_frame_calibrated")
         )
         assert is_frame_calibrated is None, (
             "Startup must not force frame_calib -- it should leave whatever "
