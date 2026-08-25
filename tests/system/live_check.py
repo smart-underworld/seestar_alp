@@ -14,7 +14,12 @@ def assert_stream_liveness(
     content — the emulator's camera stream is a static synthetic pattern,
     so pixel-change would be a false negative there)."""
     img = page.locator(locator).first
-    expect(img).to_be_visible(timeout=10000)
+    # front/app.py's classic UI server is a single-threaded wsgiref WSGI
+    # server (no ThreadingMixIn) -- a slow/blocking request elsewhere (e.g.
+    # a concurrent goto) can queue the page's own requests behind it under
+    # CI load, delaying render well past a tight budget even when the
+    # stream itself is fine. Give it real headroom.
+    expect(img).to_be_visible(timeout=20000)
 
     cdp = page.context.new_cdp_session(page)
     cdp.send("Network.enable")

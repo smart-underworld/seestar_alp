@@ -65,7 +65,12 @@ def do_goto(page: Page, base_url: str, target: SystemTestTarget) -> None:
     page.click("form button[type='submit']")
 
     status = page.locator("#eventStatusContent")
-    expect(status).to_contain_text("AutoGoto", timeout=5000)
+    # front/app.py's classic UI server is a single-threaded wsgiref WSGI
+    # server (no ThreadingMixIn) -- a slow/blocking request elsewhere can
+    # queue this HTMX poll behind it under CI load, delaying the first swap
+    # well past a tight budget even though it isn't actually stuck. Give it
+    # real headroom rather than tightening the polling loop below.
+    expect(status).to_contain_text("AutoGoto", timeout=20000)
 
     deadline = time.time() + 120
     while time.time() < deadline:
