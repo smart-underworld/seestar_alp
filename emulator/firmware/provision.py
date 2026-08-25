@@ -112,12 +112,24 @@ def download_xapk(version: str, dest_dir: Path) -> Path:
 
 
 def _unpack_debs(deb_dir: Path, out_dir: Path) -> None:
+    """dpkg -x whatever .deb files are present into out_dir.
+
+    Firmware ~3.3.1+ ships the `asiair` app pre-exploded under
+    `iscope/deb-build/asiair_armhf/` (rsync-installed on real hardware, not
+    dpkg-installed) instead of as a .deb, so `deb_dir` may contain zero,
+    some, or all of the packages a given version needs — see
+    `_merge_deb_build`, which layers that tree on top of whatever this
+    function produces.
+    """
     if out_dir.exists():
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True)
     debs = sorted(deb_dir.glob("*.deb"))
     if not debs:
-        raise RuntimeError(f"No .deb files found in {deb_dir}")
+        print(
+            f"  No .deb files in {deb_dir} (newer packaging — asiair ships pre-exploded)"
+        )
+        return
     if shutil.which("dpkg") is None:
         raise RuntimeError(
             "'dpkg' not found on PATH — required to unpack firmware .deb files"
@@ -136,6 +148,23 @@ def _unpack_debs(deb_dir: Path, out_dir: Path) -> None:
             f"dpkg -x failed for {len(failed)} package(s), unpacked tree at "
             f"{out_dir} is incomplete: {', '.join(failed)}"
         )
+
+
+def _merge_deb_build(iscope_dir: Path, out_dir: Path) -> None:
+    """Merge iscope/deb-build/{sysfiles,asiair_armhf} onto out_dir, if present.
+
+    Mirrors what the firmware's own update_package.sh does on real hardware
+    via update_asiair()'s rsync calls, but into the local staging tree
+    instead of onto a live device's `/`.
+    """
+    deb_build_dir = iscope_dir / "deb-build"
+    if not deb_build_dir.is_dir():
+        return
+    for sub in ("sysfiles", "asiair_armhf"):
+        src = deb_build_dir / sub
+        if src.is_dir():
+            print(f"  merging deb-build/{sub}/ -> {out_dir}/")
+            shutil.copytree(src, out_dir, dirs_exist_ok=True, symlinks=True)
 
 
 def _load_delta_base() -> dict[str, str]:
@@ -173,15 +202,22 @@ def provision_firmware(
     file at that path as "no interop auth needed" (self-healing), so it's
     fine for interop.pem to simply not exist for those versions.
 
-    Some firmware releases (e.g. real-world 3.3.1) ship as a delta on top of
-    a prior full release: iscope/deb/ has no asiair .deb at all, only a
-    partial iscope/deb-build/asiair_armhf/home overlay of the files that
-    changed -- mirroring what the firmware's own update_package.sh does on
-    real hardware via update_asiair()'s rsync. `delta_base` (defaulting to
-    versions.yaml's delta_base map) declares which versions are deltas and
-    of what base; when `version` is one, the base version is provisioned
-    first and its home/pi/ASIAIR tree is overlaid with the delta's own
-    overlay to produce a complete tree.
+    Firmware ~3.3.1+ drops the asiair .deb entirely: iscope/deb/ has no
+    asiair .deb, and asiair instead ships pre-exploded under
+    iscope/deb-build/asiair_armhf/ (rsync-installed on real hardware via
+    update_package.sh's update_asiair(), not dpkg-installed). Verified this
+    is a *complete* app tree, not a partial delta -- 3.3.1's tree has the
+    same file count and identical lib/ contents as 3.3.0's full .deb --
+    so provisioning just merges deb-build/ onto whatever dpkg -x produced
+    (see `_merge_deb_build`), unconditionally, no base version needed.
+
+    `delta_base` exists for the separate, currently-hypothetical case of a
+    firmware release that ships a genuinely *partial* deb-build/ overlay
+    (only the files that changed, not a full tree). None of today's pinned
+    versions need it -- versions.yaml's delta_base map is empty -- but the
+    mechanism stays: if `version` is declared in the map, its base version
+    is provisioned first and its home/pi/ASIAIR tree is overlaid with the
+    delta's own overlay to produce a complete tree.
 
     Returns the path to <work_dir>/<version>/iscope/deb/out, matching what
     emulator/run.sh's FW_BASE expects.
@@ -220,6 +256,7 @@ def provision_firmware(
     _unpack_debs(deb_dir, out_dir)
 
     if base_out_dir is not None:
+        # Declared delta: base + delta's own (assumed-partial) overlay only.
         delta_asiair_home = iscope_dir / "deb-build" / "asiair_armhf" / "home"
         if not delta_asiair_home.exists():
             raise RuntimeError(
@@ -229,6 +266,10 @@ def provision_firmware(
             )
         _overlay_tree(base_out_dir / "home", out_dir / "home")
         _overlay_tree(delta_asiair_home, out_dir / "home")
+    else:
+        # Not a declared delta: deb-build/, if present, is a complete tree
+        # standing in for a missing/partial .deb -- merge it in full.
+        _merge_deb_build(iscope_dir, out_dir)
 
     return out_dir
 

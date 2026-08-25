@@ -261,12 +261,15 @@ def test_provision_firmware_skips_pem_when_openssllib_absent(tmp_path):
 
 
 def test_provision_firmware_delta_release_overlays_onto_base_version(tmp_path):
-    # A delta release (e.g. real-world 3.3.1) ships no asiair .deb at all --
-    # just a partial iscope/deb-build/asiair_armhf/home overlay containing
-    # only the files that changed. provision_firmware must first provision
-    # the declared base version (which has a full asiair .deb), then layer
-    # the delta's overlay on top so the returned out/ tree has a complete,
-    # patched home/pi/ASIAIR.
+    # A hypothetical delta release ships no asiair .deb at all -- just a
+    # partial iscope/deb-build/asiair_armhf/home overlay containing only the
+    # files that changed. provision_firmware must first provision the
+    # declared base version (which has a full asiair .deb), then layer the
+    # delta's overlay on top so the returned out/ tree has a complete,
+    # patched home/pi/ASIAIR. (Real-world 3.3.1 looked like this at first
+    # glance -- no asiair .deb -- but its deb-build/asiair_armhf/home turned
+    # out to be a *complete* tree, not a partial one; see provision_firmware's
+    # docstring and _merge_deb_build, which is what actually handles it.)
     work_dir = tmp_path / "work"
     work_dir.mkdir()
 
@@ -355,6 +358,38 @@ def test_provision_firmware_raises_when_declared_delta_has_no_overlay(tmp_path):
             work_dir=work_dir,
             delta_base={"1.0.1": "1.0.0"},
         )
+
+
+def test_provision_firmware_merges_deb_build_when_not_a_declared_delta(tmp_path):
+    # Real-world 3.3.1: no asiair .deb, but a *complete* deb-build/asiair_armhf
+    # tree and no delta_base entry. provision_firmware must merge deb-build/
+    # straight onto the .deb-derived out/ tree -- no base version involved.
+    if subprocess.run(["which", "dpkg-deb"], capture_output=True).returncode != 0:
+        pytest.skip("dpkg-deb not available on this machine")
+
+    other_deb = tmp_path / "other.deb"
+    _build_other_deb(other_deb)
+
+    xapk_path = tmp_path / "firmware-3.3.1.xapk"
+    _build_iscope_xapk(
+        xapk_path,
+        lambda deb_dir: shutil.copy(other_deb, deb_dir),  # no asiair .deb
+        delta_overlay={
+            "bin/zwoair_imager": "complete imager binary",
+            "config": "complete config",
+        },
+    )
+
+    with patch("emulator.firmware.provision.download_xapk", return_value=xapk_path):
+        deb_out = provision_firmware(
+            version="3.3.1", work_dir=tmp_path / "work", delta_base={}
+        )
+
+    asiair_dir = deb_out / "home" / "pi" / "ASIAIR"
+    assert (
+        asiair_dir / "bin" / "zwoair_imager"
+    ).read_text() == "complete imager binary"
+    assert (asiair_dir / "config").read_text() == "complete config"
 
 
 def test_unpack_debs_raises_when_a_package_fails_to_unpack(tmp_path):
