@@ -9,9 +9,27 @@
 # `smoke` marks the single version used by the always-on PR smoke lane
 # (emulator-smoke.yml). `full` marks every version used by the full-matrix
 # lane (emulator-full.yml, label/nightly-gated).
-smoke_version: "3.3.1"
+smoke_version: "3.3.0"
 
 full_versions:
-  - "3.3.1"
+  - "3.3.0"
   - "3.2.0"
   - "2.6.4"
+
+# Some releases ship as a delta on top of a prior full release rather than
+# a complete set of .debs -- e.g. real-world 3.3.1's iscope/deb/ has no
+# asiair .deb at all, only a partial iscope/deb-build/asiair_armhf/home
+# overlay of the files that changed (mirroring what the firmware's own
+# update_package.sh does on real hardware via update_asiair()'s rsync).
+# provision.py provisions the base version first, then overlays the delta
+# version's changes on top. Human-curated, same as the lists above.
+#
+# 3.3.1 isn't pinned above yet: as of 2026-08-24, api.pureapk.com's
+# app_version API (the source provision.py downloads from -- see the
+# module header comment) hasn't indexed it, so CI can't fetch it even
+# though this delta_base entry and provision.py's chaining logic are
+# ready. Move "3.3.1" into smoke_version/full_versions once that mirror
+# catches up (spot-check: GET app_version for com.zwo.seestar and look
+# for a "3.3.1:" marker in the response body).
+delta_base:
+  "3.3.1": "3.3.0"

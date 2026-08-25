@@ -30,6 +30,7 @@ import sys
 from pathlib import Path
 
 import requests
+import yaml
 
 from emulator.firmware.apk_utils import NoMatchingSplitError
 from emulator.firmware.extract_iscope import extract_iscope_from_apk
@@ -137,7 +138,30 @@ def _unpack_debs(deb_dir: Path, out_dir: Path) -> None:
         )
 
 
-def provision_firmware(version: str, work_dir: Path) -> Path:
+def _load_delta_base() -> dict[str, str]:
+    """Load the delta_base map from versions.yaml (empty if absent)."""
+    versions_path = Path(__file__).parent / "versions.yaml"
+    doc = yaml.safe_load(versions_path.read_text())
+    return doc.get("delta_base") or {}
+
+
+def _overlay_tree(src: Path, dst: Path) -> None:
+    """Copy every file under src onto dst, overwriting matches in dst.
+
+    Files that exist in dst but not in src are left untouched -- this is an
+    overlay, not a mirror.
+    """
+    for item in src.rglob("*"):
+        if item.is_dir():
+            continue
+        target = dst / item.relative_to(src)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(item, target)
+
+
+def provision_firmware(
+    version: str, work_dir: Path, delta_base: dict[str, str] | None = None
+) -> Path:
     """Ensure firmware `version` is downloaded and extracted under work_dir.
 
     Also extracts the firmware's interop private key (see extract_pem.py)
@@ -149,12 +173,33 @@ def provision_firmware(version: str, work_dir: Path) -> Path:
     file at that path as "no interop auth needed" (self-healing), so it's
     fine for interop.pem to simply not exist for those versions.
 
+    Some firmware releases (e.g. real-world 3.3.1) ship as a delta on top of
+    a prior full release: iscope/deb/ has no asiair .deb at all, only a
+    partial iscope/deb-build/asiair_armhf/home overlay of the files that
+    changed -- mirroring what the firmware's own update_package.sh does on
+    real hardware via update_asiair()'s rsync. `delta_base` (defaulting to
+    versions.yaml's delta_base map) declares which versions are deltas and
+    of what base; when `version` is one, the base version is provisioned
+    first and its home/pi/ASIAIR tree is overlaid with the delta's own
+    overlay to produce a complete tree.
+
     Returns the path to <work_dir>/<version>/iscope/deb/out, matching what
     emulator/run.sh's FW_BASE expects.
     """
+    if delta_base is None:
+        delta_base = _load_delta_base()
+
     work_dir = Path(work_dir)
     version_dir = work_dir / version
     version_dir.mkdir(parents=True, exist_ok=True)
+
+    base_version = delta_base.get(version)
+    base_out_dir = None
+    if base_version:
+        print(f"  {version} is a delta release of {base_version} -- provisioning base first")
+        base_out_dir = provision_firmware(
+            version=base_version, work_dir=work_dir, delta_base=delta_base
+        )
 
     xapk_path = download_xapk(version=version, dest_dir=work_dir / "_xapk_cache")
     try:
@@ -171,6 +216,18 @@ def provision_firmware(version: str, work_dir: Path) -> Path:
     deb_dir = iscope_dir / "deb"
     out_dir = deb_dir / "out"
     _unpack_debs(deb_dir, out_dir)
+
+    if base_out_dir is not None:
+        delta_asiair_home = iscope_dir / "deb-build" / "asiair_armhf" / "home"
+        if not delta_asiair_home.exists():
+            raise RuntimeError(
+                f"{version} is declared as a delta of {base_version} in "
+                f"delta_base, but its XAPK has no "
+                f"iscope/deb-build/asiair_armhf/home overlay"
+            )
+        _overlay_tree(base_out_dir / "home", out_dir / "home")
+        _overlay_tree(delta_asiair_home, out_dir / "home")
+
     return out_dir
 
 

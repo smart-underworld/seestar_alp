@@ -1,6 +1,8 @@
 import io
 import shutil
 import subprocess
+import tarfile
+import zipfile
 from unittest.mock import patch
 
 import pytest
@@ -12,6 +14,66 @@ from emulator.firmware.provision import (
     download_xapk,
     provision_firmware,
 )
+
+
+def _build_asiair_deb(deb_path, imager_contents, extra_files=None):
+    pkg_root = deb_path.parent / f"pkg_root_{deb_path.stem}"
+    (pkg_root / "DEBIAN").mkdir(parents=True)
+    (pkg_root / "DEBIAN" / "control").write_text(
+        "Package: asiair\nVersion: 1.0\nArchitecture: armhf\nMaintainer: test\nDescription: test\n"
+    )
+    asiair_dir = pkg_root / "home" / "pi" / "ASIAIR"
+    (asiair_dir / "bin").mkdir(parents=True)
+    (asiair_dir / "bin" / "zwoair_imager").write_text(imager_contents)
+    for rel, contents in (extra_files or {}).items():
+        path = asiair_dir / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents)
+    subprocess.run(["dpkg-deb", "--build", str(pkg_root), str(deb_path)], check=True)
+
+
+def _build_other_deb(deb_path):
+    # Stand-in for the non-asiair .debs (alpaca_libs, rsyslog, tzdata) a
+    # delta release still ships alongside (or instead of) the asiair overlay.
+    pkg_root = deb_path.parent / f"pkg_root_{deb_path.stem}"
+    (pkg_root / "DEBIAN").mkdir(parents=True)
+    (pkg_root / "DEBIAN" / "control").write_text(
+        "Package: other\nVersion: 1.0\nArchitecture: armhf\nMaintainer: test\nDescription: test\n"
+    )
+    subprocess.run(["dpkg-deb", "--build", str(pkg_root), str(deb_path)], check=True)
+
+
+def _build_iscope_xapk(xapk_path, deb_dir_builder, delta_overlay=None):
+    iscope_dir = xapk_path.parent / f"iscope_src_{xapk_path.stem}"
+    (iscope_dir / "deb").mkdir(parents=True)
+    deb_dir_builder(iscope_dir / "deb")
+
+    if delta_overlay is not None:
+        for rel, contents in delta_overlay.items():
+            path = (
+                iscope_dir
+                / "deb-build"
+                / "asiair_armhf"
+                / "home"
+                / "pi"
+                / "ASIAIR"
+                / rel
+            )
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(contents)
+
+    tar_path = xapk_path.parent / f"{xapk_path.stem}.tar.bz2"
+    with tarfile.open(tar_path, "w:bz2") as tar:
+        tar.add(iscope_dir / "deb", arcname="deb")
+        if delta_overlay is not None:
+            tar.add(iscope_dir / "deb-build", arcname="deb-build")
+
+    with zipfile.ZipFile(xapk_path, "w") as z:
+        z.writestr("manifest.json", "{}")
+        io_buf = io.BytesIO()
+        with zipfile.ZipFile(io_buf, "w") as inner:
+            inner.writestr("assets/iscope", tar_path.read_bytes())
+        z.writestr("base.apk", io_buf.getvalue())
 
 
 def test_download_xapk_reuses_existing_cached_file(tmp_path):
@@ -196,6 +258,103 @@ def test_provision_firmware_skips_pem_when_openssllib_absent(tmp_path):
     assert deb_out == work_dir / "1.0.0" / "iscope" / "deb" / "out"
     assert (deb_out / "usr" / "bin" / "hello").exists()
     assert not (work_dir / "1.0.0" / "interop.pem").exists()
+
+
+def test_provision_firmware_delta_release_overlays_onto_base_version(tmp_path):
+    # A delta release (e.g. real-world 3.3.1) ships no asiair .deb at all --
+    # just a partial iscope/deb-build/asiair_armhf/home overlay containing
+    # only the files that changed. provision_firmware must first provision
+    # the declared base version (which has a full asiair .deb), then layer
+    # the delta's overlay on top so the returned out/ tree has a complete,
+    # patched home/pi/ASIAIR.
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+
+    if subprocess.run(["which", "dpkg-deb"], capture_output=True).returncode != 0:
+        pytest.skip("dpkg-deb not available on this machine")
+
+    base_deb = tmp_path / "base_asiair.deb"
+    _build_asiair_deb(
+        base_deb,
+        imager_contents="base imager binary",
+        extra_files={"config": "base config"},
+    )
+    base_xapk = tmp_path / "firmware-1.0.0.xapk"
+    _build_iscope_xapk(base_xapk, lambda deb_dir: shutil.copy(base_deb, deb_dir))
+
+    other_deb = tmp_path / "other.deb"
+    _build_other_deb(other_deb)
+
+    delta_xapk = tmp_path / "firmware-1.0.1.xapk"
+    _build_iscope_xapk(
+        delta_xapk,
+        lambda deb_dir: shutil.copy(other_deb, deb_dir),  # no asiair .deb here
+        delta_overlay={
+            "bin/zwoair_imager": "patched imager binary",
+            "bin/new_tool": "new in the delta",
+        },
+    )
+
+    xapks = {"1.0.0": base_xapk, "1.0.1": delta_xapk}
+
+    with patch(
+        "emulator.firmware.provision.download_xapk",
+        side_effect=lambda version, dest_dir: xapks[version],
+    ):
+        deb_out = provision_firmware(
+            version="1.0.1",
+            work_dir=work_dir,
+            delta_base={"1.0.1": "1.0.0"},
+        )
+
+    assert deb_out == work_dir / "1.0.1" / "iscope" / "deb" / "out"
+    asiair_dir = deb_out / "home" / "pi" / "ASIAIR"
+    # Delta overlay wins for a file it changed.
+    assert (asiair_dir / "bin" / "zwoair_imager").read_text() == "patched imager binary"
+    # A file the delta didn't touch is preserved from the base.
+    assert (asiair_dir / "config").read_text() == "base config"
+    # A file only the delta added is present.
+    assert (asiair_dir / "bin" / "new_tool").read_text() == "new in the delta"
+
+
+def test_provision_firmware_raises_when_declared_delta_has_no_overlay(tmp_path):
+    # A version explicitly declared in delta_base is a promise that
+    # iscope/deb-build/asiair_armhf/home exists in its XAPK. If it's
+    # missing, silently falling back to "just the base version" would look
+    # like a successful provision of firmware that's actually unpatched --
+    # this must fail loudly instead.
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+
+    if subprocess.run(["which", "dpkg-deb"], capture_output=True).returncode != 0:
+        pytest.skip("dpkg-deb not available on this machine")
+
+    base_deb = tmp_path / "base_asiair.deb"
+    _build_asiair_deb(base_deb, imager_contents="base imager binary")
+    base_xapk = tmp_path / "firmware-1.0.0.xapk"
+    _build_iscope_xapk(base_xapk, lambda deb_dir: shutil.copy(base_deb, deb_dir))
+
+    other_deb = tmp_path / "other.deb"
+    _build_other_deb(other_deb)
+
+    # No delta_overlay passed -- this XAPK has no deb-build/ at all.
+    delta_xapk = tmp_path / "firmware-1.0.1.xapk"
+    _build_iscope_xapk(delta_xapk, lambda deb_dir: shutil.copy(other_deb, deb_dir))
+
+    xapks = {"1.0.0": base_xapk, "1.0.1": delta_xapk}
+
+    with (
+        patch(
+            "emulator.firmware.provision.download_xapk",
+            side_effect=lambda version, dest_dir: xapks[version],
+        ),
+        pytest.raises(RuntimeError, match="1.0.1"),
+    ):
+        provision_firmware(
+            version="1.0.1",
+            work_dir=work_dir,
+            delta_base={"1.0.1": "1.0.0"},
+        )
 
 
 def test_unpack_debs_raises_when_a_package_fails_to_unpack(tmp_path):
