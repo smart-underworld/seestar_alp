@@ -5346,6 +5346,21 @@ class FrontMain:
         app = falcon.App(
             middleware=falcon.CORSMiddleware(allow_origins="*", allow_credentials="*")
         )
+
+        def _log_unhandled_exception(req, resp, ex, params):
+            # Falcon's default handler for an uncaught, non-HTTPError exception
+            # returns a bare 500 and logs via its own "falcon" logger -- easy to
+            # lose track of in a busy log unless something greps specifically
+            # for it. Route it through our own logger with an unmistakable tag
+            # so a silent 500 (which htmx won't swap into the DOM either) is
+            # never invisible again.
+            logger.exception(f"UNHANDLED EXCEPTION: {req.method} {req.relative_uri}")
+            resp.status = falcon.HTTP_500
+            resp.content_type = falcon.MEDIA_TEXT
+            resp.text = f"Internal error: {ex}"
+
+        app.add_error_handler(Exception, _log_unhandled_exception)
+
         app.add_route("/", HomeResource())
         app.add_route("/command", CommandResource())
         app.add_route("/goto", GotoResource())
