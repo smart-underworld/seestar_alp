@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<global date="20190214_181214">
+    <currentProfile type="6" date="20190214_181214">1</currentProfile>
+    <pa_move_dir type="5" date="20190214_181214">left</pa_move_dir>
+    <scope_name type="5" date="20190214_181214">Seestar S50</scope_name>
+    <serial_baud_rate type="6" date="20190214_181215">115200</serial_baud_rate>
+    <serial_parity type="6" date="20190214_181215">0</serial_parity>
+    <serial_wordsize type="6" date="20190214_181215">8</serial_wordsize>
+    <serial_stopbits type="6" date="20190214_181215">1</serial_stopbits>
+    <user_location_lon type="7" date="20240526_093449">-123.45</user_location_lon>
+    <user_location_lat type="7" date="20240526_093449">37.12</user_location_lat>
+</global>
+<profile date="20190214_181214">
+    <id1th date="20190214_181214">
+        <NoiseReductionMethod type="6" date="20190214_181214">0</NoiseReductionMethod>
+        <DitherScaleFactor type="7" date="20190214_181214">1</DitherScaleFactor>
+        <DitherMode type="6" date="20190214_181214">0</DitherMode>
+        <frame date="20190214_181214">
+            <timeLapse type="6" date="20190214_181214">0</timeLapse>
+            <focalLength type="6" date="20190214_181214">0</focalLength>
+        </frame>
+        <auto_exp date="20190214_181214">
+            <exposure_min type="6" date="20190214_181214">1000</exposure_min>
+            <exposure_max type="6" date="20190214_181214">5000</exposure_max>
+            <target_snr type="7" date="20190214_181214">6</target_snr>
+        </auto_exp>
+        <ExposureDurationMs type="6" date="20190214_181214">1000</ExposureDurationMs>
+        <ImageLogger date="20190214_181214">
+            <LogFramesDropped type="8" date="20190214_181214">false</LogFramesDropped>
+            <LoggingEnabled type="8" date="20190214_181214">false</LoggingEnabled>
+        </ImageLogger>
+        <overlay date="20190214_181214">
+            <slit date="20190214_181214">
+                <center.x type="6" date="20190214_181214">376</center.x>
+                <center.y type="6" date="20190214_181214">290</center.y>
+                <width type="6" date="20190214_181214">8</width>
+                <height type="6" date="20190214_181214">100</height>
+                <angle type="6" date="20190214_181214">0</angle>
+            </slit>
+        </overlay>
+        <guider date="20190214_181214">
+            <FastRecenter type="6" date="20190214_181214">1</FastRecenter>
+            <ScaleImage type="8" date="20190214_181214">true</ScaleImage>
+            <StarMinHFDFromConf type="8" date="20190214_181214">false</StarMinHFDFromConf>
+            <StarMinHFD type="7" date="20190214_181214">1</StarMinHFD>
+            <onestar date="20190214_181214">
+                <MassChangeThreshold type="7" date="20190214_181214">0.5</MassChangeThreshold>
+                <MassChangeThresholdEnabled type="8" date="20190214_181214">true</MassChangeThresholdEnabled>
+                <SearchRegion type="6" date="20190214_181214">50</SearchRegion>
+            </onestar>
+            <multistar date="20190214_181214">
+                <enabled type="8" date="20190214_181214">true</enabled>
+            </multistar>
+        </guider>
+        <camera date="20190214_181214">
+            <LastMenuChoice type="5" date="20190214_181214">Simulator</LastMenuChoice>
+        </camera>
+        <scope date="20190214_181214">
+            <CalibrationDuration type="6" date="20190214_181214">2000</CalibrationDuration>
+            <MaxRaDuration type="6" date="20190214_181214">2000</MaxRaDuration>
+            <MaxDecDuration type="6" date="20190214_181214">2000</MaxDecDuration>
+            <DecGuideMode type="6" date="20190214_181214">1</DecGuideMode>
+            <GuideAlgorithm date="20190214_181214">
+                <X date="20190214_181214">
+                    <Hysteresis date="20190214_181214">
+                        <minMove type="7" date="20190214_181214">0.1</minMove>
+                        <hysteresis type="7" date="20190214_181214">0.1</hysteresis>
+                        <aggression type="7" date="20190214_181214">0.7</aggression>
+                    </Hysteresis>
+                </X>
+                <Y date="20190214_181214">
+                    <ResistSwitch date="20190214_181214">
+                        <minMove type="7" date="20190214_181214">0.1</minMove>
+                        <aggression type="7" date="20190214_181214">1</aggression>
+                        <fastSwitch type="8" date="20190214_181214">true</fastSwitch>
+                    </ResistSwitch>
+                </Y>
+            </GuideAlgorithm>
+            <XGuideAlgorithm type="6" date="20190214_181214">1</XGuideAlgorithm>
+            <YGuideAlgorithm type="6" date="20190214_181214">4</YGuideAlgorithm>
+            <AssumeOrthogonal type="8" date="20190214_181214">false</AssumeOrthogonal>
+            <UseDecComp type="8" date="20190214_181214">true</UseDecComp>
+            <StopGuidingWhenSlewing type="8" date="20190214_181214">true</StopGuidingWhenSlewing>
+            <LastMenuChoice type="5" date="20190214_181214">Seestar S50</LastMenuChoice>
+            <connection_para date="20190214_181215">
+                <ZWO_AM5 date="20190214_181215">
+                    <baudrate type="6" date="20190214_181215">115200</baudrate>
+                    <requires_dec_flip type="8" date="20190214_181253">false</requires_dec_flip>
+                </ZWO_AM5>
+                <Seestar_S50 date="20190214_051521">
+                    <baudrate type="6" date="20190214_051521">115200</baudrate>
+                    <requires_dec_flip type="8" date="20190214_051524">false</requires_dec_flip>
+                </Seestar_S50>
+            </connection_para>
+        </scope>
+    </id1th>
+</profile>

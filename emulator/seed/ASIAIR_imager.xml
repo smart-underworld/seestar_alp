@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<setting2 date="20190214_181214">
+    <imager date="20190214_181214">
+        <stack date="20190214_181214">
+            <simulate type="8" date="20190214_181214">false</simulate>
+            <sim_image_path type="5" date="20190214_181214">input_sim_path</sim_image_path>
+            <save_discrete_ok_frame type="8" date="20240529_115945">true</save_discrete_ok_frame>
+            <dbe type="8" date="20250321_134743">false</dbe>
+            <light_duration_min type="9" date="20190214_054236">-1</light_duration_min>
+            <exp_ms type="9" date="20190304_074251">10000</exp_ms>
+        </stack>
+        <solve_simulate type="8" date="20190214_181214">false</solve_simulate>
+        <goto_simulate type="8" date="20190214_181214">false</goto_simulate>
+        <camera_simulate type="8" date="20190214_181215">true</camera_simulate>
+        <beep_volume_percent type="9" date="20190214_181215">0</beep_volume_percent>
+        <simulate date="20190214_181218">
+            <dslr_img_sim type="8" date="20190214_181218">false</dslr_img_sim>
+            <dslr_img_path type="5" date="20190214_181218">img_path</dslr_img_path>
+            <power_current_max type="7" date="20190214_181218">6</power_current_max>
+            <power_volted_min type="7" date="20190214_181218">11</power_volted_min>
+            <power_5v_volt_min type="7" date="20190214_181218">4.85</power_5v_volt_min>
+            <print_power_read type="8" date="20190214_181218">false</print_power_read>
+            <pa_3p_simulate type="8" date="20190214_181218">false</pa_3p_simulate>
+            <pa_3p_sim_img1 type="5" date="20190214_181218">image_path</pa_3p_sim_img1>
+            <pa_3p_sim_img2 type="5" date="20190214_181218">image_path</pa_3p_sim_img2>
+            <pa_3p_sim_img3 type="5" date="20190214_181218">image_path</pa_3p_sim_img3>
+            <pa_3p_sim_img4 type="5" date="20190214_181218">image_path</pa_3p_sim_img4>
+            <storage_exp_ro type="8" date="20190214_181218">true</storage_exp_ro>
+            <save_af_img type="8" date="20190214_181218">false</save_af_img>
+            <autogoto_centered type="8" date="20190214_181218">false</autogoto_centered>
+            <save_solve_fail_img type="8" date="20190214_181218">false</save_solve_fail_img>
+            <array2obj type="8" date="20190214_181218">false</array2obj>
+            <align_exp_sim type="8" date="20190214_181218">false</align_exp_sim>
+            <align_img type="5" date="20190214_181218">none</align_img>
+            <view_star_skip_af_err type="8" date="20190214_181218">false</view_star_skip_af_err>
+            <save_dark type="8" date="20190214_181218">false</save_dark>
+            <air_compatible type="8" date="20190214_181218">false</air_compatible>
+            <guest_enable type="8" date="20250116_095409">false</guest_enable>
+            <ac_lev type="9" date="20250321_130148">0</ac_lev>
+        </simulate>
+        <capture_simulate type="8" date="20190214_181218">false</capture_simulate>
+        <capture_image type="5" date="20190214_181218">none</capture_image>
+        <focuser date="20190214_181218">
+            <focal_pos type="9" date="20190214_181218">1563</focal_pos>
+            <ccd_central_region_percent type="9" date="20190214_181219">10</ccd_central_region_percent>
+            <is_save_findstar_fail_picture type="8" date="20190214_181219">false</is_save_findstar_fail_picture>
+            <factory_focal_pos type="9" date="20240315_130303">1563</factory_focal_pos>
+        </focuser>
+        <check_sun_rises type="8" date="20190214_181218">true</check_sun_rises>
+        <plan date="20190214_181218" />
+        <page_parameters date="20190214_181219">
+            <preview date="20190214_181219">
+                <ASI462 date="20190214_181219">
+                    <gain type="9" date="20190214_181219">0</gain>
+                </ASI462>
+                <exp_us type="9" date="20190214_181219">2115000</exp_us>
+                <Seestar_S50 date="20240719_234705">
+                    <gain type="9" date="20240719_234705">110</gain>
+                </Seestar_S50>
+            </preview>
+            <focus date="20240315_130410">
+                <exp_us type="9" date="20240315_130410">32</exp_us>
+            </focus>
+        </page_parameters>
+        <sensor_calibration date="20240315_130653">
+            <gsensor date="20240315_130653">
+                <x type="7" date="20240315_130653">-0.0284463</x>
+                <y type="7" date="20240315_130653">-0.00301863</y>
+                <z type="7" date="20240315_130653">0.00829721</z>
+            </gsensor>
+            <msensor date="20240315_130757">
+                <x type="7" date="20240315_130757">27.9089</x>
+                <y type="7" date="20240315_130757">0.684183</y>
+                <x11 type="7" date="20240315_130757">2.30661</x11>
+                <x12 type="7" date="20240315_130757">-0.401666</x12>
+                <y11 type="7" date="20240315_130757">-0.401666</y11>
+                <y12 type="7" date="20240315_130757">3.21083</y12>
+            </msensor>
+        </sensor_calibration>
+        <solve_res date="20240528_205012">
+            <result type="5" date="20240528_205012">{&quot;ra_dec&quot;:[22.521421,-20.770580],&quot;fov&quot;:[0.711382,1.266643],&quot;focal_len&quot;:251.864822,&quot;angle&quot;:166.356995,&quot;image_id&quot;:6018,&quot;state&quot;:&quot;complete&quot;,&quot;star_number&quot;:810,&quot;duration_ms&quot;:0}</result>
+            <cam_name type="5" date="20240528_205012">Seestar S50</cam_name>
+        </solve_res>
+        <test date="20240627_080028">
+            <auto_power_off type="8" date="20240627_080028">false</auto_power_off>
+            <auto_af type="8" date="20240813_170455">false</auto_af>
+            <stack_after_goto type="8" date="20241028_113049">false</stack_after_goto>
+            <dark_mode type="8" date="20250523_131631">true</dark_mode>
+            <expert_mode type="8" date="20260303_112816">false</expert_mode>
+            <autogoto_threshold type="7" date="20260720_000000">0.5</autogoto_threshold>
+        </test>
+        <seq_setting date="20241022_015714">
+            <group_name type="5" date="20241022_015714">bodes</group_name>
+            <delay_first type="9" date="20241022_015714">0</delay_first>
+            <delay_between_frame type="9" date="20241022_015714">0</delay_between_frame>
+            <group_by_slot type="8" date="20241022_015714">true</group_by_slot>
+            <merid_flip type="8" date="20241022_015714">false</merid_flip>
+            <park_mount type="8" date="20241022_015714">false</park_mount>
+            <shutdown_pi type="8" date="20241022_015714">false</shutdown_pi>
+            <close_cooler type="8" date="20241022_015714">false</close_cooler>
+            <target_ra type="7" date="20241022_015714">9.9625</target_ra>
+            <target_dec type="7" date="20241022_015714">69.2526</target_dec>
+        </seq_setting>
+        <app_setting date="20190214_093033">
+            <goto_target_name type="5" date="20190214_093033">Kai_goto_target_name</goto_target_name>
+        </app_setting>
+    </imager>
+</setting2>

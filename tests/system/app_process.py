@@ -1,0 +1,169 @@
+"""Launches and tears down the real seestar_alp application (root_app.py) as
+a subprocess, pointed at a scratch config.toml, for the tests/system/ suite."""
+
+import os
+import subprocess
+import sys
+import threading
+import time
+from collections import deque
+from pathlib import Path
+
+import requests
+
+READY_LINE = "Startup Complete"
+# All tests/system/ configs (see target.py) use a single device, numbered 1.
+DEVICE_NUM = 1
+
+
+class AppProcess:
+    def __init__(
+        self,
+        repo_root: Path,
+        config_path: Path,
+        uiport: int,
+        ready_timeout: float = 30.0,
+        log_file: Path | None = None,
+        alpaca_port: int | None = None,
+        wait_for_device_connected: bool = False,
+    ):
+        self.repo_root = repo_root
+        self.config_path = config_path
+        self.uiport = uiport
+        self.alpaca_port = alpaca_port
+        self.wait_for_device_connected = wait_for_device_connected
+        self.ready_timeout = ready_timeout
+        self.base_url = f"http://127.0.0.1:{uiport}"
+        self.log_file = log_file
+        self._proc: subprocess.Popen | None = None
+        self._output: deque[str] = deque(maxlen=400)
+        self._output_lock = threading.Lock()
+        self._ready = threading.Event()
+        self._reader_thread: threading.Thread | None = None
+        self._log_fh = None
+
+    def _append_line(self, line: str) -> None:
+        with self._output_lock:
+            self._output.append(line)
+            if self._log_fh is not None:
+                self._log_fh.write(line + "\n")
+                self._log_fh.flush()
+
+    def _read_output(self):
+        assert self._proc is not None and self._proc.stdout is not None
+        for line in self._proc.stdout:
+            self._append_line(line.rstrip("\n"))
+            if READY_LINE in line:
+                self._ready.set()
+
+    def start(self) -> None:
+        env = dict(os.environ)
+        env["SEESTAR_ALP_CONFIG_PATH"] = str(self.config_path)
+        env["PYTHONUNBUFFERED"] = "1"
+
+        if self.log_file is not None:
+            self.log_file.parent.mkdir(parents=True, exist_ok=True)
+            self._log_fh = open(self.log_file, "w")
+
+        self._proc = subprocess.Popen(
+            [sys.executable, "-u", "root_app.py"],
+            cwd=str(self.repo_root),
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        self._reader_thread = threading.Thread(target=self._read_output, daemon=True)
+        self._reader_thread.start()
+
+        poll_interval = 0.15
+        deadline = time.monotonic() + self.ready_timeout
+        while True:
+            if self._ready.wait(timeout=poll_interval):
+                break
+            if self._proc.poll() is not None:
+                # Child process exited without ever becoming ready — fail
+                # fast instead of waiting out the rest of ready_timeout.
+                tail = self.log_tail()
+                self.stop()
+                raise TimeoutError(
+                    f"root_app.py exited before printing '{READY_LINE}'. "
+                    f"Captured output:\n{tail}"
+                )
+            if time.monotonic() >= deadline:
+                tail = self.log_tail()
+                self.stop()
+                raise TimeoutError(
+                    f"root_app.py did not print '{READY_LINE}' within "
+                    f"{self.ready_timeout}s. Captured output:\n{tail}"
+                )
+
+        if self.wait_for_device_connected:
+            self._wait_device_connected()
+
+    # "connected" (device/telescope.py's `connected` GET resource) reflects
+    # only the raw TCP-level `is_connected` flag -- NOT `is_authenticated`,
+    # which has no HTTP-exposed signal at all. The device's auth handshake
+    # (get_verify_str -> verify_client -> pi_is_verified, run by
+    # HeartbeatMsgThread) can still be in flight after "connected" is
+    # already True. Confirmed directly: a diagnostic print in
+    # device/seestar_device.py's send_message showed iscope_start_view
+    # dispatched with is_authenticated=False in a failing run, vs. True in
+    # a passing one -- an unauthenticated-connection iscope_start_view is
+    # accepted (code 0) but never actually starts a live view, leaving
+    # get_view_state empty for the rest of the test. get_device_state's
+    # firmware-reported "is_verified" field looked like a usable per-request
+    # signal but isn't: it read True even on a brand new, never-handshaked
+    # raw connection, so it can't be polled to detect this app's own
+    # handshake completing. No production-code signal exists for this
+    # without adding one, so this buffer is a deliberate, documented
+    # test-harness compromise: give the handshake, observed completing in
+    # ~2.7s, generous headroom rather than trying to detect it precisely.
+    _POST_CONNECTED_AUTH_BUFFER_S = 5.0
+
+    def _wait_device_connected(self) -> None:
+        """READY_LINE only means the web server is up -- the device's own
+        auth handshake (get_verify_str/verify_client/pi_is_verified) runs
+        concurrently and is not guaranteed to finish first. A test that
+        fires its first device-touching request before "connected" flips
+        True gets a silent 503 from _require_connected."""
+        # The raw Alpaca backend route (device/telescope.py).
+        url = (
+            f"http://127.0.0.1:{self.alpaca_port}/api/v1/telescope/"
+            f"{DEVICE_NUM}/connected?ClientID=1&ClientTransactionID=999"
+        )
+        deadline = time.monotonic() + self.ready_timeout
+        while time.monotonic() < deadline:
+            try:
+                r = requests.get(url, timeout=2)
+                if r.json().get("Value"):
+                    time.sleep(self._POST_CONNECTED_AUTH_BUFFER_S)
+                    return
+            except Exception:
+                pass
+            time.sleep(0.2)
+        tail = self.log_tail()
+        self.stop()
+        raise TimeoutError(
+            f"device never reported connected within {self.ready_timeout}s "
+            f"after {READY_LINE!r}. Captured output:\n{tail}"
+        )
+
+    def log_tail(self) -> str:
+        with self._output_lock:
+            lines = list(self._output)
+        return "\n".join(lines)
+
+    def stop(self) -> None:
+        if self._proc is not None:
+            if self._proc.poll() is None:
+                self._proc.terminate()
+                try:
+                    self._proc.wait(timeout=5.0)
+                except subprocess.TimeoutExpired:
+                    self._proc.kill()
+                    self._proc.wait(timeout=5.0)
+            self._proc = None
+        if self._log_fh is not None:
+            self._log_fh.close()
+            self._log_fh = None

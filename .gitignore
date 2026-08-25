@@ -22,6 +22,7 @@ docker/getopts_long
 front/twilight_times.json
 front/planning.json
 front/node_modules/
+seestar_alp_upstream.egg-info/
 
 Seestar Alpaca API.json:Zone.Identifier
 CometEls.txt
@@ -30,3 +31,7 @@ messages*.db
 test_schedule_1.json
 test_schedule.json
 alpyca_EQFirmware.log
+emulator/astrometry/index/
+emulator/sim/data/*.npy
+emulator/sim/shared/*
+!emulator/sim/shared/.gitkeep

@@ -9,6 +9,10 @@ on:
       - main
     types: [opened, synchronize, reopened, closed]
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   run-test-suite:
     if: github.event_name == 'push' || 
@@ -42,10 +46,35 @@ jobs:
         run: ruff format --check
 
       - name: Run backend tests
-        run: pytest -m "not integration" --cov=device --cov=front --cov-report=term --cov-fail-under=30.0 -q
+        run: |
+          pytest -m "not integration" --cov=device --cov=front \
+            --cov-report=term --cov-report=xml:coverage-unit.xml --cov-fail-under=30.0 \
+            --junit-xml=test-results/unit.xml -q
 
       - name: Run simulator integration tests
-        run: pytest -m integration tests/integration -q
+        run: pytest -m integration tests/integration --junit-xml=test-results/integration.xml -q
+
+      - name: Publish unit & simulator test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Unit & Simulator Test Results
+          path: 'test-results/*.xml'
+          reporter: java-junit
+
+      - name: Coverage summary (device + front)
+        if: always()
+        continue-on-error: true
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: coverage-unit.xml
+          format: markdown
+          output: both
+          thresholds: '30 60'
+
+      - name: Add coverage to job summary
+        if: always()
+        run: cat code-coverage-results.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
       - name: Install frontend test dependencies
         run: npm ci
@@ -72,5 +101,29 @@ jobs:
         working-directory: cli
 
       - name: Run cli tests with coverage gate
-        run: pytest --cov --cov-fail-under=75 -q
+        run: |
+          pytest --cov --cov-report=term --cov-report=xml:coverage-cli.xml --cov-fail-under=75 \
+            --junit-xml=test-results/cli.xml -q
         working-directory: cli
+
+      - name: Publish CLI test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: CLI Test Results
+          path: 'cli/test-results/cli.xml'
+          reporter: java-junit
+
+      - name: Coverage summary (cli)
+        if: always()
+        continue-on-error: true
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: cli/coverage-cli.xml
+          format: markdown
+          output: both
+          thresholds: '75 90'
+
+      - name: Add coverage to job summary
+        if: always()
+        run: cat code-coverage-results.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true

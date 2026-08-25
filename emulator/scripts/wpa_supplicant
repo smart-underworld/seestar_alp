@@ -1,0 +1,4 @@
+#!/bin/sh
+# Fake wpa_supplicant process. Stays alive so network.sh is_wpa_run() finds it.
+# Launched with -c /home/pi/wpa_supplicant.conf so "grep .conf" in ps matches.
+while true; do sleep 86400; done

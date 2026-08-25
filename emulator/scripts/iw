@@ -1,0 +1,29 @@
+#!/bin/sh
+# Stub for iw(8).
+#   iw dev          -> get_ap_state() enumerates "Interface <name>" lines
+#   iw wlan0 info   -> station interface, type managed (used by network.sh get_state)
+#   iw uap0 info    -> AP interface, type AP + ssid + channel (used by pi_get_ap/pi_get_ap_channel)
+case "$1" in
+  dev)
+    printf 'phy#0\n\tInterface wlan0\n\t\tifindex 3\n\t\twdev 0x1\n\t\taddr aa:bb:cc:dd:ee:ff\n\t\ttype managed\n\tInterface uap0\n\t\tifindex 4\n\t\twdev 0x2\n\t\taddr aa:bb:cc:dd:ee:ff\n\t\ttype AP\n'
+    ;;
+  wlan0)
+    case "$2" in
+      info)
+        printf 'Interface wlan0\n\tifindex 3\n\twdev 0x1\n\taddr aa:bb:cc:dd:ee:ff\n\ttype managed\n\twiphy 0\n\tchannel 161 (5805 MHz), width: 80 MHz, center1: 5775 MHz\n'
+        ;;
+      *) exit 0 ;;
+    esac
+    ;;
+  uap0)
+    case "$2" in
+      info)
+        printf 'Interface uap0\n\tifindex 4\n\twdev 0x2\n\taddr aa:bb:cc:dd:ee:ff\n\tssid sandbox-ap\n\ttype AP\n\twiphy 0\n\tchannel 1 (2412 MHz), width: 20 MHz, center1: 2412 MHz\n'
+        ;;
+      *) exit 0 ;;
+    esac
+    ;;
+  *)
+    exit 0
+    ;;
+esac

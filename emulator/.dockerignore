@@ -1,0 +1,5 @@
+astrometry/index
+sim/shared
+sim/data
+**/__pycache__
+run.log
