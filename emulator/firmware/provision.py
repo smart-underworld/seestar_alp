@@ -196,7 +196,9 @@ def provision_firmware(
     base_version = delta_base.get(version)
     base_out_dir = None
     if base_version:
-        print(f"  {version} is a delta release of {base_version} -- provisioning base first")
+        print(
+            f"  {version} is a delta release of {base_version} -- provisioning base first"
+        )
         base_out_dir = provision_firmware(
             version=base_version, work_dir=work_dir, delta_base=delta_base
         )
