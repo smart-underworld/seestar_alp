@@ -6,6 +6,7 @@
             <sim_image_path type="5" date="20190214_181214">input_sim_path</sim_image_path>
             <save_discrete_ok_frame type="8" date="20240529_115945">true</save_discrete_ok_frame>
             <dbe type="8" date="20250321_134743">false</dbe>
+            <wide_denoise type="8" date="20260825_000000">false</wide_denoise>
             <light_duration_min type="9" date="20190214_054236">-1</light_duration_min>
             <exp_ms type="9" date="20190304_074251">10000</exp_ms>
         </stack>
