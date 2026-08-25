@@ -1,0 +1,14 @@
+#!/bin/sh
+# Stub for iwconfig(8). network.sh get_state checks "iwconfig wlan0 | grep -i 'Signal level'".
+case "$1" in
+  wlan0)
+    printf 'wlan0     IEEE 802.11  ESSID:"sandbox-net"\n'
+    printf '          Mode:Managed  Frequency:5.805 GHz  Access Point: AA:BB:CC:DD:EE:FF\n'
+    printf '          Bit Rate=54 Mb/s   Tx-Power=20 dBm\n'
+    printf '          Link Quality=40/70  Signal level=-71 dBm  Noise level=-92 dBm\n'
+    printf '          Rx invalid nwid:0  Rx invalid crypt:0  Rx invalid frag:0\n'
+    ;;
+  *)
+    exit 0
+    ;;
+esac

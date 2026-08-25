@@ -1,0 +1,162 @@
+name: Emulator smoke test
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+
+      - name: Set up QEMU (armhf emulation)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install backend + system-test dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -e '.[system]'
+          playwright install --with-deps chromium
+
+      - name: Read smoke firmware version
+        id: fw
+        run: |
+          python3 -c "
+          import yaml
+          doc = yaml.safe_load(open('emulator/firmware/versions.yaml'))
+          print(f'version={doc[\"smoke_version\"]}')
+          " >> "$GITHUB_OUTPUT"
+
+      - name: Cache firmware XAPK
+        uses: actions/cache@v4
+        with:
+          path: /tmp/emulator-fw/unpacked/_xapk_cache
+          key: firmware-xapk-${{ steps.fw.outputs.version }}
+
+      - name: Cache astrometry index files
+        uses: actions/cache@v4
+        with:
+          path: emulator/astrometry/index
+          key: astrometry-index-4100-series-v1
+
+      - name: Download astrometry index files (cache miss only)
+        run: emulator/astrometry/download_index.sh
+
+      - name: Provision firmware
+        id: provision
+        run: |
+          python3 -m emulator.firmware.provision \
+            --version "${{ steps.fw.outputs.version }}" \
+            --work-dir /tmp/emulator-fw/unpacked
+
+      - name: Build emulator image
+        uses: docker/build-push-action@v6
+        with:
+          context: emulator/
+          platforms: linux/arm/v7
+          tags: seestar-emulator:latest
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Rebuild renderer star catalog for this run
+        run: |
+          docker run --rm --platform linux/arm/v7 \
+            -v "$PWD/emulator/sim:/sim" \
+            -v "$PWD/emulator/astrometry/index:/usr/local/astrometry/data:ro" \
+            --entrypoint python3 seestar-emulator \
+            /sim/build_catalog.py /usr/local/astrometry/data/index-4107.fits /sim/data/stars.npy
+
+      - name: Launch emulator container
+        run: |
+          cd emulator
+          # run.sh's `docker run --rm` removes a crashed container immediately,
+          # so `docker logs` after the fact can race a container that's
+          # already gone. Redirect to a file now — captures the container's
+          # own console output regardless of whether it's still around later.
+          ./run.sh --skip-build --firmware-dir /tmp/emulator-fw --model S50 "${{ steps.fw.outputs.version }}" \
+            > /tmp/emulator-launch.log 2>&1 &
+          echo $! > /tmp/emulator.pid
+
+      - name: Wait for emulator ports
+        run: |
+          timeout 120 bash -c 'until nc -z 127.0.0.1 4700 && nc -z 127.0.0.1 4800; do sleep 2; done'
+
+      - name: Launch synthetic-sky renderer
+        run: |
+          cd emulator
+          python3 -m sim.renderd --shared sim/shared --model S50 --catalog sim/data/stars.npy &
+          echo $! > /tmp/renderd.pid
+
+      - name: Run smoke tests
+        run: |
+          pytest tests/system --target emulator --host 127.0.0.1 \
+            --pem /tmp/emulator-fw/unpacked/${{ steps.fw.outputs.version }}/interop.pem \
+            --renderer-shared-dir emulator/sim/shared \
+            -m smoke \
+            --screenshot=on --video=on --junit-xml=test-results/emulator-smoke.xml -q
+
+      - name: Publish emulator smoke test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Emulator Smoke Test Results
+          path: 'test-results/emulator-smoke.xml'
+          reporter: java-junit
+
+      - name: Print emulator container log on failure
+        if: failure()
+        run: |
+          echo "::group::emulator-launch.log (run.sh's own output, incl. container console)"
+          cat /tmp/emulator-launch.log 2>/dev/null || echo "(no log file — run.sh never started)"
+          echo "::endgroup::"
+          # Best-effort — races run.sh's `docker run --rm` if the container
+          # already crashed and was removed; emulator-launch.log is the
+          # reliable source, this is a bonus if it's still around.
+          docker logs seestar-emulator > /tmp/emulator-container.log 2>&1 || true
+
+      - name: Upload diagnostic artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-smoke-playwright-artifacts
+          path: |
+            test-results/
+            /tmp/seestar_alp_system_test/
+            /tmp/emulator-launch.log
+            /tmp/emulator-container.log
+
+      - name: Stop renderer and emulator container
+        if: always()
+        run: |
+          kill "$(cat /tmp/renderd.pid)" 2>/dev/null || true
+          docker stop seestar-emulator 2>/dev/null || true

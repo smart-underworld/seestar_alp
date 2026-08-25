@@ -1,0 +1,14 @@
+{
+  "_notes": "CONFIRMED 2026-07-18 from the real S50 at seestar.local (license SN 4ddb0535). Captured /tmp/zwo/solvetmp.fit -- the exact frame astrometry.net's source-extraction step (SExtractor, invoked by solve-field) reads for star detection during a plate solve. This CORRECTS the prior hypothesis in two ways: (1) the solve buffer is PORTRAIT 1080x1920, not landscape 1920x1080 -- SExtractor's own log confirms '1080x1920 / 16 bits (integers)'; (2) it is a Bayer GRBG mosaic (FITS BAYERPAT=GRBG), not mono. Byte order: the on-disk FITS FILE the solver reads is confirmed big-endian (astropy dtype '>i2', plus a manual big-endian-vs-little-endian decode of raw bytes on-device -- big-endian gives smoothly-varying neighboring pixel values, little-endian gives nonsense jumps); the in-memory raw camera buffer's native endianness (upstream of the FITS writer, on this little-endian ARM SoC) is NOT independently confirmed and is plausibly little-endian with the FITS writer byte-swapping on save -- do not read 'big-endian' below as disproving the original little-endian guess for the raw buffer, only as the confirmed value for the solver-facing FILE. dtype/bzero below use the exact on-disk convention: pixel array is BITPIX=16 signed int16, big-endian; physical unsigned 16-bit value = int16_value + bzero (equivalently: flip the sign bit). Total pixel-data byte count (4,147,200 = 1080*1920*2) is unchanged from the original W*H*2 hypothesis -- only the width/height assignment was swapped. Values below describe the raw pixel-data block only (offset_bytes=0); on disk this sits after a separate 5,760-byte ASCII FITS header (2 x 2880-byte blocks), which is NOT part of this schema. IMPORTANT: sim/geometry.py's code defaults (SENSOR, frame_format()) still assert landscape 1920x1080 / '<u2' and predate this capture -- always read S50 geometry via load_frame_format('frame_format.json','S50'), never frame_format('S50') directly, to get the confirmed values. See docs/firmware/v3.1.2_7.32/solve_frame_format.md for full evidence and residual uncertainties (in particular: capture was actually taken on a device running firmware build 7.75 (v3.2.0 per FITS PROGRAM keyword), not v3.1.2/7.32; S50V2/S30 share the same sensor per the sandbox SENSOR table and are inferred, not independently confirmed, to match; S50P/S30P use a different larger sensor and are not covered -- no device access).",
+  "S50": {
+    "width": 1080,
+    "height": 1920,
+    "stride_bytes": 2160,
+    "offset_bytes": 0,
+    "dtype": ">i2",
+    "bzero": 32768,
+    "bit_depth": 16,
+    "bayer_pattern": "GRBG",
+    "source": "real device /tmp/zwo/solvetmp.fit FITS header (BITPIX=16, NAXIS1=1080, NAXIS2=1920, BZERO=32768, BAYERPAT=GRBG) + SExtractor solve_output log ('1080x1920 / 16 bits (integers)'), captured 2026-07-18"
+  }
+}
