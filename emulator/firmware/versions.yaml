@@ -4,7 +4,7 @@
 # against api.pureapk.com's app_version API (APKPure's Android-app-facing
 # backend) — no separate numeric build identifier needed. Update this list
 # via PR when a new firmware ships or an old one should be dropped —
-# human-curated, per the project's design doc.
+# human-curated.
 #
 # `smoke` marks the single version used by the always-on PR smoke lane
 # (emulator-smoke.yml). `full` marks every version used by the full-matrix
