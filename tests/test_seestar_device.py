@@ -678,6 +678,67 @@ def test_get_event_state_aliases_eqmodepa_event_field_to_3ppa(seestar):
     assert out["result"]["Event"] == "3PPA"
 
 
+def test_get_event_state_returns_a_copy_not_a_live_reference(seestar):
+    # EventStatus.on_get (front/app.py) iterates the whole-dict result with
+    # .items(). If get_event_state() ever returns self.event_state itself
+    # rather than a copy, a later write to event_state (e.g. from
+    # IncomingMsgThread) mutates the object the caller is still iterating.
+    seestar.event_state["WheelMove"] = {"Event": "WheelMove", "state": "start"}
+    out = seestar.get_event_state()
+    result = out["result"]
+    assert result is not seestar.event_state
+    seestar.event_state["NewEvent"] = {"Event": "NewEvent", "state": "start"}
+    assert "NewEvent" not in result
+
+
+def test_get_event_state_survives_concurrent_event_state_inserts(seestar):
+    # Regression for a real, reproduced crash: get_event_state() used to
+    # return self.event_state directly, and EventStatus.on_get
+    # (front/app.py) iterates that dict with .items(). IncomingMsgThread
+    # inserts a new top-level key for every previously-unseen firmware
+    # "Event" name -- during an active goto's event burst (View,
+    # ContinuousExposure, WheelMove, ScopeGoto, Exposure, PlateSolve, ...
+    # arriving within milliseconds of each other), this raced with the ALP
+    # request thread's iteration and raised "RuntimeError: dictionary
+    # changed size during iteration", which the emulator's
+    # tests/system/test_flow.py::test_goto caught: the classic UI's
+    # eventStatusContent never swapped past "Loading event status..." no
+    # matter how long the test waited, because the request silently 500'd.
+    import threading
+
+    stop = threading.Event()
+    errors = []
+
+    def writer():
+        i = 0
+        while not stop.is_set():
+            with seestar.event_state_lock:
+                seestar.event_state[f"BurstEvent{i}"] = {
+                    "Event": f"BurstEvent{i}",
+                    "state": "working",
+                }
+            i += 1
+            time.sleep(0)  # yield -- a lock-holding busy loop can starve the reader
+
+    writer_thread = threading.Thread(target=writer, daemon=True)
+    writer_thread.start()
+    try:
+        for _ in range(200):
+            try:
+                out = seestar.get_event_state()
+                for _key, value in out["result"].items():
+                    isinstance(value, dict)
+            except RuntimeError as e:
+                errors.append(str(e))
+                break
+    finally:
+        stop.set()
+        writer_thread.join(timeout=2)
+        assert not writer_thread.is_alive()
+
+    assert errors == []
+
+
 def test_get_event_state_injects_mount_equ_mode(seestar):
     seestar.is_EQ_mode = True
     out = seestar.get_event_state()

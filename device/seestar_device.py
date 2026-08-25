@@ -148,6 +148,15 @@ class Seestar:
         self.lock = threading.RLock()
         self.is_cur_scheduler_item_working: bool = False
 
+        # Guards insertion/removal of top-level event_state keys. IncomingMsgThread
+        # inserts a new key for every previously-unseen firmware "Event" name, which
+        # can race with get_event_state() iterating the same dict on the ALP request
+        # thread (RuntimeError: dictionary changed size during iteration) -- a real,
+        # reproducible crash during an active goto's event burst, not just a rare
+        # theoretical race. Value-only mutations of already-existing keys don't need
+        # this (dict size doesn't change), so most call sites are left as-is.
+        self.event_state_lock = threading.Lock()
+
         self.event_state: dict[str, Any] = {}
         self.update_scheduler_state_obj({}, result=0)
 
@@ -691,7 +700,8 @@ class Seestar:
                         else:
                             self.logger.debug(f"received : {parsed_data}")
                         event_name = parsed_data["Event"]
-                        self.event_state[event_name] = parsed_data
+                        with self.event_state_lock:
+                            self.event_state[event_name] = parsed_data
 
                         # {'Event': 'EqModePA', 'Timestamp': '740.411562378', 'state': 'working', 'lapse_ms': 0, 'route': []}
                         # {'Event': 'EqModePA', 'Timestamp': '6359.231750447', 'state': 'fail', 'error': 'fail to operate', 'code': 207, 'lapse_ms': 80471, 'route': []}
@@ -718,15 +728,16 @@ class Seestar:
                             event_name == "Simu_Stack"
                         ):  # The stack event is normally received in the imaging code, but the simulator will send them here
                             # Stack event is used to update the stack status from the simulator
-                            if "stack_status" in parsed_data:
-                                self.event_state["Stack"] = {
-                                    "Event": "Stack",
-                                    "stacked_frame": parsed_data["stacked_frame"],
-                                    "dropped_frame": parsed_data["dropped_frame"],
-                                }
-                            self.event_state.pop(
-                                "Simu_Stack", None
-                            )  # Remove the Simu_Stack event to avoid confusion
+                            with self.event_state_lock:
+                                if "stack_status" in parsed_data:
+                                    self.event_state["Stack"] = {
+                                        "Event": "Stack",
+                                        "stacked_frame": parsed_data["stacked_frame"],
+                                        "dropped_frame": parsed_data["dropped_frame"],
+                                    }
+                                self.event_state.pop(
+                                    "Simu_Stack", None
+                                )  # Remove the Simu_Stack event to avoid confusion
 
                         for cb in self.event_callbacks:
                             if (
@@ -848,46 +859,59 @@ class Seestar:
         return self.response_dict[cur_cmdid]
 
     def get_event_state(self, params=None):
-        if "scheduler" not in self.event_state:
-            self.event_state["scheduler"] = {}
-        self.event_state["scheduler"]["Event"] = "Scheduler"
-        self.event_state["scheduler"]["state"] = self.schedule["state"]
-        self.event_state["scheduler"]["is_stacking"] = self.schedule.get(
-            "is_stacking", False
-        )
-        self.event_state["scheduler"]["is_stacking_paused"] = self.schedule.get(
-            "is_stacking_paused", False
-        )
+        with self.event_state_lock:
+            if "scheduler" not in self.event_state:
+                self.event_state["scheduler"] = {}
+            self.event_state["scheduler"]["Event"] = "Scheduler"
+            self.event_state["scheduler"]["state"] = self.schedule["state"]
+            self.event_state["scheduler"]["is_stacking"] = self.schedule.get(
+                "is_stacking", False
+            )
+            self.event_state["scheduler"]["is_stacking_paused"] = self.schedule.get(
+                "is_stacking_paused", False
+            )
 
-        # Mount mode is not carried by any firmware event, but we cache it from
-        # get_device_state during the startup sequence (is_EQ_mode). Inject it
-        # here, like the scheduler block, so pollers get it without a blocking
-        # RPC to the scope (get_device_state times out during imaging).
-        if "mount" not in self.event_state:
-            self.event_state["mount"] = {}
-        self.event_state["mount"]["Event"] = "Mount"
-        self.event_state["mount"]["equ_mode"] = self.is_EQ_mode
+            # Mount mode is not carried by any firmware event, but we cache it from
+            # get_device_state during the startup sequence (is_EQ_mode). Inject it
+            # here, like the scheduler block, so pollers get it without a blocking
+            # RPC to the scope (get_device_state times out during imaging).
+            if "mount" not in self.event_state:
+                self.event_state["mount"] = {}
+            self.event_state["mount"]["Event"] = "Mount"
+            self.event_state["mount"]["equ_mode"] = self.is_EQ_mode
 
-        if "EqModePA" in self.event_state:
-            self.event_state["3PPA"] = dict(self.event_state["EqModePA"])
-            # The source dict still carries its own "Event": "EqModePA" field.
-            # Classic UI's eventstatus.html matches cards via Jinja's
-            # selectattr('Event', 'equalto', '3PPA'), which inspects this
-            # embedded field rather than the event_state key -- so it must be
-            # corrected to "3PPA" or the PolarAlign card never matches, even
-            # after polar align genuinely completes.
-            self.event_state["3PPA"]["Event"] = "3PPA"
-        if "3PPA" in self.event_state:
-            self.event_state["3PPA"]["eq_offset_alt"] = self.cur_pa_error_y
-            self.event_state["3PPA"]["eq_offset_az"] = self.cur_pa_error_x
-        if params is not None and "event_name" in params:
-            event_name = params["event_name"]
-            if event_name in self.event_state:
-                result = self.event_state[event_name]
+            if "EqModePA" in self.event_state:
+                self.event_state["3PPA"] = dict(self.event_state["EqModePA"])
+                # The source dict still carries its own "Event": "EqModePA" field.
+                # Classic UI's eventstatus.html matches cards via Jinja's
+                # selectattr('Event', 'equalto', '3PPA'), which inspects this
+                # embedded field rather than the event_state key -- so it must be
+                # corrected to "3PPA" or the PolarAlign card never matches, even
+                # after polar align genuinely completes.
+                self.event_state["3PPA"]["Event"] = "3PPA"
+            if "3PPA" in self.event_state:
+                self.event_state["3PPA"]["eq_offset_alt"] = self.cur_pa_error_y
+                self.event_state["3PPA"]["eq_offset_az"] = self.cur_pa_error_x
+            if params is not None and "event_name" in params:
+                event_name = params["event_name"]
+                if event_name in self.event_state:
+                    # Copy, not a reference -- callers (e.g. EventStatus.on_get)
+                    # must not hold a live view into event_state once the lock
+                    # is released.
+                    result = dict(self.event_state[event_name])
+                else:
+                    result = {}
             else:
-                result = {}
-        else:
-            result = self.event_state
+                # A snapshot copy, not the live dict: EventStatus.on_get iterates
+                # this with .items() on the ALP request thread while
+                # IncomingMsgThread concurrently inserts new top-level keys for
+                # each previously-unseen firmware Event name -- iterating the
+                # live dict raises "RuntimeError: dictionary changed size during
+                # iteration" during an active goto's event burst (confirmed via
+                # tests/system/test_flow.py::test_goto failing every run against
+                # the emulator, event_state never reaching the caller as
+                # anything but an empty/partial render).
+                result = dict(self.event_state)
         return self.json_result("get_event_state", 0, result)
 
     # return if this device can control as master
@@ -2790,7 +2814,8 @@ class Seestar:
             )
 
     def mark_op_state(self, in_op_name, state="stopped"):
-        self.event_state[in_op_name] = {"state": state}
+        with self.event_state_lock:
+            self.event_state[in_op_name] = {"state": state}
 
     def wait_end_op(self, in_op_name):
         self.logger.info(f"Waiting for {in_op_name} to finish.")
