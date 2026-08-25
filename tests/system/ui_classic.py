@@ -42,11 +42,18 @@ def run_startup(page: Page, base_url: str, polar_align: bool = True) -> None:
     deadline = time.time() + 180
     while time.time() < deadline:
         text = status.inner_text()
-        if "fail" in text.lower():
+        watched = pattern.findall(text)
+        # Only a *watched* event's own state counts as a real failure.
+        # PlateSolve legitimately fails-and-retries per 3PPA point (the
+        # astrometry solve occasionally finds 0 stars on a given frame and
+        # succeeds a couple seconds later on retry) -- a blanket "fail"
+        # substring search over the whole page would misfire on that
+        # transient, self-recovering retry even though PolarAlign itself
+        # never left "working".
+        if any(state.strip().lower() == "fail" for _, state in watched):
             raise AssertionError(f"Startup sequence reported a failure:\n{text}")
         # All enabled events must show "complete" — Scheduler/WheelMove/
         # PlateSolve cards may stay idle regardless.
-        watched = pattern.findall(text)
         if len(watched) >= len(watched_events) and all(
             state.strip().lower() == "complete" for _, state in watched
         ):
@@ -70,9 +77,14 @@ def do_goto(page: Page, base_url: str, target: SystemTestTarget) -> None:
     deadline = time.time() + 120
     while time.time() < deadline:
         text = status.inner_text()
-        if "fail" in text.lower():
-            raise AssertionError(f"Goto reported a failure:\n{text}")
         match = re.search(r"AutoGoto[\s\S]{0,120}?State:\s*(\S+)", text)
+        # Only AutoGoto's own state counts as a real failure -- PlateSolve is
+        # also on this eventlist and legitimately fails-and-retries per
+        # attempt (see run_startup's identical fix), which a blanket "fail"
+        # substring search over the whole page would misidentify as the goto
+        # itself having failed.
+        if match and match.group(1).strip().lower() == "fail":
+            raise AssertionError(f"Goto reported a failure:\n{text}")
         if match and match.group(1).strip().lower() == "complete":
             return
         page.wait_for_timeout(2000)
