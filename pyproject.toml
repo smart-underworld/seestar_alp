@@ -4,46 +4,23 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = [
-    "alpyca==2.0.4",
-    "astropy==6.0.0",
-    "astroquery==0.4.8.dev9321",
-    "blinker==1.8.2",
-    "ephem==4.1.5",
-    "falcon==4.0.2",
-    "flask==3.0.3",
-    "flask-cors==5.0.0",
-    "geocoder==1.38.1",
-    "geomag==0.9.2015",
-    "humanize==4.10.0",
-    "jinja2==3.1.4",
-    "numpy==1.26.4",
-    "opencv-python==4.10.0.84",
-    "pandas==2.2.3",
-    "pillow==10.4.0",
-    "pydantic>=2.11.3",
-    "pydash==8.0.3",
-    "pyhocon==0.3.61",
-    "pyindi",
-    "pytz==2022.7.1",
-    "pyyaml~=6.0.1",
-    "requests~=2.32.3",
-    "ruff==0.11.6",
-    "scikit-image==0.24.0",
-    "scipy~=1.14.0",
-    "sdnotify==0.3.2",
-    "skyfield==1.49",
-    "toml==0.10.2",
-    "tomlkit==0.13.2",
-    "tzlocal==5.2",
-    "waitress==3.0.0",
-    "watchdog==5.0.2",
-]
+dynamic = ["dependencies"]
 
 [tool.setuptools.packages.find]
 # Restrict auto-discovery to actual Python packages; excludes non-package
 # top-level dirs (mac, linux, docker, simulator, etc.) that confuse setuptools.
 include = ["front_v2*", "imaging*", "lib*", "schedule*"]
+
+[tool.setuptools.dynamic]
+# requirements.txt is the single source of truth for pinned versions --
+# this used to be a second, hand-maintained copy of the same list that
+# drifted out of sync (numpy==1.26.4 here vs numpy==2.3.2 in
+# requirements.txt being the one that broke CI: numpy 1.26.4 has no cp313
+# wheel, forcing a source build that hit a broken pythran/GCC toolchain).
+# `pip install -e '.[system]'` now installs the exact same pins
+# `pip install -r requirements.txt` already resolved, so it's a no-op
+# reinstall rather than a silent downgrade-and-rebuild.
+dependencies = { file = ["requirements.txt"] }
 
 [tool.uv.sources]
 pyindi = { git = "https://github.com/MMTObservatory/pyINDI.git", rev = "c12590fbe310c34cadb03713051789a4d76d80c7" }
