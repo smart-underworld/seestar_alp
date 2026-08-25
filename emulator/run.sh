@@ -174,6 +174,20 @@ if [[ ! -f "${ASTRO_DATA}/index-4112.fits" ]]; then
   echo "         plate solving will fail — run ./astrometry/download_index.sh first."
 fi
 
+# zwoair_imager loads on-device AI models (e.g. dnoise_1.rknn for the
+# raw-denoise pass on every Stack exposure) from /etc/zwo/ai_model. Without
+# this mounted, "Open file model failed" is followed by a null-pointer
+# SIGSEGV in at least firmware 3.3.1 (confirmed: 3.3.0/3.2.0/2.6.4 appear to
+# tolerate the missing file, 3.3.1 doesn't) — so mount it unconditionally
+# whenever the firmware tree has it, which all pinned versions do.
+AI_MODEL_DIR="${FW_BASE}/etc/zwo/ai_model"
+AI_MODEL_MOUNT=""
+if [[ -d "${AI_MODEL_DIR}" ]]; then
+  AI_MODEL_MOUNT="-v ${AI_MODEL_DIR}:/etc/zwo/ai_model:ro"
+else
+  echo "WARNING: ${AI_MODEL_DIR} not found — AI-model-dependent imager features (e.g. raw denoise) may crash"
+fi
+
 echo "==> Launching zwoair_imager as model ${SEESTAR_MODEL} (ports 4700/4701, 4800/4801, 80, UDP 4720 forwarded)..."
 echo "    Ctrl-C to stop."
 TTY_FLAG=""; [ -t 0 ] && TTY_FLAG="-t"
@@ -196,4 +210,5 @@ docker run --rm -i ${TTY_FLAG} \
   -v "${TMPZWO}:/home/pi/.ZWO" \
   -v "${ASTRO_DATA}:/usr/local/astrometry/data:ro" \
   -v "${SIM_SHARED}:/run/seestar-sim" \
+  ${AI_MODEL_MOUNT} \
   seestar-emulator
