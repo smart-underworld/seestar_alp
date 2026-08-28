@@ -972,10 +972,12 @@ class Seestar:
         #    data = {"id":cmdid, "method":"set_setting", "params":{"exp_ms":{"stack_l":x_stack_l,"continuous":x_continuous}, "stack_dither":{"pix":d_pix,"interval":d_interval,"enable":d_enable}, "stack_lenhance":l_enhance, "heater_enable":heater_enable}}
         data: MessageParams = {
             "method": "set_setting",
-            "params": {"exp_ms": {"stack_l": x_stack_l, "continuous": x_continuous}},
-            "stack_lenhance": l_enhance,
-            "auto_3ppa_calib": True,
-            "auto_power_off": False,
+            "params": {
+                "exp_ms": {"stack_l": x_stack_l, "continuous": x_continuous},
+                "stack_lenhance": l_enhance,
+                "auto_3ppa_calib": True,
+                "auto_power_off": False,
+            },
         }
 
         result = self.send_message_param_sync(data)
