@@ -71,9 +71,9 @@
                 <div class="col">
                     <label for="mosaicScale" class="form-label">Scale ({{ values.mosaic_scale or "1.0" }}x)</label>
                     <input type="range" class="form-range" id="mosaicScale" name="mosaicScale"
-                           min="1.0" max="2.0" step="0.1" value="{{ values.mosaic_scale or 1.0 }}"
+                           min="1.0" max="3.0" step="0.1" value="{{ values.mosaic_scale or 1.0 }}"
                            oninput="document.querySelector('label[for=mosaicScale]').textContent = 'Scale (' + this.value + 'x)'">
-                    <div id="mosaicScaleHelp" class="form-text">Enlarges the frame relative to a single Seestar frame (1.0x-2.0x)</div>
+                    <div id="mosaicScaleHelp" class="form-text">Enlarges the frame relative to a single Seestar frame (1.0x-3.0x)</div>
                     {% if errors.mosaic_scale %}
                         <div id="mosaicScaleError" class="form-text" style="color:red;">The scale value you provided {{errors.mosaic_scale}} is not valid.</div>
                     {% endif %}

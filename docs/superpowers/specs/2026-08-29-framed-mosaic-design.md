@@ -47,9 +47,10 @@ dec_num=1`) than to the grid Mosaic.
 
 ## 2. Goals
 
-- Let a user pick a target, a scale (1.0×–2.0×) and a rotation angle (−90°..+90°) for a
-  single enlarged/rotated capture, and either run it immediately or schedule it — matching
-  the real Seestar app's own framing control ranges and semantics.
+- Let a user pick a target, a scale (1.0×–3.0×) and a rotation angle (−90°..+90°) for a
+  single enlarged/rotated capture, and either run it immediately or schedule it. The
+  angle range matches the real Seestar app's own control range; the scale range was
+  widened past the real app's 1.0×–2.0× cap per user request after initial rollout.
 - Support this from both an immediate-action page and the Schedule page, and from the
   Planning page as a visual framing tool that can hand off to either.
 - Support federation (`duplicate` and `by_time` modes) consistent with how other
@@ -87,13 +88,13 @@ it's a mosaic-family capture mode.
 |---|---|---|
 | `target_name` | str | same as Image/Mosaic |
 | `ra`, `dec`, `is_j2000` | as existing | resolved via `Util.parse_coordinate`, same as `start_mosaic_item` |
-| `mosaic_scale` | float, 1.0–2.0 | maps to firmware `mosaic.scale`; default 1.0 |
+| `mosaic_scale` | float, 1.0–3.0 | maps to firmware `mosaic.scale`; default 1.0 |
 | `mosaic_angle` | float, −90..90 | maps to firmware `mosaic.angle`; default 0.0 |
 | `panel_time_sec` | int | reused name for consistency with Image/Mosaic forms — total single-session imaging duration |
 | `gain`, `is_use_lp_filter`, `is_use_autofocus`, `num_tries`, `retry_wait_s`, `stack_type` | as existing | same semantics as Image/Mosaic |
 | `federation_mode`, `max_devices` | optional | only meaningful when targeting the federation device (`device_num == 0`) |
 
-Validation: reject if `mosaic_scale` outside `[1.0, 2.0]` or `mosaic_angle` outside
+Validation: reject if `mosaic_scale` outside `[1.0, 3.0]` or `mosaic_angle` outside
 `[-90, 90]`, mirroring the existing `nRA < 1 or nDec < 0` guard style in
 `start_mosaic_item`. Reject (log + skip) rather than raise, consistent with existing
 mosaic item error handling.
@@ -165,8 +166,9 @@ elif action == "start_framed_mosaic":
 
 - New template `front/templates/framed_mosaic_create.html`, structured like
   `mosaic_create.html`: target search/catalog widget (reuse existing shared search JS),
-  RA/Dec fields, a scale slider (1.0×–2.0×, step 0.1) and an angle slider (−90°..+90°,
-  step 5°) — matching the real app's control ranges/step sizes exactly — plus the standard
+  RA/Dec fields, a scale slider (1.0×–3.0×, step 0.1) and an angle slider (−90°..+90°,
+  step 5°) — the angle range/step matches the real app's control exactly; the scale
+  range was widened past the real app's 1.0×–2.0× cap per user request — plus the standard
   exposure/gain/retry/stack-type fields shared with Image/Mosaic, and (for the federation
   device) `federation_mode`/`max_devices` fields matching the existing Mosaic form.
 - New routes: `/{telescope_id}/framed_mosaic` (immediate) and

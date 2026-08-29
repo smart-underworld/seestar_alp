@@ -2336,7 +2336,7 @@ class Seestar:
         retry_wait_s = params.get("retry_wait_s", 300)
         stack_type = params.get("stack_type", "DeepSky")
 
-        if mosaic_scale < 1.0 or mosaic_scale > 2.0:
+        if mosaic_scale < 1.0 or mosaic_scale > 3.0:
             self.logger.info(
                 "Framed mosaic scale is invalid. Moving to next schedule item if any."
             )

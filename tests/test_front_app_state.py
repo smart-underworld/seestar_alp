@@ -1873,7 +1873,7 @@ def test_do_create_framed_mosaic_rejects_scale_out_of_range(monkeypatch):
 
     monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
 
-    form = _make_framed_mosaic_form({"mosaicScale": "3.0"})
+    form = _make_framed_mosaic_form({"mosaicScale": "3.5"})
     req = _FormReq(form)
     resp = DummyResp()
 
