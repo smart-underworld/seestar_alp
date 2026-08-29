@@ -892,10 +892,42 @@ def test_40_framed_mosaic_federation_by_time_reaches_both_devices(
     assert dev2.schedule["list"][0]["action"] == "start_framed_mosaic"
     assert dev2.schedule["list"][0]["params"]["panel_time_sec"] == 10
 
+    # add_schedule_item populates schedule["list"] synchronously, before the
+    # background scheduler_thread_fn thread flips schedule["state"] to
+    # "working". stop_scheduler is a silent no-op unless state == "working",
+    # so wait for that state on both devices before stopping -- otherwise the
+    # real background thread would race ahead and run the framed mosaic item
+    # to completion against the real simulator, unseen by this test.
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        if dev1.schedule["state"] == "working" and dev2.schedule["state"] == "working":
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail(
+            "Timed out waiting for both devices' schedulers to start working"
+        )
+
     # Don't wait out the full stacking duration on both real devices — stop
     # both schedulers now that the routing/splitting behavior is confirmed.
-    dev1.stop_scheduler({})
-    dev2.stop_scheduler({})
+    stop1 = dev1.stop_scheduler({})
+    stop2 = dev2.stop_scheduler({})
+    assert stop1["code"] == 0, f"dev1 stop_scheduler did not succeed: {stop1}"
+    assert stop2["code"] == 0, f"dev2 stop_scheduler did not succeed: {stop2}"
+
+    # Confirm the stop actually took effect rather than silently no-op'ing --
+    # if it had, the scheduler would still show "working" and a real capture
+    # would keep running against the simulator after this test returns.
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        if dev1.schedule["state"] != "working" and dev2.schedule["state"] != "working":
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail("Timed out waiting for both devices' schedulers to stop")
+
+    assert dev1.schedule["state"] == "stopped"
+    assert dev2.schedule["state"] == "stopped"
 
 
 # ---------------------------------------------------------------------------
