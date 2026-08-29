@@ -2412,7 +2412,10 @@ class Seestar:
             self.update_scheduler_state_obj(item_state)
 
             self.send_message_param_sync(
-                {"method": "set_setting", "params": {"stack_lenhance": is_use_LP_filter}}
+                {
+                    "method": "set_setting",
+                    "params": {"stack_lenhance": is_use_LP_filter},
+                }
             )
 
             result = False
@@ -2478,9 +2481,7 @@ class Seestar:
                 ):
                     msg = "Failed to start stacking."
                     self.logger.warning(msg)
-                    self.event_state["scheduler"]["cur_scheduler_item"][
-                        "action"
-                    ] = msg
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
                     return
 
                 remaining_time_s = round(panel_time_sec)

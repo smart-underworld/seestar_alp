@@ -885,7 +885,9 @@ def test_40_framed_mosaic_federation_by_time_reaches_both_devices(
             break
         time.sleep(0.1)
     else:
-        pytest.fail("Timed out waiting for the framed mosaic item to reach both devices")
+        pytest.fail(
+            "Timed out waiting for the framed mosaic item to reach both devices"
+        )
 
     assert dev1.schedule["list"][0]["action"] == "start_framed_mosaic"
     assert dev1.schedule["list"][0]["params"]["panel_time_sec"] == 10
@@ -904,9 +906,7 @@ def test_40_framed_mosaic_federation_by_time_reaches_both_devices(
             break
         time.sleep(0.1)
     else:
-        pytest.fail(
-            "Timed out waiting for both devices' schedulers to start working"
-        )
+        pytest.fail("Timed out waiting for both devices' schedulers to start working")
 
     # Don't wait out the full stacking duration on both real devices — stop
     # both schedulers now that the routing/splitting behavior is confirmed.
@@ -1037,9 +1037,7 @@ def test_39_framed_mosaic_form_reaches_device_layer(monkeypatch, front_sim_bridg
     monkeypatch.setattr(front_app, "do_action_device", capturing_do_action)
 
     app = falcon.App()
-    app.add_route(
-        "/{telescope_id:int}/framed_mosaic", front_app.FramedMosaicResource()
-    )
+    app.add_route("/{telescope_id:int}/framed_mosaic", front_app.FramedMosaicResource())
     client = testing.TestClient(app)
 
     form = {

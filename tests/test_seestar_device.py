@@ -2724,7 +2724,8 @@ def test_scheduler_thread_fn_dispatches_start_framed_mosaic(monkeypatch, seestar
     monkeypatch.setattr(
         seestar,
         "start_framed_mosaic_item",
-        lambda p: calls.append(p) or setattr(seestar, "is_cur_scheduler_item_working", False),
+        lambda p: calls.append(p)
+        or setattr(seestar, "is_cur_scheduler_item_working", False),
     )
     monkeypatch.setattr(seestar, "play_sound", lambda _v: None)
 
