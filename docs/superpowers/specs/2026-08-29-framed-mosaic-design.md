@@ -1,6 +1,6 @@
 # Framed Mosaic — Design
 
-Status: Draft, pending user review
+Status: Approved
 Date: 2026-08-29
 Author: Ben Guthro (with Claude)
 
@@ -54,8 +54,6 @@ dec_num=1`) than to the grid Mosaic.
   Planning page as a visual framing tool that can hand off to either.
 - Support federation (`duplicate` and `by_time` modes) consistent with how other
   single-target actions are federated today.
-- Ship behind `Config.experimental` end-to-end (UI and device/API surface), since the
-  underlying protocol behavior is reverse-engineered and only partially verified.
 
 ## 3. Non-goals
 
@@ -65,8 +63,9 @@ dec_num=1`) than to the grid Mosaic.
   This feature is implemented entirely through `seestar_alp`'s existing Python scheduler
   (`scheduler_thread_fn`), issuing a single `goto` + a `set_setting` framing update + a
   normal stack session — it does not hand scheduling over to the firmware.
-- No resolution of the telephoto-vs-wide-camera nuance in §9 beyond gating and a
-  verification step; this ships as `Config.experimental` specifically because that's open.
+- No resolution of the telephoto-vs-wide-camera nuance in §9 within this change — it ships
+  as a normal (non-gated) feature, with hardware/emulator verification tracked as a
+  follow-up per §9 and §11, not as a precondition for landing.
 
 ## 4. Naming
 
@@ -146,14 +145,6 @@ elif action == "start_framed_mosaic":
         time.sleep(2)
 ```
 
-### 5.4 Gating
-
-`start_framed_mosaic` and `start_framed_mosaic_item` check `Config.experimental` at entry
-and return a `json_result(..., -1, "Framed mosaic is an experimental feature; enable it in
-Config to use it.")`-style error if disabled. This is in the device layer, not only
-`front/app.py`, because the action is reachable directly via the Alpaca `do_action` surface
-and the bruno collection, bypassing the UI entirely.
-
 ## 6. Federation layer (`device/seestar_federation.py`)
 
 - **`construct_schedule_item`**: extend the existing `if item["action"] == "start_mosaic"`
@@ -183,10 +174,8 @@ and the bruno collection, bypassing the UI entirely.
   `do_create_image`/`do_create_mosaic`-style handler pattern already used in `front/app.py`
   (parse form → build `values` dict → `do_action_device("start_framed_mosaic", ...)` or
   `do_insert_schedule_item("start_framed_mosaic", ...)`).
-- Both routes are gated by `Config.experimental` (404 or redirect-with-flash when
-  disabled), matching the device-layer gate in §5.4.
-- Nav entry ("Framed Mosaic") added to `nav.html`, shown only when `Config.experimental`
-  is enabled.
+- Nav entry ("Framed Mosaic") added to `nav.html`, alongside the existing Image/Mosaic
+  entries.
 - `front/templates/partials/schedule_list.html` gets a render case for
   `action == "start_framed_mosaic"` items, showing a summary line like
   `"Framed Mosaic: M31 @ 1.5× / 45°"`, parallel to the existing Mosaic item summary.
@@ -219,11 +208,6 @@ and the bruno collection, bypassing the UI entirely.
 - "Send to Schedule" button opens a modal (same interaction pattern as the existing
   AstroMosaic card's modal) pre-filled with the current target/scale/angle, posting to
   `/{telescope_id}/schedule/framed_mosaic`.
-- The card entry is only present in the list returned to the template when
-  `Config.experimental` is enabled (filtered in the route/view that renders `planning.html`,
-  not baked permanently into `planning.json.example`'s consumption — so toggling
-  `Config.experimental` off hides the card immediately without touching the user's saved
-  card state).
 
 ### 8.1 Card-list upgrade path
 
@@ -239,19 +223,18 @@ when the file doesn't exist yet (first run) — it never merges afterward. Any c
   `planning_page_collapsed` choices are preserved) — this only *adds* missing cards, never
   modifies existing ones.
 - This is a general fix (benefits any future card addition), not scoped narrowly to
-  `framed_mosaic`; the `framed_mosaic` card itself is additionally gated by
-  `Config.experimental` per §8 regardless of this merge.
+  `framed_mosaic`.
 
 ## 9. Risks / open questions
 
-- **Camera-mode scope (blocking for "experimental" → default promotion, not for landing
-  the feature behind the flag):** firmware evidence traced confirms `wide_mosaic_angle` is
-  read at capture time for camera mode 2 ("wide"). The Android app's own UI gates the
-  angle *control* to telephoto mode and reads a separately-named setting there, not fully
-  traced. Until verified, `mosaic_angle`/`mosaic_scale` should be treated as
-  possibly-camera-mode-dependent. No code in this design should assume telephoto-only or
+- **Camera-mode scope (not yet verified on hardware):** firmware evidence traced confirms
+  `wide_mosaic_angle` is read at capture time for camera mode 2 ("wide"). The Android app's
+  own UI gates the angle *control* to telephoto mode and reads a separately-named setting
+  there, not fully traced. Until verified, `mosaic_angle`/`mosaic_scale` should be treated
+  as possibly-camera-mode-dependent. No code in this design should assume telephoto-only or
   wide-only; the setting is just sent for whatever the device's current active camera mode
-  is, and behavior should be confirmed on hardware/emulator before wider rollout.
+  is. Because this ships without an experimental gate, treat the bruno-collection
+  verification pass in §10 as a near-term priority rather than a someday follow-up.
 - **Firmware version coverage:** verification was done against v3.1.2 firmware. Confirm
   the `mosaic` `set_setting` key and behavior are unchanged (or note differences) on
   whatever firmware version(s) CI's emulator matrix covers (currently 3.3.0/3.2.0/2.6.4 per
@@ -282,21 +265,18 @@ Per `AGENTS.md`'s testing expectations:
     `mosaic_goto_inner_worker` tests).
   - Scheduler dispatch: `scheduler_thread_fn` correctly routes `action ==
     "start_framed_mosaic"` items.
-  - `Config.experimental` gate returns an error result when disabled.
   - Federation: `construct_schedule_item` validates/trims RA/Dec for
     `start_framed_mosaic` items; `start_scheduler` correctly fans out `duplicate` and
     `by_time` modes and rejects/falls back on `by_panels`.
 - **`tests/test_front_app_state.py`**: render-contract tests for the new
-  `framed_mosaic_create.html` route (form fields present, correct defaults/ranges) and for
-  the new Planning card (present only when `Config.experimental` is enabled, absent
-  otherwise), and for the `schedule_list.html` render case for `start_framed_mosaic` items.
+  `framed_mosaic_create.html` route (form fields present, correct defaults/ranges), the
+  new Planning card, the nav entry, and the `schedule_list.html` render case for
+  `start_framed_mosaic` items.
 - **`tests/integration/test_simulator_e2e.py`**: full round trip — submit a framed mosaic
   via the immediate-action route and verify the simulator receives the expected
   `set_setting` mosaic payload followed by goto/stack commands; submit via the schedule
   route and verify execution order and the post-completion reset; a federated `by_time`
-  case verifying `panel_time_sec` division and per-device dispatch; verify the
-  `Config.experimental`-disabled case returns the expected error via the API and hides the
-  UI entry points.
+  case verifying `panel_time_sec` division and per-device dispatch.
 - **Bruno collection**: add `action-start_framed_mosaic.bru` and
   `action-add_schedule_item_framed_mosaic.bru` (plus insert/replace variants matching the
   existing Mosaic set) under `bruno/Seestar Alpaca API/Schedule - Mosaic/`, documenting
@@ -305,9 +285,10 @@ Per `AGENTS.md`'s testing expectations:
 
 ## 11. Rollout
 
-- Ship entirely behind `Config.experimental` (device/API layer per §5.4, UI per §7/§8) —
-  no default-on behavior change for existing users.
-- Promotion out of experimental status should wait on: (a) confirming the camera-mode
-  scope question in §9 against real hardware or the emulator, and (b) the emulator/CI
-  regression suite (`emulator-smoke.yml`/`emulator-full.yml`) exercising this action on at
-  least one pinned firmware version without error.
+- Ships as a normal, default-available feature (no `Config.experimental` gate) — the nav
+  entry, create page, Planning card, and API action are all live for every user once this
+  lands.
+- Given the reverse-engineered protocol basis, prioritize the bruno-collection
+  verification pass and the emulator/CI regression suite
+  (`emulator-smoke.yml`/`emulator-full.yml`) exercising this action against real
+  firmware/hardware soon after landing, per §9.
