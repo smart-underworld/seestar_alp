@@ -55,7 +55,8 @@
 import sys
 import traceback
 import inspect
-from wsgiref.simple_server import WSGIRequestHandler, make_server
+from socketserver import ThreadingMixIn
+from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
 # -- isort wants the above line to be blank --
 # Controller classes (for routing)
@@ -115,6 +116,17 @@ class LoggingWSGIRequestHandler(WSGIRequestHandler):
         ##TODO## on non-200s, per Wireshark. So crazy!
         # if args[1] != '200':  # Log this only on non-200 responses
         #    log.logger.info(f'{self.client_address[0]} <- {format%args}')
+
+
+class ThreadingWSGIServer(ThreadingMixIn, WSGIServer):
+    """Serve each Alpaca API request on its own thread. Plain wsgiref
+    WSGIServer handles one request at a time, so every classic-UI action
+    that calls into this server (get_device_state, get_event_state,
+    goto_target, etc. -- nearly every page render) serialized behind
+    whichever request was in flight, even after front/app.py's own server
+    was made threaded for the same reason."""
+
+    daemon_threads = True
 
 
 # -----------------------
@@ -326,6 +338,7 @@ class DeviceMain:
                 Config.ip_address,
                 Config.port,
                 falc_app,
+                server_class=ThreadingWSGIServer,
                 handler_class=LoggingWSGIRequestHandler,
             )
             logger.info(

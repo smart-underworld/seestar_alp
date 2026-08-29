@@ -11,7 +11,8 @@ from falcon import (
 )
 from astroquery.simbad import Simbad
 from jinja2 import Environment, FileSystemLoader
-from wsgiref.simple_server import WSGIRequestHandler, make_server
+from socketserver import ThreadingMixIn
+from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 from pathlib import Path
 import urllib.parse
 import requests
@@ -50,8 +51,10 @@ logger = init_logging()
 load = Loader("data/")
 _last_context_get_time = {}
 _context_cached = {}
+_context_cache_lock = threading.Lock()
 _last_api_state_get_time = {}
 _api_state_cached = {}
+_api_state_cache_lock = threading.Lock()
 _planning_cards_cache = None
 _planning_cards_cache_mtime = None
 _planning_cards_cache_lock = threading.Lock()
@@ -282,13 +285,14 @@ def _get_context_real(telescope_id, req):
 
 
 def get_context(telescope_id, req):
-    if (
-        telescope_id not in _context_cached
-        or time.time() - _last_context_get_time[telescope_id] > 1.0
-    ):
-        _last_context_get_time[telescope_id] = time.time()
-        _context_cached[telescope_id] = _get_context_real(telescope_id, req)
-    return _context_cached[telescope_id]
+    with _context_cache_lock:
+        if (
+            telescope_id not in _context_cached
+            or time.time() - _last_context_get_time[telescope_id] > 1.0
+        ):
+            _last_context_get_time[telescope_id] = time.time()
+            _context_cached[telescope_id] = _get_context_real(telescope_id, req)
+        return _context_cached[telescope_id]
 
 
 def get_flash_cookie(req, resp):
@@ -570,13 +574,14 @@ def _check_api_state_cached(telescope_id):
 
 
 def check_api_state(telescope_id):
-    if (
-        telescope_id not in _api_state_cached
-        or time.time() - _last_api_state_get_time[telescope_id] > 1.0
-    ):
-        _last_api_state_get_time[telescope_id] = time.time()
-        _api_state_cached[telescope_id] = _check_api_state_cached(telescope_id)
-    return _api_state_cached[telescope_id]
+    with _api_state_cache_lock:
+        if (
+            telescope_id not in _api_state_cached
+            or time.time() - _last_api_state_get_time[telescope_id] > 1.0
+        ):
+            _last_api_state_get_time[telescope_id] = time.time()
+            _api_state_cached[telescope_id] = _check_api_state_cached(telescope_id)
+        return _api_state_cached[telescope_id]
 
 
 def check_internet_connection():
@@ -5066,6 +5071,16 @@ class LoggingWSGIRequestHandler(WSGIRequestHandler):
         logger.debug(f"{datetime.now()} {self.client_address[0]} <- {format % args}")
 
 
+class ThreadingWSGIServer(ThreadingMixIn, WSGIServer):
+    """Serve each request on its own thread so long-poll/SSE connections
+    (auth-status, live view) don't block the rest of the UI. Plain wsgiref
+    WSGIServer handles one request at a time; a slow synchronous device RPC
+    (or a held long-poll) stalls every other classic-UI request -- including
+    unrelated HTMX polls -- until it returns."""
+
+    daemon_threads = True
+
+
 class GetPlanetCoordinates:
     @staticmethod
     def on_get(req, resp):
@@ -5503,6 +5518,7 @@ class FrontMain:
                 Config.ip_address,
                 Config.uiport,
                 app,
+                server_class=ThreadingWSGIServer,
                 handler_class=LoggingWSGIRequestHandler,
             )
             logger.info(
