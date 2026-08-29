@@ -175,6 +175,26 @@ def test_construct_schedule_item_rejects_negative_ra_float():
         )
 
 
+def test_construct_schedule_item_validates_framed_mosaic_coords():
+    federation = Seestar_Federation(DummyLogger(), {})
+    item = federation.construct_schedule_item(
+        {
+            "action": "start_framed_mosaic",
+            "params": {"ra": 1.234567, "dec": 2.987654, "is_j2000": True},
+        }
+    )
+    assert item["params"]["ra"] == 1.2346
+    assert item["params"]["dec"] == 2.9877
+
+    with pytest.raises(Exception):
+        federation.construct_schedule_item(
+            {
+                "action": "start_framed_mosaic",
+                "params": {"ra": -1.0, "dec": 2.0, "is_j2000": True},
+            }
+        )
+
+
 def test_add_schedule_item_appends_deque():
     federation = Seestar_Federation(DummyLogger(), {})
     out = federation.add_schedule_item(
@@ -473,6 +493,110 @@ def test_start_scheduler_by_time(monkeypatch):
     assert "available_device_list" in out
     assert any(c[0] == "add_schedule_item" for c in dev1.called)
     assert any(c[0] == "add_schedule_item" for c in dev2.called)
+
+
+def test_start_scheduler_framed_mosaic_duplicate_default(monkeypatch):
+    dev1 = FakeDevice(connected=True)
+    dev2 = FakeDevice(connected=True)
+    federation = Seestar_Federation(DummyLogger(), {1: dev1, 2: dev2})
+
+    federation.schedule["list"] = collections.deque(
+        [
+            {
+                "action": "start_framed_mosaic",
+                "params": {
+                    "ra": 1.2,
+                    "dec": 3.4,
+                    "is_j2000": True,
+                    "panel_time_sec": 30,
+                    "mosaic_scale": 1.5,
+                    "mosaic_angle": 45.0,
+                },
+            }
+        ]
+    )
+    monkeypatch.setattr("device.seestar_federation.random.shuffle", lambda x: None)
+    out = federation.start_scheduler({})
+    assert "available_device_list" in out
+
+    added = [c[1] for c in dev1.called if c[0] == "add_schedule_item"]
+    assert added[0]["params"]["federation_mode"] == "duplicate"
+    assert added[0]["params"]["panel_time_sec"] == 30
+
+
+def test_start_scheduler_framed_mosaic_by_time_splits_duration(monkeypatch):
+    dev1 = FakeDevice(connected=True)
+    dev2 = FakeDevice(connected=True)
+    federation = Seestar_Federation(DummyLogger(), {1: dev1, 2: dev2})
+
+    federation.schedule["list"] = collections.deque(
+        [
+            {
+                "action": "start_framed_mosaic",
+                "params": {
+                    "ra": 1.2,
+                    "dec": 3.4,
+                    "is_j2000": True,
+                    "federation_mode": "by_time",
+                    "panel_time_sec": 30,
+                    "mosaic_scale": 1.5,
+                    "mosaic_angle": 45.0,
+                },
+            }
+        ]
+    )
+    monkeypatch.setattr("device.seestar_federation.random.shuffle", lambda x: None)
+    federation.start_scheduler({})
+
+    added = [c[1] for c in dev1.called if c[0] == "add_schedule_item"]
+    assert added[0]["params"]["panel_time_sec"] == 15
+
+
+def test_start_scheduler_framed_mosaic_by_panels_falls_back_to_duplicate(monkeypatch):
+    dev1 = FakeDevice(connected=True)
+    federation = Seestar_Federation(DummyLogger(), {1: dev1})
+
+    federation.schedule["list"] = collections.deque(
+        [
+            {
+                "action": "start_framed_mosaic",
+                "params": {
+                    "ra": 1.2,
+                    "dec": 3.4,
+                    "is_j2000": True,
+                    "federation_mode": "by_panels",
+                    "panel_time_sec": 30,
+                    "mosaic_scale": 1.5,
+                    "mosaic_angle": 45.0,
+                },
+            }
+        ]
+    )
+    monkeypatch.setattr("device.seestar_federation.random.shuffle", lambda x: None)
+    federation.start_scheduler({})
+
+    added = [c[1] for c in dev1.called if c[0] == "add_schedule_item"]
+    assert added[0]["params"]["federation_mode"] == "duplicate"
+    assert added[0]["params"]["panel_time_sec"] == 30
+
+
+def test_start_scheduler_and_start_framed_mosaic_shortcut(monkeypatch):
+    dev1 = FakeDevice(connected=True)
+    federation = Seestar_Federation(DummyLogger(), {1: dev1})
+    monkeypatch.setattr("device.seestar_federation.random.shuffle", lambda x: None)
+
+    out = federation.start_framed_mosaic(
+        {"target_name": "T", "ra": 1.2, "dec": 3.4, "is_j2000": True}
+    )
+    assert "device" in out
+
+
+def test_start_framed_mosaic_no_devices_returns_error():
+    federation = Seestar_Federation(DummyLogger(), {})
+    out = federation.start_framed_mosaic(
+        {"target_name": "T", "ra": 1.2, "dec": 3.4, "is_j2000": True}
+    )
+    assert "error" in out
 
 
 def test_start_scheduler_missing_params_raises_keyerror(monkeypatch):
