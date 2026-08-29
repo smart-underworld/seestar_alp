@@ -1,4 +1,6 @@
 import json
+import os
+import shutil
 import pytest
 import falcon
 import front.app as front_app
@@ -311,6 +313,82 @@ def test_update_planning_card_state_invalidates_cache(monkeypatch, tmp_path):
     assert front_app._planning_cards_cache is None
     updated_cards = front_app.get_planning_cards()
     assert updated_cards[0]["planning_page_enable"] is False
+
+
+def test_get_planning_cards_merges_missing_cards_from_example(monkeypatch, tmp_path):
+    planning_file = tmp_path / "planning.json"
+    planning_file.write_text(
+        json.dumps(
+            [
+                {
+                    "card_name": "twilight_times",
+                    "card_friendly_name": "Twilight Times",
+                    "template": "partials/twilight_times.html",
+                    "planning_page_enable": False,
+                    "planning_page_collapsed": True,
+                }
+            ]
+        )
+    )
+    example_file = tmp_path / "planning.json.example"
+    example_file.write_text(
+        json.dumps(
+            [
+                {
+                    "card_name": "twilight_times",
+                    "card_friendly_name": "Twilight Times",
+                    "template": "partials/twilight_times.html",
+                    "planning_page_enable": True,
+                    "planning_page_collapsed": False,
+                },
+                {
+                    "card_name": "framed_mosaic",
+                    "card_friendly_name": "Framed Mosaic",
+                    "template": "partials/framed_mosaic_planning.html",
+                    "planning_page_enable": True,
+                    "planning_page_collapsed": False,
+                },
+            ]
+        )
+    )
+
+    monkeypatch.setattr(front_app.os.path, "dirname", lambda _: str(tmp_path))
+    front_app._planning_cards_cache = None
+    front_app._planning_cards_cache_mtime = None
+
+    cards = front_app.get_planning_cards()
+
+    names = {card["card_name"] for card in cards}
+    assert names == {"twilight_times", "framed_mosaic"}
+
+    # the user's existing settings for a card they already have must be preserved
+    twilight = next(c for c in cards if c["card_name"] == "twilight_times")
+    assert twilight["planning_page_enable"] is False
+    assert twilight["planning_page_collapsed"] is True
+
+    # the merge is persisted so a second load doesn't need the cache
+    front_app._planning_cards_cache = None
+    front_app._planning_cards_cache_mtime = None
+    persisted = json.loads(planning_file.read_text())
+    assert {c["card_name"] for c in persisted} == {"twilight_times", "framed_mosaic"}
+
+
+def test_planning_page_includes_framed_mosaic_card(monkeypatch, tmp_path):
+    example_source = os.path.join(
+        os.path.dirname(front_app.__file__), "planning.json.example"
+    )
+    shutil.copyfile(example_source, tmp_path / "planning.json")
+
+    monkeypatch.setattr(front_app.os.path, "dirname", lambda _: str(tmp_path))
+    front_app._planning_cards_cache = None
+    front_app._planning_cards_cache_mtime = None
+
+    cards = front_app.get_planning_cards()
+    names = {card["card_name"] for card in cards}
+    assert "framed_mosaic" in names
+
+    framed_mosaic_card = next(c for c in cards if c["card_name"] == "framed_mosaic")
+    assert framed_mosaic_card["template"] == "partials/framed_mosaic_planning.html"
 
 
 def test_get_csc_sites_data_uses_in_memory_cache(monkeypatch, tmp_path):

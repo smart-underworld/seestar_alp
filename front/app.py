@@ -457,24 +457,21 @@ def get_planning_cards():
         card_state_file_location = os.path.abspath(
             os.path.join(sys._MEIPASS, "planning.json")
         )
+        card_state_example_file_location = os.path.abspath(
+            os.path.join(sys._MEIPASS, "planning.json.example")
+        )
     else:
         card_state_file_location = os.path.join(
             os.path.dirname(__file__), "planning.json"
         )
+        card_state_example_file_location = os.path.join(
+            os.path.dirname(__file__), "planning.json.example"
+        )
 
     # Check to see if there is cached planning.json, if not create it.
     if not os.path.isfile(card_state_file_location):
-        if getattr(
-            sys, "frozen", False
-        ):  # frozen means that we are running from a bundled app
-            card_state_example_file_location = os.path.abspath(
-                os.path.join(sys._MEIPASS, "planning.json.example")
-            )
-        else:
-            card_state_example_file_location = os.path.join(
-                os.path.dirname(__file__), "planning.json.example"
-            )
         shutil.copyfile(card_state_example_file_location, card_state_file_location)
+
     file_mtime = os.path.getmtime(card_state_file_location)
     with _planning_cards_cache_lock:
         if (
@@ -484,6 +481,25 @@ def get_planning_cards():
             return json.loads(json.dumps(_planning_cards_cache))
         with open(card_state_file_location, "r") as card_state_file:
             state_data = json.load(card_state_file)
+
+        # Merge in any cards present in the shipped example that the user's
+        # local planning.json (created once, on first run) doesn't have yet —
+        # otherwise a card added after a user's first run is never seen.
+        if os.path.isfile(card_state_example_file_location):
+            with open(card_state_example_file_location, "r") as example_file:
+                example_cards = json.load(example_file)
+            existing_names = {card["card_name"] for card in state_data}
+            missing_cards = [
+                card
+                for card in example_cards
+                if card["card_name"] not in existing_names
+            ]
+            if missing_cards:
+                state_data.extend(missing_cards)
+                with open(card_state_file_location, "w") as card_state_file:
+                    json.dump(state_data, card_state_file, indent=4)
+                file_mtime = os.path.getmtime(card_state_file_location)
+
         _planning_cards_cache = state_data
         _planning_cards_cache_mtime = file_mtime
         return json.loads(json.dumps(state_data))
