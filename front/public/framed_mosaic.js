@@ -7,8 +7,10 @@
 
   let aladin = null;
   let overlay = null;
+  let aladinDiv = null;
   let currentRaDeg = 10.68;
   let currentDecDeg = 41.27;
+  let isDragging = false;
 
   function rectangleCorners(raDeg, decDeg, scale, angleDeg) {
     const halfW = (BASE_FOV_X_DEG * scale) / 2.0;
@@ -30,6 +32,32 @@
       const rotatedY = x * sinA + y * cosA;
       return [raDeg + rotatedX / cosDec, decDeg + rotatedY];
     });
+  }
+
+  // Inverse of rectangleCorners' rotation: is (raDeg, decDeg) inside the
+  // current frame's (possibly rotated) rectangle?
+  function isInsideFrame(raDeg, decDeg) {
+    const scale = parseFloat(document.getElementById("framed_mosaic_scale").value);
+    const angle = parseFloat(document.getElementById("framed_mosaic_angle").value);
+    const cosDec = Math.cos((currentDecDeg * Math.PI) / 180.0) || 1e-6;
+    const dRa = (raDeg - currentRaDeg) * cosDec;
+    const dDec = decDeg - currentDecDeg;
+    const angleRad = (angle * Math.PI) / 180.0;
+    const cosA = Math.cos(angleRad);
+    const sinA = Math.sin(angleRad);
+    const localX = dRa * cosA + dDec * sinA;
+    const localY = -dRa * sinA + dDec * cosA;
+    const halfW = (BASE_FOV_X_DEG * scale) / 2.0;
+    const halfH = (BASE_FOV_Y_DEG * scale) / 2.0;
+    return Math.abs(localX) <= halfW && Math.abs(localY) <= halfH;
+  }
+
+  // Mouse event -> [ra, dec] in degrees at that screen position, using the
+  // aladin container's own bounding box rather than event.offsetX/offsetY
+  // (which is relative to whatever inner canvas layer received the event).
+  function eventToRaDec(evt) {
+    const rect = aladinDiv.getBoundingClientRect();
+    return aladin.pix2world(evt.clientX - rect.left, evt.clientY - rect.top);
   }
 
   window.update_framed_mosaic = function update_framed_mosaic() {
@@ -57,10 +85,52 @@
       fov: 2,
       target: document.getElementById("framed_mosaic_search_text").value,
     });
+    aladinDiv = document.getElementById("framed-mosaic-aladin-div");
     overlay = A.graphicOverlay({ color: "#f59e0b", lineWidth: 2 });
     aladin.addOverlay(overlay);
     update_framed_mosaic();
+    setUpFrameDrag();
   };
+
+  // Click-and-drag the rectangle itself to move its center, independent of
+  // panning the sky view. Registered in the capture phase so we can
+  // stopPropagation before Aladin's own view-pan handler (bound directly on
+  // its canvas, in the bubble phase) ever sees the mousedown -- otherwise
+  // both a frame-drag and a view-pan would start from the same click.
+  function setUpFrameDrag() {
+    aladinDiv.addEventListener(
+      "mousedown",
+      function (evt) {
+        const [ra, dec] = eventToRaDec(evt);
+        if (!isInsideFrame(ra, dec)) return;
+        isDragging = true;
+        evt.stopPropagation();
+        evt.preventDefault();
+        currentRaDeg = ra;
+        currentDecDeg = dec;
+        update_framed_mosaic();
+      },
+      true
+    );
+
+    aladinDiv.addEventListener("mousemove", function (evt) {
+      if (isDragging) return;
+      const [ra, dec] = eventToRaDec(evt);
+      aladinDiv.style.cursor = isInsideFrame(ra, dec) ? "move" : "";
+    });
+
+    document.addEventListener("mousemove", function (evt) {
+      if (!isDragging) return;
+      const [ra, dec] = eventToRaDec(evt);
+      currentRaDeg = ra;
+      currentDecDeg = dec;
+      update_framed_mosaic();
+    });
+
+    document.addEventListener("mouseup", function () {
+      isDragging = false;
+    });
+  }
 
   document.addEventListener("DOMContentLoaded", function () {
     if (typeof A !== "undefined" && A.init) {
@@ -100,16 +170,19 @@
         document.getElementById("fm_targetName").value =
           document.getElementById("framed_mosaic_search_text").value;
         if (aladin) {
-          const [ra, dec] = aladin.getRaDec();
+          // Submit the frame's own center (currentRaDeg/currentDecDeg), not
+          // the view's center (aladin.getRaDec()) -- once the frame can be
+          // dragged independently of the view, those two can differ, and
+          // it's the frame's position the user actually wants scheduled.
           // Aladin Lite returns RA in degrees, but the schedule form (and the
           // device layer's Util.parse_coordinate for numeric RA) expects RA
           // in hours. Dec is already in degrees, which is what's expected.
-          document.getElementById("fm_ra").value = (ra / 15).toFixed(6);
+          document.getElementById("fm_ra").value = (currentRaDeg / 15).toFixed(6);
           // dec is already in degrees (no unit conversion needed), but fix
           // its precision too: raw JS floats very close to 0 stringify in
           // exponential notation (e.g. "1e-7"), which fails the server's
           // check_dec_value() regexes and would wrongly reject the target.
-          document.getElementById("fm_dec").value = dec.toFixed(6);
+          document.getElementById("fm_dec").value = currentDecDeg.toFixed(6);
         }
         modal.showModal();
       });
