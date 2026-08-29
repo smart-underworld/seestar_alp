@@ -3188,13 +3188,6 @@ class EventStatus:
 
     @staticmethod
     def on_get(req, resp, telescope_id=1):
-        logger.info(
-            "TEMP-DIAG eventstatus on_get telescope_id=%s action=%s hx-current-url=%s referer=%s",
-            telescope_id,
-            req.get_param("action"),
-            req.get_header("HX-Current-URL"),
-            req.get_header("Referer"),
-        )
         results = []
         action = req.get_param("action")
         if action == "command":
@@ -3268,15 +3261,7 @@ class EventStatus:
         html = resp.text
         with EventStatus._lock:
             last_html = EventStatus._last_render_by_key.get(cache_key)
-            hit = last_html == html
-            logger.info(
-                "TEMP-DIAG eventstatus cache_key=%r hit=%s had_prior=%s len_html=%s",
-                cache_key,
-                hit,
-                cache_key in EventStatus._last_render_by_key,
-                len(html) if html else 0,
-            )
-            if hit:
+            if last_html == html:
                 resp.status = falcon.HTTP_204
                 resp.text = ""
                 return
