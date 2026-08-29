@@ -224,10 +224,14 @@
                     <p class="mt-0 mb-0">RA: {{ item["params"]["ra"] }}</p>
                     <p class="mt-0 mb-0">DEC: {{ item["params"]["dec"] }}</p>
                   </div>
-                  <!-- Scale/Angle have no direct equivalent in the shared header;
-                       shown here under the Panels/Ov% spacer columns. -->
-                  <div class="col align-self-start">{{ item["params"]["mosaic_scale"] }}x</div>
-                  <div class="col align-self-start">{{ item["params"]["mosaic_angle"] }}&deg;</div>
+                  <!-- Scale/Angle have no direct equivalent in the shared header
+                       (Panels/Ov%); self-labeled here so they read clearly
+                       regardless of the header above, matching the RA/DEC
+                       column's own self-labeling convention. -->
+                  <div class="col align-self-start">
+                    <p class="mt-0 mb-0">Scale: {{ item["params"]["mosaic_scale"] }}x</p>
+                    <p class="mt-0 mb-0">Angle: {{ item["params"]["mosaic_angle"] }}&deg;</p>
+                  </div>
                   <div class="col align-self-start">
                     {% if item["params"]["is_j2000"] == True %}
                       <div class="form-check-inline">
@@ -296,10 +300,14 @@
               <p class="mt-0 mb-0">RA: {{ item["params"]["ra"] }}</p>
               <p class="mt-0 mb-0">DEC: {{ item["params"]["dec"] }}</p>
             </div>
-            <!-- Scale/Angle have no direct equivalent in the shared header;
-                 shown here under the Panels/Ov% spacer columns. -->
-            <div class="col align-self-start">{{ item["params"]["mosaic_scale"] }}x</div>
-            <div class="col align-self-start">{{ item["params"]["mosaic_angle"] }}&deg;</div>
+            <!-- Scale/Angle have no direct equivalent in the shared header
+                 (Panels/Ov%); self-labeled here so they read clearly
+                 regardless of the header above, matching the RA/DEC
+                 column's own self-labeling convention. -->
+            <div class="col align-self-start">
+              <p class="mt-0 mb-0">Scale: {{ item["params"]["mosaic_scale"] }}x</p>
+              <p class="mt-0 mb-0">Angle: {{ item["params"]["mosaic_angle"] }}&deg;</p>
+            </div>
             <div class="col align-self-start">
               {% if item["params"]["is_j2000"] == True %}
                 <div class="form-check-inline">
