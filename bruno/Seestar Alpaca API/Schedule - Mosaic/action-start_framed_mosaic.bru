@@ -1,0 +1,23 @@
+meta {
+  name: action-start_framed_mosaic
+  type: http
+  seq: 100
+}
+
+put {
+  url: {{base_url}}/api/v1/telescope/{{dev_num}}/action
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+  Accept: application/json
+}
+
+body:form-urlencoded {
+  Action: start_framed_mosaic
+  Parameters: {"target_name":"M31", "ra":-1.0, "dec":-1.0, "is_j2000": false, "is_use_lp_filter":false, "panel_time_sec":3600, "mosaic_scale": 1.5, "mosaic_angle": 45.0, "gain": 80}
+  ClientID: 1
+  ClientTransactionID: 999
+}

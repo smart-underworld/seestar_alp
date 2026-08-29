@@ -1,0 +1,211 @@
+<script src="/public/fit_import.js"></script>
+    <div class="card border-primary mb-3">
+        <div class="card-body">
+            <!-- First Row: Target Name and Search For -->
+            <div class="mb-3 row">
+                <div class="d-flex align-items-center">
+                    <!-- Target Name -->
+                    <div class="col me-3">
+                        <label for="targetName" class="form-label">Target Name</label>
+                        <input type="text" class="form-control" id="targetName" name="targetName"
+                               aria-describedby="targetNameHelp" value="{{ values.target_name }}" required>
+                        <div id="targetNameHelp" class="form-text">Enter a descriptive name for the target. (e.g. ...)</div>
+                    </div>
+
+                    <!-- Search For -->
+                    <div class="col">
+                        <label for="searchFor" class="form-label">Search For</label>
+                        <div class="d-flex mb-0">
+                            <select class="form-select" id="searchFor" name="searchFor" title="Select type of target">
+                                <option value="DS" selected>Simbad Deepsky (Online)</option>
+                                <option value="LS" >Local Deepsky DB</option>
+                                <option value="PL">Planet</option>
+                                <option value="MP">Minor Planet (Asteroid)</option>
+                                <option value="CO">Comet</option>
+                                <option value="VS"> AAVSO Varible Star (Online)</option>
+                            </select>
+                            <button type="button" id="getSimbad" class="btn btn-primary ms-2" title="Search for Coordinates" onclick="fetchCoordinates()">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
+                                    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="searchForHelp" class="form-text mb-0">Choose the type of object you are searching for.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Second Row: RA and Dec -->
+            <div class="mb-3 row">
+                <div class="col">
+                    <label for="ra" class="form-label">Right Ascension</label>
+                    <input type="text" class="form-control" id="ra" name="ra" aria-describedby="raHelp"
+                           value="{{ values.ra }}" required>
+                    <div id="raHelp" class="form-text">Target center in decimal hours or hours/minutes/seconds (e.g. -1.2 or 6h32m32.5s)</div>
+                    {% if errors.ra %}
+                        <div id="raError" class="form-text" style="color:red;">The RA value you provided {{errors.ra}} is not valid.</div>
+                    {% endif %}
+                </div>
+                <div class="col">
+                    <label for="dec" class="form-label">Declination</label>
+                    <input type="text" class="form-control" id="dec" name="dec" aria-describedby="decHelp"
+                           value="{{ values.dec }}" required>
+                    <div id="decHelp" class="form-text">Target center in decimal degrees or degrees/minutes/seconds (e.g. -1.2 or +6d32m32.5s)</div>
+                    {% if errors.dec %}
+                        <div id="decError" class="form-text" style="color:red;">The DEC value you provided {{errors.dec}} is not valid.</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Checkbox for J2000 -->
+            <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="useJ2000" name="useJ2000"
+                           {% if values.is_j2000 %}checked{% endif %}>
+                    <label class="form-check-label" for="useJ2000">Use J2000?</label>
+                </div>
+            </div>
+
+            <!-- Scale and Angle -->
+            <div class="mb-3 row">
+                <div class="col">
+                    <label for="mosaicScale" class="form-label">Scale ({{ values.mosaic_scale or "1.0" }}x)</label>
+                    <input type="range" class="form-range" id="mosaicScale" name="mosaicScale"
+                           min="1.0" max="4.0" step="0.1" value="{{ values.mosaic_scale or 1.0 }}"
+                           oninput="document.querySelector('label[for=mosaicScale]').textContent = 'Scale (' + this.value + 'x)'">
+                    <div id="mosaicScaleHelp" class="form-text">Enlarges the frame relative to a single Seestar frame (1.0x-4.0x)</div>
+                    {% if errors.mosaic_scale %}
+                        <div id="mosaicScaleError" class="form-text" style="color:red;">The scale value you provided {{errors.mosaic_scale}} is not valid.</div>
+                    {% endif %}
+                </div>
+                <div class="col">
+                    <label for="mosaicAngle" class="form-label">Angle ({{ values.mosaic_angle or "0" }}&deg;)</label>
+                    <input type="range" class="form-range" id="mosaicAngle" name="mosaicAngle"
+                           min="-90" max="90" step="5" value="{{ values.mosaic_angle or 0 }}"
+                           oninput="document.querySelector('label[for=mosaicAngle]').textContent = 'Angle (' + this.value + '°)'">
+                    <div id="mosaicAngleHelp" class="form-text">Rotation of the frame, -90&deg; to +90&deg;</div>
+                    {% if errors.mosaic_angle %}
+                        <div id="mosaicAngleError" class="form-text" style="color:red;">The angle value you provided {{errors.mosaic_angle}} is not valid.</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Buttons for importing coordinates from other sources -->
+            <div class="mb-3 row justify-content-center">
+                <div class="col text-center">
+                    <label for="getClipboard" class="form-label">&nbsp;</label><br>
+                    <button type="button" id="getStallarium" class="btn btn-primary" title="Parse RA/Dec from clipboard" onclick="fetchClipboard()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard-fill" viewBox="0 0 16 16">
+                            <path fill-rule="evenodd" d="M10 1.5a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5zm-5 0A1.5 1.5 0 0 1 6.5 0h3A1.5 1.5 0 0 1 11 1.5v1A1.5 1.5 0 0 1 9.5 4h-3A1.5 1.5 0 0 1 5 2.5zm-2 0h1v1A2.5 2.5 0 0 0 6.5 5h3A2.5 2.5 0 0 0 12 2.5v-1h1a2 2 0 0 1 2 2V14a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V3.5a2 2 0 0 1 2-2"/>
+                        </svg>
+                    </button>
+                    <div id="targetNameHelp" class="form-text">Paste RA/Dec from Clipboard</div>
+                </div>
+                <div class="col text-center">
+                    <label for="getStallarium" class="form-label">&nbsp;</label><br>
+                    <button type="button" id="getStallarium" class="btn btn-primary" title="Copy RA/Dec from Stellarium" onclick="fetchStellarium()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-star-fill" viewBox="0 0 16 16">
+                            <path d="M3.612 15.443c-.386.198-.824-.149-.746-.592l.83-4.73L.173 6.765c-.329-.314-.158-.888.283-.95l4.898-.696L7.538.792c.197-.39.73-.39.927 0l2.184 4.327 4.898.696c.441.062.612.636.282.95l-3.522 3.356.83 4.73c.078.443-.36.79-.746.592L8 13.187l-4.389 2.256z"/>
+                        </svg>
+                    </button>
+                    <div id="targetNameHelp" class="form-text">Retrieve RA/Dec from Stellarium</div>
+                </div>
+                <div class="col text-center">
+                    <label for="getHeaders" class="form-label">&nbsp;</label><br>
+                    <button type="button" id="getHeaders" class="btn btn-primary" title="Retrieve info from previous FIT image">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16">
+                            <path fill="currentColor" d="M.002 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2zm1 9v1a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5l-3.777-1.947a.5.5 0 0 0-.577.093l-3.71 3.71l-2.66-1.772a.5.5 0 0 0-.63.062zm5-6.5a1.5 1.5 0 1 0-3 0a1.5 1.5 0 0 0 3 0"/>
+                        </svg>
+                    </button>
+                    <input type="file" id="fileInput" style="display:none;" />
+                    <div id="targetNameHelp" class="form-text">Retrieve from previous Seestar FIT File</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    {% if telescope["device_num"] == 0 %}
+	<h5 class="card-title mb-2">Federation Settings</h5>
+	<div class="card border-primary mb-3">
+		<div class="card-body">
+			<div class="form-group row g-2">
+					<div class="col-md-3 col-sm-3">
+						<label for="federation_mode" class="form-label">Mode</label>
+						<select id="federation_mode" name="federation_mode" class="form-select app-select">
+	            <option value="duplicate">Duplicate</option>
+							<option value="by_time">Split By Time</option>
+						</select>
+					</div>
+					<div class="col-md-3 col-sm-3">
+						<label for="max_devices" class="form-label">Max Devices</label>
+						<input type="number" id="max_devices" name="max_devices" min="1" value="1" required class="form-control">
+					</div>
+			</div>
+		</div>
+	</div>
+    {% endif %}
+
+    <h5 class="card-title mb-2">Exposure Settings</h5>
+    <div class="card border-primary mb-3">
+        <div class="card-body">
+
+            <div class="mb-3">
+                <label for="panelTime" class="form-label">Acquisition Time</label>
+                <input type="text" class="form-control" id="panelTime" name="panelTime"
+                       aria-describedby="panelTimeHelp" value="{{ values.panel_time_sec }}" required>
+                <div id="panelTimeHelp" class="form-text">How much acquisition time (ex: 1h 30m or 5400).
+                </div>
+            </div>
+
+            <div class="mb-3">
+                {% if values.gain %}
+                    <input type="text" class="form-control" id="gain" name="gain" aria-describedby="gainHelp"
+                        value="{{ values.gain }}" required>
+                {% else %}
+                    <input type="text" class="form-control" id="gain" name="gain" aria-describedby="gainHelp"
+                        value="{{ defgain }}" required>
+                {% endif %}
+                <div id="gainHelp" class="form-text">Gain. (ex: 80)</div>
+            </div>
+
+            <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="useLpFilter" name="useLpFilter">
+                    <label class="form-check-label" for="useLpFilter">
+                        Use Light Pollution Filter?
+                    </label>
+                </div>
+            </div>
+            <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="useAutoFocus" name="useAutoFocus">
+                    <label class="form-check-label" for="useAutoFocus">
+                        Use Auto Focus?
+                    </label>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+	<h5 class="card-title mb-2">Retry Settings</h5>
+	<div class="card border-primary mb-3">
+		<div class="card-body">
+			<div class="row">
+				<div class="col-sm-6 mb-3">
+					<label for="num_tries" class="form-label">Number of Retries</label>
+					<input type="text" id="num_tries" name="num_tries" class="form-control"
+					       aria-describedby="num_triesHelp" value="{{ values.num_tries }}">
+					<div id="num_triesHelp" class="form-text">Number of times to retry a failed GoTo (Default 1)</div>
+				</div>
+				<div class="col-sm-6 mb-3">
+					<label for="retry_wait_s" class="form-label">Delay between retries in seconds</label>
+					<input type="text" id="retry_wait_s" name="retry_wait_s" class="form-control"
+					       aria-describedby="retry_wait_sHelp" value="{{ values.retry_wait_s }}">
+					<div id="retry_wait_sHelp" class="form-text">Delay between retry attempts (Default 300)</div>
+				</div>
+			</div>
+		</div>
+	</div>

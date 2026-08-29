@@ -457,24 +457,21 @@ def get_planning_cards():
         card_state_file_location = os.path.abspath(
             os.path.join(sys._MEIPASS, "planning.json")
         )
+        card_state_example_file_location = os.path.abspath(
+            os.path.join(sys._MEIPASS, "planning.json.example")
+        )
     else:
         card_state_file_location = os.path.join(
             os.path.dirname(__file__), "planning.json"
         )
+        card_state_example_file_location = os.path.join(
+            os.path.dirname(__file__), "planning.json.example"
+        )
 
     # Check to see if there is cached planning.json, if not create it.
     if not os.path.isfile(card_state_file_location):
-        if getattr(
-            sys, "frozen", False
-        ):  # frozen means that we are running from a bundled app
-            card_state_example_file_location = os.path.abspath(
-                os.path.join(sys._MEIPASS, "planning.json.example")
-            )
-        else:
-            card_state_example_file_location = os.path.join(
-                os.path.dirname(__file__), "planning.json.example"
-            )
         shutil.copyfile(card_state_example_file_location, card_state_file_location)
+
     file_mtime = os.path.getmtime(card_state_file_location)
     with _planning_cards_cache_lock:
         if (
@@ -484,6 +481,25 @@ def get_planning_cards():
             return json.loads(json.dumps(_planning_cards_cache))
         with open(card_state_file_location, "r") as card_state_file:
             state_data = json.load(card_state_file)
+
+        # Merge in any cards present in the shipped example that the user's
+        # local planning.json (created once, on first run) doesn't have yet —
+        # otherwise a card added after a user's first run is never seen.
+        if os.path.isfile(card_state_example_file_location):
+            with open(card_state_example_file_location, "r") as example_file:
+                example_cards = json.load(example_file)
+            existing_names = {card["card_name"] for card in state_data}
+            missing_cards = [
+                card
+                for card in example_cards
+                if card["card_name"] not in existing_names
+            ]
+            if missing_cards:
+                state_data.extend(missing_cards)
+                with open(card_state_file_location, "w") as card_state_file:
+                    json.dump(state_data, card_state_file, indent=4)
+                file_mtime = os.path.getmtime(card_state_file_location)
+
         _planning_cards_cache = state_data
         _planning_cards_cache_mtime = file_mtime
         return json.loads(json.dumps(state_data))
@@ -1422,6 +1438,86 @@ def do_create_mosaic(req, resp, schedule, telescope_id):
         logger.info("POST scheduled request %s %s", values, response)
     else:
         response = do_action_device("start_mosaic", telescope_id, values, False)
+        logger.info("POST immediate request %s %s", values, response)
+
+    return values, errors
+
+
+def do_create_framed_mosaic(req, resp, schedule, telescope_id):
+    form = req.media
+    targetName = form["targetName"]
+    ra = form["ra"]
+    dec = form["dec"]
+    useJ2000 = form.get("useJ2000") == "on"
+    mosaicScale = form["mosaicScale"]
+    mosaicAngle = form["mosaicAngle"]
+    panelTime = hms_to_sec(form["panelTime"])
+    useLpfilter = form.get("useLpFilter") == "on"
+    useAutoFocus = form.get("useAutoFocus") == "on"
+    gain = form["gain"]
+    num_tries = form.get("num_tries")
+    retry_wait_s = form.get("retry_wait_s")
+    stack_type = _parse_stack_type(form)
+    action = form.get("action", "")
+    selected_items = form.get("selected_items", "")
+    errors = {}
+    values = {
+        "target_name": targetName,
+        "is_j2000": useJ2000,
+        "ra": ra,
+        "dec": dec,
+        "mosaic_scale": float(mosaicScale),
+        "mosaic_angle": float(mosaicAngle),
+        "is_use_lp_filter": useLpfilter,
+        "panel_time_sec": int(panelTime),
+        "gain": int(gain),
+        "is_use_autofocus": useAutoFocus,
+        "num_tries": int(num_tries) if num_tries else 1,
+        "retry_wait_s": int(retry_wait_s) if retry_wait_s else 300,
+        "stack_type": stack_type,
+    }
+
+    if telescope_id == 0:
+        fedMode = form.get("federation_mode")
+        if fedMode:
+            values["federation_mode"] = fedMode
+        maxDev = form.get("max_devices")
+        if maxDev:
+            values["max_devices"] = maxDev
+
+    if not check_ra_value(ra):
+        flash(resp, "Invalid RA value")
+        errors["ra"] = ra
+
+    if not check_dec_value(dec):
+        flash(resp, "Invalid DEC Value")
+        errors["dec"] = dec
+
+    if values["mosaic_scale"] < 1.0 or values["mosaic_scale"] > 4.0:
+        flash(resp, "Mosaic scale must be between 1.0 and 4.0")
+        errors["mosaic_scale"] = mosaicScale
+
+    if values["mosaic_angle"] < -90.0 or values["mosaic_angle"] > 90.0:
+        flash(resp, "Mosaic angle must be between -90 and 90")
+        errors["mosaic_angle"] = mosaicAngle
+
+    if errors:
+        flash(resp, "ERROR detected in framed mosaic parameters")
+        return values, errors
+
+    if schedule:
+        if action == "append":
+            response = do_schedule_action_device(
+                "start_framed_mosaic", values, telescope_id
+            )
+        else:
+            response = do_insert_schedule_item(
+                "start_framed_mosaic", values, selected_items, telescope_id
+            )
+
+        logger.info("POST scheduled request %s %s", values, response)
+    else:
+        response = do_action_device("start_framed_mosaic", telescope_id, values, False)
         logger.info("POST immediate request %s %s", values, response)
 
     return values, errors
@@ -2417,6 +2513,39 @@ class MosaicResource(BaseResource):
         )
 
 
+class FramedMosaicResource(BaseResource):
+    def on_get(self, req, resp, telescope_id=0):
+        self.framed_mosaic(req, resp, {}, {}, telescope_id)
+
+    def on_post(self, req, resp, telescope_id=0):
+        values, errors = do_create_framed_mosaic(req, resp, False, telescope_id)
+        self.framed_mosaic(req, resp, values, errors, telescope_id)
+
+    @staticmethod
+    def framed_mosaic(req, resp, values, errors, telescope_id):
+        context = get_context(telescope_id, req)
+        if not context["online"]:
+            telescope_id = 0
+
+        current = do_action_device("get_schedule", telescope_id, {})
+        if current is None:
+            return
+        state = current["Value"]["state"]
+        schedule = current["Value"]
+
+        render_template(
+            req,
+            resp,
+            "framed_mosaic.html",
+            state=state,
+            schedule=schedule,
+            values=values,
+            errors=errors,
+            action=f"/{telescope_id}/framed_mosaic",
+            **context,
+        )
+
+
 class ScheduleResource:
     @staticmethod
     def on_get(req, resp, telescope_id=0):
@@ -2626,6 +2755,39 @@ class ScheduleMosaicResource:
             telescope_id = 0
         render_schedule_tab(
             req, resp, telescope_id, "schedule_mosaic.html", "mosaic", values, errors
+        )
+
+
+class ScheduleFramedMosaicResource:
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
+        render_schedule_tab(
+            req,
+            resp,
+            telescope_id,
+            "schedule_framed_mosaic.html",
+            "framed_mosaic",
+            {},
+            {},
+        )
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        values, errors = do_create_framed_mosaic(req, resp, True, telescope_id)
+        online = check_api_state(telescope_id)
+        if not online:
+            telescope_id = 0
+        render_schedule_tab(
+            req,
+            resp,
+            telescope_id,
+            "schedule_framed_mosaic.html",
+            "framed_mosaic",
+            values,
+            errors,
         )
 
 
@@ -3201,7 +3363,7 @@ class EventStatus:
             ]
         elif action == "goto":
             eventlist = ["WheelMove", "AutoGoto", "PlateSolve"]
-        elif action == "image" or action == "mosaic":
+        elif action in ("image", "mosaic", "framed_mosaic"):
             eventlist = [
                 "WheelMove",
                 "AutoGoto",
@@ -5377,6 +5539,7 @@ class FrontMain:
         app.add_route("/live", LivePage())
         app.add_route("/live/{mode}", LivePage())
         app.add_route("/mosaic", MosaicResource())
+        app.add_route("/framed_mosaic", FramedMosaicResource())
         app.add_route("/position", TelescopePositionResource())
         app.add_route("/search", SearchObjectResource())
         app.add_route("/settings", SettingsResource())
@@ -5391,6 +5554,7 @@ class FrontMain:
         app.add_route("/schedule/image", ScheduleImageResource())
         app.add_route("/schedule/import", ScheduleImportResource())
         app.add_route("/schedule/mosaic", ScheduleMosaicResource())
+        app.add_route("/schedule/framed_mosaic", ScheduleFramedMosaicResource())
         app.add_route("/schedule/refresh", ScheduleRefreshResource())
         app.add_route("/schedule/startup", ScheduleStartupResource())
         app.add_route("/schedule/shutdown", ScheduleShutdownResource())
@@ -5438,6 +5602,7 @@ class FrontMain:
         app.add_route("/{telescope_id:int}/live/wide-cam", LiveWideCamResource())
         app.add_route("/{telescope_id:int}/live/{mode}", LivePage())
         app.add_route("/{telescope_id:int}/mosaic", MosaicResource())
+        app.add_route("/{telescope_id:int}/framed_mosaic", FramedMosaicResource())
         app.add_route("/{telescope_id:int}/planning", PlanningResource())
         app.add_route("/{telescope_id:int}/position", TelescopePositionResource())
         app.add_route("/{telescope_id:int}/search", SearchObjectResource())
@@ -5456,6 +5621,10 @@ class FrontMain:
         app.add_route("/{telescope_id:int}/schedule/image", ScheduleImageResource())
         app.add_route("/{telescope_id:int}/schedule/import", ScheduleImportResource())
         app.add_route("/{telescope_id:int}/schedule/mosaic", ScheduleMosaicResource())
+        app.add_route(
+            "/{telescope_id:int}/schedule/framed_mosaic",
+            ScheduleFramedMosaicResource(),
+        )
         app.add_route("/{telescope_id:int}/schedule/startup", ScheduleStartupResource())
         app.add_route(
             "/{telescope_id:int}/schedule/shutdown", ScheduleShutdownResource()

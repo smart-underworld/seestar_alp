@@ -47,9 +47,10 @@ dec_num=1`) than to the grid Mosaic.
 
 ## 2. Goals
 
-- Let a user pick a target, a scale (1.0×–2.0×) and a rotation angle (−90°..+90°) for a
-  single enlarged/rotated capture, and either run it immediately or schedule it — matching
-  the real Seestar app's own framing control ranges and semantics.
+- Let a user pick a target, a scale (1.0×–4.0×) and a rotation angle (−90°..+90°) for a
+  single enlarged/rotated capture, and either run it immediately or schedule it. The
+  angle range matches the real Seestar app's own control range; the scale range was
+  widened past the real app's 1.0×–2.0× cap per user request after initial rollout.
 - Support this from both an immediate-action page and the Schedule page, and from the
   Planning page as a visual framing tool that can hand off to either.
 - Support federation (`duplicate` and `by_time` modes) consistent with how other
@@ -87,13 +88,13 @@ it's a mosaic-family capture mode.
 |---|---|---|
 | `target_name` | str | same as Image/Mosaic |
 | `ra`, `dec`, `is_j2000` | as existing | resolved via `Util.parse_coordinate`, same as `start_mosaic_item` |
-| `mosaic_scale` | float, 1.0–2.0 | maps to firmware `mosaic.scale`; default 1.0 |
+| `mosaic_scale` | float, 1.0–4.0 | maps to firmware `mosaic.scale`; default 1.0 |
 | `mosaic_angle` | float, −90..90 | maps to firmware `mosaic.angle`; default 0.0 |
 | `panel_time_sec` | int | reused name for consistency with Image/Mosaic forms — total single-session imaging duration |
 | `gain`, `is_use_lp_filter`, `is_use_autofocus`, `num_tries`, `retry_wait_s`, `stack_type` | as existing | same semantics as Image/Mosaic |
 | `federation_mode`, `max_devices` | optional | only meaningful when targeting the federation device (`device_num == 0`) |
 
-Validation: reject if `mosaic_scale` outside `[1.0, 2.0]` or `mosaic_angle` outside
+Validation: reject if `mosaic_scale` outside `[1.0, 4.0]` or `mosaic_angle` outside
 `[-90, 90]`, mirroring the existing `nRA < 1 or nDec < 0` guard style in
 `start_mosaic_item`. Reject (log + skip) rather than raise, consistent with existing
 mosaic item error handling.
@@ -165,8 +166,9 @@ elif action == "start_framed_mosaic":
 
 - New template `front/templates/framed_mosaic_create.html`, structured like
   `mosaic_create.html`: target search/catalog widget (reuse existing shared search JS),
-  RA/Dec fields, a scale slider (1.0×–2.0×, step 0.1) and an angle slider (−90°..+90°,
-  step 5°) — matching the real app's control ranges/step sizes exactly — plus the standard
+  RA/Dec fields, a scale slider (1.0×–4.0×, step 0.1) and an angle slider (−90°..+90°,
+  step 5°) — the angle range/step matches the real app's control exactly; the scale
+  range was widened past the real app's 1.0×–2.0× cap per user request — plus the standard
   exposure/gain/retry/stack-type fields shared with Image/Mosaic, and (for the federation
   device) `federation_mode`/`max_devices` fields matching the existing Mosaic form.
 - New routes: `/{telescope_id}/framed_mosaic` (immediate) and
@@ -235,10 +237,23 @@ when the file doesn't exist yet (first run) — it never merges afterward. Any c
   wide-only; the setting is just sent for whatever the device's current active camera mode
   is. Because this ships without an experimental gate, treat the bruno-collection
   verification pass in §10 as a near-term priority rather than a someday follow-up.
-- **Firmware version coverage:** verification was done against v3.1.2 firmware. Confirm
-  the `mosaic` `set_setting` key and behavior are unchanged (or note differences) on
-  whatever firmware version(s) CI's emulator matrix covers (currently 3.3.0/3.2.0/2.6.4 per
-  `emulator-full.yml`).
+- **Firmware version coverage:** confirmed present since at least v2.6.1 (the oldest
+  unpacked firmware available for research) through v3.3.1 — `wide_mosaic_angle` and the
+  `"mosaic"` `set_setting`/`get_setting` key exist in every version checked, so this is
+  not a recent ZWO addition and CI's emulator matrix (2.6.4/3.2.0/3.3.0 per
+  `emulator-full.yml`) already spans a version old enough to exercise it. v3.3.1's
+  decompiled sources carry real symbol names (unlike v3.1.2's anonymous `FUN_*`
+  functions) and show a `SetMosaicParams(scale, angle, star_map_angle)` entry point
+  (`ASIMosaicStack::SetMosaicParams`) that forwards straight into
+  `ASIMosaicStack::editMosaicNeedparameter` — no explicit upper-bound clamp on `scale`
+  was visible at that entry point (the only bound-like check there, `ABS(scale) > 1.01`,
+  just toggles an "is mosaic active" flag, not a value limit). This is consistent with,
+  but does not newly prove, the open question directly below about whether firmware
+  silently rejects or misbehaves on a `mosaic_scale` value past the real app's own
+  1.0–2.0 UI range (this design currently allows up to 4.0, per user decision after
+  being told static analysis couldn't confirm firmware support above 2.0) — the deeper
+  `editMosaicNeedparameter`/`generatePatchN`/`generatePatchE` geometry functions that
+  would show a real clamp, if one exists, were not traced.
 - **Persistent-setting reset ordering:** the `finally`-block reset (§5.2 step 5) must not
   race with a subsequent schedule item starting immediately after (e.g., a plain Image item
   right after a framed mosaic in the same schedule) — the reset must complete and be
@@ -287,7 +302,9 @@ Per `AGENTS.md`'s testing expectations:
 
 - Ships as a normal, default-available feature (no `Config.experimental` gate) — the nav
   entry, create page, Planning card, and API action are all live for every user once this
-  lands.
+  lands, with one caveat: the Planning card inherits the Planning page's own pre-existing
+  `Config.experimental` nav gate (unrelated to this feature, not modified by it) — so it's
+  reachable by experimental users via the nav, or by any user via a direct URL.
 - Given the reverse-engineered protocol basis, prioritize the bruno-collection
   verification pass and the emulator/CI regression suite
   (`emulator-smoke.yml`/`emulator-full.yml`) exercising this action against real

@@ -852,6 +852,84 @@ def test_27_federation_home_lists_both_devices(two_device_federation):
     assert "Seestar Beta" in resp.text
 
 
+def test_40_framed_mosaic_federation_by_time_reaches_both_devices(
+    two_device_federation,
+):
+    """A federated by_time start_framed_mosaic splits panel_time_sec across both devices."""
+    alpaca_action = two_device_federation["alpaca_action"]
+    dev1 = two_device_federation["dev1"]
+    dev2 = two_device_federation["dev2"]
+
+    resp = alpaca_action(
+        0,
+        "start_framed_mosaic",
+        {
+            "target_name": "M31",
+            "ra": 0.7,
+            "dec": 41.27,
+            "is_j2000": True,
+            "is_use_lp_filter": False,
+            "federation_mode": "by_time",
+            "panel_time_sec": 20,
+            "mosaic_scale": 1.5,
+            "mosaic_angle": 45.0,
+            "gain": 80,
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json["ErrorNumber"] == 0
+
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        if dev1.schedule["list"] and dev2.schedule["list"]:
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail(
+            "Timed out waiting for the framed mosaic item to reach both devices"
+        )
+
+    assert dev1.schedule["list"][0]["action"] == "start_framed_mosaic"
+    assert dev1.schedule["list"][0]["params"]["panel_time_sec"] == 10
+    assert dev2.schedule["list"][0]["action"] == "start_framed_mosaic"
+    assert dev2.schedule["list"][0]["params"]["panel_time_sec"] == 10
+
+    # add_schedule_item populates schedule["list"] synchronously, before the
+    # background scheduler_thread_fn thread flips schedule["state"] to
+    # "working". stop_scheduler is a silent no-op unless state == "working",
+    # so wait for that state on both devices before stopping -- otherwise the
+    # real background thread would race ahead and run the framed mosaic item
+    # to completion against the real simulator, unseen by this test.
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        if dev1.schedule["state"] == "working" and dev2.schedule["state"] == "working":
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail("Timed out waiting for both devices' schedulers to start working")
+
+    # Don't wait out the full stacking duration on both real devices — stop
+    # both schedulers now that the routing/splitting behavior is confirmed.
+    stop1 = dev1.stop_scheduler({})
+    stop2 = dev2.stop_scheduler({})
+    assert stop1["code"] == 0, f"dev1 stop_scheduler did not succeed: {stop1}"
+    assert stop2["code"] == 0, f"dev2 stop_scheduler did not succeed: {stop2}"
+
+    # Confirm the stop actually took effect rather than silently no-op'ing --
+    # if it had, the scheduler would still show "working" and a real capture
+    # would keep running against the simulator after this test returns.
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        if dev1.schedule["state"] != "working" and dev2.schedule["state"] != "working":
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail("Timed out waiting for both devices' schedulers to stop")
+
+    assert dev1.schedule["state"] == "stopped"
+    assert dev2.schedule["state"] == "stopped"
+
+
 # ---------------------------------------------------------------------------
 # Tests 28-35: Stack type and wide angle camera (added with firmware 3.2.0)
 # ---------------------------------------------------------------------------
@@ -874,6 +952,38 @@ def test_28_simulator_handles_set_stack_type(simulator_server):
         assert state["result"]["stack_type"] == stack_type, (
             f"Expected stack_type={stack_type!r} in device state"
         )
+
+
+def test_38_simulator_mosaic_setting_round_trips(simulator_server):
+    """set_setting with a mosaic sub-object updates get_setting's response."""
+    host = simulator_server["host"]
+    port = simulator_server["tcp_port"]
+
+    _send_tcp_command(
+        host,
+        port,
+        {
+            "id": 3100,
+            "method": "set_setting",
+            "params": {"mosaic": {"scale": 1.5, "angle": 45.0, "star_map_angle": 0.0}},
+        },
+    )
+    state = _send_tcp_command(host, port, {"id": 3101, "method": "get_setting"})
+    assert state["result"]["mosaic"]["scale"] == 1.5
+    assert state["result"]["mosaic"]["angle"] == 45.0
+
+    _send_tcp_command(
+        host,
+        port,
+        {
+            "id": 3102,
+            "method": "set_setting",
+            "params": {"mosaic": {"scale": 1.0, "angle": 0.0, "star_map_angle": 0.0}},
+        },
+    )
+    reset_state = _send_tcp_command(host, port, {"id": 3103, "method": "get_setting"})
+    assert reset_state["result"]["mosaic"]["scale"] == 1.0
+    assert reset_state["result"]["mosaic"]["angle"] == 0.0
 
 
 def test_29_stack_type_in_image_form_reaches_device_layer(
@@ -911,6 +1021,41 @@ def test_29_stack_type_in_image_form_reaches_device_layer(
     resp = client.simulate_post("/1/image", json=form)
     assert resp.status_code == 200
     assert captured.get("start_mosaic_params", {}).get("stack_type") == "SolarSystem"
+
+
+def test_39_framed_mosaic_form_reaches_device_layer(monkeypatch, front_sim_bridge):
+    """A Framed Mosaic form POST reaches the device layer as start_framed_mosaic."""
+    captured = {}
+    original_action = front_app.do_action_device
+
+    def capturing_do_action(action, dev_num, params, is_schedule=False):
+        if action == "start_framed_mosaic":
+            captured["params"] = params
+            return {"ErrorNumber": 0, "Value": {}}
+        return original_action(action, dev_num, params, is_schedule)
+
+    monkeypatch.setattr(front_app, "do_action_device", capturing_do_action)
+
+    app = falcon.App()
+    app.add_route("/{telescope_id:int}/framed_mosaic", front_app.FramedMosaicResource())
+    client = testing.TestClient(app)
+
+    form = {
+        "targetName": "M31",
+        "ra": "0.7",
+        "dec": "41.27",
+        "mosaicScale": "1.5",
+        "mosaicAngle": "45",
+        "panelTime": "3600",
+        "gain": "80",
+        "num_tries": "1",
+        "retry_wait_s": "300",
+    }
+    resp = client.simulate_post("/1/framed_mosaic", json=form)
+    assert resp.status_code == 200
+    assert captured["params"]["mosaic_scale"] == 1.5
+    assert captured["params"]["mosaic_angle"] == 45.0
+    assert captured["params"]["target_name"] == "M31"
 
 
 def test_30_invalid_stack_type_normalised_to_deepsky_before_device(

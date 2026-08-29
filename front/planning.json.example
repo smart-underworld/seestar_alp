@@ -7,6 +7,13 @@
         "planning_page_collapsed": false
     },
     {
+        "card_name": "framed_mosaic",
+        "card_friendly_name": "Framed Mosaic",
+        "template": "partials/framed_mosaic_planning.html",
+        "planning_page_enable": true,
+        "planning_page_collapsed": false
+    },
+    {
         "card_name": "twilight_times",
         "card_friendly_name": "Twilight Times",
         "template": "partials/twilight_times.html",

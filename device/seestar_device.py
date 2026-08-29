@@ -2314,6 +2314,227 @@ class Seestar:
         self.mosaic_thread.start()
         return
 
+    def start_framed_mosaic_item(self, params: dict[str, Any]) -> None:
+        self.is_cur_scheduler_item_working = False
+
+        if self.schedule["state"] != "working":
+            self.logger.info("Run Scheduler is stopping")
+            self.schedule["state"] = "stopped"
+            return
+
+        target_name = params["target_name"]
+        center_RA = params["ra"]
+        center_Dec = params["dec"]
+        is_j2000 = params["is_j2000"]
+        is_use_LP_filter = params["is_use_lp_filter"]
+        panel_time_sec = params["panel_time_sec"]
+        mosaic_scale = params.get("mosaic_scale", 1.0)
+        mosaic_angle = params.get("mosaic_angle", 0.0)
+        gain = params["gain"]
+        is_use_autofocus = params.get("is_use_autofocus", False)
+        num_tries = params.get("num_tries", 1)
+        retry_wait_s = params.get("retry_wait_s", 300)
+        stack_type = params.get("stack_type", "DeepSky")
+
+        if mosaic_scale < 1.0 or mosaic_scale > 4.0:
+            self.logger.info(
+                "Framed mosaic scale is invalid. Moving to next schedule item if any."
+            )
+            return
+        if mosaic_angle < -90 or mosaic_angle > 90:
+            self.logger.info(
+                "Framed mosaic angle is invalid. Moving to next schedule item if any."
+            )
+            return
+
+        if not isinstance(center_RA, str) and center_RA == -1 and center_Dec == -1:
+            center_RA = self.ra
+            center_Dec = self.dec
+            is_j2000 = False
+
+        parsed_coord = Util.parse_coordinate(is_j2000, center_RA, center_Dec)
+        center_RA = parsed_coord.ra.hour
+        center_Dec = parsed_coord.dec.deg
+
+        self.logger.info("received framed mosaic parameters:")
+        self.logger.info("  target        : " + target_name)
+        self.logger.info("  RA            : %s", center_RA)
+        self.logger.info("  Dec           : %s", center_Dec)
+        self.logger.info("  scale         : %s", mosaic_scale)
+        self.logger.info("  angle         : %s", mosaic_angle)
+        self.logger.info("  panel time (s): %s", panel_time_sec)
+
+        self.is_cur_scheduler_item_working = True
+        self.framed_mosaic_thread = threading.Thread(
+            target=lambda: self.framed_mosaic_thread_fn(
+                target_name,
+                center_RA,
+                center_Dec,
+                is_use_LP_filter,
+                panel_time_sec,
+                mosaic_scale,
+                mosaic_angle,
+                gain,
+                is_use_autofocus,
+                num_tries,
+                retry_wait_s,
+                stack_type,
+            )
+        )
+        self.framed_mosaic_thread.name = f"FramedMosaicThread:{self.device_name}"
+        self.framed_mosaic_thread.start()
+
+    def framed_mosaic_thread_fn(
+        self,
+        target_name,
+        center_RA,
+        center_Dec,
+        is_use_LP_filter,
+        panel_time_sec,
+        mosaic_scale,
+        mosaic_angle,
+        gain,
+        is_use_autofocus,
+        num_tries,
+        retry_wait_s,
+        stack_type="DeepSky",
+    ):
+        try:
+            total_time_s = round(panel_time_sec)
+            item_state: SchedulerItemState = {
+                "type": "framed_mosaic",
+                "schedule_item_id": self.schedule["current_item_id"],
+                "target_name": target_name,
+                "action": "start",
+                "item_total_time_s": total_time_s,
+                "item_remaining_time_s": total_time_s,
+            }
+            self.update_scheduler_state_obj(item_state)
+
+            self.send_message_param_sync(
+                {
+                    "method": "set_setting",
+                    "params": {"stack_lenhance": is_use_LP_filter},
+                }
+            )
+
+            result = False
+            for try_index in range(num_tries):
+                try_count = try_index + 1
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = (
+                    f"attempt #{try_count} slewing to target centered at "
+                    f"{center_RA:.2f}, {center_Dec:.2f}"
+                )
+                self.logger.info(f"Trying to reach target, attempt #{try_count}")
+                result = self.mosaic_goto_inner_worker(
+                    center_RA,
+                    center_Dec,
+                    target_name,
+                    is_use_autofocus,
+                    is_use_LP_filter,
+                )
+                if result:
+                    break
+                if try_count < num_tries:
+                    for i in range(round(retry_wait_s / 5)):
+                        if self.schedule["state"] != "working":
+                            self.logger.info(
+                                "Scheduler was requested to stop. Stopping at current framed mosaic."
+                            )
+                            self.schedule["state"] = "stopped"
+                            return
+                        waited_time = i * 5
+                        msg = f"waited {waited_time}s of requested {retry_wait_s}s before retry GOTO target."
+                        self.logger.info(msg)
+                        self.event_state["scheduler"]["cur_scheduler_item"][
+                            "action"
+                        ] = msg
+                        time.sleep(5)
+
+            if not result:
+                msg = f"Failed to goto target after {num_tries} tries."
+                self.logger.warning(msg)
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+                return
+
+            self.send_message_param_sync(
+                {
+                    "method": "set_setting",
+                    "params": {
+                        "mosaic": {
+                            "scale": mosaic_scale,
+                            "angle": mosaic_angle,
+                            "star_map_angle": 0.0,
+                        }
+                    },
+                }
+            )
+            try:
+                msg = f"stacking the framed mosaic for {panel_time_sec} seconds"
+                self.logger.info(msg)
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+
+                self.set_target_name(target_name)
+
+                if not self.start_stack(
+                    {"gain": gain, "restart": True, "stack_type": stack_type}
+                ):
+                    msg = "Failed to start stacking."
+                    self.logger.warning(msg)
+                    self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+                    return
+
+                remaining_time_s = round(panel_time_sec)
+                for i in range(round(panel_time_sec / 5)):
+                    self.event_state["scheduler"]["cur_scheduler_item"][
+                        "item_remaining_time_s"
+                    ] = remaining_time_s
+                    threading.current_thread().last_run = datetime.now()
+
+                    if self.schedule["state"] != "working":
+                        self.logger.info(
+                            "Scheduler was requested to stop. Stopping at current framed mosaic."
+                        )
+                        self.stop_stack()
+                        self.schedule["state"] = "stopped"
+                        self.event_state["scheduler"]["cur_scheduler_item"][
+                            "item_remaining_time_s"
+                        ] = 0
+                        return
+                    if self.schedule["is_skip_requested"]:
+                        self.logger.info(
+                            "current framed mosaic stacking was requested to skip."
+                        )
+                        return
+
+                    time.sleep(5)
+                    remaining_time_s -= 5
+
+                self.event_state["scheduler"]["cur_scheduler_item"][
+                    "item_remaining_time_s"
+                ] = 0
+                self.stop_stack()
+                msg = "Framed mosaic stacking operation finished " + target_name
+                self.logger.info(msg)
+                self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
+            finally:
+                self.send_message_param_sync(
+                    {
+                        "method": "set_setting",
+                        "params": {
+                            "mosaic": {
+                                "scale": 1.0,
+                                "angle": 0.0,
+                                "star_map_angle": 0.0,
+                            }
+                        },
+                    }
+                )
+
+            self.event_state["scheduler"]["cur_scheduler_item"]["action"] = "complete"
+        finally:
+            self.is_cur_scheduler_item_working = False
+
     def get_schedule(self, params):
         if "schedule_id" in params:
             if self.schedule["schedule_id"] != params["schedule_id"]:
@@ -2507,6 +2728,19 @@ class Seestar:
         self.add_schedule_item(schedule_item)
         return self.start_scheduler(params)
 
+    # shortcut to start a new scheduler with only a framed mosaic request
+    def start_framed_mosaic(self, params):
+        if self.schedule["state"] != "stopped" and self.schedule["state"] != "complete":
+            return self.json_result(
+                "start_framed_mosaic",
+                -1,
+                "An existing scheduler is active. Returned with no action.",
+            )
+        self.create_schedule(params)
+        schedule_item = {"action": "start_framed_mosaic", "params": params}
+        self.add_schedule_item(schedule_item)
+        return self.start_scheduler(params)
+
     def json_result(self, command_name, code, result):
         if code != 0:
             self.logger.warning(
@@ -2629,6 +2863,11 @@ class Seestar:
             action = cur_schedule_item["action"]
             if action == "start_mosaic":
                 self.start_mosaic_item(cur_schedule_item["params"])
+                while self.is_cur_scheduler_item_working:
+                    update_time()
+                    time.sleep(2)
+            elif action == "start_framed_mosaic":
+                self.start_framed_mosaic_item(cur_schedule_item["params"])
                 while self.is_cur_scheduler_item_working:
                     update_time()
                     time.sleep(2)

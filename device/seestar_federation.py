@@ -206,7 +206,7 @@ class Seestar_Federation:
 
     def construct_schedule_item(self, params):
         item = params.copy()
-        if item["action"] == "start_mosaic":
+        if item["action"] in ("start_mosaic", "start_framed_mosaic"):
             mosaic_params = item["params"]
             if isinstance(mosaic_params["ra"], str):
                 # try to trim the seconds to 1 decimal
@@ -372,6 +372,24 @@ class Seestar_Federation:
         self.add_schedule_item(schedule_item)
         return self.start_scheduler(cur_params)
 
+    # shortcut to start a new scheduler with only a framed mosaic request
+    def start_framed_mosaic(self, cur_params):
+        cur_schedule = self.get_schedule(cur_params)
+        num_devices = len(cur_schedule["available_device_list"])
+        if num_devices < 1:
+            return {
+                "error": "Failed: No available devices found to execute a schedule."
+            }
+
+        self.schedule = {
+            "list": [],
+            "state": "stopped",
+            "schedule_id": str(uuid.uuid4()),
+        }
+        schedule_item = {"action": "start_framed_mosaic", "params": cur_params}
+        self.add_schedule_item(schedule_item)
+        return self.start_scheduler(cur_params)
+
     def start_scheduler(self, params):
         if len(self.schedule["list"]) == 0:
             return {"error": "Failed: The schedule is empty."}
@@ -427,6 +445,29 @@ class Seestar_Federation:
                         self.logger.info(
                             f"federation mode by panels ->   key: {key}; panel: {new_item['params']['selected_panels']}"
                         )
+                    cur_device.add_schedule_item(new_item)
+            elif schedule_item["action"] == "start_framed_mosaic":
+                # federation_mode : duplicate or by_time (no by_panels — there
+                # are no discrete panels in a framed mosaic)
+                if "federation_mode" not in cur_params or num_devices == 1:
+                    cur_params["federation_mode"] = "duplicate"
+                elif cur_params["federation_mode"] == "by_time":
+                    cur_params["panel_time_sec"] = round(
+                        cur_params["panel_time_sec"] / num_devices
+                    )
+                elif cur_params["federation_mode"] == "by_panels":
+                    self.logger.warn(
+                        "federation_mode 'by_panels' is not supported for "
+                        "start_framed_mosaic; falling back to 'duplicate'."
+                    )
+                    cur_params["federation_mode"] = "duplicate"
+
+                for key in available_devices:
+                    cur_device = self.seestar_devices[key]
+                    new_item = {
+                        "action": "start_framed_mosaic",
+                        "params": cur_params.copy(),
+                    }
                     cur_device.add_schedule_item(new_item)
             else:
                 for key in available_devices:

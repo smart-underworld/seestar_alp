@@ -1633,6 +1633,100 @@ def test_mosaic_thread_fn_happy_path(monkeypatch, seestar):
     assert seestar.is_cur_scheduler_item_working is False
 
 
+def test_framed_mosaic_thread_fn_happy_path(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(seestar, "mosaic_goto_inner_worker", lambda *_a, **_k: True)
+    monkeypatch.setattr(seestar, "set_target_name", lambda _n: {"ok": True})
+    monkeypatch.setattr(seestar, "start_stack", lambda _p: True)
+    monkeypatch.setattr(seestar, "stop_stack", lambda: {"ok": True})
+
+    sent = []
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda p: sent.append(p) or {"ok": True},
+    )
+    seestar.schedule["state"] = "working"
+    seestar.schedule["is_skip_requested"] = False
+    seestar.schedule["current_item_id"] = "fm1"
+    seestar.event_state["scheduler"] = {"cur_scheduler_item": {}}
+
+    seestar.framed_mosaic_thread_fn(
+        "T1", 1.0, 2.0, False, 5, 1.5, 45.0, 80, False, 1, 5, "DeepSky"
+    )
+
+    assert (
+        seestar.event_state["scheduler"]["cur_scheduler_item"]["action"] == "complete"
+    )
+    assert seestar.is_cur_scheduler_item_working is False
+
+    mosaic_sets = [
+        p["params"]["mosaic"] for p in sent if "mosaic" in p.get("params", {})
+    ]
+    assert mosaic_sets[0] == {"scale": 1.5, "angle": 45.0, "star_map_angle": 0.0}
+    assert mosaic_sets[-1] == {"scale": 1.0, "angle": 0.0, "star_map_angle": 0.0}
+
+
+def test_framed_mosaic_thread_fn_skips_mosaic_setting_on_goto_failure(
+    monkeypatch, seestar
+):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(seestar, "mosaic_goto_inner_worker", lambda *_a, **_k: False)
+
+    sent = []
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda p: sent.append(p) or {"ok": True},
+    )
+    seestar.schedule["state"] = "working"
+    seestar.schedule["is_skip_requested"] = False
+    seestar.schedule["current_item_id"] = "fm2"
+    seestar.event_state["scheduler"] = {"cur_scheduler_item": {}}
+
+    seestar.framed_mosaic_thread_fn(
+        "T1", 1.0, 2.0, False, 5, 1.5, 45.0, 80, False, 1, 1, "DeepSky"
+    )
+
+    assert seestar.is_cur_scheduler_item_working is False
+    assert not any("mosaic" in p.get("params", {}) for p in sent)
+
+
+def test_framed_mosaic_thread_fn_resets_mosaic_setting_on_stack_failure(
+    monkeypatch, seestar
+):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(seestar, "mosaic_goto_inner_worker", lambda *_a, **_k: True)
+    monkeypatch.setattr(seestar, "set_target_name", lambda _n: {"ok": True})
+    monkeypatch.setattr(seestar, "start_stack", lambda _p: False)
+
+    sent = []
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda p: sent.append(p) or {"ok": True},
+    )
+    seestar.schedule["state"] = "working"
+    seestar.schedule["is_skip_requested"] = False
+    seestar.schedule["current_item_id"] = "fm3"
+    seestar.event_state["scheduler"] = {"cur_scheduler_item": {}}
+
+    seestar.framed_mosaic_thread_fn(
+        "T1", 1.0, 2.0, False, 5, 1.5, 45.0, 80, False, 1, 1, "DeepSky"
+    )
+
+    mosaic_sets = [
+        p["params"]["mosaic"] for p in sent if "mosaic" in p.get("params", {})
+    ]
+    assert mosaic_sets == [
+        {"scale": 1.5, "angle": 45.0, "star_map_angle": 0.0},
+        {"scale": 1.0, "angle": 0.0, "star_map_angle": 0.0},
+    ]
+
+
 def test_start_mosaic_item_paths(monkeypatch, seestar):
     monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
     monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
@@ -1708,6 +1802,67 @@ def test_start_mosaic_item_paths(monkeypatch, seestar):
     seestar.schedule["state"] = "working"
     seestar.start_mosaic_item(good)
     assert started["count"] == 1
+
+
+def test_start_framed_mosaic_item_paths(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+
+    class FakeCoord:
+        ra = SimpleNamespace(hour=1.5)
+        dec = SimpleNamespace(deg=2.5)
+
+    monkeypatch.setattr(
+        "device.seestar_device.Util.parse_coordinate", lambda *_a, **_k: FakeCoord
+    )
+
+    started = {"count": 0}
+
+    class FakeThread:
+        def __init__(self, target=None):
+            self.target = target
+            self.name = ""
+
+        def start(self):
+            started["count"] += 1
+
+    monkeypatch.setattr("device.seestar_device.threading.Thread", FakeThread)
+    monkeypatch.setattr(seestar, "framed_mosaic_thread_fn", lambda *a, **k: None)
+
+    # scheduler not working branch
+    seestar.schedule["state"] = "stopped"
+    assert (
+        seestar.start_framed_mosaic_item({"target_name": "T", "ra": 1, "dec": 2})
+        is None
+    )
+
+    base_params = {
+        "target_name": "T",
+        "ra": 1.0,
+        "dec": 2.0,
+        "is_j2000": False,
+        "is_use_lp_filter": False,
+        "panel_time_sec": 5,
+        "mosaic_scale": 1.5,
+        "mosaic_angle": 45.0,
+        "gain": 80,
+    }
+
+    # invalid scale
+    seestar.schedule["state"] = "working"
+    bad_scale = dict(base_params, mosaic_scale=4.5)
+    assert seestar.start_framed_mosaic_item(bad_scale) is None
+    assert started["count"] == 0
+
+    # invalid angle
+    bad_angle = dict(base_params, mosaic_angle=-91.0)
+    assert seestar.start_framed_mosaic_item(bad_angle) is None
+    assert started["count"] == 0
+
+    # valid params start a thread
+    assert seestar.start_framed_mosaic_item(base_params) is None
+    assert started["count"] == 1
+    assert seestar.is_cur_scheduler_item_working is True
 
 
 def test_startup_sequence_error_branches(monkeypatch, seestar):
@@ -2529,3 +2684,64 @@ def test_force_stop_goto_idempotent_when_no_goto(monkeypatch, seestar):
 
     assert result["ok"] is True
     assert seestar.is_goto() is False
+
+
+def test_start_framed_mosaic_rejects_when_scheduler_active(seestar):
+    seestar.schedule["state"] = "working"
+    out = seestar.start_framed_mosaic({"target_name": "T", "ra": 1, "dec": 2})
+    assert out["code"] == -1
+
+
+def test_start_framed_mosaic_creates_and_starts_schedule(monkeypatch, seestar):
+    seestar.schedule["state"] = "stopped"
+    calls = []
+    monkeypatch.setattr(
+        seestar, "create_schedule", lambda p: calls.append(("create_schedule", p))
+    )
+    monkeypatch.setattr(
+        seestar,
+        "add_schedule_item",
+        lambda item: calls.append(("add_schedule_item", item)),
+    )
+    monkeypatch.setattr(
+        seestar, "start_scheduler", lambda p: calls.append(("start_scheduler", p))
+    )
+
+    params = {"target_name": "T", "ra": 1, "dec": 2}
+    seestar.start_framed_mosaic(params)
+
+    assert calls[0] == ("create_schedule", params)
+    assert calls[1] == (
+        "add_schedule_item",
+        {"action": "start_framed_mosaic", "params": params},
+    )
+    assert calls[2] == ("start_scheduler", params)
+
+
+def test_scheduler_thread_fn_dispatches_start_framed_mosaic(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    calls = []
+    monkeypatch.setattr(
+        seestar,
+        "start_framed_mosaic_item",
+        lambda p: calls.append(p)
+        or setattr(seestar, "is_cur_scheduler_item_working", False),
+    )
+    monkeypatch.setattr(seestar, "play_sound", lambda _v: None)
+
+    seestar.schedule = {
+        "state": "stopped",
+        "list": [
+            {
+                "action": "start_framed_mosaic",
+                "schedule_item_id": "fm1",
+                "params": {"target_name": "T"},
+            }
+        ],
+        "item_number": 1,
+        "is_stacking": False,
+        "is_stacking_paused": False,
+    }
+    seestar.scheduler_thread_fn()
+
+    assert calls == [{"target_name": "T"}]

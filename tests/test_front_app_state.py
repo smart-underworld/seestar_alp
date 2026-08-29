@@ -1,4 +1,7 @@
 import json
+import os
+import re
+import shutil
 import pytest
 import falcon
 import front.app as front_app
@@ -311,6 +314,82 @@ def test_update_planning_card_state_invalidates_cache(monkeypatch, tmp_path):
     assert front_app._planning_cards_cache is None
     updated_cards = front_app.get_planning_cards()
     assert updated_cards[0]["planning_page_enable"] is False
+
+
+def test_get_planning_cards_merges_missing_cards_from_example(monkeypatch, tmp_path):
+    planning_file = tmp_path / "planning.json"
+    planning_file.write_text(
+        json.dumps(
+            [
+                {
+                    "card_name": "twilight_times",
+                    "card_friendly_name": "Twilight Times",
+                    "template": "partials/twilight_times.html",
+                    "planning_page_enable": False,
+                    "planning_page_collapsed": True,
+                }
+            ]
+        )
+    )
+    example_file = tmp_path / "planning.json.example"
+    example_file.write_text(
+        json.dumps(
+            [
+                {
+                    "card_name": "twilight_times",
+                    "card_friendly_name": "Twilight Times",
+                    "template": "partials/twilight_times.html",
+                    "planning_page_enable": True,
+                    "planning_page_collapsed": False,
+                },
+                {
+                    "card_name": "framed_mosaic",
+                    "card_friendly_name": "Framed Mosaic",
+                    "template": "partials/framed_mosaic_planning.html",
+                    "planning_page_enable": True,
+                    "planning_page_collapsed": False,
+                },
+            ]
+        )
+    )
+
+    monkeypatch.setattr(front_app.os.path, "dirname", lambda _: str(tmp_path))
+    front_app._planning_cards_cache = None
+    front_app._planning_cards_cache_mtime = None
+
+    cards = front_app.get_planning_cards()
+
+    names = {card["card_name"] for card in cards}
+    assert names == {"twilight_times", "framed_mosaic"}
+
+    # the user's existing settings for a card they already have must be preserved
+    twilight = next(c for c in cards if c["card_name"] == "twilight_times")
+    assert twilight["planning_page_enable"] is False
+    assert twilight["planning_page_collapsed"] is True
+
+    # the merge is persisted so a second load doesn't need the cache
+    front_app._planning_cards_cache = None
+    front_app._planning_cards_cache_mtime = None
+    persisted = json.loads(planning_file.read_text())
+    assert {c["card_name"] for c in persisted} == {"twilight_times", "framed_mosaic"}
+
+
+def test_planning_page_includes_framed_mosaic_card(monkeypatch, tmp_path):
+    example_source = os.path.join(
+        os.path.dirname(front_app.__file__), "planning.json.example"
+    )
+    shutil.copyfile(example_source, tmp_path / "planning.json")
+
+    monkeypatch.setattr(front_app.os.path, "dirname", lambda _: str(tmp_path))
+    front_app._planning_cards_cache = None
+    front_app._planning_cards_cache_mtime = None
+
+    cards = front_app.get_planning_cards()
+    names = {card["card_name"] for card in cards}
+    assert "framed_mosaic" in names
+
+    framed_mosaic_card = next(c for c in cards if c["card_name"] == "framed_mosaic")
+    assert framed_mosaic_card["template"] == "partials/framed_mosaic_planning.html"
 
 
 def test_get_csc_sites_data_uses_in_memory_cache(monkeypatch, tmp_path):
@@ -983,6 +1062,40 @@ def test_eventstatus_endpoint_handles_empty_event_result(monkeypatch):
     assert "No results available." in resp.text
 
 
+def test_eventstatus_framed_mosaic_uses_same_eventlist_as_mosaic(monkeypatch):
+    monkeypatch.setattr(
+        front_app,
+        "get_context",
+        lambda _tid, _req: _minimal_context("eventstatus", online=True),
+    )
+    monkeypatch.setattr(
+        front_app,
+        "do_action_device",
+        lambda *_args, **_kwargs: {"Value": {"result": {"x": {"state": "idle"}}}},
+    )
+
+    def render(action):
+        front_app.EventStatus._last_render_by_key.clear()
+        req = DummyHTMXReq(
+            relative_uri="/1/eventstatus",
+            params={"action": action},
+            headers={
+                "User-Agent": "pytest-agent",
+                "HX-Current-URL": f"http://localhost/1/{action}",
+            },
+        )
+        resp = DummyResp()
+        front_app.EventStatus.on_get(req, resp, telescope_id=1)
+        return resp.text
+
+    mosaic_html = render("mosaic")
+    framed_mosaic_html = render("framed_mosaic")
+
+    for expected in ("DarkLibrary", "Stack"):
+        assert expected in mosaic_html
+        assert expected in framed_mosaic_html
+
+
 @pytest.mark.parametrize(
     "stack_from_get_setting,stack_from_get_stack_setting,expected_discrete",
     [
@@ -1619,6 +1732,23 @@ def _make_mosaic_form(extra=None):
     return base
 
 
+def _make_framed_mosaic_form(extra=None):
+    base = {
+        "targetName": "Test Target",
+        "ra": "10.5",
+        "dec": "-5.0",
+        "mosaicScale": "1.5",
+        "mosaicAngle": "45",
+        "panelTime": "3600",
+        "gain": "80",
+        "num_tries": "1",
+        "retry_wait_s": "300",
+    }
+    if extra:
+        base.update(extra)
+    return base
+
+
 class _FormReq:
     def __init__(self, data):
         self.media = data
@@ -1707,6 +1837,141 @@ def test_do_create_image_stack_type_included_in_start_mosaic_params(monkeypatch)
     front_app.do_create_image(req, resp, False, 1)
 
     assert captured.get("start_mosaic_params", {}).get("stack_type") == "SolarSystem"
+
+
+def test_do_create_framed_mosaic_builds_expected_params(monkeypatch):
+    captured = {}
+
+    def fake_do_action_device(action, dev_num, params, is_schedule=False):
+        captured["action"] = action
+        captured["params"] = params
+        return {"ErrorNumber": 0, "Value": {}}
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    form = _make_framed_mosaic_form()
+    req = _FormReq(form)
+    resp = DummyResp()
+
+    values, errors = front_app.do_create_framed_mosaic(req, resp, False, 1)
+
+    assert not errors
+    assert captured["action"] == "start_framed_mosaic"
+    assert values["mosaic_scale"] == 1.5
+    assert values["mosaic_angle"] == 45.0
+    assert values["target_name"] == "Test Target"
+    assert values["panel_time_sec"] == 3600
+    assert values["gain"] == 80
+
+
+def test_do_create_framed_mosaic_rejects_scale_out_of_range(monkeypatch):
+    called = {"device": False}
+
+    def fake_do_action_device(action, dev_num, params, is_schedule=False):
+        called["device"] = True
+        return {"ErrorNumber": 0, "Value": {}}
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    form = _make_framed_mosaic_form({"mosaicScale": "4.5"})
+    req = _FormReq(form)
+    resp = DummyResp()
+
+    values, errors = front_app.do_create_framed_mosaic(req, resp, False, 1)
+
+    assert "mosaic_scale" in errors
+    assert called["device"] is False
+
+
+def test_do_create_framed_mosaic_rejects_angle_out_of_range(monkeypatch):
+    called = {"device": False}
+
+    def fake_do_action_device(action, dev_num, params, is_schedule=False):
+        called["device"] = True
+        return {"ErrorNumber": 0, "Value": {}}
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    form = _make_framed_mosaic_form({"mosaicAngle": "120"})
+    req = _FormReq(form)
+    resp = DummyResp()
+
+    values, errors = front_app.do_create_framed_mosaic(req, resp, False, 1)
+
+    assert "mosaic_angle" in errors
+    assert called["device"] is False
+
+
+def test_do_create_framed_mosaic_invalid_ra_does_not_call_device(monkeypatch):
+    called = {"device": False}
+
+    def fake_do_action_device(action, dev_num, params, is_schedule=False):
+        called["device"] = True
+        return {"ErrorNumber": 0, "Value": {}}
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    form = _make_framed_mosaic_form({"ra": "not_valid"})
+    req = _FormReq(form)
+    resp = DummyResp()
+
+    values, errors = front_app.do_create_framed_mosaic(req, resp, False, 1)
+
+    assert "ra" in errors
+    assert called["device"] is False
+
+
+def test_do_create_framed_mosaic_schedule_append(monkeypatch):
+    captured = {}
+
+    def fake_do_action_device(action, dev_num, params, is_schedule=False):
+        captured["action"] = action
+        captured["params"] = params
+        return {"ErrorNumber": 0, "Value": {}}
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    form = _make_framed_mosaic_form({"action": "append"})
+    req = _FormReq(form)
+    resp = DummyResp()
+
+    front_app.do_create_framed_mosaic(req, resp, True, 1)
+
+    assert captured["action"] == "add_schedule_item"
+    assert captured["params"]["action"] == "start_framed_mosaic"
+    assert captured["params"]["params"]["mosaic_scale"] == 1.5
+
+
+def test_framed_mosaic_resource_renders_form(monkeypatch):
+    monkeypatch.setattr(
+        front_app,
+        "get_context",
+        lambda telescope_id, req: {
+            "online": True,
+            "client_master": True,
+            "root": "",
+            "defgain": 80,
+            "telescope": {"device_num": telescope_id},
+        },
+    )
+    monkeypatch.setattr(
+        front_app,
+        "do_action_device",
+        lambda action, dev_num, params, is_schedule=False: {
+            "Value": {"state": "stopped"}
+        },
+    )
+
+    app = falcon.App()
+    app.add_route("/{telescope_id:int}/framed_mosaic", front_app.FramedMosaicResource())
+    client = testing.TestClient(app)
+
+    resp = client.simulate_get("/1/framed_mosaic")
+
+    assert resp.status_code == 200
+    assert "Framed Mosaic" in resp.text
+    assert 'id="mosaicScale"' in resp.text
+    assert 'id="mosaicAngle"' in resp.text
 
 
 def test_do_create_image_invalid_ra_does_not_propagate_stack_type_to_device(
@@ -2005,3 +2270,102 @@ def test_goto_target_template_has_htmx_force_stop_button():
     assert 'id="forceStopGotoStatus"' in html
     # The button must not fall back to hand-rolled fetch() wiring.
     assert "fetch(" not in html
+
+
+def test_schedule_list_renders_framed_mosaic_item():
+    template = front_app.env.get_template("partials/schedule_list.html")
+    html = template.render(
+        schedule={
+            "list": [
+                {
+                    "schedule_item_id": "fm1",
+                    "action": "start_framed_mosaic",
+                    "params": {
+                        "target_name": "M31",
+                        "ra": 0.7,
+                        "dec": 41.27,
+                        "mosaic_scale": 1.5,
+                        "mosaic_angle": 45.0,
+                        "panel_time_sec": 3600,
+                        "gain": 80,
+                        "num_tries": 1,
+                        "retry_wait_s": 300,
+                    },
+                }
+            ],
+            "is_stacking": False,
+        },
+        current_item={},
+    )
+
+    assert "M31" in html
+    assert "Scale: 1.5x" in html
+    assert "Angle: 45.0&deg;" in html
+
+
+def _row_column_count(html):
+    """Count top-level Bootstrap grid columns (col/col-2/col-auto) in a
+    rendered schedule_list.html row, to catch column-count drift between
+    action-type branches that share the same table header."""
+    return len(re.findall(r'class="col(?:-\d+|-auto)?[ "]', html))
+
+
+@pytest.mark.parametrize("is_current", [True, False])
+def test_schedule_list_framed_mosaic_column_count_matches_mosaic(is_current):
+    """Regression guard: a framed_mosaic row must have the same column count
+    as a start_mosaic row, since both render under schedule_base.html's one
+    shared 10-column header. A mismatch silently shifts every column after
+    the divergence point (this exact bug shipped once already)."""
+    template = front_app.env.get_template("partials/schedule_list.html")
+    current_item = {"schedule_item_id": "x1"} if is_current else {}
+
+    mosaic_html = template.render(
+        schedule={
+            "list": [
+                {
+                    "schedule_item_id": "x1",
+                    "action": "start_mosaic",
+                    "params": {
+                        "target_name": "M31",
+                        "ra": 0.7,
+                        "dec": 41.27,
+                        "ra_num": 1,
+                        "dec_num": 1,
+                        "panel_overlap_percent": 10,
+                        "panel_time_sec": 3600,
+                        "gain": 80,
+                        "selected_panels": "",
+                        "num_tries": 1,
+                        "retry_wait_s": 300,
+                    },
+                }
+            ],
+            "is_stacking": False,
+        },
+        current_item=current_item,
+    )
+    framed_html = template.render(
+        schedule={
+            "list": [
+                {
+                    "schedule_item_id": "x1",
+                    "action": "start_framed_mosaic",
+                    "params": {
+                        "target_name": "M31",
+                        "ra": 0.7,
+                        "dec": 41.27,
+                        "mosaic_scale": 1.5,
+                        "mosaic_angle": 45.0,
+                        "panel_time_sec": 3600,
+                        "gain": 80,
+                        "num_tries": 1,
+                        "retry_wait_s": 300,
+                    },
+                }
+            ],
+            "is_stacking": False,
+        },
+        current_item=current_item,
+    )
+
+    assert _row_column_count(framed_html) == _row_column_count(mosaic_html)
