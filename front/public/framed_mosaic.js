@@ -71,13 +71,22 @@
     if (searchBtn) {
       searchBtn.addEventListener("click", function () {
         if (!aladin) return;
+        // Aladin Lite v3's gotoObject takes an options object with
+        // success/error callbacks, not a bare callback function -- passing
+        // a bare function silently registers nothing, so the view pans but
+        // our overlay never redraws at the new position.
         aladin.gotoObject(
           document.getElementById("framed_mosaic_search_text").value,
-          function () {
-            const [ra, dec] = aladin.getRaDec();
-            currentRaDeg = ra;
-            currentDecDeg = dec;
-            update_framed_mosaic();
+          {
+            success: function () {
+              const [ra, dec] = aladin.getRaDec();
+              currentRaDeg = ra;
+              currentDecDeg = dec;
+              update_framed_mosaic();
+            },
+            error: function () {
+              // Object not found -- leave the overlay at its last position.
+            },
           }
         );
       });
