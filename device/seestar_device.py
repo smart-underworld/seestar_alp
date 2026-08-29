@@ -2817,7 +2817,7 @@ class Seestar:
 
     def mark_op_state(self, in_op_name, state="stopped"):
         with self.event_state_lock:
-            self.event_state[in_op_name] = {"state": state}
+            self.event_state[in_op_name] = {"Event": in_op_name, "state": state}
 
     def wait_end_op(self, in_op_name):
         self.logger.info(f"Waiting for {in_op_name} to finish.")
