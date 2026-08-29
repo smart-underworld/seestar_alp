@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import pytest
 import falcon
@@ -2298,5 +2299,73 @@ def test_schedule_list_renders_framed_mosaic_item():
     )
 
     assert "M31" in html
-    assert "1.5x" in html
-    assert "45.0&deg;" in html
+    assert "Scale: 1.5x" in html
+    assert "Angle: 45.0&deg;" in html
+
+
+def _row_column_count(html):
+    """Count top-level Bootstrap grid columns (col/col-2/col-auto) in a
+    rendered schedule_list.html row, to catch column-count drift between
+    action-type branches that share the same table header."""
+    return len(re.findall(r'class="col(?:-\d+|-auto)?[ "]', html))
+
+
+@pytest.mark.parametrize("is_current", [True, False])
+def test_schedule_list_framed_mosaic_column_count_matches_mosaic(is_current):
+    """Regression guard: a framed_mosaic row must have the same column count
+    as a start_mosaic row, since both render under schedule_base.html's one
+    shared 10-column header. A mismatch silently shifts every column after
+    the divergence point (this exact bug shipped once already)."""
+    template = front_app.env.get_template("partials/schedule_list.html")
+    current_item = {"schedule_item_id": "x1"} if is_current else {}
+
+    mosaic_html = template.render(
+        schedule={
+            "list": [
+                {
+                    "schedule_item_id": "x1",
+                    "action": "start_mosaic",
+                    "params": {
+                        "target_name": "M31",
+                        "ra": 0.7,
+                        "dec": 41.27,
+                        "ra_num": 1,
+                        "dec_num": 1,
+                        "panel_overlap_percent": 10,
+                        "panel_time_sec": 3600,
+                        "gain": 80,
+                        "selected_panels": "",
+                        "num_tries": 1,
+                        "retry_wait_s": 300,
+                    },
+                }
+            ],
+            "is_stacking": False,
+        },
+        current_item=current_item,
+    )
+    framed_html = template.render(
+        schedule={
+            "list": [
+                {
+                    "schedule_item_id": "x1",
+                    "action": "start_framed_mosaic",
+                    "params": {
+                        "target_name": "M31",
+                        "ra": 0.7,
+                        "dec": 41.27,
+                        "mosaic_scale": 1.5,
+                        "mosaic_angle": 45.0,
+                        "panel_time_sec": 3600,
+                        "gain": 80,
+                        "num_tries": 1,
+                        "retry_wait_s": 300,
+                    },
+                }
+            ],
+            "is_stacking": False,
+        },
+        current_item=current_item,
+    )
+
+    assert _row_column_count(framed_html) == _row_column_count(mosaic_html)

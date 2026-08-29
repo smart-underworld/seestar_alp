@@ -227,11 +227,12 @@
                   <!-- Scale/Angle have no direct equivalent in the shared header
                        (Panels/Ov%); self-labeled here so they read clearly
                        regardless of the header above, matching the RA/DEC
-                       column's own self-labeling convention. -->
-                  <div class="col align-self-start">
-                    <p class="mt-0 mb-0">Scale: {{ item["params"]["mosaic_scale"] }}x</p>
-                    <p class="mt-0 mb-0">Angle: {{ item["params"]["mosaic_angle"] }}&deg;</p>
-                  </div>
+                       column's own self-labeling convention. Two separate
+                       cells, matching start_mosaic's two cells in this same
+                       position (RA/DEC panels, overlap%), to keep the total
+                       column count aligned with the shared header row. -->
+                  <div class="col align-self-start">Scale: {{ item["params"]["mosaic_scale"] }}x</div>
+                  <div class="col align-self-start">Angle: {{ item["params"]["mosaic_angle"] }}&deg;</div>
                   <div class="col align-self-start">
                     {% if item["params"]["is_j2000"] == True %}
                       <div class="form-check-inline">
@@ -303,11 +304,12 @@
             <!-- Scale/Angle have no direct equivalent in the shared header
                  (Panels/Ov%); self-labeled here so they read clearly
                  regardless of the header above, matching the RA/DEC
-                 column's own self-labeling convention. -->
-            <div class="col align-self-start">
-              <p class="mt-0 mb-0">Scale: {{ item["params"]["mosaic_scale"] }}x</p>
-              <p class="mt-0 mb-0">Angle: {{ item["params"]["mosaic_angle"] }}&deg;</p>
-            </div>
+                 column's own self-labeling convention. Two separate cells,
+                 matching start_mosaic's two cells in this same position
+                 (RA/DEC panels, overlap%), to keep the total column count
+                 aligned with the shared header row. -->
+            <div class="col align-self-start">Scale: {{ item["params"]["mosaic_scale"] }}x</div>
+            <div class="col align-self-start">Angle: {{ item["params"]["mosaic_angle"] }}&deg;</div>
             <div class="col align-self-start">
               {% if item["params"]["is_j2000"] == True %}
                 <div class="form-check-inline">
