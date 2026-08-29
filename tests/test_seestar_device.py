@@ -1850,7 +1850,7 @@ def test_start_framed_mosaic_item_paths(monkeypatch, seestar):
 
     # invalid scale
     seestar.schedule["state"] = "working"
-    bad_scale = dict(base_params, mosaic_scale=3.5)
+    bad_scale = dict(base_params, mosaic_scale=4.5)
     assert seestar.start_framed_mosaic_item(bad_scale) is None
     assert started["count"] == 0
 

@@ -1493,8 +1493,8 @@ def do_create_framed_mosaic(req, resp, schedule, telescope_id):
         flash(resp, "Invalid DEC Value")
         errors["dec"] = dec
 
-    if values["mosaic_scale"] < 1.0 or values["mosaic_scale"] > 3.0:
-        flash(resp, "Mosaic scale must be between 1.0 and 3.0")
+    if values["mosaic_scale"] < 1.0 or values["mosaic_scale"] > 4.0:
+        flash(resp, "Mosaic scale must be between 1.0 and 4.0")
         errors["mosaic_scale"] = mosaicScale
 
     if values["mosaic_angle"] < -90.0 or values["mosaic_angle"] > 90.0:
