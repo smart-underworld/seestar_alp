@@ -224,10 +224,46 @@
                     <p class="mt-0 mb-0">RA: {{ item["params"]["ra"] }}</p>
                     <p class="mt-0 mb-0">DEC: {{ item["params"]["dec"] }}</p>
                   </div>
+                  <!-- Scale/Angle have no direct equivalent in the shared header;
+                       shown here under the Panels/Ov% spacer columns. -->
                   <div class="col align-self-start">{{ item["params"]["mosaic_scale"] }}x</div>
                   <div class="col align-self-start">{{ item["params"]["mosaic_angle"] }}&deg;</div>
+                  <div class="col align-self-start">
+                    {% if item["params"]["is_j2000"] == True %}
+                      <div class="form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="isJ2000_{{ item['id'] }}" checked disabled>
+                      </div>
+                    {% else %}
+                      <div class="form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="isNotJ2000_{{ item['id'] }}" disabled>
+                      </div>
+                    {% endif %}
+                  </div>
                   <div class="col align-self-start">{{ seconds_to_hms(item["params"]["panel_time_sec"]) }}</div>
                   <div class="col align-self-start">{{ item["params"]["gain"] }}</div>
+                  <div class="col align-self-start">
+                    {% if item["params"]["is_use_lp_filter"] == True %}
+                      <div class="form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="isUseLPFilter_{{ item['id'] }}" checked disabled>
+                      </div>
+                    {% else %}
+                      <div class="form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="isNotUseLPFilter_{{ item['id'] }}" disabled>
+                      </div>
+                    {% endif %}
+                  </div>
+                  <div class="col align-self-start">
+                    {% if item["params"]["is_use_autofocus"] == True %}
+                      <div class="form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="isUseAutoFocus_{{ item['id'] }}" checked disabled>
+                      </div>
+                    {% else %}
+                      <div class="form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="isNotUseAutoFocus_{{ item['id'] }}" disabled>
+                      </div>
+                    {% endif %}
+                  </div>
+                  <div class="col-2 align-self-start text-break">-</div>
                 </div>
               </button>
             </div>
@@ -260,10 +296,46 @@
               <p class="mt-0 mb-0">RA: {{ item["params"]["ra"] }}</p>
               <p class="mt-0 mb-0">DEC: {{ item["params"]["dec"] }}</p>
             </div>
+            <!-- Scale/Angle have no direct equivalent in the shared header;
+                 shown here under the Panels/Ov% spacer columns. -->
             <div class="col align-self-start">{{ item["params"]["mosaic_scale"] }}x</div>
             <div class="col align-self-start">{{ item["params"]["mosaic_angle"] }}&deg;</div>
+            <div class="col align-self-start">
+              {% if item["params"]["is_j2000"] == True %}
+                <div class="form-check-inline">
+                  <input class="form-check-input" type="checkbox" id="isJ2000_{{ item['id'] }}" checked disabled>
+                </div>
+              {% else %}
+                <div class="form-check-inline">
+                  <input class="form-check-input" type="checkbox" id="isNotJ2000_{{ item['id'] }}" disabled>
+                </div>
+              {% endif %}
+            </div>
             <div class="col align-self-start">{{ seconds_to_hms(item["params"]["panel_time_sec"]) }}</div>
             <div class="col align-self-start">{{ item["params"]["gain"] }}</div>
+            <div class="col align-self-start">
+              {% if item["params"]["is_use_lp_filter"] == True %}
+                <div class="form-check-inline">
+                  <input class="form-check-input" type="checkbox" id="isUseLPFilter_{{ item['id'] }}" checked disabled>
+                </div>
+              {% else %}
+                <div class="form-check-inline">
+                  <input class="form-check-input" type="checkbox" id="isNotUseLPFilter_{{ item['id'] }}" disabled>
+                </div>
+              {% endif %}
+            </div>
+            <div class="col align-self-start">
+              {% if item["params"]["is_use_autofocus"] == True %}
+                <div class="form-check-inline">
+                  <input class="form-check-input" type="checkbox" id="isUseAutoFocus_{{ item['id'] }}" checked disabled>
+                </div>
+              {% else %}
+                <div class="form-check-inline">
+                  <input class="form-check-input" type="checkbox" id="isNotUseAutoFocus_{{ item['id'] }}" disabled>
+                </div>
+              {% endif %}
+            </div>
+            <div class="col-2 align-self-start text-break">-</div>
           </div>
         {% endif %}
       {% else %}

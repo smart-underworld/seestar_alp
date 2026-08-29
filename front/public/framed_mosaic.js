@@ -38,14 +38,17 @@
     document.getElementById("framed_mosaic_scale_display").textContent = scale.toFixed(1);
     document.getElementById("framed_mosaic_angle_display").textContent = angle;
 
+    // Keep the hidden form inputs (actually submitted to the schedule form)
+    // in sync with the sliders unconditionally, even if the Aladin preview
+    // itself failed to load or hasn't initialized yet.
+    document.getElementById("fm_mosaicScale").value = scale.toFixed(1);
+    document.getElementById("fm_mosaicAngle").value = angle;
+
     if (!aladin) return;
 
     overlay.removeAll();
     const corners = rectangleCorners(currentRaDeg, currentDecDeg, scale, angle);
     overlay.add(A.polygon(corners, { color: "#f59e0b", lineWidth: 2 }));
-
-    document.getElementById("fm_mosaicScale").value = scale.toFixed(1);
-    document.getElementById("fm_mosaicAngle").value = angle;
   };
 
   window.init_framed_mosaic_aladin = function init_framed_mosaic_aladin() {
@@ -89,8 +92,15 @@
           document.getElementById("framed_mosaic_search_text").value;
         if (aladin) {
           const [ra, dec] = aladin.getRaDec();
-          document.getElementById("fm_ra").value = ra;
-          document.getElementById("fm_dec").value = dec;
+          // Aladin Lite returns RA in degrees, but the schedule form (and the
+          // device layer's Util.parse_coordinate for numeric RA) expects RA
+          // in hours. Dec is already in degrees, which is what's expected.
+          document.getElementById("fm_ra").value = (ra / 15).toFixed(6);
+          // dec is already in degrees (no unit conversion needed), but fix
+          // its precision too: raw JS floats very close to 0 stringify in
+          // exponential notation (e.g. "1e-7"), which fails the server's
+          // check_dec_value() regexes and would wrongly reject the target.
+          document.getElementById("fm_dec").value = dec.toFixed(6);
         }
         modal.showModal();
       });
