@@ -287,7 +287,9 @@ Per `AGENTS.md`'s testing expectations:
 
 - Ships as a normal, default-available feature (no `Config.experimental` gate) — the nav
   entry, create page, Planning card, and API action are all live for every user once this
-  lands.
+  lands, with one caveat: the Planning card inherits the Planning page's own pre-existing
+  `Config.experimental` nav gate (unrelated to this feature, not modified by it) — so it's
+  reachable by experimental users via the nav, or by any user via a direct URL.
 - Given the reverse-engineered protocol basis, prioritize the bruno-collection
   verification pass and the emulator/CI regression suite
   (`emulator-smoke.yml`/`emulator-full.yml`) exercising this action against real
