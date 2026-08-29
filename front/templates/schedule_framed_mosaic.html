@@ -1,0 +1,7 @@
+{% extends 'schedule_base.html' %}
+
+{% block schedule_tab_content %}
+    {% with action=root ~ "/schedule/framed_mosaic" %}
+        {% include 'framed_mosaic_create.html' with context %}
+    {% endwith %}
+{% endblock %}

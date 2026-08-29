@@ -207,6 +207,65 @@
                   <div class="col-2 align-self-start text-break">{{ item["params"]["selected_panels"] }}</div>
           </div>
         {% endif %}
+      {% elif item["action"] == 'start_framed_mosaic' %}
+        {% if current_item['schedule_item_id'] == item['schedule_item_id'] %}
+          <div class="accordion-item">
+            <div class="accordion-header" id="heading{{ item['schedule_item_id'] }}">
+              <button
+                class="btn btn-link fw-bold text-white text-decoration-none text-start w-100"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#collapse{{ item['schedule_item_id'] }}"
+                aria-expanded="{% if open_accordion_id == 'collapse' ~ item['schedule_item_id'] %}true{% else %}false{% endif %}"
+                aria-controls="collapse{{ item['schedule_item_id'] }}">
+                <div class="row w-100">
+                  <div class="col-2 align-self-start text-break">{{ item["params"]["target_name"] }}</div>
+                  <div class="col-2 align-self-start">
+                    <p class="mt-0 mb-0">RA: {{ item["params"]["ra"] }}</p>
+                    <p class="mt-0 mb-0">DEC: {{ item["params"]["dec"] }}</p>
+                  </div>
+                  <div class="col align-self-start">{{ item["params"]["mosaic_scale"] }}x</div>
+                  <div class="col align-self-start">{{ item["params"]["mosaic_angle"] }}&deg;</div>
+                  <div class="col align-self-start">{{ seconds_to_hms(item["params"]["panel_time_sec"]) }}</div>
+                  <div class="col align-self-start">{{ item["params"]["gain"] }}</div>
+                </div>
+              </button>
+            </div>
+            <div id="collapse{{ item['schedule_item_id'] }}"
+                 class="accordion-collapse collapse{% if open_accordion_id == 'collapse' ~ item['schedule_item_id'] %} show{% endif %}"
+                 aria-labelledby="heading{{ item['schedule_item_id'] }}" data-bs-parent="#scheduleAccordion">
+              <div class="accordion-body">
+                {% if schedule["is_stacking"] %}
+                  {% if current_item is defined and current_item['item_remaining_time_s'] is defined %}
+                    {% set item_time = current_item['item_total_time_s'] %}
+                    {% set item_remain = current_item['item_remaining_time_s'] %}
+                    {% set item_elapse = item_time - item_remain %}
+                    <p>Time Elapsed: {{ seconds_to_hms(item_elapse) }}</p>
+                    <p>Time Remaining: {{ seconds_to_hms(item_remain) }}</p>
+                  {% endif %}
+                {% endif %}
+                {% if item["params"]['federation_mode'] %}
+                  <p>Federation Mode: {{ item["params"]['federation_mode'] }}</p>
+                  <p>Max Devices: {{ item["params"]['max_devices'] }}</p>
+                {% endif %}
+                <p>Retries: {{ item["params"]['num_tries'] }}</p>
+                <p>Retry Wait: {{ item["params"]['retry_wait_s'] }}s</p>
+              </div>
+            </div>
+          </div>
+        {% else %}
+          <div class="row w-100">
+            <div class="col-2 align-self-start text-break">{{ item["params"]["target_name"] }}</div>
+            <div class="col-2 align-self-start">
+              <p class="mt-0 mb-0">RA: {{ item["params"]["ra"] }}</p>
+              <p class="mt-0 mb-0">DEC: {{ item["params"]["dec"] }}</p>
+            </div>
+            <div class="col align-self-start">{{ item["params"]["mosaic_scale"] }}x</div>
+            <div class="col align-self-start">{{ item["params"]["mosaic_angle"] }}&deg;</div>
+            <div class="col align-self-start">{{ seconds_to_hms(item["params"]["panel_time_sec"]) }}</div>
+            <div class="col align-self-start">{{ item["params"]["gain"] }}</div>
+          </div>
+        {% endif %}
       {% else %}
         <!-- Render non-collapsible actions (no button) -->
         <div class="col align-self-start">

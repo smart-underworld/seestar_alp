@@ -1619,6 +1619,23 @@ def _make_mosaic_form(extra=None):
     return base
 
 
+def _make_framed_mosaic_form(extra=None):
+    base = {
+        "targetName": "Test Target",
+        "ra": "10.5",
+        "dec": "-5.0",
+        "mosaicScale": "1.5",
+        "mosaicAngle": "45",
+        "panelTime": "3600",
+        "gain": "80",
+        "num_tries": "1",
+        "retry_wait_s": "300",
+    }
+    if extra:
+        base.update(extra)
+    return base
+
+
 class _FormReq:
     def __init__(self, data):
         self.media = data
@@ -1707,6 +1724,141 @@ def test_do_create_image_stack_type_included_in_start_mosaic_params(monkeypatch)
     front_app.do_create_image(req, resp, False, 1)
 
     assert captured.get("start_mosaic_params", {}).get("stack_type") == "SolarSystem"
+
+
+def test_do_create_framed_mosaic_builds_expected_params(monkeypatch):
+    captured = {}
+
+    def fake_do_action_device(action, dev_num, params, is_schedule=False):
+        captured["action"] = action
+        captured["params"] = params
+        return {"ErrorNumber": 0, "Value": {}}
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    form = _make_framed_mosaic_form()
+    req = _FormReq(form)
+    resp = DummyResp()
+
+    values, errors = front_app.do_create_framed_mosaic(req, resp, False, 1)
+
+    assert not errors
+    assert captured["action"] == "start_framed_mosaic"
+    assert values["mosaic_scale"] == 1.5
+    assert values["mosaic_angle"] == 45.0
+    assert values["target_name"] == "Test Target"
+    assert values["panel_time_sec"] == 3600
+    assert values["gain"] == 80
+
+
+def test_do_create_framed_mosaic_rejects_scale_out_of_range(monkeypatch):
+    called = {"device": False}
+
+    def fake_do_action_device(action, dev_num, params, is_schedule=False):
+        called["device"] = True
+        return {"ErrorNumber": 0, "Value": {}}
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    form = _make_framed_mosaic_form({"mosaicScale": "3.0"})
+    req = _FormReq(form)
+    resp = DummyResp()
+
+    values, errors = front_app.do_create_framed_mosaic(req, resp, False, 1)
+
+    assert "mosaic_scale" in errors
+    assert called["device"] is False
+
+
+def test_do_create_framed_mosaic_rejects_angle_out_of_range(monkeypatch):
+    called = {"device": False}
+
+    def fake_do_action_device(action, dev_num, params, is_schedule=False):
+        called["device"] = True
+        return {"ErrorNumber": 0, "Value": {}}
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    form = _make_framed_mosaic_form({"mosaicAngle": "120"})
+    req = _FormReq(form)
+    resp = DummyResp()
+
+    values, errors = front_app.do_create_framed_mosaic(req, resp, False, 1)
+
+    assert "mosaic_angle" in errors
+    assert called["device"] is False
+
+
+def test_do_create_framed_mosaic_invalid_ra_does_not_call_device(monkeypatch):
+    called = {"device": False}
+
+    def fake_do_action_device(action, dev_num, params, is_schedule=False):
+        called["device"] = True
+        return {"ErrorNumber": 0, "Value": {}}
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    form = _make_framed_mosaic_form({"ra": "not_valid"})
+    req = _FormReq(form)
+    resp = DummyResp()
+
+    values, errors = front_app.do_create_framed_mosaic(req, resp, False, 1)
+
+    assert "ra" in errors
+    assert called["device"] is False
+
+
+def test_do_create_framed_mosaic_schedule_append(monkeypatch):
+    captured = {}
+
+    def fake_do_action_device(action, dev_num, params, is_schedule=False):
+        captured["action"] = action
+        captured["params"] = params
+        return {"ErrorNumber": 0, "Value": {}}
+
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+
+    form = _make_framed_mosaic_form({"action": "append"})
+    req = _FormReq(form)
+    resp = DummyResp()
+
+    front_app.do_create_framed_mosaic(req, resp, True, 1)
+
+    assert captured["action"] == "add_schedule_item"
+    assert captured["params"]["action"] == "start_framed_mosaic"
+    assert captured["params"]["params"]["mosaic_scale"] == 1.5
+
+
+def test_framed_mosaic_resource_renders_form(monkeypatch):
+    monkeypatch.setattr(
+        front_app,
+        "get_context",
+        lambda telescope_id, req: {
+            "online": True,
+            "client_master": True,
+            "root": "",
+            "defgain": 80,
+            "telescope": {"device_num": telescope_id},
+        },
+    )
+    monkeypatch.setattr(
+        front_app,
+        "do_action_device",
+        lambda action, dev_num, params, is_schedule=False: {
+            "Value": {"state": "stopped"}
+        },
+    )
+
+    app = falcon.App()
+    app.add_route("/{telescope_id:int}/framed_mosaic", front_app.FramedMosaicResource())
+    client = testing.TestClient(app)
+
+    resp = client.simulate_get("/1/framed_mosaic")
+
+    assert resp.status_code == 200
+    assert "Framed Mosaic" in resp.text
+    assert 'id="mosaicScale"' in resp.text
+    assert 'id="mosaicAngle"' in resp.text
 
 
 def test_do_create_image_invalid_ra_does_not_propagate_stack_type_to_device(
@@ -2005,3 +2157,34 @@ def test_goto_target_template_has_htmx_force_stop_button():
     assert 'id="forceStopGotoStatus"' in html
     # The button must not fall back to hand-rolled fetch() wiring.
     assert "fetch(" not in html
+
+
+def test_schedule_list_renders_framed_mosaic_item():
+    template = front_app.env.get_template("partials/schedule_list.html")
+    html = template.render(
+        schedule={
+            "list": [
+                {
+                    "schedule_item_id": "fm1",
+                    "action": "start_framed_mosaic",
+                    "params": {
+                        "target_name": "M31",
+                        "ra": 0.7,
+                        "dec": 41.27,
+                        "mosaic_scale": 1.5,
+                        "mosaic_angle": 45.0,
+                        "panel_time_sec": 3600,
+                        "gain": 80,
+                        "num_tries": 1,
+                        "retry_wait_s": 300,
+                    },
+                }
+            ],
+            "is_stacking": False,
+        },
+        current_item={},
+    )
+
+    assert "M31" in html
+    assert "1.5x" in html
+    assert "45.0&deg;" in html
