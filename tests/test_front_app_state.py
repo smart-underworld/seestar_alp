@@ -983,6 +983,40 @@ def test_eventstatus_endpoint_handles_empty_event_result(monkeypatch):
     assert "No results available." in resp.text
 
 
+def test_eventstatus_framed_mosaic_uses_same_eventlist_as_mosaic(monkeypatch):
+    monkeypatch.setattr(
+        front_app,
+        "get_context",
+        lambda _tid, _req: _minimal_context("eventstatus", online=True),
+    )
+    monkeypatch.setattr(
+        front_app,
+        "do_action_device",
+        lambda *_args, **_kwargs: {"Value": {"result": {"x": {"state": "idle"}}}},
+    )
+
+    def render(action):
+        front_app.EventStatus._last_render_by_key.clear()
+        req = DummyHTMXReq(
+            relative_uri="/1/eventstatus",
+            params={"action": action},
+            headers={
+                "User-Agent": "pytest-agent",
+                "HX-Current-URL": f"http://localhost/1/{action}",
+            },
+        )
+        resp = DummyResp()
+        front_app.EventStatus.on_get(req, resp, telescope_id=1)
+        return resp.text
+
+    mosaic_html = render("mosaic")
+    framed_mosaic_html = render("framed_mosaic")
+
+    for expected in ("DarkLibrary", "Stack"):
+        assert expected in mosaic_html
+        assert expected in framed_mosaic_html
+
+
 @pytest.mark.parametrize(
     "stack_from_get_setting,stack_from_get_stack_setting,expected_discrete",
     [

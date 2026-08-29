@@ -3347,7 +3347,7 @@ class EventStatus:
             ]
         elif action == "goto":
             eventlist = ["WheelMove", "AutoGoto", "PlateSolve"]
-        elif action == "image" or action == "mosaic":
+        elif action in ("image", "mosaic", "framed_mosaic"):
             eventlist = [
                 "WheelMove",
                 "AutoGoto",
