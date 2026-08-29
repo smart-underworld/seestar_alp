@@ -456,7 +456,7 @@ class Seestar_Federation:
                         cur_params["panel_time_sec"] / num_devices
                     )
                 elif cur_params["federation_mode"] == "by_panels":
-                    self.logger.warning(
+                    self.logger.warn(
                         "federation_mode 'by_panels' is not supported for "
                         "start_framed_mosaic; falling back to 'duplicate'."
                     )

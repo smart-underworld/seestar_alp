@@ -554,7 +554,8 @@ def test_start_scheduler_framed_mosaic_by_time_splits_duration(monkeypatch):
 
 def test_start_scheduler_framed_mosaic_by_panels_falls_back_to_duplicate(monkeypatch):
     dev1 = FakeDevice(connected=True)
-    federation = Seestar_Federation(DummyLogger(), {1: dev1})
+    dev2 = FakeDevice(connected=True)
+    federation = Seestar_Federation(DummyLogger(), {1: dev1, 2: dev2})
 
     federation.schedule["list"] = collections.deque(
         [
@@ -575,9 +576,12 @@ def test_start_scheduler_framed_mosaic_by_panels_falls_back_to_duplicate(monkeyp
     monkeypatch.setattr("device.seestar_federation.random.shuffle", lambda x: None)
     federation.start_scheduler({})
 
-    added = [c[1] for c in dev1.called if c[0] == "add_schedule_item"]
-    assert added[0]["params"]["federation_mode"] == "duplicate"
-    assert added[0]["params"]["panel_time_sec"] == 30
+    added1 = [c[1] for c in dev1.called if c[0] == "add_schedule_item"]
+    added2 = [c[1] for c in dev2.called if c[0] == "add_schedule_item"]
+    assert added1[0]["params"]["federation_mode"] == "duplicate"
+    assert added1[0]["params"]["panel_time_sec"] == 30
+    assert added2[0]["params"]["federation_mode"] == "duplicate"
+    assert added2[0]["params"]["panel_time_sec"] == 30
 
 
 def test_start_scheduler_and_start_framed_mosaic_shortcut(monkeypatch):
