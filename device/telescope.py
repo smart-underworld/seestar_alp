@@ -218,6 +218,9 @@ class action:
             elif action_name == "start_mosaic":
                 result = cur_dev.start_mosaic(params)
                 resp.text = MethodResponse(req, value=result).json
+            elif action_name == "start_framed_mosaic":
+                result = cur_dev.start_framed_mosaic(params)
+                resp.text = MethodResponse(req, value=result).json
             elif action_name == "goto_target":
                 result = cur_dev.goto_target(params)
                 resp.text = MethodResponse(req, value=result).json
