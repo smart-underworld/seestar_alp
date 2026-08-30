@@ -91,7 +91,7 @@ def test_transform_message_for_verify_list_params(seestar):
         out = seestar.transform_message_for_verify(
             {"method": "scope_goto", "params": [12.3, 45.6]}
         )
-        assert out["params"] == [[12.3, 45.6], "verify"]
+        assert out["params"] == [12.3, 45.6, "verify"]
 
         wheel = seestar.transform_message_for_verify(
             {"method": "set_wheel_position", "params": [1]}
@@ -118,9 +118,30 @@ def test_transform_message_for_verify_keeps_existing_verify_list(seestar):
     try:
         Config.verify_injection = True
         out = seestar.transform_message_for_verify(
-            {"method": "scope_goto", "params": [[1.0, 2.0], "verify"]}
+            {"method": "scope_goto", "params": [12.3, 45.6, "verify"]}
         )
-        assert out["params"] == [[1.0, 2.0], "verify"]
+        assert out["params"] == [12.3, 45.6, "verify"]
+    finally:
+        Config.verify_injection = old_setting
+
+
+def test_transform_message_for_verify_does_not_double_nest_list_params(seestar):
+    """Regression test for issues #748/#758: on firmware >= 2706, verify
+    injection was wrapping an already-list-shaped params value in ANOTHER
+    list ([[value...], "verify"]) instead of appending "verify" flatly.
+    Firmware rejects the double-nested shape as 'expected object/float
+    param' (code 107/108). set_wheel_position had a narrow fix for this;
+    this proves the fix now applies to any list-param method, e.g.
+    set_control_value's ["gain", value].
+    """
+    seestar.firmware_ver_int = 2846
+    old_setting = Config.verify_injection
+    try:
+        Config.verify_injection = True
+        out = seestar.transform_message_for_verify(
+            {"method": "set_control_value", "params": ["gain", 80]}
+        )
+        assert out["params"] == ["gain", 80, "verify"]
     finally:
         Config.verify_injection = old_setting
 

@@ -796,13 +796,14 @@ class Seestar:
                     data["params"] = existing_params
                     return data
 
-                if isinstance(existing_params, list) and existing_params:
-                    if existing_params[-1] == "verify":
+                if isinstance(existing_params, list):
+                    # Positional params (e.g. scope_goto's [ra, dec] before task 2,
+                    # set_control_value's ["gain", value]) must stay a flat list with
+                    # "verify" appended. Wrapping them in another list (e.g.
+                    # [[ra, dec], "verify"]) makes firmware >= 2706 reject the whole
+                    # payload as "expected float/object param" (code 107/108).
+                    if existing_params and existing_params[-1] == "verify":
                         return data
-
-                if data.get("method") == "set_wheel_position" and isinstance(
-                    existing_params, list
-                ):
                     data["params"] = existing_params + ["verify"]
                 else:
                     data["params"] = [existing_params, "verify"]
