@@ -1249,46 +1249,76 @@ def test_42_auto_af_round_trip_via_simulator(front_sim_bridge):
     assert setting.get("auto_af") is True
 
 
-def test_43_scope_goto_and_pi_set_time_require_object_params(simulator_server):
-    """Regression test for issues #748/#758: the simulator must enforce the
-    same param-shape contract real firmware does, so a future regression
-    back to positional/list params is caught by CI instead of shipping to
-    users' hardware."""
+def test_43_scope_goto_and_pi_set_time_reject_double_nested_params(simulator_server):
+    """Regression test for issues #748/#758. Decompiled firmware confirms
+    scope_goto/scope_sync's Params::Params and pi_set_time's json_array2obj
+    accept EITHER a keyed object OR a plain positional list/single-element
+    list-wrap -- what real firmware actually rejects is the DOUBLE nesting
+    that transform_message_for_verify used to produce when injecting the
+    auth "verify" flag into list params: [[ra, dec], "verify"] instead of
+    [ra, dec, "verify"], and [[date_json], "verify"] instead of
+    [date_json, "verify"]. The simulator mirrors that real contract so a
+    regression back to the double-nesting bug is caught by CI."""
     host = simulator_server["host"]
     port = simulator_server["tcp_port"]
 
-    good_goto = _send_tcp_command(
+    # Both real shapes succeed for scope_goto: keyed object (what ALP sends
+    # today) and a plain positional list (what older/no-verify-injection
+    # callers, e.g. the CLI, still send).
+    good_goto_obj = _send_tcp_command(
         host, port, {"id": 200, "method": "scope_goto", "params": {"ra": 1.0, "dec": 2.0}}
     )
-    assert "error" not in good_goto
+    assert "error" not in good_goto_obj
 
-    bad_goto = _send_tcp_command(
+    good_goto_list = _send_tcp_command(
         host, port, {"id": 201, "method": "scope_goto", "params": [1.0, 2.0]}
+    )
+    assert "error" not in good_goto_list
+
+    good_goto_list_with_verify = _send_tcp_command(
+        host, port, {"id": 202, "method": "scope_goto", "params": [1.0, 2.0, "verify"]}
+    )
+    assert "error" not in good_goto_list_with_verify
+
+    # The double-nested shape (the actual pre-fix bug) is rejected.
+    bad_goto = _send_tcp_command(
+        host, port, {"id": 203, "method": "scope_goto", "params": [[1.0, 2.0], "verify"]}
     )
     assert bad_goto.get("code") == 108
     assert "error" in bad_goto
 
-    good_sync = _send_tcp_command(
-        host, port, {"id": 202, "method": "scope_sync", "params": {"ra": 1.0, "dec": 2.0}}
+    good_sync_obj = _send_tcp_command(
+        host, port, {"id": 204, "method": "scope_sync", "params": {"ra": 1.0, "dec": 2.0}}
     )
-    assert "error" not in good_sync
+    assert "error" not in good_sync_obj
 
     bad_sync = _send_tcp_command(
-        host, port, {"id": 203, "method": "scope_sync", "params": [1.0, 2.0]}
+        host, port, {"id": 205, "method": "scope_sync", "params": [[1.0, 2.0], "verify"]}
     )
     assert bad_sync.get("code") == 108
 
-    good_time = _send_tcp_command(
+    good_time_obj = _send_tcp_command(
         host,
         port,
-        {"id": 204, "method": "pi_set_time", "params": {"year": 2026, "mon": 1}},
+        {"id": 206, "method": "pi_set_time", "params": {"year": 2026, "mon": 1}},
     )
-    assert "error" not in good_time
+    assert "error" not in good_time_obj
+
+    good_time_list = _send_tcp_command(
+        host,
+        port,
+        {"id": 207, "method": "pi_set_time", "params": [{"year": 2026, "mon": 1}]},
+    )
+    assert "error" not in good_time_list
 
     bad_time = _send_tcp_command(
         host,
         port,
-        {"id": 205, "method": "pi_set_time", "params": [{"year": 2026, "mon": 1}]},
+        {
+            "id": 208,
+            "method": "pi_set_time",
+            "params": [[{"year": 2026, "mon": 1}], "verify"],
+        },
     )
     assert bad_time.get("code") == 107
     assert "error" in bad_time

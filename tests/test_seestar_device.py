@@ -171,11 +171,12 @@ def test_wire_payload_for_scope_goto_and_pi_set_time_on_firmware_2846(
     full real pipeline (send_message_param -> transform_message_for_verify
     -> send_message) and captures the exact JSON that would be written to
     the socket, for a firmware version where verify injection is active but
-    dict-param verify-injection is skipped (>= 2706). This is the exact
-    combination that silently broke pi_set_time and scope_goto for both
-    reporters -- unlike a test that hand-builds the already-fixed dict
-    payload, this one would fail against the pre-fix code (list params for
-    both methods, and the verify-wrapper's list double-nesting).
+    dict-param verify-injection is skipped (>= 2706). The actual root cause
+    of both reports was transform_message_for_verify double-nesting list
+    params; decompiled firmware confirms scope_goto/pi_set_time would also
+    have accepted a correctly flat-appended list. This test verifies the
+    dict shape this branch adopted defensively still produces clean wire
+    bytes with no leaked "verify" key.
     """
     seestar.firmware_ver_int = 2846
     old_setting = Config.verify_injection
@@ -1208,12 +1209,17 @@ def test_start_up_thread_fn_success_and_old_firmware(monkeypatch, seestar):
 def test_start_up_thread_fn_sends_pi_set_time_as_object_and_logs_failure(
     monkeypatch, seestar
 ):
-    """Regression test for issues #748/#758: pi_set_time was wrapped in a
-    list ([date_json]), which firmware 7.75+/8.46+ rejects with 'expected
-    object param' (code 107). The failure was also silently swallowed
-    (logged at info level with no error check), which is how a user could
-    lose a night of imaging to a stale scope clock without any warning in
-    the logs.
+    """Regression test for issues #748/#758. Decompiled firmware confirms
+    pi_set_time's json_array2obj unwraps a single-element list fine, so
+    [date_json] alone was never the problem -- the real bug was
+    transform_message_for_verify double-nesting it into [[date_json],
+    "verify"] (fixed separately), which json_array2obj cannot unwrap to an
+    object. Sending a bare object here is a defensive choice that also
+    matches what real-hardware testers confirmed works. Separately, the
+    failure was silently swallowed (logged at info level with no error
+    check), which is how a user could lose a night of imaging to a stale
+    scope clock without any warning in the logs -- that part of this fix
+    stands regardless of the shape question.
     """
     monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
     monkeypatch.setattr(
@@ -1418,9 +1424,13 @@ def test_slew_sync_stop_and_sound_paths(monkeypatch, seestar):
 
 
 def test_slew_to_ra_dec_and_sync_target_send_object_params(monkeypatch, seestar):
-    """Regression test for issue #758: firmware 8.46 rejected scope_goto/
-    scope_sync when params were sent as a positional [ra, dec] list
-    ('expected float param', code 108). Real firmware wants a keyed object.
+    """Regression test for issue #758. Decompiled firmware confirms scope_goto/
+    scope_sync actually accept EITHER a keyed object OR a positional [ra, dec]
+    list -- the real bug was transform_message_for_verify double-nesting list
+    params into [[ra, dec], "verify"] (fixed separately). Sending a keyed
+    object here is a defensive choice that also matches what real-hardware
+    testers on firmware 7.75/8.46 confirmed works, and it sidesteps the
+    verify-injection wrapper on firmware >= 2706 entirely.
     """
     sent = []
     monkeypatch.setattr(

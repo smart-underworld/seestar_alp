@@ -38,8 +38,8 @@ class SeestarSimulator:
         self.state = {
             "device": {
                 "name": "ASI AIR imager",
-                "firmware_ver_int": 2470,
-                "firmware_ver_string": "4.70",
+                "firmware_ver_int": 2846,
+                "firmware_ver_string": "8.46",
                 "is_verified": True,
                 "sn": "simulated123",
                 "cpuId": "simcpu123",
@@ -195,6 +195,26 @@ class SeestarSimulator:
         """
         self.socket = sock
         self.logger.debug(f"Socket set in SeestarSimulator: {sock}")
+
+    @staticmethod
+    def _extract_ra_dec(params):
+        """Mirror real firmware's Params::Params: accept a keyed {"ra","dec"}
+        object OR a positional [ra, dec, ...] list (extra trailing elements,
+        e.g. a "verify" flag, are ignored) -- reject anything else, including
+        a doubly-nested list like [[ra, dec], "verify"]."""
+
+        def _is_num(v):
+            return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+        if isinstance(params, dict):
+            ra, dec = params.get("ra"), params.get("dec")
+        elif isinstance(params, list) and len(params) >= 2:
+            ra, dec = params[0], params[1]
+        else:
+            return None
+        if _is_num(ra) and _is_num(dec):
+            return (ra, dec)
+        return None
 
     # Simulate the main API methods
     def send_message_param_sync(self, data):
@@ -407,12 +427,7 @@ class SeestarSimulator:
                 "id": cur_cmdid,
             }
         elif method == "scope_goto":
-            params = data.get("params")
-            if (
-                not isinstance(params, dict)
-                or not isinstance(params.get("ra"), (int, float))
-                or not isinstance(params.get("dec"), (int, float))
-            ):
+            if self._extract_ra_dec(data.get("params")) is None:
                 return {
                     "jsonrpc": "2.0",
                     "Timestamp": timestamp,
@@ -430,12 +445,7 @@ class SeestarSimulator:
                 "id": cur_cmdid,
             }
         elif method == "scope_sync":
-            params = data.get("params")
-            if (
-                not isinstance(params, dict)
-                or not isinstance(params.get("ra"), (int, float))
-                or not isinstance(params.get("dec"), (int, float))
-            ):
+            if self._extract_ra_dec(data.get("params")) is None:
                 return {
                     "jsonrpc": "2.0",
                     "Timestamp": timestamp,
@@ -537,6 +547,10 @@ class SeestarSimulator:
             }
         elif method == "pi_set_time":
             params = data.get("params")
+            if isinstance(params, list) and params:
+                # Real firmware's json_array2obj unwraps a single-element
+                # array to its first element before requiring an object.
+                params = params[0]
             if not isinstance(params, dict):
                 return {
                     "jsonrpc": "2.0",
