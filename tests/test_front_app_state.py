@@ -1694,40 +1694,34 @@ def test_settings_post_wide_focal_pos_bad_value_coerced_to_zero(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Autofocus temp/time/meridian-flip/filter-wheel triggers (firmware 2846+)
+# Autofocus-enabled toggle (auto_af) -- present since firmware 2732 (v3.1.2);
+# firmware 2846 (v3.3.0) additionally gates the new sensor-temp-drift
+# auto-refocus check on it (confirmed against the real decompiled firmware
+# and the live QEMU emulator, not just the key's presence).
 # ---------------------------------------------------------------------------
 
 
-def _af_trigger_get_setting_response():
-    return {
-        "stack_dither": {"pix": 10, "interval": 2, "enable": True},
-        "exp_ms": {"stack_l": 10000, "continuous": 500},
-        "auto_3ppa_calib": True,
-        "frame_calib": True,
-        "focal_pos": 1500,
-        "heater_enable": False,
-        "auto_power_off": False,
-        "stack_lenhance": False,
-        "dark_mode": False,
-        "stack_cont_capt": False,
-        "stack": {"drizzle2x": False},
-        "af_temp_change_on": True,
-        "af_temp_span": 2.0,
-        "af_time_change_on": False,
-        "af_time_span_hour": 1.0,
-        "af_merid_flip": True,
-        "af_wheel_change": True,
-    }
-
-
-def test_get_device_settings_af_triggers_shown_on_fw_2846(monkeypatch):
+def test_get_device_settings_shows_auto_af(monkeypatch):
     monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
-    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2846)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
     monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
 
     def fake_method_sync(method, telescope_id=1, **kwargs):
         if method == "get_setting":
-            return _af_trigger_get_setting_response()
+            return {
+                "stack_dither": {"pix": 10, "interval": 2, "enable": True},
+                "exp_ms": {"stack_l": 10000, "continuous": 500},
+                "auto_3ppa_calib": True,
+                "frame_calib": True,
+                "focal_pos": 1500,
+                "heater_enable": False,
+                "auto_power_off": False,
+                "stack_lenhance": False,
+                "dark_mode": False,
+                "stack_cont_capt": False,
+                "stack": {"drizzle2x": False},
+                "auto_af": True,
+            }
         if method == "get_stack_setting":
             return {}
         raise AssertionError(f"Unexpected: {method}")
@@ -1736,23 +1730,31 @@ def test_get_device_settings_af_triggers_shown_on_fw_2846(monkeypatch):
 
     settings = front_app.get_device_settings(1)
 
-    assert settings["af_temp_change_on"] is True
-    assert settings["af_temp_span"] == 2.0
-    assert settings["af_time_change_on"] is False
-    assert settings["af_time_span_hour"] == 1.0
-    assert settings["af_merid_flip"] is True
-    assert settings["af_wheel_change"] is True
+    assert settings["auto_af"] is True
 
 
-def test_get_device_settings_af_triggers_absent_below_fw_2846(monkeypatch):
-    """Keys were inert before firmware 2846 (v3.3.0); don't offer them."""
+def test_get_device_settings_omits_auto_af_when_absent(monkeypatch):
+    """Firmware may not return auto_af; don't show it as None."""
     monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
-    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2775)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
     monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
 
     def fake_method_sync(method, telescope_id=1, **kwargs):
         if method == "get_setting":
-            return _af_trigger_get_setting_response()
+            return {
+                "stack_dither": {"pix": 10, "interval": 2, "enable": True},
+                "exp_ms": {"stack_l": 10000, "continuous": 500},
+                "auto_3ppa_calib": True,
+                "frame_calib": True,
+                "focal_pos": 1500,
+                "heater_enable": False,
+                "auto_power_off": False,
+                "stack_lenhance": False,
+                "dark_mode": False,
+                "stack_cont_capt": False,
+                "stack": {"drizzle2x": False},
+                # auto_af intentionally absent
+            }
         if method == "get_stack_setting":
             return {}
         raise AssertionError(f"Unexpected: {method}")
@@ -1761,55 +1763,15 @@ def test_get_device_settings_af_triggers_absent_below_fw_2846(monkeypatch):
 
     settings = front_app.get_device_settings(1)
 
-    for key in (
-        "af_temp_change_on",
-        "af_temp_span",
-        "af_time_change_on",
-        "af_time_span_hour",
-        "af_merid_flip",
-        "af_wheel_change",
-    ):
-        assert key not in settings
+    assert "auto_af" not in settings
 
 
-def test_get_device_settings_af_triggers_omits_none_fields(monkeypatch):
-    """Fields the firmware doesn't return should be absent, not present as None."""
-    monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
-    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2846)
-    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
-
-    def fake_method_sync(method, telescope_id=1, **kwargs):
-        if method == "get_setting":
-            resp = _af_trigger_get_setting_response()
-            del resp["af_wheel_change"]
-            resp["af_merid_flip"] = None
-            return resp
-        if method == "get_stack_setting":
-            return {}
-        raise AssertionError(f"Unexpected: {method}")
-
-    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
-
-    settings = front_app.get_device_settings(1)
-
-    assert settings["af_temp_change_on"] is True
-    assert "af_wheel_change" not in settings
-    assert "af_merid_flip" not in settings
-
-
-def test_settings_post_af_triggers_sent_on_fw_2846(monkeypatch):
+def test_settings_post_auto_af_sent(monkeypatch):
     output, calls = _run_settings_post(
         monkeypatch,
         model="Seestar S50",
         fw=2846,
-        form_extra={
-            "af_temp_change_on": "true",
-            "af_temp_span": "2.5",
-            "af_time_change_on": "false",
-            "af_time_span_hour": "1.0",
-            "af_merid_flip": "true",
-            "af_wheel_change": "false",
-        },
+        form_extra={"auto_af": "true"},
     )
 
     assert output == "Successfully Updated Settings."
@@ -1823,42 +1785,11 @@ def test_settings_post_af_triggers_sent_on_fw_2846(monkeypatch):
             if isinstance(p, dict):
                 merged.update(p)
 
-    assert merged.get("af_temp_change_on") is True
-    assert merged.get("af_temp_span") == 2.5
-    assert merged.get("af_time_change_on") is False
-    assert merged.get("af_time_span_hour") == 1.0
-    assert merged.get("af_merid_flip") is True
-    assert merged.get("af_wheel_change") is False
+    assert merged.get("auto_af") is True
 
 
-def test_settings_post_af_triggers_not_sent_on_older_fw(monkeypatch):
-    output, calls = _run_settings_post(
-        monkeypatch,
-        model="Seestar S50",
-        fw=2775,
-        form_extra={
-            "af_temp_change_on": "true",
-            "af_temp_span": "2.5",
-        },
-    )
-
-    assert output == "Successfully Updated Settings."
-    merged = {}
-    for action, params in calls:
-        if (
-            action in ("method_sync", "method_async")
-            and params.get("method") == "set_setting"
-        ):
-            p = params.get("params", {})
-            if isinstance(p, dict):
-                merged.update(p)
-
-    assert "af_temp_change_on" not in merged
-    assert "af_temp_span" not in merged
-
-
-def test_settings_post_af_triggers_absent_fields_not_sent(monkeypatch):
-    """Form without AF trigger fields should not error and should not send them."""
+def test_settings_post_auto_af_absent_not_sent(monkeypatch):
+    """Form without auto_af should not error and should not send it."""
     output, calls = _run_settings_post(
         monkeypatch,
         model="Seestar S50",
@@ -1877,44 +1808,7 @@ def test_settings_post_af_triggers_absent_fields_not_sent(monkeypatch):
             if isinstance(p, dict):
                 merged.update(p)
 
-    assert "af_temp_change_on" not in merged
-    assert "af_temp_span" not in merged
-
-
-def test_settings_template_groups_af_fields_under_mount_and_focus(monkeypatch):
-    """af_* trigger settings should land in Mount and Focus, not General/Environment."""
-    context = _minimal_context("settings")
-    context["settings"] = {
-        "af_temp_change_on": True,
-        "af_temp_span": 2.0,
-        "af_merid_flip": False,
-    }
-    context["settings_friendly_names"] = {
-        "af_temp_change_on": "AF on Sensor Temp Change",
-        "af_temp_span": "AF Temp Change Threshold (°C)",
-        "af_merid_flip": "AF After Meridian Flip",
-    }
-    context["settings_helper_text"] = {
-        "af_temp_change_on": "",
-        "af_temp_span": "",
-        "af_merid_flip": "",
-    }
-    context["output"] = None
-    context["action"] = "/1/settings"
-    context["firmware_ver_int"] = 2846
-    context["version"] = "test"
-
-    template = front_app.fetch_template("settings.html")
-    html = template.render(**context)
-
-    mount_pos = html.find("Mount and Focus")
-    general_pos = html.find("General")
-    af_pos = html.find("af_temp_change_on")
-
-    assert mount_pos != -1
-    assert af_pos > mount_pos
-    if general_pos != -1:
-        assert af_pos < general_pos or general_pos < mount_pos
+    assert "auto_af" not in merged
 
 
 # ---------------------------------------------------------------------------

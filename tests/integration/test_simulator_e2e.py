@@ -1217,59 +1217,24 @@ def test_37_force_stop_goto_front_endpoint(two_device_federation):
     assert dev1.is_goto() is False
 
 
-def test_41_af_triggers_shown_for_firmware_2846(monkeypatch, front_sim_bridge):
-    """GET /settings on firmware >= 2846 (v3.3.0) renders the AF trigger fields."""
-    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2846)
-
-    # Seed the simulator with AF trigger values, as a real device already
-    # configured with these settings would report them via get_setting.
+def test_41_auto_af_shown_in_settings(monkeypatch, front_sim_bridge):
+    """GET /settings renders the Autofocus Enabled field once the simulator
+    reports auto_af (a real key, confirmed present/settable since firmware
+    2732 (v3.1.2) against the live QEMU emulator running real firmware)."""
     _send_tcp_command(
         front_sim_bridge["host"],
         front_sim_bridge["tcp_port"],
-        {
-            "id": 3601,
-            "method": "set_setting",
-            "params": {
-                "af_temp_change_on": True,
-                "af_temp_span": 2.0,
-                "af_merid_flip": True,
-                "af_wheel_change": True,
-            },
-        },
+        {"id": 3601, "method": "set_setting", "params": {"auto_af": True}},
     )
 
     resp = front_sim_bridge["client"].simulate_get("/1/settings")
     assert resp.status_code == 200
-    assert "AF on Sensor Temp Change" in resp.text
-    assert "AF Temp Change Threshold" in resp.text
-    assert "AF After Meridian Flip" in resp.text
-    assert "AF After Filter Wheel Change" in resp.text
+    assert "Autofocus Enabled" in resp.text
 
 
-def test_42_af_triggers_absent_for_older_firmware(monkeypatch, front_sim_bridge):
-    """GET /settings below firmware 2846 must NOT include the AF trigger fields
-    — the keys existed earlier but were inert until v3.3.0 wired up the behavior."""
-    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2775)
-
-    resp = front_sim_bridge["client"].simulate_get("/1/settings")
-    assert resp.status_code == 200
-    assert "AF on Sensor Temp Change" not in resp.text
-    assert "AF Temp Change Threshold" not in resp.text
-
-
-def test_43_af_triggers_round_trip_via_simulator(monkeypatch, front_sim_bridge):
-    """POST AF trigger settings on firmware 2846 → verify the simulator received them."""
-    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2846)
-
-    payload = {
-        **_settings_payload(),
-        "af_temp_change_on": "true",
-        "af_temp_span": "2.5",
-        "af_time_change_on": "false",
-        "af_time_span_hour": "1.0",
-        "af_merid_flip": "true",
-        "af_wheel_change": "false",
-    }
+def test_42_auto_af_round_trip_via_simulator(front_sim_bridge):
+    """POST auto_af → verify the simulator received it via get_setting."""
+    payload = {**_settings_payload(), "auto_af": "true"}
 
     post_resp = front_sim_bridge["client"].simulate_post("/1/settings", json=payload)
     assert post_resp.status_code == 200
@@ -1281,8 +1246,4 @@ def test_43_af_triggers_round_trip_via_simulator(monkeypatch, front_sim_bridge):
         {"id": 3600, "method": "get_setting"},
     )
     setting = state.get("result", {})
-    assert setting.get("af_temp_change_on") is True
-    assert setting.get("af_temp_span") == 2.5
-    assert setting.get("af_time_change_on") is False
-    assert setting.get("af_merid_flip") is True
-    assert setting.get("af_wheel_change") is False
+    assert setting.get("auto_af") is True
