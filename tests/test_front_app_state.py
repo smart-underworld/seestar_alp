@@ -1898,6 +1898,125 @@ def test_settings_post_auto_af_absent_not_sent(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# On-device ASCOM Alpaca server toggle (alpaca_enable) -- new in firmware
+# v3.3.1 (build 9.16). This is ZWO's own Alpaca REST server running on the
+# device itself, separate from seestar_alp's Alpaca API layer. Feature-detect
+# by payload presence, like auto_af above, since we don't have a confirmed
+# firmware_ver_int threshold for this firmware family's release.
+# ---------------------------------------------------------------------------
+
+
+def test_get_device_settings_shows_alpaca_enable(monkeypatch):
+    monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2846)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+
+    def fake_method_sync(method, telescope_id=1, **kwargs):
+        if method == "get_setting":
+            return {
+                "stack_dither": {"pix": 10, "interval": 2, "enable": True},
+                "exp_ms": {"stack_l": 10000, "continuous": 500},
+                "auto_3ppa_calib": True,
+                "frame_calib": True,
+                "focal_pos": 1500,
+                "heater_enable": False,
+                "auto_power_off": False,
+                "stack_lenhance": False,
+                "dark_mode": False,
+                "stack_cont_capt": False,
+                "stack": {"drizzle2x": False},
+                "alpaca_enable": True,
+            }
+        if method == "get_stack_setting":
+            return {}
+        raise AssertionError(f"Unexpected: {method}")
+
+    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
+
+    settings = front_app.get_device_settings(1)
+
+    assert settings["alpaca_enable"] is True
+
+
+def test_get_device_settings_omits_alpaca_enable_when_absent(monkeypatch):
+    """Firmware may not return alpaca_enable; don't show it as None."""
+    monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2846)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+
+    def fake_method_sync(method, telescope_id=1, **kwargs):
+        if method == "get_setting":
+            return {
+                "stack_dither": {"pix": 10, "interval": 2, "enable": True},
+                "exp_ms": {"stack_l": 10000, "continuous": 500},
+                "auto_3ppa_calib": True,
+                "frame_calib": True,
+                "focal_pos": 1500,
+                "heater_enable": False,
+                "auto_power_off": False,
+                "stack_lenhance": False,
+                "dark_mode": False,
+                "stack_cont_capt": False,
+                "stack": {"drizzle2x": False},
+                # alpaca_enable intentionally absent
+            }
+        if method == "get_stack_setting":
+            return {}
+        raise AssertionError(f"Unexpected: {method}")
+
+    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
+
+    settings = front_app.get_device_settings(1)
+
+    assert "alpaca_enable" not in settings
+
+
+def test_settings_post_alpaca_enable_sent(monkeypatch):
+    output, calls = _run_settings_post(
+        monkeypatch,
+        model="Seestar S50",
+        fw=2846,
+        form_extra={"alpaca_enable": "true"},
+    )
+
+    assert output == "Successfully Updated Settings."
+    merged = {}
+    for action, params in calls:
+        if (
+            action in ("method_sync", "method_async")
+            and params.get("method") == "set_setting"
+        ):
+            p = params.get("params", {})
+            if isinstance(p, dict):
+                merged.update(p)
+
+    assert merged.get("alpaca_enable") is True
+
+
+def test_settings_post_alpaca_enable_absent_not_sent(monkeypatch):
+    """Form without alpaca_enable should not error and should not send it."""
+    output, calls = _run_settings_post(
+        monkeypatch,
+        model="Seestar S50",
+        fw=2846,
+        form_extra={},
+    )
+
+    assert output == "Successfully Updated Settings."
+    merged = {}
+    for action, params in calls:
+        if (
+            action in ("method_sync", "method_async")
+            and params.get("method") == "set_setting"
+        ):
+            p = params.get("params", {})
+            if isinstance(p, dict):
+                merged.update(p)
+
+    assert "alpaca_enable" not in merged
+
+
+# ---------------------------------------------------------------------------
 # Stack type – form extraction (do_create_image / do_create_mosaic)
 # ---------------------------------------------------------------------------
 

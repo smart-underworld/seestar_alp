@@ -1159,6 +1159,15 @@ def get_device_settings(telescope_id):
         if auto_af is not None:
             settings["auto_af"] = auto_af
 
+        # On-device ASCOM Alpaca REST server toggle -- new in firmware v3.3.1
+        # (build 9.16). This is ZWO's own Alpaca server running on the device
+        # itself, separate from seestar_alp's own Alpaca API layer. No
+        # confirmed firmware_ver_int threshold for this release, so gate by
+        # payload presence rather than version.
+        alpaca_enable = pydash.get(settings_result, "alpaca_enable")
+        if alpaca_enable is not None:
+            settings["alpaca_enable"] = alpaca_enable
+
         # If either endpoint reports these stack-save fields, expose them.
         for key, value in (
             (
@@ -4070,6 +4079,11 @@ class SettingsResource(BaseResource):
         if "auto_af" in PostedSettings:
             FormattedNewSettings["auto_af"] = str2bool(PostedSettings["auto_af"])
 
+        if "alpaca_enable" in PostedSettings:
+            FormattedNewSettings["alpaca_enable"] = str2bool(
+                PostedSettings["alpaca_enable"]
+            )
+
         FormattedNewStackSettings = {}
         has_stack_settings_input = any(
             key in PostedSettings
@@ -4373,6 +4387,7 @@ class SettingsResource(BaseResource):
             "stack_cont_capt": "Continuous Capture Mode",
             "stack_drizzle2x": "4k Live Stack Mode (2x Drizzle)",
             "auto_af": "Automatic Autofocus",
+            "alpaca_enable": "On-Device Alpaca Server",
         }
         # Maybe we can store this better?
         settings_helper_text = {
@@ -4416,6 +4431,7 @@ class SettingsResource(BaseResource):
             "stack_cont_capt": "Enabling continuous capture mode disables live stacking",
             "stack_drizzle2x": "Enables 2x drizzle on Live Stack for 4k Mode",
             "auto_af": "Lets the scope re-run autofocus on its own during a session, e.g. when sensor temperature drifts.",
+            "alpaca_enable": "Enables ZWO's built-in ASCOM Alpaca REST server on the device itself (port 32323, separate from seestar_alp's own Alpaca API). Warning: this server has no authentication by default -- any client on your local network can control the device once enabled.",
         }
         render_template(
             req,

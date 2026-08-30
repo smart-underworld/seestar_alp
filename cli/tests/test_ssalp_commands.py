@@ -186,6 +186,12 @@ class TestSystemMixinCoverage:
         with pytest.raises(ValueError):
             await client.set_heater(True, 101)
 
+    async def test_set_alpaca_server_on(self, client, httpx_mock):
+        await _check_method(httpx_mock, client.set_alpaca_server(True), "set_setting")
+
+    async def test_set_alpaca_server_off(self, client, httpx_mock):
+        await _check_method(httpx_mock, client.set_alpaca_server(False), "set_setting")
+
 
 # ── MountMixin ────────────────────────────────────────────────────────────
 
