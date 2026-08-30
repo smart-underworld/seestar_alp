@@ -1141,6 +1141,16 @@ def get_device_settings(telescope_id):
                 if val is not None:
                     settings[key] = val
 
+        # Autofocus-enabled toggle. Confirmed present in set_setting/get_setting
+        # since firmware 2732 (v3.1.2); as of firmware 2846 (v3.3.0), enabling it
+        # also gates the new sensor-temp-drift auto-refocus check (decompiled
+        # firmware: NeedViewStarSensorTempAutoFocus reads GetTestSetting()'s
+        # auto_af-backed flag, with a hardcoded 5.0C threshold -- not user
+        # configurable). No version gate needed; the key itself isn't new.
+        auto_af = pydash.get(settings_result, "auto_af")
+        if auto_af is not None:
+            settings["auto_af"] = auto_af
+
         # If either endpoint reports these stack-save fields, expose them.
         for key, value in (
             (
@@ -4049,6 +4059,9 @@ class SettingsResource(BaseResource):
                     PostedSettings["wide_focal_pos"], 0
                 )
 
+        if "auto_af" in PostedSettings:
+            FormattedNewSettings["auto_af"] = str2bool(PostedSettings["auto_af"])
+
         FormattedNewStackSettings = {}
         has_stack_settings_input = any(
             key in PostedSettings
@@ -4287,6 +4300,7 @@ class SettingsResource(BaseResource):
             "wide_4k": 0,
             "wide_denoise": 0,
             "wide_focal_pos": 0,
+            "auto_af": 0,
         }
         settings = {
             key: value
@@ -4334,6 +4348,7 @@ class SettingsResource(BaseResource):
             "dark_mode": "Dark Mode",
             "stack_cont_capt": "Continuous Capture Mode",
             "stack_drizzle2x": "4k Live Stack Mode (2x Drizzle)",
+            "auto_af": "Automatic Autofocus",
         }
         # Maybe we can store this better?
         settings_helper_text = {
@@ -4376,6 +4391,7 @@ class SettingsResource(BaseResource):
             "dark_mode": "Enable or disable LEDs while imaging.",
             "stack_cont_capt": "Enabling continuous capture mode disables live stacking",
             "stack_drizzle2x": "Enables 2x drizzle on Live Stack for 4k Mode",
+            "auto_af": "Lets the scope re-run autofocus on its own during a session, e.g. when sensor temperature drifts.",
         }
         render_template(
             req,

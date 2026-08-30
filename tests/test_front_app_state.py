@@ -1694,6 +1694,124 @@ def test_settings_post_wide_focal_pos_bad_value_coerced_to_zero(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Autofocus-enabled toggle (auto_af) -- present since firmware 2732 (v3.1.2);
+# firmware 2846 (v3.3.0) additionally gates the new sensor-temp-drift
+# auto-refocus check on it (confirmed against the real decompiled firmware
+# and the live QEMU emulator, not just the key's presence).
+# ---------------------------------------------------------------------------
+
+
+def test_get_device_settings_shows_auto_af(monkeypatch):
+    monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+
+    def fake_method_sync(method, telescope_id=1, **kwargs):
+        if method == "get_setting":
+            return {
+                "stack_dither": {"pix": 10, "interval": 2, "enable": True},
+                "exp_ms": {"stack_l": 10000, "continuous": 500},
+                "auto_3ppa_calib": True,
+                "frame_calib": True,
+                "focal_pos": 1500,
+                "heater_enable": False,
+                "auto_power_off": False,
+                "stack_lenhance": False,
+                "dark_mode": False,
+                "stack_cont_capt": False,
+                "stack": {"drizzle2x": False},
+                "auto_af": True,
+            }
+        if method == "get_stack_setting":
+            return {}
+        raise AssertionError(f"Unexpected: {method}")
+
+    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
+
+    settings = front_app.get_device_settings(1)
+
+    assert settings["auto_af"] is True
+
+
+def test_get_device_settings_omits_auto_af_when_absent(monkeypatch):
+    """Firmware may not return auto_af; don't show it as None."""
+    monkeypatch.setattr(front_app, "get_client_master", lambda _tid: True)
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2732)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+
+    def fake_method_sync(method, telescope_id=1, **kwargs):
+        if method == "get_setting":
+            return {
+                "stack_dither": {"pix": 10, "interval": 2, "enable": True},
+                "exp_ms": {"stack_l": 10000, "continuous": 500},
+                "auto_3ppa_calib": True,
+                "frame_calib": True,
+                "focal_pos": 1500,
+                "heater_enable": False,
+                "auto_power_off": False,
+                "stack_lenhance": False,
+                "dark_mode": False,
+                "stack_cont_capt": False,
+                "stack": {"drizzle2x": False},
+                # auto_af intentionally absent
+            }
+        if method == "get_stack_setting":
+            return {}
+        raise AssertionError(f"Unexpected: {method}")
+
+    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
+
+    settings = front_app.get_device_settings(1)
+
+    assert "auto_af" not in settings
+
+
+def test_settings_post_auto_af_sent(monkeypatch):
+    output, calls = _run_settings_post(
+        monkeypatch,
+        model="Seestar S50",
+        fw=2846,
+        form_extra={"auto_af": "true"},
+    )
+
+    assert output == "Successfully Updated Settings."
+    merged = {}
+    for action, params in calls:
+        if (
+            action in ("method_sync", "method_async")
+            and params.get("method") == "set_setting"
+        ):
+            p = params.get("params", {})
+            if isinstance(p, dict):
+                merged.update(p)
+
+    assert merged.get("auto_af") is True
+
+
+def test_settings_post_auto_af_absent_not_sent(monkeypatch):
+    """Form without auto_af should not error and should not send it."""
+    output, calls = _run_settings_post(
+        monkeypatch,
+        model="Seestar S50",
+        fw=2846,
+        form_extra={},
+    )
+
+    assert output == "Successfully Updated Settings."
+    merged = {}
+    for action, params in calls:
+        if (
+            action in ("method_sync", "method_async")
+            and params.get("method") == "set_setting"
+        ):
+            p = params.get("params", {})
+            if isinstance(p, dict):
+                merged.update(p)
+
+    assert "auto_af" not in merged
+
+
+# ---------------------------------------------------------------------------
 # Stack type – form extraction (do_create_image / do_create_mosaic)
 # ---------------------------------------------------------------------------
 

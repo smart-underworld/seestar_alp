@@ -1215,3 +1215,35 @@ def test_37_force_stop_goto_front_endpoint(two_device_federation):
     assert resp.status_code == 200
     assert "Cleared. Mount free." in resp.text
     assert dev1.is_goto() is False
+
+
+def test_41_auto_af_shown_in_settings(monkeypatch, front_sim_bridge):
+    """GET /settings renders the Automatic Autofocus field once the simulator
+    reports auto_af (a real key, confirmed present/settable since firmware
+    2732 (v3.1.2) against the live QEMU emulator running real firmware)."""
+    _send_tcp_command(
+        front_sim_bridge["host"],
+        front_sim_bridge["tcp_port"],
+        {"id": 3601, "method": "set_setting", "params": {"auto_af": True}},
+    )
+
+    resp = front_sim_bridge["client"].simulate_get("/1/settings")
+    assert resp.status_code == 200
+    assert "Automatic Autofocus" in resp.text
+
+
+def test_42_auto_af_round_trip_via_simulator(front_sim_bridge):
+    """POST auto_af → verify the simulator received it via get_setting."""
+    payload = {**_settings_payload(), "auto_af": "true"}
+
+    post_resp = front_sim_bridge["client"].simulate_post("/1/settings", json=payload)
+    assert post_resp.status_code == 200
+    assert "Successfully Updated Settings." in post_resp.text
+
+    state = _send_tcp_command(
+        front_sim_bridge["host"],
+        front_sim_bridge["tcp_port"],
+        {"id": 3600, "method": "get_setting"},
+    )
+    setting = state.get("result", {})
+    assert setting.get("auto_af") is True
