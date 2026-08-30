@@ -1482,7 +1482,7 @@ class Seestar:
                 "sec": now.second,
                 "time_zone": tz_name,
             }
-            date_data: MessageParams = {"method": "pi_set_time", "params": [date_json]}
+            date_data: MessageParams = {"method": "pi_set_time", "params": date_json}
 
             do_AF = params.get("auto_focus", False)
             do_3PPA = params.get("3ppa", False)
@@ -1541,7 +1541,11 @@ class Seestar:
             self.logger.info(msg)
             self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
 
-            self.logger.info(self.send_message_param_sync(date_data))
+            time_result = self.send_message_param_sync(date_data)
+            if "error" in time_result:
+                self.logger.warning(f"Failed to set scope time: {time_result}")
+            else:
+                self.logger.info(f"Set scope time: {time_result}")
             response = self.send_message_param_sync(loc_data)
             if "error" in response:
                 self.logger.error(f"Failed to set location: {response}")

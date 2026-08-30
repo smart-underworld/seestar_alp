@@ -1126,6 +1126,61 @@ def test_start_up_thread_fn_success_and_old_firmware(monkeypatch, seestar):
     assert seestar.schedule["state"] == "stopped"
 
 
+def test_start_up_thread_fn_sends_pi_set_time_as_object_and_logs_failure(
+    monkeypatch, seestar
+):
+    """Regression test for issues #748/#758: pi_set_time was wrapped in a
+    list ([date_json]), which firmware 7.75+/8.46+ rejects with 'expected
+    object param' (code 107). The failure was also silently swallowed
+    (logged at info level with no error check), which is how a user could
+    lose a night of imaging to a stale scope clock without any warning in
+    the logs.
+    """
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone_name", lambda: "UTC"
+    )
+    import datetime as _dt
+
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone", lambda: _dt.timezone.utc
+    )
+    monkeypatch.setattr("device.seestar_device.EarthLocation", lambda **_k: object())
+    monkeypatch.setattr(seestar, "set_setting", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(seestar, "play_sound", lambda _sid: None)
+
+    sent = []
+    warnings = []
+    monkeypatch.setattr(
+        seestar.logger, "warning", lambda *a, **k: warnings.append((a, k))
+    )
+
+    def fake_sync(payload):
+        if payload["method"] == "get_device_state":
+            return {"result": {"device": {"firmware_ver_int": 2846}}}
+        if payload["method"] == "pi_set_time":
+            sent.append(payload)
+            return {"error": "expected object param", "code": 107}
+        return {"result": "ok"}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
+
+    seestar.start_up_thread_fn(
+        {
+            "lat": 1.1,
+            "lon": 2.2,
+            "auto_focus": False,
+            "3ppa": False,
+            "dark_frames": False,
+        }
+    )
+
+    assert sent, "pi_set_time was never sent"
+    assert isinstance(sent[0]["params"], dict)
+    assert "year" in sent[0]["params"] and "time_zone" in sent[0]["params"]
+    assert warnings, "a failed pi_set_time must be logged as a warning, not swallowed"
+
+
 def test_spectra_thread_and_start_item(monkeypatch, seestar):
     monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
 
