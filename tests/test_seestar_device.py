@@ -1283,6 +1283,29 @@ def test_slew_sync_stop_and_sound_paths(monkeypatch, seestar):
     assert seestar.stop_stack()["result"] == "ok"
 
 
+def test_slew_to_ra_dec_and_sync_target_send_object_params(monkeypatch, seestar):
+    """Regression test for issue #758: firmware 8.46 rejected scope_goto/
+    scope_sync when params were sent as a positional [ra, dec] list
+    ('expected float param', code 108). Real firmware wants a keyed object.
+    """
+    sent = []
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda d: sent.append(d) or {"result": "ok"},
+    )
+    monkeypatch.setattr(seestar, "wait_end_op", lambda _e: True)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+
+    seestar._slew_to_ra_dec([12.3, 45.6])
+    assert sent[-1]["method"] == "scope_goto"
+    assert sent[-1]["params"] == {"ra": 12.3, "dec": 45.6}
+
+    seestar._sync_target([1.0, 2.0])
+    assert sent[-1]["method"] == "scope_sync"
+    assert sent[-1]["params"] == {"ra": 1.0, "dec": 2.0}
+
+
 def test_send_message_and_shutdown_thread(monkeypatch, seestar):
     class Sock:
         def __init__(self):

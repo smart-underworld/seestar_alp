@@ -1149,12 +1149,15 @@ class Seestar:
         result = self.send_message_param_sync(data)
         return "error" not in result
 
-    # {"method":"scope_goto","params":[1.2345,75.0]}
+    # {"method":"scope_goto","params":{"ra":1.2345,"dec":75.0}}
     def _slew_to_ra_dec(self, params):
         in_ra = params[0]
         in_dec = params[1]
         self.logger.info(f"slew to {in_ra}, {in_dec}")
-        data: MessageParams = {"method": "scope_goto", "params": [in_ra, in_dec]}
+        data: MessageParams = {
+            "method": "scope_goto",
+            "params": {"ra": in_ra, "dec": in_dec},
+        }
         self.mark_op_state("goto_target", "stopped")
         result = self.send_message_param_sync(data)
         if "error" in result:
@@ -1175,7 +1178,10 @@ class Seestar:
         in_ra = params[0]
         in_dec = params[1]
         self.logger.info("%s: sync to target... %s %s", self.device_name, in_ra, in_dec)
-        data: MessageParams = {"method": "scope_sync", "params": [in_ra, in_dec]}
+        data: MessageParams = {
+            "method": "scope_sync",
+            "params": {"ra": in_ra, "dec": in_dec},
+        }
         result = self.send_message_param_sync(data)
         if "error" in result:
             self.logger.info(f"Failed to sync: {result}")
