@@ -166,38 +166,77 @@ def test_wire_payload_for_scope_goto_and_pi_set_time_on_firmware_2846(
     monkeypatch, seestar
 ):
     """End-to-end regression test for issues #748 (firmware 7.75/2775) and
-    #758 (firmware 8.46/2846): captures the exact JSON that would be
-    written to the socket, after transform_message_for_verify runs, for a
-    firmware version where verify injection is active but dict-param
-    verify-injection is skipped (>= 2706 short-circuits at
-    transform_message_for_verify). This is the exact combination that
-    silently broke pi_set_time and scope_goto for both reporters.
+    #758 (firmware 8.46/2846): drives the REAL production callers
+    (_slew_to_ra_dec, and pi_set_time inside start_up_thread_fn) through the
+    full real pipeline (send_message_param -> transform_message_for_verify
+    -> send_message) and captures the exact JSON that would be written to
+    the socket, for a firmware version where verify injection is active but
+    dict-param verify-injection is skipped (>= 2706). This is the exact
+    combination that silently broke pi_set_time and scope_goto for both
+    reporters -- unlike a test that hand-builds the already-fixed dict
+    payload, this one would fail against the pre-fix code (list params for
+    both methods, and the verify-wrapper's list double-nesting).
     """
     seestar.firmware_ver_int = 2846
     old_setting = Config.verify_injection
     sent = []
-    monkeypatch.setattr(seestar, "send_message", lambda payload: sent.append(payload))
+
+    def fake_send_message(payload):
+        wire = json.loads(payload.rstrip("\r\n"))
+        sent.append(wire)
+        if wire["method"] == "get_device_state":
+            seestar.response_dict[wire["id"]] = {
+                "result": {"device": {"firmware_ver_int": 2846}}
+            }
+        else:
+            seestar.response_dict[wire["id"]] = {"result": "ok"}
+        return True
+
+    monkeypatch.setattr(seestar, "send_message", fake_send_message)
+    monkeypatch.setattr(seestar, "wait_end_op", lambda _e: True)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+
     try:
         Config.verify_injection = True
 
-        seestar.send_message_param(
-            {"method": "scope_goto", "params": {"ra": 22.8737, "dec": 67.479}}
-        )
-        wire = json.loads(sent[-1])
-        assert wire["params"] == {"ra": 22.8737, "dec": 67.479}
+        # Drive the real production caller for scope_goto (fixed in
+        # Task 2) through the real transform_message_for_verify +
+        # send_message pipeline.
+        seestar._slew_to_ra_dec([22.8737, 67.479])
+        scope_goto_wire = next(w for w in sent if w["method"] == "scope_goto")
+        assert scope_goto_wire["params"] == {"ra": 22.8737, "dec": 67.479}
 
-        date_json = {
-            "year": 2026,
-            "mon": 8,
-            "day": 17,
-            "hour": 9,
-            "min": 5,
-            "sec": 37,
-            "time_zone": "Europe/Paris",
-        }
-        seestar.send_message_param({"method": "pi_set_time", "params": date_json})
-        wire = json.loads(sent[-1])
-        assert wire["params"] == date_json
+        # Drive the real production caller for pi_set_time (fixed in
+        # Task 3) through the same real pipeline, via start_up_thread_fn.
+        monkeypatch.setattr(
+            "device.seestar_device.tzlocal.get_localzone_name", lambda: "UTC"
+        )
+        import datetime as _dt
+
+        monkeypatch.setattr(
+            "device.seestar_device.tzlocal.get_localzone",
+            lambda: _dt.timezone.utc,
+        )
+        monkeypatch.setattr(
+            "device.seestar_device.EarthLocation", lambda **_k: object()
+        )
+        monkeypatch.setattr(seestar, "set_setting", lambda *a, **k: {"ok": True})
+        monkeypatch.setattr(seestar, "play_sound", lambda _sid: None)
+
+        seestar.start_up_thread_fn(
+            {
+                "lat": 1.1,
+                "lon": 2.2,
+                "auto_focus": False,
+                "3ppa": False,
+                "dark_frames": False,
+            }
+        )
+        pi_set_time_wire = next(w for w in sent if w["method"] == "pi_set_time")
+        assert isinstance(pi_set_time_wire["params"], dict)
+        assert "year" in pi_set_time_wire["params"]
+        assert "verify" not in pi_set_time_wire["params"]
     finally:
         Config.verify_injection = old_setting
 
