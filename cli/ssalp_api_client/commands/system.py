@@ -39,3 +39,15 @@ class SystemMixin:
         return await self.method_sync(
             "pi_output_set2", {"heater": {"state": state, "value": value}}
         )
+
+    async def set_alpaca_server(self, enable: bool) -> dict:
+        """Enable or disable the on-device ASCOM Alpaca REST server (firmware v3.3.1+).
+
+        This is ZWO's own Alpaca server running on the device itself (port
+        32323), separate from seestar_alp's own Alpaca API layer.
+
+        Warning: it has no authentication by default -- any client on the
+        local network gets full device control once enabled.
+        """
+        logger.info("set_alpaca_server enable=%s", enable)
+        return await self.method_sync("set_setting", {"alpaca_enable": enable})

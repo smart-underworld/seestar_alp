@@ -360,6 +360,55 @@ def _settings_payload():
     }
 
 
+ALPACA_SERVER_PORT = 32323
+
+
+def _can_connect(host, port, timeout=2.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.2)
+            try:
+                s.connect((host, port))
+                return True
+            except OSError:
+                time.sleep(0.05)
+    return False
+
+
+def _cannot_connect(host, port, timeout=2.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.2)
+            try:
+                s.connect((host, port))
+            except OSError:
+                return True
+            time.sleep(0.05)
+    return False
+
+
+def test_alpaca_server_toggle_opens_and_closes_port(front_sim_bridge):
+    """Toggling alpaca_enable should start/stop a real listener on 32323,
+    mirroring the on-device ASCOM Alpaca REST server introduced in firmware
+    v3.3.1 that seestar_alp's settings page now exposes."""
+    payload = _settings_payload()
+    try:
+        payload["alpaca_enable"] = "true"
+        post = front_sim_bridge["client"].simulate_post("/1/settings", json=payload)
+        assert post.status_code == 200
+        assert _can_connect("127.0.0.1", ALPACA_SERVER_PORT)
+
+        payload["alpaca_enable"] = "false"
+        post = front_sim_bridge["client"].simulate_post("/1/settings", json=payload)
+        assert post.status_code == 200
+        assert _cannot_connect("127.0.0.1", ALPACA_SERVER_PORT)
+    finally:
+        payload["alpaca_enable"] = "false"
+        front_sim_bridge["client"].simulate_post("/1/settings", json=payload)
+
+
 def test_01_simulator_tcp_get_device_state(simulator_server):
     resp = _send_tcp_command(
         simulator_server["host"],

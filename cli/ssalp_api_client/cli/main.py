@@ -1075,6 +1075,18 @@ def system_heater(ctx: click.Context, state: bool, value: int) -> None:
     _run(ctx, ctx.obj["client"].set_heater(state=state, value=value))
 
 
+@system.command("alpaca")
+@click.option("--on/--off", "enable", required=True)
+@click.pass_context
+def system_alpaca(ctx: click.Context, enable: bool) -> None:
+    """Enable or disable the on-device ASCOM Alpaca REST server (firmware v3.3.1+).
+
+    Warning: this server has no authentication by default -- any client on
+    the local network gets full device control once enabled.
+    """
+    _run(ctx, ctx.obj["client"].set_alpaca_server(enable=enable))
+
+
 @system.command("play-sound")
 @click.option("--id", "sound_id", required=True, type=int, help="Sound ID.")
 @click.pass_context

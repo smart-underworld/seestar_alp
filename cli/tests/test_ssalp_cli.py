@@ -40,6 +40,7 @@ def _mock_client(return_value=None):
     client.set_heater = AsyncMock(return_value=return_value)
     client.play_sound = AsyncMock(return_value=return_value)
     client.set_brightness = AsyncMock(return_value=return_value)
+    client.set_alpaca_server = AsyncMock(return_value=return_value)
     return client
 
 
@@ -279,3 +280,19 @@ class TestSystemCommands:
             MockClient.return_value = _mock_client()
             result = runner.invoke(cli, ["system", "play-sound"])
         assert result.exit_code != 0
+
+    def test_alpaca_on(self, runner):
+        with patch("ssalp_api_client.cli.main.SSAlpApiClient") as MockClient:
+            client = _mock_client()
+            MockClient.return_value = client
+            result = runner.invoke(cli, ["system", "alpaca", "--on"])
+        assert result.exit_code == 0
+        client.set_alpaca_server.assert_awaited_once_with(enable=True)
+
+    def test_alpaca_off(self, runner):
+        with patch("ssalp_api_client.cli.main.SSAlpApiClient") as MockClient:
+            client = _mock_client()
+            MockClient.return_value = client
+            result = runner.invoke(cli, ["system", "alpaca", "--off"])
+        assert result.exit_code == 0
+        client.set_alpaca_server.assert_awaited_once_with(enable=False)
