@@ -1263,6 +1263,28 @@ def test_check_needs_auth_true_when_method_sync_returns_none(monkeypatch):
     assert front_app.check_needs_auth(99) is True
 
 
+def test_check_needs_auth_true_when_device_layer_times_out_faster_than_http(
+    monkeypatch,
+):
+    # Once seestar_device.py's auth-gap fail-fast cap kicks in, the device
+    # layer resolves its OWN timeout (~1.5s) faster than this request's HTTP
+    # client timeout (Config.timeout, 5s) -- so the HTTP call succeeds and
+    # method_sync unwraps the device's "Error: Exceeded allotted wait time for
+    # result" string instead of the request itself timing out to None. That
+    # string must be treated the same as the None case above, not silently
+    # fall through to "no warning needed".
+    front_app._auth_needs_cache.pop(98, None)
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
+    monkeypatch.setattr(
+        front_app,
+        "method_sync",
+        lambda method, telescope_id=1, **kw: (
+            "Error: Exceeded allotted wait time for result"
+        ),
+    )
+    assert front_app.check_needs_auth(98) is True
+
+
 def test_check_needs_auth_timeout_preserved_false_when_previously_authenticated(
     monkeypatch,
 ):

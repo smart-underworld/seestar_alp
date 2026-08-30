@@ -743,6 +743,127 @@ def test_send_message_param_sync_timeout(monkeypatch, seestar):
     assert "Error: Exceeded allotted wait time for result" in out["result"]
 
 
+def _run_one_sync_timeout(monkeypatch, seestar, cmdid, method="get_device_state"):
+    """Drive send_message_param_sync through exactly one 10s-timeout cycle."""
+    monkeypatch.setattr(seestar, "send_message_param", lambda _d: cmdid)
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    times = iter([0.0, 2.1, 11.2])
+    monkeypatch.setattr("device.seestar_device.time.time", lambda: next(times))
+    return seestar.send_message_param_sync({"method": method})
+
+
+def test_no_reply_timeout_logs_auth_gap_guidance_without_pem(monkeypatch, seestar):
+    # Firmware that requires auth but is unauthenticated ignores every sync
+    # command while still streaming events -- issue #759. With no interop_pem
+    # configured, the very first no-reply timeout on a fresh connection must
+    # produce one clear ERROR pointing at the PEM / seestar-proxy, not silence
+    # forever. (A busy-vs-unauthenticated cold start looks identical no
+    # matter how many timeouts you count, so this fires on the first one.)
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
+    errors = []
+    monkeypatch.setattr(seestar.logger, "error", lambda msg: errors.append(msg))
+    gap_errors = lambda: [m for m in errors if "since connecting" in m]  # noqa: E731
+
+    _run_one_sync_timeout(monkeypatch, seestar, 1, "get_device_state")
+    assert len(gap_errors()) == 1
+    assert "interop_pem" in gap_errors()[0]
+    assert "seestar-proxy" in gap_errors()[0]
+
+    # Further timeouts on the same connection must not repeat the log.
+    _run_one_sync_timeout(monkeypatch, seestar, 2, "get_view_state")
+    assert len(gap_errors()) == 1
+
+
+def test_no_reply_timeout_logs_auth_gap_guidance_with_pem_configured(
+    monkeypatch, seestar
+):
+    # Same symptom, but interop_pem IS configured -- the guidance must point
+    # at a failing handshake, not "go configure a PEM" (already have one).
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem")
+    errors = []
+    monkeypatch.setattr(seestar.logger, "error", lambda msg: errors.append(msg))
+
+    _run_one_sync_timeout(monkeypatch, seestar, 1)
+
+    gap_errors = [m for m in errors if "since connecting" in m]
+    assert len(gap_errors) == 1
+    assert "interop_pem" in gap_errors[0]
+    assert "Authentication is likely failing" in gap_errors[0]
+
+
+def test_busy_scope_with_prior_reply_never_triggers_auth_gap(monkeypatch, seestar):
+    # A scope that already answered once (e.g. mid-imaging, temporarily busy)
+    # must never be accused of needing a PEM just because later calls stall.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
+    errors = []
+    monkeypatch.setattr(seestar.logger, "error", lambda msg: errors.append(msg))
+
+    monkeypatch.setattr(seestar, "send_message_param", lambda _d: 42)
+    seestar.response_dict[42] = {"id": 42, "result": "ok"}
+    seestar.send_message_param_sync({"method": "get_device_state"})
+
+    for i in range(1, 6):
+        _run_one_sync_timeout(monkeypatch, seestar, 100 + i)
+
+    assert [m for m in errors if "since connecting" in m] == []
+
+
+def test_old_firmware_error_reply_counts_as_a_reply_and_never_gaps(
+    monkeypatch, seestar
+):
+    # The critical compatibility contract: pre-auth firmware doesn't time out
+    # at all, it replies immediately with an error (e.g. pi_is_verified is
+    # "unknown method" on old firmware). That error reply must count as proof
+    # the scope is talking to us, permanently disabling auth-gap detection
+    # for this connection -- old firmware must never see the PEM warning.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
+    errors = []
+    monkeypatch.setattr(seestar.logger, "error", lambda msg: errors.append(msg))
+
+    monkeypatch.setattr(seestar, "send_message_param", lambda _d: 7)
+    monkeypatch.setattr("device.seestar_device.time.time", lambda: 0.0)
+    seestar.response_dict[7] = {
+        "id": 7,
+        "method": "pi_is_verified",
+        "code": 102,
+        "error": "unknown method",
+    }
+    seestar.send_message_param_sync({"method": "pi_is_verified"})
+    assert seestar._connection_had_sync_reply is True
+
+    for i in range(1, 6):
+        _run_one_sync_timeout(monkeypatch, seestar, 200 + i)
+
+    assert [m for m in errors if "since connecting" in m] == []
+
+
+def test_sync_reply_after_auth_gap_logs_recovery_and_resets(monkeypatch, seestar):
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
+    errors = []
+    infos = []
+    monkeypatch.setattr(seestar.logger, "error", lambda msg: errors.append(msg))
+    monkeypatch.setattr(seestar.logger, "info", lambda msg: infos.append(msg))
+
+    _run_one_sync_timeout(monkeypatch, seestar, 1)
+    assert len([m for m in errors if "since connecting" in m]) == 1
+    assert seestar._auth_gap_logged is True
+
+    monkeypatch.setattr(seestar, "send_message_param", lambda _d: 999)
+    monkeypatch.setattr("device.seestar_device.time.time", lambda: 0.0)
+    seestar.response_dict[999] = {"id": 999, "result": "ok"}
+    seestar.send_message_param_sync({"method": "pi_is_verified"})
+
+    assert seestar._auth_gap_logged is False
+    assert seestar._connection_had_sync_reply is True
+    assert any("answering commands again" in m for m in infos)
+
+    # And it must be able to trip again cleanly on a later reconnect.
+    seestar.disconnect()
+    assert seestar._connection_had_sync_reply is False
+    assert seestar._consecutive_sync_timeouts == 0
+    assert seestar._auth_gap_logged is False
+
+
 def test_get_event_state_and_is_client_master(seestar):
     seestar.schedule["state"] = "working"
     seestar.event_state["3PPA"] = {"eq_offset_alt": 0, "eq_offset_az": 0}
