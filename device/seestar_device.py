@@ -123,6 +123,16 @@ class Seestar:
         # fine without auth), and the heartbeat loop retries auth until it lands.
         self.is_authenticated: bool = False
         self._last_auth_attempt: float = 0.0
+        # Tracks whether THIS connection has ever gotten a sync reply, and how
+        # many consecutive sync timeouts have piled up since.  Old pre-auth
+        # firmware answers something quickly; firmware that requires auth but
+        # isn't authenticated silently ignores every command while still
+        # streaming async events, so a connection that has never once gotten a
+        # reply back is a strong signal of that -- not just a busy scope (see
+        # issue #759: interop_pem missing or wrong looks exactly like this).
+        self._connection_had_sync_reply: bool = False
+        self._consecutive_sync_timeouts: int = 0
+        self._auth_gap_logged: bool = False
         self.is_slewing: bool = False
         self.target_dec: float = 0
         self.target_ra: float = 0
@@ -494,6 +504,11 @@ class Seestar:
         self.is_connected = False
         # A fresh socket must re-authenticate; auth state is per-connection.
         self.is_authenticated = False
+        # The auth-gap tracking below is also per-connection: a fresh socket
+        # deserves a fresh chance before we accuse it of needing a PEM.
+        self._connection_had_sync_reply = False
+        self._consecutive_sync_timeouts = 0
+        self._auth_gap_logged = False
         self.socket_force_close()
 
     def send_udp_intro(self) -> None:
@@ -849,6 +864,7 @@ class Seestar:
                         f"Failed to wait for message response.  {elapsed} seconds. {cur_cmdid=} {data=}"
                     )
                     data["result"] = "Error: Exceeded allotted wait time for result"
+                    self._note_sync_timeout()
                     return data
                 else:
                     self.logger.warning(
@@ -857,7 +873,60 @@ class Seestar:
                     # todo : dump out stats.  last run time on threads, connection status, etc.
             time.sleep(0.5)
         self.logger.debug(f"response is {self.response_dict[cur_cmdid]}")
+        self._note_sync_reply()
         return self.response_dict[cur_cmdid]
+
+    # No-reply sync timeouts on a fresh connection before we log the auth-gap
+    # diagnostic. This is 1, not several: a cold-start-busy scope and an
+    # unauthenticated one look identical no matter how many timeouts you
+    # count, and internal startup (guest_mode_init) only issues a single sync
+    # call before it gives up on firmware_ver_int == 0 -- waiting for more
+    # would mean this rarely fires without something else (a browser tab,
+    # an Alpaca/ASCOM client) also polling the device.
+    _AUTH_GAP_TIMEOUT_THRESHOLD = 1
+
+    def _note_sync_reply(self) -> None:
+        """Record that this connection got a sync reply; clears any auth-gap state."""
+        self._consecutive_sync_timeouts = 0
+        if not self._connection_had_sync_reply:
+            self._connection_had_sync_reply = True
+        if self._auth_gap_logged:
+            self._auth_gap_logged = False
+            self.logger.info(f"{self.device_name}: scope is answering commands again.")
+
+    def _note_sync_timeout(self) -> None:
+        """Track a sync-call timeout and, once this connection has strung
+        together several with zero replies, log a clear diagnostic instead of
+        timing out silently forever.  Gated on "never had a reply" so a scope
+        that's merely busy mid-imaging (which already had working replies
+        earlier in the connection) never trips this."""
+        if self._connection_had_sync_reply:
+            return
+        self._consecutive_sync_timeouts += 1
+        if (
+            self._auth_gap_logged
+            or self._consecutive_sync_timeouts < self._AUTH_GAP_TIMEOUT_THRESHOLD
+        ):
+            return
+        self._auth_gap_logged = True
+        if getattr(Config, "seestar_interop_pem", ""):
+            self.logger.error(
+                f"{self.device_name}: the scope has not answered a single command "
+                "since connecting, even though interop_pem is configured. "
+                "Authentication is likely failing (wrong key, or the firmware "
+                "rejected verify_client) -- check the interop_pem path/contents, "
+                "or authenticate via seestar-proxy and the Seestar app instead."
+            )
+        else:
+            self.logger.error(
+                f"{self.device_name}: the scope has not answered a single command "
+                "since connecting -- it is only streaming events. Recent "
+                "firmware requires authentication before it will reply to "
+                "anything else. Set interop_pem in config.toml, or authenticate "
+                "via seestar-proxy and the Seestar app, to restore control. (If "
+                "the scope is genuinely just busy on a cold start, this clears "
+                "on its own once it answers anything.)"
+            )
 
     def get_event_state(self, params=None):
         with self.event_state_lock:
@@ -3217,10 +3286,11 @@ class Seestar:
                 self.guest_mode_init()
                 self.event_callbacks_init(initial_state["result"])
 
-            except Exception:
+            except Exception as ex:
                 # todo : Disconnect socket and set is_watch_events false
-                # print(f"XXXX Exception {ex}")
-                pass
+                self.logger.error(
+                    f"{self.device_name}: error during watch-thread startup sequence: {ex}"
+                )
 
     def end_watch_thread(self):
         # I think it should be is_watch_events instead of is_connected...

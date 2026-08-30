@@ -823,6 +823,14 @@ def _check_needs_auth_uncached(telescope_id):
         # confirmed state rather than treating a busy-device timeout as auth failure.
         if result is None:
             return None
+        # A device-layer sync-call timeout, wrapped as an error string, means
+        # exactly what an HTTP-layer timeout (None, above) means: the firmware
+        # never replied. Without this, that error string falls through to the
+        # "Offline" return False below and the auth warning never fires.
+        if isinstance(result, str) and result.startswith(
+            "Error: Exceeded allotted wait time"
+        ):
+            return None
         # "Offline" string → device layer explicitly says offline.
         return False
     except Exception:
