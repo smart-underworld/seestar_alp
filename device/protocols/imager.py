@@ -3,7 +3,7 @@ import zipfile
 from datetime import datetime
 from enum import Enum
 from io import BytesIO
-from time import sleep
+from time import monotonic, sleep
 from typing import Optional, Tuple, List
 
 import cv2
@@ -142,8 +142,25 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
 
         self.logger.info("STOPPING image receiving thread")
 
+    # Backoff between failed RTSP connection attempts.  With the scope powered
+    # off, cv2.VideoCapture() fails after the ffmpeg connect timeout and the
+    # loop used to retry immediately, so an always-on install emitted an ffmpeg
+    # error to stderr roughly every 100s, indefinitely.  Reset on first success.
+    _STREAM_RETRY_MIN_S = 1.0
+    _STREAM_RETRY_MAX_S = 60.0
+
+    def _wait_before_retry(self, delay: float) -> None:
+        """Sleep in short slices, so the thread still reacts to a stop request
+        and keeps its watchdog timestamp fresh while backing off."""
+        deadline = monotonic() + delay
+        while monotonic() < deadline and self.is_streaming():
+            threading.current_thread().last_run = datetime.now()
+            sleep(0.25)
+
     def streaming_thread_fn(self):
         self.logger.info("starting image stream receiving thread")
+
+        retry_delay = 0.0
 
         while True:
             # print(f"RECEIVING stream loop {self.exposure_mode=} {self._is_started=} {self.is_streaming()}")
@@ -151,7 +168,18 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
 
             if self.is_streaming():
                 # print("Streaming loop")
-                self._run_streaming_loop()
+                if self._run_streaming_loop():
+                    retry_delay = 0.0
+                else:
+                    retry_delay = (
+                        self._STREAM_RETRY_MIN_S
+                        if retry_delay == 0.0
+                        else min(retry_delay * 2, self._STREAM_RETRY_MAX_S)
+                    )
+                    self.logger.debug(
+                        f"RTSP stream unavailable, retrying in {retry_delay:.0f}s"
+                    )
+                    self._wait_before_retry(retry_delay)
 
             sleep(0.25)  # Wait a second before trying to reconnect...
 
@@ -191,7 +219,13 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
             # If we aren't connected, just wait...
             sleep(1)
 
-    def _run_streaming_loop(self):
+    def _run_streaming_loop(self) -> bool:
+        """Run one streaming session.
+
+        Returns True if the RTSP stream was opened (whatever happened next),
+        False if the connection could not be established, so the caller can
+        back off instead of hammering an unreachable scope.
+        """
         try:
             empty_images = 0
             with RtspClient(
@@ -199,6 +233,9 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
                 logger=self.logger,
                 verbose=True,
             ) as client:
+                if not client.isOpened():
+                    return False
+
                 # self.raw_img = np.copy(client.read(raw=True))
                 # self.received_frame += 1
 
@@ -235,6 +272,9 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
                         break
         except Exception as e:
             self.logger.error(f"Exception in stream thread... {e=}")
+            return False
+
+        return True
 
     # def _parse_header(self, header) -> Tuple[int, Optional[int], Optional[int], Optional[int]]:
     #     if header is not None and len(header) > 20:
