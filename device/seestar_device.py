@@ -796,13 +796,14 @@ class Seestar:
                     data["params"] = existing_params
                     return data
 
-                if isinstance(existing_params, list) and existing_params:
-                    if existing_params[-1] == "verify":
+                if isinstance(existing_params, list):
+                    # Positional params (e.g. scope_goto's [ra, dec] before task 2,
+                    # set_control_value's ["gain", value]) must stay a flat list with
+                    # "verify" appended. Wrapping them in another list (e.g.
+                    # [[ra, dec], "verify"]) makes firmware >= 2706 reject the whole
+                    # payload as "expected float/object param" (code 107/108).
+                    if existing_params and existing_params[-1] == "verify":
                         return data
-
-                if data.get("method") == "set_wheel_position" and isinstance(
-                    existing_params, list
-                ):
                     data["params"] = existing_params + ["verify"]
                 else:
                     data["params"] = [existing_params, "verify"]
@@ -1148,12 +1149,15 @@ class Seestar:
         result = self.send_message_param_sync(data)
         return "error" not in result
 
-    # {"method":"scope_goto","params":[1.2345,75.0]}
+    # {"method":"scope_goto","params":{"ra":1.2345,"dec":75.0}}
     def _slew_to_ra_dec(self, params):
         in_ra = params[0]
         in_dec = params[1]
         self.logger.info(f"slew to {in_ra}, {in_dec}")
-        data: MessageParams = {"method": "scope_goto", "params": [in_ra, in_dec]}
+        data: MessageParams = {
+            "method": "scope_goto",
+            "params": {"ra": in_ra, "dec": in_dec},
+        }
         self.mark_op_state("goto_target", "stopped")
         result = self.send_message_param_sync(data)
         if "error" in result:
@@ -1174,7 +1178,10 @@ class Seestar:
         in_ra = params[0]
         in_dec = params[1]
         self.logger.info("%s: sync to target... %s %s", self.device_name, in_ra, in_dec)
-        data: MessageParams = {"method": "scope_sync", "params": [in_ra, in_dec]}
+        data: MessageParams = {
+            "method": "scope_sync",
+            "params": {"ra": in_ra, "dec": in_dec},
+        }
         result = self.send_message_param_sync(data)
         if "error" in result:
             self.logger.info(f"Failed to sync: {result}")
@@ -1475,7 +1482,7 @@ class Seestar:
                 "sec": now.second,
                 "time_zone": tz_name,
             }
-            date_data: MessageParams = {"method": "pi_set_time", "params": [date_json]}
+            date_data: MessageParams = {"method": "pi_set_time", "params": date_json}
 
             do_AF = params.get("auto_focus", False)
             do_3PPA = params.get("3ppa", False)
@@ -1534,7 +1541,11 @@ class Seestar:
             self.logger.info(msg)
             self.event_state["scheduler"]["cur_scheduler_item"]["action"] = msg
 
-            self.logger.info(self.send_message_param_sync(date_data))
+            time_result = self.send_message_param_sync(date_data)
+            if "error" in time_result:
+                self.logger.warning(f"Failed to set scope time: {time_result}")
+            else:
+                self.logger.info(f"Set scope time: {time_result}")
             response = self.send_message_param_sync(loc_data)
             if "error" in response:
                 self.logger.error(f"Failed to set location: {response}")

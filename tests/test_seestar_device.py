@@ -91,7 +91,7 @@ def test_transform_message_for_verify_list_params(seestar):
         out = seestar.transform_message_for_verify(
             {"method": "scope_goto", "params": [12.3, 45.6]}
         )
-        assert out["params"] == [[12.3, 45.6], "verify"]
+        assert out["params"] == [12.3, 45.6, "verify"]
 
         wheel = seestar.transform_message_for_verify(
             {"method": "set_wheel_position", "params": [1]}
@@ -118,9 +118,30 @@ def test_transform_message_for_verify_keeps_existing_verify_list(seestar):
     try:
         Config.verify_injection = True
         out = seestar.transform_message_for_verify(
-            {"method": "scope_goto", "params": [[1.0, 2.0], "verify"]}
+            {"method": "scope_goto", "params": [12.3, 45.6, "verify"]}
         )
-        assert out["params"] == [[1.0, 2.0], "verify"]
+        assert out["params"] == [12.3, 45.6, "verify"]
+    finally:
+        Config.verify_injection = old_setting
+
+
+def test_transform_message_for_verify_does_not_double_nest_list_params(seestar):
+    """Regression test for issues #748/#758: on firmware >= 2706, verify
+    injection was wrapping an already-list-shaped params value in ANOTHER
+    list ([[value...], "verify"]) instead of appending "verify" flatly.
+    Firmware rejects the double-nested shape as 'expected object/float
+    param' (code 107/108). set_wheel_position had a narrow fix for this;
+    this proves the fix now applies to any list-param method, e.g.
+    set_control_value's ["gain", value].
+    """
+    seestar.firmware_ver_int = 2846
+    old_setting = Config.verify_injection
+    try:
+        Config.verify_injection = True
+        out = seestar.transform_message_for_verify(
+            {"method": "set_control_value", "params": ["gain", 80]}
+        )
+        assert out["params"] == ["gain", 80, "verify"]
     finally:
         Config.verify_injection = old_setting
 
@@ -139,6 +160,86 @@ def test_send_message_param_assigns_id_and_serializes(monkeypatch, seestar):
     assert cmd_id == 10000
     assert '"id": 10000' in sent["payload"]
     assert sent["payload"].endswith("\r\n")
+
+
+def test_wire_payload_for_scope_goto_and_pi_set_time_on_firmware_2846(
+    monkeypatch, seestar
+):
+    """End-to-end regression test for issues #748 (firmware 7.75/2775) and
+    #758 (firmware 8.46/2846): drives the REAL production callers
+    (_slew_to_ra_dec, and pi_set_time inside start_up_thread_fn) through the
+    full real pipeline (send_message_param -> transform_message_for_verify
+    -> send_message) and captures the exact JSON that would be written to
+    the socket, for a firmware version where verify injection is active but
+    dict-param verify-injection is skipped (>= 2706). The actual root cause
+    of both reports was transform_message_for_verify double-nesting list
+    params; decompiled firmware confirms scope_goto/pi_set_time would also
+    have accepted a correctly flat-appended list. This test verifies the
+    dict shape this branch adopted defensively still produces clean wire
+    bytes with no leaked "verify" key.
+    """
+    seestar.firmware_ver_int = 2846
+    old_setting = Config.verify_injection
+    sent = []
+
+    def fake_send_message(payload):
+        wire = json.loads(payload.rstrip("\r\n"))
+        sent.append(wire)
+        if wire["method"] == "get_device_state":
+            seestar.response_dict[wire["id"]] = {
+                "result": {"device": {"firmware_ver_int": 2846}}
+            }
+        else:
+            seestar.response_dict[wire["id"]] = {"result": "ok"}
+        return True
+
+    monkeypatch.setattr(seestar, "send_message", fake_send_message)
+    monkeypatch.setattr(seestar, "wait_end_op", lambda _e: True)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+
+    try:
+        Config.verify_injection = True
+
+        # Drive the real production caller for scope_goto (fixed in
+        # Task 2) through the real transform_message_for_verify +
+        # send_message pipeline.
+        seestar._slew_to_ra_dec([22.8737, 67.479])
+        scope_goto_wire = next(w for w in sent if w["method"] == "scope_goto")
+        assert scope_goto_wire["params"] == {"ra": 22.8737, "dec": 67.479}
+
+        # Drive the real production caller for pi_set_time (fixed in
+        # Task 3) through the same real pipeline, via start_up_thread_fn.
+        monkeypatch.setattr(
+            "device.seestar_device.tzlocal.get_localzone_name", lambda: "UTC"
+        )
+        import datetime as _dt
+
+        monkeypatch.setattr(
+            "device.seestar_device.tzlocal.get_localzone",
+            lambda: _dt.timezone.utc,
+        )
+        monkeypatch.setattr(
+            "device.seestar_device.EarthLocation", lambda **_k: object()
+        )
+        monkeypatch.setattr(seestar, "set_setting", lambda *a, **k: {"ok": True})
+        monkeypatch.setattr(seestar, "play_sound", lambda _sid: None)
+
+        seestar.start_up_thread_fn(
+            {
+                "lat": 1.1,
+                "lon": 2.2,
+                "auto_focus": False,
+                "3ppa": False,
+                "dark_frames": False,
+            }
+        )
+        pi_set_time_wire = next(w for w in sent if w["method"] == "pi_set_time")
+        assert isinstance(pi_set_time_wire["params"], dict)
+        assert "year" in pi_set_time_wire["params"]
+        assert "verify" not in pi_set_time_wire["params"]
+    finally:
+        Config.verify_injection = old_setting
 
 
 def test_schedule_create_and_add_item(seestar):
@@ -1105,6 +1206,66 @@ def test_start_up_thread_fn_success_and_old_firmware(monkeypatch, seestar):
     assert seestar.schedule["state"] == "stopped"
 
 
+def test_start_up_thread_fn_sends_pi_set_time_as_object_and_logs_failure(
+    monkeypatch, seestar
+):
+    """Regression test for issues #748/#758. Decompiled firmware confirms
+    pi_set_time's json_array2obj unwraps a single-element list fine, so
+    [date_json] alone was never the problem -- the real bug was
+    transform_message_for_verify double-nesting it into [[date_json],
+    "verify"] (fixed separately), which json_array2obj cannot unwrap to an
+    object. Sending a bare object here is a defensive choice that also
+    matches what real-hardware testers confirmed works. Separately, the
+    failure was silently swallowed (logged at info level with no error
+    check), which is how a user could lose a night of imaging to a stale
+    scope clock without any warning in the logs -- that part of this fix
+    stands regardless of the shape question.
+    """
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone_name", lambda: "UTC"
+    )
+    import datetime as _dt
+
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone", lambda: _dt.timezone.utc
+    )
+    monkeypatch.setattr("device.seestar_device.EarthLocation", lambda **_k: object())
+    monkeypatch.setattr(seestar, "set_setting", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(seestar, "play_sound", lambda _sid: None)
+
+    sent = []
+    warnings = []
+    monkeypatch.setattr(
+        seestar.logger, "warning", lambda *a, **k: warnings.append((a, k))
+    )
+
+    def fake_sync(payload):
+        if payload["method"] == "get_device_state":
+            return {"result": {"device": {"firmware_ver_int": 2846}}}
+        if payload["method"] == "pi_set_time":
+            sent.append(payload)
+            return {"error": "expected object param", "code": 107}
+        return {"result": "ok"}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
+
+    seestar.start_up_thread_fn(
+        {
+            "lat": 1.1,
+            "lon": 2.2,
+            "auto_focus": False,
+            "3ppa": False,
+            "dark_frames": False,
+        }
+    )
+
+    assert sent, "pi_set_time was never sent"
+    assert isinstance(sent[0]["params"], dict)
+    assert "year" in sent[0]["params"] and "time_zone" in sent[0]["params"]
+    assert warnings, "a failed pi_set_time must be logged as a warning, not swallowed"
+
+
 def test_spectra_thread_and_start_item(monkeypatch, seestar):
     monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
 
@@ -1260,6 +1421,33 @@ def test_slew_sync_stop_and_sound_paths(monkeypatch, seestar):
     assert seestar.stop_slew()["result"] == "ok"
     assert seestar.play_sound(3)["result"] == "ok"
     assert seestar.stop_stack()["result"] == "ok"
+
+
+def test_slew_to_ra_dec_and_sync_target_send_object_params(monkeypatch, seestar):
+    """Regression test for issue #758. Decompiled firmware confirms scope_goto/
+    scope_sync actually accept EITHER a keyed object OR a positional [ra, dec]
+    list -- the real bug was transform_message_for_verify double-nesting list
+    params into [[ra, dec], "verify"] (fixed separately). Sending a keyed
+    object here is a defensive choice that also matches what real-hardware
+    testers on firmware 7.75/8.46 confirmed works, and it sidesteps the
+    verify-injection wrapper on firmware >= 2706 entirely.
+    """
+    sent = []
+    monkeypatch.setattr(
+        seestar,
+        "send_message_param_sync",
+        lambda d: sent.append(d) or {"result": "ok"},
+    )
+    monkeypatch.setattr(seestar, "wait_end_op", lambda _e: True)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+
+    seestar._slew_to_ra_dec([12.3, 45.6])
+    assert sent[-1]["method"] == "scope_goto"
+    assert sent[-1]["params"] == {"ra": 12.3, "dec": 45.6}
+
+    seestar._sync_target([1.0, 2.0])
+    assert sent[-1]["method"] == "scope_sync"
+    assert sent[-1]["params"] == {"ra": 1.0, "dec": 2.0}
 
 
 def test_send_message_and_shutdown_thread(monkeypatch, seestar):
