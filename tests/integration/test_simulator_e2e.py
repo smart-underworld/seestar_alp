@@ -1266,7 +1266,9 @@ def test_43_scope_goto_and_pi_set_time_reject_double_nested_params(simulator_ser
     # today) and a plain positional list (what older/no-verify-injection
     # callers, e.g. the CLI, still send).
     good_goto_obj = _send_tcp_command(
-        host, port, {"id": 200, "method": "scope_goto", "params": {"ra": 1.0, "dec": 2.0}}
+        host,
+        port,
+        {"id": 200, "method": "scope_goto", "params": {"ra": 1.0, "dec": 2.0}},
     )
     assert "error" not in good_goto_obj
 
@@ -1282,18 +1284,24 @@ def test_43_scope_goto_and_pi_set_time_reject_double_nested_params(simulator_ser
 
     # The double-nested shape (the actual pre-fix bug) is rejected.
     bad_goto = _send_tcp_command(
-        host, port, {"id": 203, "method": "scope_goto", "params": [[1.0, 2.0], "verify"]}
+        host,
+        port,
+        {"id": 203, "method": "scope_goto", "params": [[1.0, 2.0], "verify"]},
     )
     assert bad_goto.get("code") == 108
     assert "error" in bad_goto
 
     good_sync_obj = _send_tcp_command(
-        host, port, {"id": 204, "method": "scope_sync", "params": {"ra": 1.0, "dec": 2.0}}
+        host,
+        port,
+        {"id": 204, "method": "scope_sync", "params": {"ra": 1.0, "dec": 2.0}},
     )
     assert "error" not in good_sync_obj
 
     bad_sync = _send_tcp_command(
-        host, port, {"id": 205, "method": "scope_sync", "params": [[1.0, 2.0], "verify"]}
+        host,
+        port,
+        {"id": 205, "method": "scope_sync", "params": [[1.0, 2.0], "verify"]},
     )
     assert bad_sync.get("code") == 108
 

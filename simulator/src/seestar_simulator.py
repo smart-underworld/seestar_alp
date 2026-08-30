@@ -455,7 +455,12 @@ class SeestarSimulator:
                     "id": cur_cmdid,
                 }
             # Simulate sync
-            return {"jsonrpc": "2.0", "method": "scope_sync", "result": 0, "id": cur_cmdid}
+            return {
+                "jsonrpc": "2.0",
+                "method": "scope_sync",
+                "result": 0,
+                "id": cur_cmdid,
+            }
         elif method == "scope_speed_move":
             # Simulate move
             return {
