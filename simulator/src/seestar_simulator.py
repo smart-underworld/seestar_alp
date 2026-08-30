@@ -407,6 +407,20 @@ class SeestarSimulator:
                 "id": cur_cmdid,
             }
         elif method == "scope_goto":
+            params = data.get("params")
+            if (
+                not isinstance(params, dict)
+                or not isinstance(params.get("ra"), (int, float))
+                or not isinstance(params.get("dec"), (int, float))
+            ):
+                return {
+                    "jsonrpc": "2.0",
+                    "Timestamp": timestamp,
+                    "method": "scope_goto",
+                    "error": "expected float param",
+                    "code": 108,
+                    "id": cur_cmdid,
+                }
             # Simulate slewing
             self.state["mount"]["move_type"] = "goto"
             return {
@@ -416,8 +430,22 @@ class SeestarSimulator:
                 "id": cur_cmdid,
             }
         elif method == "scope_sync":
+            params = data.get("params")
+            if (
+                not isinstance(params, dict)
+                or not isinstance(params.get("ra"), (int, float))
+                or not isinstance(params.get("dec"), (int, float))
+            ):
+                return {
+                    "jsonrpc": "2.0",
+                    "Timestamp": timestamp,
+                    "method": "scope_sync",
+                    "error": "expected float param",
+                    "code": 108,
+                    "id": cur_cmdid,
+                }
             # Simulate sync
-            return {"jsonrpc": "2.0", "result": 0, "id": cur_cmdid}
+            return {"jsonrpc": "2.0", "method": "scope_sync", "result": 0, "id": cur_cmdid}
         elif method == "scope_speed_move":
             # Simulate move
             return {
@@ -508,8 +536,18 @@ class SeestarSimulator:
                 "id": cur_cmdid,
             }
         elif method == "pi_set_time":
+            params = data.get("params")
+            if not isinstance(params, dict):
+                return {
+                    "jsonrpc": "2.0",
+                    "Timestamp": timestamp,
+                    "method": "pi_set_time",
+                    "error": "expected object param",
+                    "code": 107,
+                    "id": cur_cmdid,
+                }
             # Simulate setting time
-            self.scope_time = data.get("params", {})
+            self.scope_time = params
             return {
                 "jsonrpc": "2.0",
                 "Timestamp": timestamp,

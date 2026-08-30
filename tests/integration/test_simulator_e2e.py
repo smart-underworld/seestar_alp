@@ -1247,3 +1247,48 @@ def test_42_auto_af_round_trip_via_simulator(front_sim_bridge):
     )
     setting = state.get("result", {})
     assert setting.get("auto_af") is True
+
+
+def test_43_scope_goto_and_pi_set_time_require_object_params(simulator_server):
+    """Regression test for issues #748/#758: the simulator must enforce the
+    same param-shape contract real firmware does, so a future regression
+    back to positional/list params is caught by CI instead of shipping to
+    users' hardware."""
+    host = simulator_server["host"]
+    port = simulator_server["tcp_port"]
+
+    good_goto = _send_tcp_command(
+        host, port, {"id": 200, "method": "scope_goto", "params": {"ra": 1.0, "dec": 2.0}}
+    )
+    assert "error" not in good_goto
+
+    bad_goto = _send_tcp_command(
+        host, port, {"id": 201, "method": "scope_goto", "params": [1.0, 2.0]}
+    )
+    assert bad_goto.get("code") == 108
+    assert "error" in bad_goto
+
+    good_sync = _send_tcp_command(
+        host, port, {"id": 202, "method": "scope_sync", "params": {"ra": 1.0, "dec": 2.0}}
+    )
+    assert "error" not in good_sync
+
+    bad_sync = _send_tcp_command(
+        host, port, {"id": 203, "method": "scope_sync", "params": [1.0, 2.0]}
+    )
+    assert bad_sync.get("code") == 108
+
+    good_time = _send_tcp_command(
+        host,
+        port,
+        {"id": 204, "method": "pi_set_time", "params": {"year": 2026, "mon": 1}},
+    )
+    assert "error" not in good_time
+
+    bad_time = _send_tcp_command(
+        host,
+        port,
+        {"id": 205, "method": "pi_set_time", "params": [{"year": 2026, "mon": 1}]},
+    )
+    assert bad_time.get("code") == 107
+    assert "error" in bad_time
