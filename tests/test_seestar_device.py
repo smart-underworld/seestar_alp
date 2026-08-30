@@ -162,6 +162,46 @@ def test_send_message_param_assigns_id_and_serializes(monkeypatch, seestar):
     assert sent["payload"].endswith("\r\n")
 
 
+def test_wire_payload_for_scope_goto_and_pi_set_time_on_firmware_2846(
+    monkeypatch, seestar
+):
+    """End-to-end regression test for issues #748 (firmware 7.75/2775) and
+    #758 (firmware 8.46/2846): captures the exact JSON that would be
+    written to the socket, after transform_message_for_verify runs, for a
+    firmware version where verify injection is active but dict-param
+    verify-injection is skipped (>= 2706 short-circuits at
+    transform_message_for_verify). This is the exact combination that
+    silently broke pi_set_time and scope_goto for both reporters.
+    """
+    seestar.firmware_ver_int = 2846
+    old_setting = Config.verify_injection
+    sent = []
+    monkeypatch.setattr(seestar, "send_message", lambda payload: sent.append(payload))
+    try:
+        Config.verify_injection = True
+
+        seestar.send_message_param(
+            {"method": "scope_goto", "params": {"ra": 22.8737, "dec": 67.479}}
+        )
+        wire = json.loads(sent[-1])
+        assert wire["params"] == {"ra": 22.8737, "dec": 67.479}
+
+        date_json = {
+            "year": 2026,
+            "mon": 8,
+            "day": 17,
+            "hour": 9,
+            "min": 5,
+            "sec": 37,
+            "time_zone": "Europe/Paris",
+        }
+        seestar.send_message_param({"method": "pi_set_time", "params": date_json})
+        wire = json.loads(sent[-1])
+        assert wire["params"] == date_json
+    finally:
+        Config.verify_injection = old_setting
+
+
 def test_schedule_create_and_add_item(seestar):
     new_schedule = seestar.create_schedule({})
     assert new_schedule["state"] == "stopped"
