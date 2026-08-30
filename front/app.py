@@ -4348,7 +4348,7 @@ class SettingsResource(BaseResource):
             "dark_mode": "Dark Mode",
             "stack_cont_capt": "Continuous Capture Mode",
             "stack_drizzle2x": "4k Live Stack Mode (2x Drizzle)",
-            "auto_af": "Autofocus Enabled",
+            "auto_af": "Automatic Autofocus",
         }
         # Maybe we can store this better?
         settings_helper_text = {
@@ -4391,7 +4391,7 @@ class SettingsResource(BaseResource):
             "dark_mode": "Enable or disable LEDs while imaging.",
             "stack_cont_capt": "Enabling continuous capture mode disables live stacking",
             "stack_drizzle2x": "Enables 2x drizzle on Live Stack for 4k Mode",
-            "auto_af": "Enable autofocus. On firmware 8.46+, this also gates automatic refocus on sensor temperature drift (fixed 5°C threshold, not user-configurable).",
+            "auto_af": "Lets the scope re-run autofocus on its own during a session, e.g. when sensor temperature drifts.",
         }
         render_template(
             req,
