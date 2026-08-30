@@ -4128,10 +4128,17 @@ class SettingsResource(BaseResource):
                 },
             )
 
-        settings_output = do_action_device(
-            "method_sync",
-            telescope_id,
-            {"method": "set_setting", "params": FormattedNewSettings},
+        no_response_output = {
+            "ErrorNumber": 1,
+            "ErrorMessage": "No response from device",
+        }
+        settings_output = (
+            do_action_device(
+                "method_sync",
+                telescope_id,
+                {"method": "set_setting", "params": FormattedNewSettings},
+            )
+            or no_response_output
         )
         # For some stupid reason known only to ZWO, dark_mode is returned by get_setting as a boolean.
         # However when you set_setting it expects an integer representation of that boolean
@@ -4139,10 +4146,13 @@ class SettingsResource(BaseResource):
         # It needs to be on its own.
         dark_mode_bool = str2bool(PostedSettings["dark_mode"])
         dark_mode_value = int(dark_mode_bool)
-        dark_mode_output = do_action_device(
-            "method_async",
-            telescope_id,
-            {"method": "set_setting", "params": {"dark_mode": dark_mode_value}},
+        dark_mode_output = (
+            do_action_device(
+                "method_async",
+                telescope_id,
+                {"method": "set_setting", "params": {"dark_mode": dark_mode_value}},
+            )
+            or no_response_output
         )
         # Live Stack Mode is another one like dark_mode.
         cont_capt = str2bool(PostedSettings["stack_cont_capt"])
@@ -4156,10 +4166,13 @@ class SettingsResource(BaseResource):
         # 4k Mode is another one like cont_capt
         drizzle2x = str2bool(PostedSettings["stack_drizzle2x"])
         DrizzleModeSettings = {"stack": {"drizzle2x": drizzle2x}}
-        drizzle_mode_output = do_action_device(
-            "method_sync",
-            telescope_id,
-            {"method": "set_setting", "params": DrizzleModeSettings},
+        drizzle_mode_output = (
+            do_action_device(
+                "method_sync",
+                telescope_id,
+                {"method": "set_setting", "params": DrizzleModeSettings},
+            )
+            or no_response_output
         )
         plan_target_af_output = {"ErrorNumber": 0}
         plan_target_af_success = True
@@ -4190,10 +4203,13 @@ class SettingsResource(BaseResource):
             StarTrailsSettings = {
                 "stack": {"star_trails": str2bool(PostedSettings["stack_star_trails"])}
             }
-            star_trails_output = do_action_device(
-                "method_sync",
-                telescope_id,
-                {"method": "set_setting", "params": StarTrailsSettings},
+            star_trails_output = (
+                do_action_device(
+                    "method_sync",
+                    telescope_id,
+                    {"method": "set_setting", "params": StarTrailsSettings},
+                )
+                or no_response_output
             )
         stack_settings_output = {"ErrorNumber": 0}
         stack_settings_success = True
