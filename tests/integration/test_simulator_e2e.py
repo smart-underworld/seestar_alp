@@ -1218,7 +1218,7 @@ def test_37_force_stop_goto_front_endpoint(two_device_federation):
 
 
 def test_41_auto_af_shown_in_settings(monkeypatch, front_sim_bridge):
-    """GET /settings renders the Autofocus Enabled field once the simulator
+    """GET /settings renders the Automatic Autofocus field once the simulator
     reports auto_af (a real key, confirmed present/settable since firmware
     2732 (v3.1.2) against the live QEMU emulator running real firmware)."""
     _send_tcp_command(
@@ -1229,7 +1229,7 @@ def test_41_auto_af_shown_in_settings(monkeypatch, front_sim_bridge):
 
     resp = front_sim_bridge["client"].simulate_get("/1/settings")
     assert resp.status_code == 200
-    assert "Autofocus Enabled" in resp.text
+    assert "Automatic Autofocus" in resp.text
 
 
 def test_42_auto_af_round_trip_via_simulator(front_sim_bridge):
