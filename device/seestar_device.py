@@ -892,9 +892,7 @@ class Seestar:
             self._connection_had_sync_reply = True
         if self._auth_gap_logged:
             self._auth_gap_logged = False
-            self.logger.info(
-                f"{self.device_name}: scope is answering commands again."
-            )
+            self.logger.info(f"{self.device_name}: scope is answering commands again.")
 
     def _note_sync_timeout(self) -> None:
         """Track a sync-call timeout and, once this connection has strung
