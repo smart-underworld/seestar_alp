@@ -1141,6 +1141,22 @@ def get_device_settings(telescope_id):
                 if val is not None:
                     settings[key] = val
 
+        # Sensor-temp/time/meridian-flip/filter-wheel autofocus triggers.
+        # Keys existed in set_setting since firmware 2732 (v3.1.2) but were
+        # inert until firmware 2846 (v3.3.0) actually wired up the refocus
+        # behavior, so don't offer them to older firmware.
+        if fw >= 2846:
+            for key, val in {
+                "af_temp_change_on": pydash.get(settings_result, "af_temp_change_on"),
+                "af_temp_span": pydash.get(settings_result, "af_temp_span"),
+                "af_time_change_on": pydash.get(settings_result, "af_time_change_on"),
+                "af_time_span_hour": pydash.get(settings_result, "af_time_span_hour"),
+                "af_merid_flip": pydash.get(settings_result, "af_merid_flip"),
+                "af_wheel_change": pydash.get(settings_result, "af_wheel_change"),
+            }.items():
+                if val is not None:
+                    settings[key] = val
+
         # If either endpoint reports these stack-save fields, expose them.
         for key, value in (
             (
@@ -4049,6 +4065,18 @@ class SettingsResource(BaseResource):
                     PostedSettings["wide_focal_pos"], 0
                 )
 
+        if fw >= 2846:
+            for key, converter in (
+                ("af_temp_change_on", str2bool),
+                ("af_temp_span", lambda v: _safe_float(v, 0.0)),
+                ("af_time_change_on", str2bool),
+                ("af_time_span_hour", lambda v: _safe_float(v, 0.0)),
+                ("af_merid_flip", str2bool),
+                ("af_wheel_change", str2bool),
+            ):
+                if key in PostedSettings:
+                    FormattedNewSettings[key] = converter(PostedSettings[key])
+
         FormattedNewStackSettings = {}
         has_stack_settings_input = any(
             key in PostedSettings
@@ -4287,6 +4315,12 @@ class SettingsResource(BaseResource):
             "wide_4k": 0,
             "wide_denoise": 0,
             "wide_focal_pos": 0,
+            "af_temp_change_on": 2846,
+            "af_temp_span": 2846,
+            "af_time_change_on": 2846,
+            "af_time_span_hour": 2846,
+            "af_merid_flip": 2846,
+            "af_wheel_change": 2846,
         }
         settings = {
             key: value
@@ -4334,6 +4368,12 @@ class SettingsResource(BaseResource):
             "dark_mode": "Dark Mode",
             "stack_cont_capt": "Continuous Capture Mode",
             "stack_drizzle2x": "4k Live Stack Mode (2x Drizzle)",
+            "af_temp_change_on": "AF on Sensor Temp Change",
+            "af_temp_span": "AF Temp Change Threshold (°C)",
+            "af_time_change_on": "AF on Elapsed Time",
+            "af_time_span_hour": "AF Time Interval (hours)",
+            "af_merid_flip": "AF After Meridian Flip",
+            "af_wheel_change": "AF After Filter Wheel Change",
         }
         # Maybe we can store this better?
         settings_helper_text = {
@@ -4376,6 +4416,12 @@ class SettingsResource(BaseResource):
             "dark_mode": "Enable or disable LEDs while imaging.",
             "stack_cont_capt": "Enabling continuous capture mode disables live stacking",
             "stack_drizzle2x": "Enables 2x drizzle on Live Stack for 4k Mode",
+            "af_temp_change_on": "Automatically refocus when the sensor temperature drifts (firmware 8.46+).",
+            "af_temp_span": "Sensor temperature change (°C) that triggers an automatic refocus.",
+            "af_time_change_on": "Automatically refocus after a set amount of elapsed time (firmware 8.46+).",
+            "af_time_span_hour": "Elapsed time (hours) that triggers an automatic refocus.",
+            "af_merid_flip": "Automatically refocus after a meridian flip (firmware 8.46+).",
+            "af_wheel_change": "Automatically refocus after a filter wheel change (firmware 8.46+).",
         }
         render_template(
             req,
