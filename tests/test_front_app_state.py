@@ -843,6 +843,70 @@ def test_settings_post_missing_light_duration_min_does_not_raise(monkeypatch):
     assert captured["stack_payload"]["light_duration_min"] == -1
 
 
+@pytest.mark.parametrize(
+    "timed_out_call", ["settings", "dark_mode", "drizzle", "star_trails"]
+)
+def test_settings_post_does_not_crash_when_a_write_times_out(
+    monkeypatch, timed_out_call
+):
+    # Issue #728: a device-side write timeout (do_action_device returns None,
+    # matching a real requests.exceptions.Timeout in front/app.py's
+    # do_action_device) must not crash on_post with
+    # `TypeError: 'NoneType' object is not subscriptable` when the result is
+    # later subscripted as e.g. settings_output["ErrorNumber"].
+    model = "Seestar S30 Pro" if timed_out_call == "star_trails" else "Seestar S50"
+
+    class DummyReq:
+        def __init__(self):
+            self.media = {
+                "stack_lenhance": "false",
+                "stack_dither_pix": "10",
+                "stack_dither_interval": "2",
+                "stack_dither_enable": "true",
+                "exp_ms_stack_l": "10000",
+                "exp_ms_continuous": "500",
+                "focal_pos": "1500",
+                "auto_power_off": "false",
+                "auto_3ppa_calib": "true",
+                "frame_calib": "true",
+                "save_discrete_frame": "true",
+                "save_discrete_ok_frame": "false",
+                "heater_enable": "false",
+                "dark_mode": "false",
+                "stack_cont_capt": "false",
+                "stack_drizzle2x": "false",
+                "stack_star_trails": "false",
+            }
+
+    def fake_do_action_device(action, dev_num, parameters, is_schedule=False):
+        method = parameters.get("method")
+        params = parameters.get("params", {})
+        if timed_out_call == "settings" and "stack_lenhance" in params:
+            return None
+        if timed_out_call == "dark_mode" and "dark_mode" in params:
+            return None
+        if timed_out_call == "drizzle" and "drizzle2x" in params.get("stack", {}):
+            return None
+        if timed_out_call == "star_trails" and "star_trails" in params.get("stack", {}):
+            return None
+        assert method  # sanity: every other call still gets a normal response
+        return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+    captured = {}
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2500)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: model)
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+    monkeypatch.setattr(
+        front_app.SettingsResource,
+        "render_settings",
+        staticmethod(lambda _req, _resp, _tid, output: captured.update(output=output)),
+    )
+
+    front_app.SettingsResource().on_post(DummyReq(), object(), 1)
+
+    assert captured["output"] == "Error Updating Settings."
+
+
 def test_settings_post_auto_lenhance_sent_on_fw_2775(monkeypatch):
     class DummyReq:
         def __init__(self):
