@@ -49,6 +49,28 @@ def test_check_ra_value_accepts_multiple_formats():
     assert check_ra_value("12 30 10.5")
 
 
+def test_check_ra_value_rejects_degrees_outside_the_0_to_24_hour_range():
+    # 279.2347 is Vega's RA in *degrees* -- a bare decimal RA is parsed as hours
+    # (see Util.parse_coordinate), so this must be rejected rather than silently
+    # wrapped by astropy into 15.2347h, a completely different point in the sky.
+    assert not check_ra_value("279.2347")
+    assert check_ra_value("18.6156")  # Vega's RA in hours
+
+
+def test_check_ra_value_bare_decimal_boundary():
+    assert check_ra_value("0")
+    assert check_ra_value("23.9999")
+    assert not check_ra_value("24.0")
+    assert not check_ra_value("-1.2")
+
+
+def test_check_ra_value_still_accepts_sexagesimal_and_space_separated_formats():
+    # These formats carry their own hour component and aren't subject to the
+    # bare-decimal range check above.
+    assert check_ra_value("6h32m32.5s")
+    assert check_ra_value("12 30 10.5")
+
+
 def test_check_dec_value_accepts_multiple_formats():
     assert check_dec_value("+12d 30m 10.5s")
     assert check_dec_value("-10.25")

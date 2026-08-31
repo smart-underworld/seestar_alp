@@ -1251,13 +1251,23 @@ def process_queue(resp, telescope_id):
 
 
 def check_ra_value(raString):
-    valid = [
+    """A bare decimal RA is parsed as hours (Util.parse_coordinate uses
+    unit=u.hourangle, matching the ASCOM RightAscension convention), so it must
+    fall in [0, 24) -- astropy silently wraps an out-of-range value via modulo
+    instead of raising, which previously let e.g. "279.2347" (a target's RA in
+    *degrees*, easy to enter by mistake) slew to a completely wrong sky position
+    with no error. Sexagesimal/space-separated formats already carry their own
+    hour component and are left to format-only validation.
+    """
+    bare_decimal = re.fullmatch(r"[+-]?(\d+\.?\d*|\.\d+)", raString)
+    if bare_decimal:
+        return 0 <= float(raString) < 24
+
+    sexagesimal = [
         r"^\d+h\s*\d+m\s*([0-9.]+s)?$",
-        r"^\d+(\.\d+)?$",
         r"^\d+\s+\d+\s+[0-9.]+$",
-        r"^[+-]?([0-9]*[.])?[0-9]+$",
     ]
-    return any(re.search(pattern, raString) for pattern in valid)
+    return any(re.search(pattern, raString) for pattern in sexagesimal)
 
 
 def check_dec_value(decString):

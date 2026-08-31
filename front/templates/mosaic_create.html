@@ -42,7 +42,7 @@
                     <label for="ra" class="form-label">Right Ascension</label>
                     <input type="text" class="form-control" id="ra" name="ra" aria-describedby="raHelp"
                            value="{{ values.ra }}" required>
-                    <div id="raHelp" class="form-text">Mosaic center in decimal hours or hours/minutes/seconds (e.g. -1.2 or 6h32m32.5s)</div>
+                    <div id="raHelp" class="form-text">Mosaic center in decimal hours or hours/minutes/seconds (e.g. 1.2 or 6h32m32.5s)</div>
                     {% if errors.ra %}
                         <div id="raError" class="form-text" style="color:red;">The RA value you provided {{errors.ra}} is not valid.</div>
                     {% endif %}
