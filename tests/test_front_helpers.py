@@ -61,7 +61,19 @@ def test_check_ra_value_bare_decimal_boundary():
     assert check_ra_value("0")
     assert check_ra_value("23.9999")
     assert not check_ra_value("24.0")
-    assert not check_ra_value("-1.2")
+
+
+def test_check_ra_value_accepts_a_single_negative_wrap():
+    # -2 is unambiguously 22h (astropy wraps it that way), and a real
+    # RA-in-degrees mistake can never be negative -- RA-in-degrees has no
+    # negative convention -- so accepting one wrap here can't reopen the
+    # degrees-mistaken-for-hours bug the range check above guards against.
+    assert check_ra_value("-1.2")
+    assert check_ra_value("-23.9999")
+    assert not check_ra_value("-24.0")
+    # Anything requiring more than one wrap is still a plausible degrees
+    # mistake (e.g. a negated RA-in-degrees typo), not a legitimate offset.
+    assert not check_ra_value("-279.2347")
 
 
 def test_check_ra_value_still_accepts_sexagesimal_format():

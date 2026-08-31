@@ -1253,15 +1253,23 @@ def process_queue(resp, telescope_id):
 def check_ra_value(raString):
     """A bare decimal RA is parsed as hours (Util.parse_coordinate uses
     unit=u.hourangle, matching the ASCOM RightAscension convention), so it must
-    fall in [0, 24) -- astropy silently wraps an out-of-range value via modulo
-    instead of raising, which previously let e.g. "279.2347" (a target's RA in
-    *degrees*, easy to enter by mistake) slew to a completely wrong sky position
-    with no error. Sexagesimal/space-separated formats already carry their own
-    hour component and are left to format-only validation.
+    fall within one wrap of [0, 24) -- astropy silently wraps an out-of-range
+    value via modulo instead of raising, which previously let e.g. "279.2347"
+    (a target's RA in *degrees*, easy to enter by mistake) slew to a completely
+    wrong sky position with no error. Sexagesimal/space-separated formats
+    already carry their own hour component and are left to format-only
+    validation.
+
+    A single negative wrap (-24, 0) is accepted -- e.g. -2 is unambiguously
+    22h, and a real RA-in-degrees mistake can never be negative (RA-in-degrees
+    has no negative convention), so this can't reopen the bug above. The
+    positive side stays a hard cutoff at 24: unlike negative values, values
+    just over 24 (e.g. 24-48) *are* plausible RA-in-degrees mistakes for real
+    targets, so loosening that side would silently let some of them back in.
     """
     bare_decimal = re.fullmatch(r"[+-]?(\d+\.?\d*|\.\d+)", raString)
     if bare_decimal:
-        return 0 <= float(raString) < 24
+        return -24 < float(raString) < 24
 
     sexagesimal = [
         r"^\d+h\s*\d+m\s*([0-9.]+s)?$",
