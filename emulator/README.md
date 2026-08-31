@@ -554,10 +554,10 @@ These satisfy two independent regex-parsed code paths in `network.sh`:
 
 ### seed/
 
-Config and database files copied from a real device, mounted writable at
-`/home/pi/.ZWO/`. SQLite requires write access to create journal files alongside
-the database, so `run.sh` copies `seed/` to a temp directory at launch rather
-than mounting it read-only.
+Config and database files mounted writable at `/home/pi/.ZWO/`. SQLite
+requires write access to create journal files alongside the database, so
+`run.sh` copies `seed/` to a temp directory at launch rather than mounting it
+read-only.
 
 `zwoair_license` does **not** need to come from a real device. `entrypoint.sh`
 generates it fresh on every container start: it reads the CPU serial from
