@@ -6,17 +6,17 @@
 # the Rockchip CPU unique ID; in the container it is the fixed value set in
 # stub_hwid.c (CPUINFO_SERIAL).
 #
-# Formula verified against a real device:
-#   Serial cf6e09e382b50cd6 → cf6e09e3 XOR 82b50cd6 = 4ddb0535 (matches live license)
+# Formula verified against a real device (example serial redacted):
+#   Serial 0011223344556677 → 00112233 XOR 44556677 = 44444444
 #
 # Because this script and the binary's verifyPlus both derive sn/digest from
 # the same serial with the same formula, the generated license is always
 # self-consistent — pi_is_verified passes for ANY CPUINFO_SERIAL value, not
 # just one matching a real device.
 
-AUTH_CODE="cd32cd7f1798464ba4c3f17fea85040e"
-# sign field is not locally verified; keep original to have a well-formed file.
-SIGN="c1fDIZFCv0qkJchn72C3yk5IT/sVJfy+rayLR7MCr1Xv6P+NuIgFGqRt/vGOqe9ekbxspWZy8XEK05qkTVWoxUzS5xKEMVOfbJrHstf8IooUHXs5FDSyXahovOrKEvH4LwTvh2be3wPr4VuMuQ9/Ci71ZtZ9z5OZq0CUNG7gZoU="
+AUTH_CODE="00000000000000000000000000000000"
+# sign field is not locally verified; any well-formed base64 blob works.
+SIGN="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 LICENSE_PATH="/home/pi/.ZWO/zwoair_license"
 IMAGER="/home/pi/ASIAIR/bin/zwoair_imager"
 
