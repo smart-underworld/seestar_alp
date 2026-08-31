@@ -75,6 +75,12 @@ name = "Seestar Alpha"
 # ip_address should not have to be changed unless you have more than 1 seestar
 ip_address = "seestar.local"
 device_num = 1
+# Set to true when this entry points at the QEMU emulator (emulator/), not real
+# hardware, to suppress the firmware-auth warning banner. The emulator always
+# reports unverified -- its license signature check can only pass with a real
+# device's captured signing key, which can't be shipped in this repo (see
+# emulator/README.md) -- so the warning can never clear on its own there.
+#is_emulator = true
 #[[seestars]]
 #name = "Seestar Beta"
 #ip_address = "192.168.110.36"

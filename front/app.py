@@ -153,6 +153,18 @@ def get_telescope(telescope_id):
     return matches[0] if matches else None
 
 
+def is_emulator_telescope(telescope_id):
+    """True if this telescope's config.toml entry is flagged is_emulator = true.
+
+    The QEMU emulator (emulator/) can't be made to pass firmware's license
+    signature check without a real device's captured signing key (see
+    emulator/README.md), so it always reports unverified. Devices flagged
+    this way skip the auth warning rather than showing a nag no one can clear.
+    """
+    telescope = get_telescope(telescope_id)
+    return bool(telescope and telescope.get("is_emulator", False))
+
+
 def get_root(telescope_id):
     if telescope_id == 0:
         root = "/0"
@@ -774,6 +786,8 @@ def check_needs_auth(telescope_id):
     Results are cached for _AUTH_CACHE_TTL seconds to avoid a blocking TCP call
     on every page render.
     """
+    if is_emulator_telescope(telescope_id):
+        return False
     now = time.monotonic()
     cached = _auth_needs_cache.get(telescope_id)
     if cached is not None:

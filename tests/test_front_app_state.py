@@ -16,6 +16,16 @@ def _clear_auth_cache():
     front_app._auth_needs_cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_emulator_flag(monkeypatch):
+    # Isolate from the developer's local config.toml: if a [[seestars]] entry
+    # has is_emulator = true (e.g. for local emulator testing), tests below
+    # that don't care about it must not silently start skipping their
+    # check_needs_auth path. Tests exercising is_emulator_telescope or the
+    # is_emulator short-circuit explicitly override get_telescope again.
+    monkeypatch.setattr(front_app, "get_telescope", lambda _tid: {"device_num": _tid})
+
+
 class DummyReq:
     def __init__(self, host="localhost:5432", scheme="http"):
         self.host = host
@@ -1255,6 +1265,38 @@ def test_sparse_template_contexts_render_without_error(template_name, context):
 
 
 # --- check_needs_auth ---
+
+
+def test_is_emulator_telescope_true_when_flagged(monkeypatch):
+    monkeypatch.setattr(
+        front_app, "get_telescope", lambda _tid: {"device_num": 1, "is_emulator": True}
+    )
+    assert front_app.is_emulator_telescope(1) is True
+
+
+def test_is_emulator_telescope_false_when_absent(monkeypatch):
+    monkeypatch.setattr(front_app, "get_telescope", lambda _tid: {"device_num": 1})
+    assert front_app.is_emulator_telescope(1) is False
+
+
+def test_is_emulator_telescope_false_when_no_such_telescope(monkeypatch):
+    monkeypatch.setattr(front_app, "get_telescope", lambda _tid: None)
+    assert front_app.is_emulator_telescope(1) is False
+
+
+def test_check_needs_auth_false_for_emulator_telescope_without_network_call(
+    monkeypatch,
+):
+    # The emulator's license signature check can never pass (no real device's
+    # signing key is shipped in the repo), so is_emulator must short-circuit
+    # before any pi_is_verified round trip -- not just return False after one.
+    monkeypatch.setattr(front_app, "is_emulator_telescope", lambda _tid: True)
+
+    def fail_if_called(_tid):
+        raise AssertionError("check_api_state must not be called for emulator devices")
+
+    monkeypatch.setattr(front_app, "check_api_state", fail_if_called)
+    assert front_app.check_needs_auth(1) is False
 
 
 def test_check_needs_auth_false_when_offline(monkeypatch):
