@@ -1,3 +1,4 @@
+{% import 'partials/mosaic_order_diagram.html' as mosaic_diagrams %}
 {% block html_header %}
     <link href="https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.css" rel="stylesheet">
     <script type="text/javascript" src="https://code.jquery.com/jquery-1.12.1.min.js" charset="utf-8"></script>
@@ -127,7 +128,14 @@
     </fieldset>
 </div>
 <div id="aladin-div" style="height:500px; width: 100%;"></div>
-<div id="radec-div" style="width:300px;"></div>
+<div class="mt-2">
+    <div class="form-text">Each box below is one panel of the current mosaic grid, labeled with the order it is
+        captured in, its panel code (the same one used by "Selected Panels" and "Current Panel" on the
+        schedule, e.g. "21"), and its RA/Dec center. Arrows show the capture order: for each Dec row, every
+        RA panel in that row is captured in sequence, then the mount moves to the next Dec row and starts
+        again from the first RA panel (it does not alternate direction row to row).</div>
+    <div id="radec-div" style="width:100%; overflow-x:auto;"></div>
+</div>
 <div id="day-div" style="height:300px; width: 100%; max-width: 100% !important;"></div>
 <div id="year-div" style="height:300px; width: 100%; max-width: 100% !important;"></div>
 <div id="dayvisibility-panel-text" style="display: none;"></div>
@@ -226,7 +234,20 @@
                         <label for="panelSelect" class="form-label">Selected Panels (optional)</label>
                         <input type="text" class="form-control" id="panelSelect" name="panelSelect"
                             aria-describedby="panelSelectHelp">
-                        <div id="panelSelectHelp" class="form-text">Semicolon delimited list of panels you want to image</div>
+                        <div id="panelSelectHelp" class="form-text">Semicolon delimited list of panels you want to image.
+                            Each panel is identified by its RA panel number followed by its Dec panel number, e.g.
+                            <code>11;21</code> images the panel at RA position 1/Dec position 1 and the panel at
+                            RA position 2/Dec position 1. This same code (e.g. "21") is shown as "Current Panel"
+                            while a mosaic is running, and is appended to the saved image name (e.g. "M31_21").</div>
+                    </div>
+                </div>
+                <div class="mb-3 row">
+                    <div class="col">
+                        <div class="form-text">Panels are imaged in a fixed grid order: for each Dec row, every RA
+                            panel in that row is captured in sequence, then the mount moves to the next Dec row and
+                            starts again from the first RA panel (it does not alternate direction row to row).
+                            Example for a 3&times;3 mosaic:</div>
+                        {{ mosaic_diagrams.mosaic_order_example('mosaicOrderArrowDialog') }}
                     </div>
                 </div>
                 <div class="mb-3">
@@ -255,11 +276,14 @@
                 <h5 class="card-title">Exposure</h5>
 
                 <div class="mb-3">
-                    <label for="panelTime" class="form-label">Panel Acquisition Time</label>
+                    <label for="panelTime" class="form-label">Panel Acquisition Time (per panel)</label>
                     <input type="text" class="form-control" id="panelTime" name="panelTime"
                            aria-describedby="panelTimeHelp" required>
                     <div id="panelTimeHelp" class="form-text">How much time to acquire data for each panel (ex: 1h 30m or 5400).
+                        This is applied per panel, not split across the whole mosaic.
                     </div>
+                    <div id="mosaicTotalTimeHelp" class="form-text">Total acquisition time: <span id="mosaicTotalTime">-</span>
+                        (excludes slewing, autofocus, and retries)</div>
                 </div>
 
                 <div class="mb-3">
@@ -446,6 +470,58 @@
     const open_send_to_schedule_modal_btn = document.getElementById("open_send_to_schedule_modal_btn");
     const close_send_to_schedule_modal_btn = document.getElementById("close_send_to_schedule_modal_btn");
 
+    function parseDurationToSeconds(text) {
+        text = (text || "").trim().toLowerCase();
+        if (/^\d+(\.\d+)?$/.test(text)) {
+            return parseFloat(text);
+        }
+        const match = text.match(/^(?:(\d+(?:\.\d+)?)\s*h\s*)?(?:(\d+(?:\.\d+)?)\s*m\s*)?(?:(\d+(?:\.\d+)?)\s*s\s*)?$/);
+        if (!match || (!match[1] && !match[2] && !match[3])) {
+            return null;
+        }
+        return (parseFloat(match[1] || 0) * 3600) + (parseFloat(match[2] || 0) * 60) + parseFloat(match[3] || 0);
+    }
+
+    function formatSecondsAsHms(totalSeconds) {
+        totalSeconds = Math.round(totalSeconds);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        return String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0");
+    }
+
+    function updateMosaicTotalTime() {
+        // Scoped to the dialog: the Planning page also hosts the Framed
+        // Mosaic card, so a bare document.getElementById could pick up
+        // that card's fields if id collisions are ever introduced.
+        const totalTimeEl = send_to_schedule_modal.querySelector("#mosaicTotalTime");
+        if (!totalTimeEl) {
+            return;
+        }
+        const panelTimeSec = parseDurationToSeconds(send_to_schedule_modal.querySelector("#panelTime").value);
+        const selectedPanels = (send_to_schedule_modal.querySelector("#panelSelect").value || "").trim();
+        let panelCount;
+        if (selectedPanels) {
+            panelCount = selectedPanels.split(";").length;
+        } else {
+            const raPanels = parseInt(send_to_schedule_modal.querySelector("#raPanels").value, 10);
+            const decPanels = parseInt(send_to_schedule_modal.querySelector("#decPanels").value, 10);
+            panelCount = (raPanels || 0) * (decPanels || 0);
+        }
+        if (panelTimeSec === null || !panelCount) {
+            totalTimeEl.textContent = "-";
+            return;
+        }
+        totalTimeEl.textContent = formatSecondsAsHms(panelTimeSec * panelCount);
+    }
+
+    ["raPanels", "decPanels", "panelTime", "panelSelect"].forEach(function (id) {
+        const el = send_to_schedule_modal.querySelector("#" + id);
+        if (el) {
+            el.addEventListener("input", updateMosaicTotalTime);
+        }
+    });
+
     function show_send_to_schedule_modal() {
         astro_mosaic_grid_x = document.getElementById('astro_mosaic_grid_x').value;
         astro_mosaic_grid_y = document.getElementById('astro_mosaic_grid_y').value;
@@ -464,6 +540,7 @@
         aladin_dec = aladin_radec_array[3] + "d" + aladin_radec_array[4] + "m" + aladin_radec_array[5] + "s";
         document.getElementById('ra').value = aladin_ra;
         document.getElementById('dec').value = aladin_dec;
+        updateMosaicTotalTime();
         send_to_schedule_modal.showModal();
     }
 

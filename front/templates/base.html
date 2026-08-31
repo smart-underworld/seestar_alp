@@ -32,6 +32,7 @@
             --ui-primary: {{ accent_color or "#2cb1ff" }};
             --ui-primary-hover: color-mix(in srgb, var(--ui-primary) 82%, #ffffff);
             --ui-body: {{ webui_text_color or "#e7edf7" }};
+            --ui-muted: {{ webui_text_color or "rgba(231, 237, 247, 0.75)" }};
             --ui-link: {{ webui_link_color or (accent_color or "#6fc9ff") }};
 
             --bs-primary: var(--ui-primary);
@@ -39,6 +40,7 @@
             --bs-link-color: var(--ui-link);
             --bs-link-hover-color: var(--ui-link);
             --bs-body-color: var(--ui-body);
+            --bs-secondary-color: var(--ui-muted);
             --bs-border-radius: var(--ui-radius);
             --bs-border-radius-sm: 0.6rem;
             --bs-border-radius-lg: 1rem;
@@ -78,6 +80,7 @@
                            radial-gradient(120% 90% at 96% 8%, #ffe4c1 0%, transparent 52%),
                            linear-gradient(135deg, #f6fbff 0%, #eef5ff 55%, #e9f2ff 100%);
             --ui-body: {{ webui_text_color or "#1b2a42" }};
+            --ui-muted: {{ webui_text_color or "rgba(27, 42, 66, 0.75)" }};
         }
 
         body {

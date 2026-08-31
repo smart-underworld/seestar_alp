@@ -1,4 +1,5 @@
 <script src="/public/fit_import.js"></script>
+{% import 'partials/mosaic_order_diagram.html' as mosaic_diagrams %}
     <div class="card border-primary mb-3">
         <div class="card-body">
             <!-- First Row: Target Name and Search For -->
@@ -87,6 +88,15 @@
                     <div id="panelOverlapHelp" class="form-text">Overlap of panels in percentage</div>
                 </div>
             </div>
+            <div class="mb-3 row">
+                <div class="col">
+                    <div class="form-text">Panels are imaged in a fixed grid order: for each Dec row, every RA
+                        panel in that row is captured in sequence, then the mount moves to the next Dec row and
+                        starts again from the first RA panel (it does not alternate direction row to row).
+                        Example for a 3&times;3 mosaic:</div>
+                    {{ mosaic_diagrams.mosaic_order_example('mosaicOrderArrowCreate') }}
+                </div>
+            </div>
 
             <!-- Selected Panels -->
             <div class="mb-3 row">
@@ -94,7 +104,11 @@
                     <label for="panelSelect" class="form-label">Selected Panels (optional)</label>
                     <input type="text" class="form-control" id="panelSelect" name="panelSelect"
                            value="{{ values.selected_panels }}">
-                    <div id="panelSelectHelp" class="form-text">Semicolon delimited list of panels you want to image</div>
+                    <div id="panelSelectHelp" class="form-text">Semicolon delimited list of panels you want to image.
+                        Each panel is identified by its RA panel number followed by its Dec panel number, e.g.
+                        <code>11;21</code> images the panel at RA position 1/Dec position 1 and the panel at
+                        RA position 2/Dec position 1. This same code (e.g. "21") is shown as "Current Panel"
+                        while a mosaic is running, and is appended to the saved image name (e.g. "M31_21").</div>
                 </div>
             </div>
 
@@ -179,11 +193,14 @@
 
 
             <div class="mb-3">
-                <label for="panelTime" class="form-label">Panel Acquisition Time</label>
+                <label for="panelTime" class="form-label">Panel Acquisition Time (per panel)</label>
                 <input type="text" class="form-control" id="panelTime" name="panelTime"
                        aria-describedby="panelTimeHelp" value="{{ values.panel_time_sec }}" required>
                 <div id="panelTimeHelp" class="form-text">How much acquisition time for each panel (ex: 1h 30m or 5400).
+                    This is applied per panel, not split across the whole mosaic.
                 </div>
+                <div id="mosaicTotalTimeHelp" class="form-text">Total acquisition time: <span id="mosaicTotalTime">-</span>
+                    (excludes slewing, autofocus, and retries)</div>
             </div>
 
             <div class="mb-3">
@@ -253,3 +270,55 @@
         </div>
     </div>
 </div>
+
+<script>
+    function parseDurationToSeconds(text) {
+        text = (text || "").trim().toLowerCase();
+        if (/^\d+(\.\d+)?$/.test(text)) {
+            return parseFloat(text);
+        }
+        const match = text.match(/^(?:(\d+(?:\.\d+)?)\s*h\s*)?(?:(\d+(?:\.\d+)?)\s*m\s*)?(?:(\d+(?:\.\d+)?)\s*s\s*)?$/);
+        if (!match || (!match[1] && !match[2] && !match[3])) {
+            return null;
+        }
+        return (parseFloat(match[1] || 0) * 3600) + (parseFloat(match[2] || 0) * 60) + parseFloat(match[3] || 0);
+    }
+
+    function formatSecondsAsHms(totalSeconds) {
+        totalSeconds = Math.round(totalSeconds);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        return String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0");
+    }
+
+    function updateMosaicTotalTime() {
+        const totalTimeEl = document.getElementById("mosaicTotalTime");
+        if (!totalTimeEl) {
+            return;
+        }
+        const panelTimeSec = parseDurationToSeconds(document.getElementById("panelTime").value);
+        const selectedPanels = (document.getElementById("panelSelect").value || "").trim();
+        let panelCount;
+        if (selectedPanels) {
+            panelCount = selectedPanels.split(";").length;
+        } else {
+            const raPanels = parseInt(document.getElementById("raPanels").value, 10);
+            const decPanels = parseInt(document.getElementById("decPanels").value, 10);
+            panelCount = (raPanels || 0) * (decPanels || 0);
+        }
+        if (panelTimeSec === null || !panelCount) {
+            totalTimeEl.textContent = "-";
+            return;
+        }
+        totalTimeEl.textContent = formatSecondsAsHms(panelTimeSec * panelCount);
+    }
+
+    ["raPanels", "decPanels", "panelTime", "panelSelect"].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener("input", updateMosaicTotalTime);
+        }
+    });
+    updateMosaicTotalTime();
+</script>

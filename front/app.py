@@ -1945,6 +1945,17 @@ def seconds_to_hms(seconds):
 env.globals["seconds_to_hms"] = seconds_to_hms
 
 
+def mosaic_panel_count(params):
+    """Panel count for a mosaic item, matching Seestar.mosaic_thread_fn's num_panels."""
+    selected_panels = params.get("selected_panels") or ""
+    if selected_panels:
+        return len(selected_panels.split(";"))
+    return params.get("ra_num", 1) * params.get("dec_num", 1)
+
+
+env.globals["mosaic_panel_count"] = mosaic_panel_count
+
+
 def fetch_template(template_name):
     try:
         if getattr(sys, "frozen", False):
