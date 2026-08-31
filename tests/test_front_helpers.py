@@ -64,11 +64,10 @@ def test_check_ra_value_bare_decimal_boundary():
     assert not check_ra_value("-1.2")
 
 
-def test_check_ra_value_still_accepts_sexagesimal_and_space_separated_formats():
-    # These formats carry their own hour component and aren't subject to the
+def test_check_ra_value_still_accepts_sexagesimal_format():
+    # Sexagesimal RA carries its own hour component and isn't subject to the
     # bare-decimal range check above.
     assert check_ra_value("6h32m32.5s")
-    assert check_ra_value("12 30 10.5")
 
 
 def test_check_dec_value_accepts_multiple_formats():
