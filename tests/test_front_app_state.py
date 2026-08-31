@@ -1457,6 +1457,25 @@ def test_auth_warning_absent_when_not_needed(monkeypatch):
     assert "Authentication required" not in html
 
 
+def test_form_text_stays_legible_with_default_theme():
+    """Regression guard: Bootstrap's .form-text/.text-muted use
+    --bs-secondary-color, which used to only get a theme-aware value inside
+    `{% if webui_text_color %}`. With the default (unconfigured) theme that
+    left it at Bootstrap's stock dark-gray, unreadable against this app's
+    dark background -- surfaced by the new, longer mosaic help text added
+    for issues #37/#680. --bs-secondary-color must resolve to a visible
+    color even when no custom webui_text_color is set."""
+    context = _minimal_context("stats")
+    context["flashed_messages"] = []
+    context["messages"] = []
+    context["version"] = "test"
+    context["now"] = "now"
+    template = front_app.fetch_template("base.html")
+    html = template.render(**context)
+    assert "--bs-secondary-color: var(--ui-muted);" in html
+    assert "--ui-muted: rgba(231, 237, 247, 0.75);" in html
+
+
 # ---------------------------------------------------------------------------
 # Wide angle camera settings – GET (get_device_settings)
 # ---------------------------------------------------------------------------
@@ -2297,6 +2316,55 @@ def test_framed_mosaic_resource_renders_form(monkeypatch):
     assert 'id="mosaicAngle"' in resp.text
 
 
+def test_mosaic_resource_renders_order_and_notation_guidance(monkeypatch):
+    """Regression guard for the mosaic clarity cleanup (issues #37/#680):
+    the create form must explain panel order, panel-select notation, and
+    show a computed total-time readout, without touching Framed Mosaic."""
+    monkeypatch.setattr(
+        front_app,
+        "get_context",
+        lambda telescope_id, req: {
+            "online": True,
+            "client_master": True,
+            "root": "",
+            "defgain": 80,
+            "telescope": {"device_num": telescope_id},
+        },
+    )
+    monkeypatch.setattr(
+        front_app,
+        "do_action_device",
+        lambda action, dev_num, params, is_schedule=False: {
+            "Value": {"state": "stopped"}
+        },
+    )
+
+    app = falcon.App()
+    app.add_route("/{telescope_id:int}/mosaic", front_app.MosaicResource())
+    client = testing.TestClient(app)
+
+    resp = client.simulate_get("/1/mosaic")
+
+    assert resp.status_code == 200
+    assert "Panel Acquisition Time (per panel)" in resp.text
+    assert 'id="mosaicTotalTime"' in resp.text
+    assert "does not alternate direction row to row" in resp.text
+    assert "RA panel number followed by its Dec panel number" in resp.text
+
+
+def test_mosaic_panel_count_uses_grid_when_no_selection():
+    assert front_app.mosaic_panel_count({"ra_num": 3, "dec_num": 2}) == 6
+
+
+def test_mosaic_panel_count_uses_selected_panels_when_present():
+    assert (
+        front_app.mosaic_panel_count(
+            {"ra_num": 3, "dec_num": 2, "selected_panels": "11;21"}
+        )
+        == 2
+    )
+
+
 def test_do_create_image_invalid_ra_does_not_propagate_stack_type_to_device(
     monkeypatch,
 ):
@@ -2624,6 +2692,50 @@ def test_schedule_list_renders_framed_mosaic_item():
     assert "M31" in html
     assert "Scale: 1.5x" in html
     assert "Angle: 45.0&deg;" in html
+
+
+def test_schedule_list_shows_total_mosaic_time_and_labeled_current_panel():
+    """Regression guard for the mosaic clarity cleanup (issues #37/#680):
+    the schedule list must show a computed grand total next to the
+    per-panel time, and label the running panel by RA/Dec instead of an
+    ambiguous concatenated digit pair."""
+    template = front_app.env.get_template("partials/schedule_list.html")
+    html = template.render(
+        schedule={
+            "list": [
+                {
+                    "schedule_item_id": "x1",
+                    "action": "start_mosaic",
+                    "params": {
+                        "target_name": "M31",
+                        "ra": 0.7,
+                        "dec": 41.27,
+                        "ra_num": 2,
+                        "dec_num": 2,
+                        "panel_overlap_percent": 10,
+                        "panel_time_sec": 3600,
+                        "gain": 80,
+                        "selected_panels": "",
+                        "num_tries": 1,
+                        "retry_wait_s": 300,
+                    },
+                }
+            ],
+            "is_stacking": True,
+        },
+        current_item={
+            "schedule_item_id": "x1",
+            "item_total_time_s": 14400,
+            "item_remaining_time_s": 10800,
+            "cur_ra_panel_num": 2,
+            "cur_dec_panel_num": 1,
+        },
+    )
+
+    assert "01:00:00 ea." in html
+    assert "Total: 04:00:00" in html
+    assert "Current Panel: 21" in html
+    assert "RA 2 / Dec 1" in html
 
 
 def _row_column_count(html):

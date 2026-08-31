@@ -1,0 +1,56 @@
+{% macro mosaic_order_example(marker_id) %}
+<div class="d-flex justify-content-center">
+    <svg viewBox="0 0 320 300" width="320" height="300" role="img" aria-label="3 by 3 mosaic example: panels are captured in order 11, 21, 31, 12, 22, 32, 13, 23, 33, sweeping across each Dec row (bottom row first, since Dec-low is captured first) then moving up to the next row." style="max-width:100%;">
+        <title>3x3 mosaic capture order example</title>
+        <defs>
+            <marker id="{{ marker_id }}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+            </marker>
+        </defs>
+        <g fill="none" stroke="currentColor" stroke-opacity="0.35">
+            <rect x="20" y="20" width="80" height="80" rx="8"></rect>
+            <rect x="110" y="20" width="80" height="80" rx="8"></rect>
+            <rect x="200" y="20" width="80" height="80" rx="8"></rect>
+            <rect x="20" y="110" width="80" height="80" rx="8"></rect>
+            <rect x="110" y="110" width="80" height="80" rx="8"></rect>
+            <rect x="200" y="110" width="80" height="80" rx="8"></rect>
+            <rect x="20" y="200" width="80" height="80" rx="8"></rect>
+            <rect x="110" y="200" width="80" height="80" rx="8"></rect>
+            <rect x="200" y="200" width="80" height="80" rx="8"></rect>
+        </g>
+        <g fill="currentColor" text-anchor="middle" font-family="sans-serif">
+            <!-- Top row: last captured (Dec-high) -->
+            <text x="60" y="58" font-size="22" font-weight="700">7</text>
+            <text x="60" y="78" font-size="12" opacity="0.75">panel 13</text>
+            <text x="150" y="58" font-size="22" font-weight="700">8</text>
+            <text x="150" y="78" font-size="12" opacity="0.75">panel 23</text>
+            <text x="240" y="58" font-size="22" font-weight="700">9</text>
+            <text x="240" y="78" font-size="12" opacity="0.75">panel 33</text>
+            <!-- Middle row -->
+            <text x="60" y="148" font-size="22" font-weight="700">4</text>
+            <text x="60" y="168" font-size="12" opacity="0.75">panel 12</text>
+            <text x="150" y="148" font-size="22" font-weight="700">5</text>
+            <text x="150" y="168" font-size="12" opacity="0.75">panel 22</text>
+            <text x="240" y="148" font-size="22" font-weight="700">6</text>
+            <text x="240" y="168" font-size="12" opacity="0.75">panel 32</text>
+            <!-- Bottom row: captured first (Dec-low), since Dec increases upward -->
+            <text x="60" y="238" font-size="22" font-weight="700">1</text>
+            <text x="60" y="258" font-size="12" opacity="0.75">panel 11</text>
+            <text x="150" y="238" font-size="22" font-weight="700">2</text>
+            <text x="150" y="258" font-size="12" opacity="0.75">panel 21</text>
+            <text x="240" y="238" font-size="22" font-weight="700">3</text>
+            <text x="240" y="258" font-size="12" opacity="0.75">panel 31</text>
+        </g>
+        <g fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="100" y1="60" x2="108" y2="60" marker-end="url(#{{ marker_id }})"></line>
+            <line x1="190" y1="60" x2="198" y2="60" marker-end="url(#{{ marker_id }})"></line>
+            <line x1="100" y1="150" x2="108" y2="150" marker-end="url(#{{ marker_id }})"></line>
+            <line x1="190" y1="150" x2="198" y2="150" marker-end="url(#{{ marker_id }})"></line>
+            <line x1="100" y1="240" x2="108" y2="240" marker-end="url(#{{ marker_id }})"></line>
+            <line x1="190" y1="240" x2="198" y2="240" marker-end="url(#{{ marker_id }})"></line>
+            <path d="M280,240 L300,240 L300,195 L10,195 L10,150 L18,150" marker-end="url(#{{ marker_id }})"></path>
+            <path d="M280,150 L300,150 L300,105 L10,105 L10,60 L18,60" marker-end="url(#{{ marker_id }})"></path>
+        </g>
+    </svg>
+</div>
+{% endmacro %}

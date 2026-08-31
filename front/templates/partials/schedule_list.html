@@ -52,7 +52,10 @@
                   </div>
 
                   <!-- Fifth Column: Panel Time -->
-                  <div class="col align-self-start">{{ seconds_to_hms(item["params"]["panel_time_sec"]) }}</div>
+                  <div class="col align-self-start">
+                    {{ seconds_to_hms(item["params"]["panel_time_sec"]) }} ea.
+                    <br><small class="text-muted" title="Acquisition only; excludes slewing, autofocus, and retries">Total: {{ seconds_to_hms(item["params"]["panel_time_sec"] * mosaic_panel_count(item["params"])) }}</small>
+                  </div>
 
                   <!-- Sixth Column: Gain -->
                   <div class="col align-self-start">{{ item["params"]["gain"] }}</div>
@@ -106,7 +109,8 @@
                     {% endif %}
                     {% if item["params"]["ra_num"] > 1 or item["params"]["dec_num"] > 1 %}
                       {% if current_item['cur_ra_panel_num'] and current_item['cur_dec_panel_num'] %}
-                        <p>Current Panel:  {{ current_item['cur_ra_panel_num'] }}{{ current_item['cur_dec_panel_num'] }}</p>
+                        <p>Current Panel: {{ current_item['cur_ra_panel_num'] }}{{ current_item['cur_dec_panel_num'] }}
+                          (RA {{ current_item['cur_ra_panel_num'] }} / Dec {{ current_item['cur_dec_panel_num'] }})</p>
                       {% endif %}
                       {% if current_item['panel_remaining_time_s'] is defined %}
                         {% set panel_remain = current_item['panel_remaining_time_s'] %}
@@ -172,7 +176,10 @@
                   </div>
 
                   <!-- Fifth Column: Panel Time -->
-                  <div class="col align-self-start">{{ seconds_to_hms(item["params"]["panel_time_sec"]) }}</div>
+                  <div class="col align-self-start">
+                    {{ seconds_to_hms(item["params"]["panel_time_sec"]) }} ea.
+                    <br><small class="text-muted" title="Acquisition only; excludes slewing, autofocus, and retries">Total: {{ seconds_to_hms(item["params"]["panel_time_sec"] * mosaic_panel_count(item["params"])) }}</small>
+                  </div>
 
                   <!-- Sixth Column: Gain -->
                   <div class="col align-self-start">{{ item["params"]["gain"] }}</div>
