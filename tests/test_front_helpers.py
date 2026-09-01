@@ -49,6 +49,39 @@ def test_check_ra_value_accepts_multiple_formats():
     assert check_ra_value("12 30 10.5")
 
 
+def test_check_ra_value_rejects_degrees_outside_the_0_to_24_hour_range():
+    # 279.2347 is Vega's RA in *degrees* -- a bare decimal RA is parsed as hours
+    # (see Util.parse_coordinate), so this must be rejected rather than silently
+    # wrapped by astropy into 15.2347h, a completely different point in the sky.
+    assert not check_ra_value("279.2347")
+    assert check_ra_value("18.6156")  # Vega's RA in hours
+
+
+def test_check_ra_value_bare_decimal_boundary():
+    assert check_ra_value("0")
+    assert check_ra_value("23.9999")
+    assert not check_ra_value("24.0")
+
+
+def test_check_ra_value_accepts_a_single_negative_wrap():
+    # -2 is unambiguously 22h (astropy wraps it that way), and a real
+    # RA-in-degrees mistake can never be negative -- RA-in-degrees has no
+    # negative convention -- so accepting one wrap here can't reopen the
+    # degrees-mistaken-for-hours bug the range check above guards against.
+    assert check_ra_value("-1.2")
+    assert check_ra_value("-23.9999")
+    assert not check_ra_value("-24.0")
+    # Anything requiring more than one wrap is still a plausible degrees
+    # mistake (e.g. a negated RA-in-degrees typo), not a legitimate offset.
+    assert not check_ra_value("-279.2347")
+
+
+def test_check_ra_value_still_accepts_sexagesimal_format():
+    # Sexagesimal RA carries its own hour component and isn't subject to the
+    # bare-decimal range check above.
+    assert check_ra_value("6h32m32.5s")
+
+
 def test_check_dec_value_accepts_multiple_formats():
     assert check_dec_value("+12d 30m 10.5s")
     assert check_dec_value("-10.25")

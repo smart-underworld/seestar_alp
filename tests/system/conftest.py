@@ -49,7 +49,7 @@ def pytest_addoption(parser):
         help="Path to the firmware 7.18+ interop PEM key.",
     )
     group.addoption("--goto-target-name", default="Vega")
-    group.addoption("--goto-ra", default="279.2347", help="Decimal degrees.")
+    group.addoption("--goto-ra", default="18.6156", help="Decimal hours.")
     group.addoption("--goto-dec", default="38.7836", help="Decimal degrees.")
     group.addoption(
         "--capture-duration",
