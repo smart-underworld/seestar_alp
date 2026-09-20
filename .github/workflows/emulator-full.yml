@@ -112,10 +112,17 @@ jobs:
           echo $! > /tmp/renderd.pid
 
       - name: Run full regression tests
+        # Polaris, not the tests' default (Vega): the emulator runs on the
+        # real wall clock at a fixed observer (lat 37.12), and GitHub delays
+        # scheduled runs by hours, so a fixed rising/setting target is often
+        # below the horizon (firmware: "ac below horizon") and goto never
+        # starts. Polaris stays ~37 deg up at every time of day/year.
+        # RA is J2000 decimal hours (2h31m49s), Dec is degrees.
         run: |
           pytest tests/system --target emulator --host 127.0.0.1 \
             --pem /tmp/emulator-fw/unpacked/${{ matrix.version }}/interop.pem \
             --renderer-shared-dir emulator/sim/shared \
+            --goto-target-name Polaris --goto-ra 2.5303 --goto-dec 89.2641 \
             -m full \
             --screenshot=on --video=on \
             --junit-xml=test-results/emulator-full-${{ matrix.version }}.xml -q
