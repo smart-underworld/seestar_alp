@@ -291,6 +291,46 @@ static int eaf_fd = -1;
 static int     pwm_fd = -1;
 static uint8_t efw_state[8] = {0};  /* last commanded EFW state, echoed on GET */
 
+#ifdef __aarch64__
+/* The aarch64 (S30 Pro / S50 Pro, RV1126B) libasisdk/imager drive the same
+ * /dev/pwm-gpio-misc node through a different ioctl family, all type 'C':
+ *   nr 1/2  work-mode get/set   {u32 gpio, u32 mode}      (gpio <= 0x20)
+ *   nr 3/4  pwm param get/set   {u32 pwm,  u32 a, u32 b}
+ *   nr 5/6  pwm enable/disable  {u32 pwm}
+ *   nr 7/8  gpio level get/set  {u32 gpio, u32 level}     (get fills level)
+ *   nr 9/10 global timer set/get{u32 period_ns, u32 duty_ns}
+ * The imager verifies every write by reading it back (a failed read-back is
+ * logged "pigpio SetMode error" and the wheel move fails with code 508), so
+ * this is a plain stateful register file: reads return what was last written. */
+#define PWM_GPIO_MAX 33
+#define PWM_CHANNELS 8
+static uint32_t pwmgpio_mode[PWM_GPIO_MAX];
+static uint32_t pwmgpio_level[PWM_GPIO_MAX];
+static uint32_t pwmgpio_param[PWM_CHANNELS][2];
+static uint32_t pwmgpio_enabled[PWM_CHANNELS];
+static uint32_t pwmgpio_timer[2];
+
+/* Returns 1 if `request` was a pwm-gpio ioctl (handled; caller returns 0). */
+static int pwm_gpio_ioctl(unsigned long request, void *arg) {
+    if (((request >> 8) & 0xff) != 'C' || !arg) return 0;
+    uint32_t *p = (uint32_t *)arg;
+    uint32_t idx = p[0];
+    switch (request & 0xff) {
+    case 1: if (idx < PWM_GPIO_MAX) p[1] = pwmgpio_mode[idx]; return 1;
+    case 2: if (idx < PWM_GPIO_MAX) pwmgpio_mode[idx] = p[1]; return 1;
+    case 3: if (idx < PWM_CHANNELS) { p[1] = pwmgpio_param[idx][0]; p[2] = pwmgpio_param[idx][1]; } return 1;
+    case 4: if (idx < PWM_CHANNELS) { pwmgpio_param[idx][0] = p[1]; pwmgpio_param[idx][1] = p[2]; } return 1;
+    case 5: if (idx < PWM_CHANNELS) pwmgpio_enabled[idx] = 1; return 1;
+    case 6: if (idx < PWM_CHANNELS) pwmgpio_enabled[idx] = 0; return 1;
+    case 7: if (idx < PWM_GPIO_MAX) p[1] = pwmgpio_level[idx]; return 1;
+    case 8: if (idx < PWM_GPIO_MAX) pwmgpio_level[idx] = p[1]; return 1;
+    case 9: pwmgpio_timer[0] = p[0]; pwmgpio_timer[1] = p[1]; return 1;
+    case 10: p[0] = pwmgpio_timer[0]; p[1] = pwmgpio_timer[1]; return 1;
+    default: return 0;
+    }
+}
+#endif
+
 /* Streaming state — set by VIDIOC_STREAMON, cleared by STREAMOFF.
  * Used by select() intercept to know when to inject frame-ready signals. */
 static volatile int _streaming = 0;
@@ -735,6 +775,9 @@ int ioctl(int fd, unsigned long request, ...) {
     va_list ap; va_start(ap, request); arg = va_arg(ap, void *); va_end(ap);
     if (fd == eaf_fd && fd != -1) return 0;
     if (fd == pwm_fd && fd != -1) {
+#ifdef __aarch64__
+        if (pwm_gpio_ioctl(request, arg)) return 0;
+#endif
         /* EFW: echo the last SET 8-byte state back on GET so the imager's poll
          * loop sees the wheel arrive; other pwm-gpio-misc ioctls just succeed. */
         if (request == EFW_SET && arg) {
