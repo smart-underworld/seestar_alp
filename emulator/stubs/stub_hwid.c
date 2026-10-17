@@ -1038,7 +1038,15 @@ int access(const char *path, int mode) {
             return 0;
         }
         if (strstr(path, "/dev/media")) {
+#ifdef __aarch64__
+            /* The aarch64 libasisdk scans media<cam>, media<cam+2>, media<cam+4>
+             * and spins forever if access() fails for any of them; the matching
+             * stub_media_ctl.c returns NULL for the devices that don't exist. */
+            if (strlen(path) == strlen("/dev/mediaN") &&
+                    path[10] >= '0' && path[10] <= '5') {
+#else
             if (strcmp(path, "/dev/media0") == 0 || strcmp(path, "/dev/media1") == 0) {
+#endif
                 fprintf(stderr, "[hwid_stub] access(%s, %d) -> 0\n", path, mode);
                 fflush(stderr);
                 return 0;
