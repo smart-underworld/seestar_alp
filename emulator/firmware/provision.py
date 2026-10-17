@@ -27,6 +27,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 import requests
@@ -150,6 +151,24 @@ def _unpack_debs(deb_dir: Path, out_dir: Path) -> None:
         )
 
 
+def _ensure_deb_build_dir(iscope_dir: Path) -> None:
+    """Extract iscope/deb-build.tar.bz2 to iscope/deb-build/ if only the tarball shipped.
+
+    Firmware 3.3.2 ships the pre-exploded app tree compressed, where 3.3.1
+    shipped it as a plain directory. Same contents either way, so unpack it
+    up front and let everything downstream keep reading deb-build/.
+    """
+    deb_build_dir = iscope_dir / "deb-build"
+    tarball = iscope_dir / "deb-build.tar.bz2"
+    if deb_build_dir.is_dir() or not tarball.is_file():
+        return
+    print(f"  extracting {tarball.name} -> {iscope_dir}/")
+    with tarfile.open(tarball, "r:bz2") as tar:
+        # "tar" filter: refuses absolute paths and .. escapes but keeps the
+        # symlinks the app tree legitimately contains.
+        tar.extractall(iscope_dir, filter="tar")
+
+
 def _merge_deb_build(iscope_dir: Path, out_dir: Path) -> None:
     """Merge iscope/deb-build/{sysfiles,asiair_armhf} onto out_dir, if present.
 
@@ -250,6 +269,8 @@ def provision_firmware(
     iscope_dir = extract_iscope_from_apk(
         str(xapk_path), str(version_dir), variant="iscope"
     )
+
+    _ensure_deb_build_dir(iscope_dir)
 
     deb_dir = iscope_dir / "deb"
     out_dir = deb_dir / "out"

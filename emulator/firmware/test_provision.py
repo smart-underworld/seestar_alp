@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from emulator.firmware.provision import (
+    _ensure_deb_build_dir,
     _extract_download_url,
     _fetch_xapk_bytes,
     _unpack_debs,
@@ -390,6 +391,35 @@ def test_provision_firmware_merges_deb_build_when_not_a_declared_delta(tmp_path)
         asiair_dir / "bin" / "zwoair_imager"
     ).read_text() == "complete imager binary"
     assert (asiair_dir / "config").read_text() == "complete config"
+
+
+def test_ensure_deb_build_dir_extracts_tarball_shipped_by_3_3_2(tmp_path):
+    # Real-world 3.3.2 ships iscope/deb-build.tar.bz2 instead of a plain
+    # deb-build/ directory (3.3.1 style); the contents are identical.
+    src = tmp_path / "src" / "deb-build" / "asiair_armhf" / "home" / "pi" / "ASIAIR"
+    src.mkdir(parents=True)
+    (src / "zwoair_imager").write_text("imager")
+    iscope_dir = tmp_path / "iscope"
+    iscope_dir.mkdir()
+    with tarfile.open(iscope_dir / "deb-build.tar.bz2", "w:bz2") as tar:
+        tar.add(tmp_path / "src" / "deb-build", arcname="deb-build")
+
+    _ensure_deb_build_dir(iscope_dir)
+
+    extracted = iscope_dir / "deb-build" / "asiair_armhf" / "home" / "pi" / "ASIAIR"
+    assert (extracted / "zwoair_imager").read_text() == "imager"
+
+
+def test_ensure_deb_build_dir_leaves_existing_directory_alone(tmp_path):
+    iscope_dir = tmp_path / "iscope"
+    (iscope_dir / "deb-build").mkdir(parents=True)
+    (iscope_dir / "deb-build" / "marker").write_text("keep")
+    with tarfile.open(iscope_dir / "deb-build.tar.bz2", "w:bz2"):
+        pass
+
+    _ensure_deb_build_dir(iscope_dir)
+
+    assert (iscope_dir / "deb-build" / "marker").read_text() == "keep"
 
 
 def test_unpack_debs_raises_when_a_package_fails_to_unpack(tmp_path):
