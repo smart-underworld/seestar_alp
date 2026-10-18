@@ -1,9 +1,11 @@
 // Live preview of a Framed Mosaic (scale + rotation) over an Aladin sky view.
-// Base FOV matches the Seestar S50's telephoto camera (43.8 x 77.4 arcmin);
-// this is a visual planning aid only — it does not compute device commands.
+// Base FOV is the telephoto camera of the model picked in the planner's
+// Seestar dropdown (see seestar_models.js); this is a visual planning aid
+// only — it does not compute device commands.
 (function () {
-  const BASE_FOV_X_DEG = 43.8 / 60.0;
-  const BASE_FOV_Y_DEG = 77.4 / 60.0;
+  // Read per use: the model can change while the page is open.
+  const baseFovXDeg = () => window.seestarFov().fov_x / 60.0;
+  const baseFovYDeg = () => window.seestarFov().fov_y / 60.0;
 
   let aladin = null;
   let overlay = null;
@@ -13,8 +15,8 @@
   let isDragging = false;
 
   function rectangleCorners(raDeg, decDeg, scale, angleDeg) {
-    const halfW = (BASE_FOV_X_DEG * scale) / 2.0;
-    const halfH = (BASE_FOV_Y_DEG * scale) / 2.0;
+    const halfW = (baseFovXDeg() * scale) / 2.0;
+    const halfH = (baseFovYDeg() * scale) / 2.0;
     const angleRad = (angleDeg * Math.PI) / 180.0;
     const cosA = Math.cos(angleRad);
     const sinA = Math.sin(angleRad);
@@ -47,8 +49,8 @@
     const sinA = Math.sin(angleRad);
     const localX = dRa * cosA + dDec * sinA;
     const localY = -dRa * sinA + dDec * cosA;
-    const halfW = (BASE_FOV_X_DEG * scale) / 2.0;
-    const halfH = (BASE_FOV_Y_DEG * scale) / 2.0;
+    const halfW = (baseFovXDeg() * scale) / 2.0;
+    const halfH = (baseFovYDeg() * scale) / 2.0;
     return Math.abs(localX) <= halfW && Math.abs(localY) <= halfH;
   }
 
@@ -135,6 +137,12 @@
   document.addEventListener("DOMContentLoaded", function () {
     if (typeof A !== "undefined" && A.init) {
       A.init.then(init_framed_mosaic_aladin);
+    }
+
+    // Redraw the frame when the planner's Seestar model changes.
+    const modelSelect = document.getElementById("seestar");
+    if (modelSelect) {
+      modelSelect.addEventListener("change", update_framed_mosaic);
     }
 
     const searchBtn = document.getElementById("framed_mosaic_search_button");

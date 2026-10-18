@@ -851,6 +851,35 @@ def _check_needs_auth_uncached(telescope_id):
         return False
 
 
+def _model_family(model):
+    """Normalize a product_model string to "S30"/"S50" plus a Pro flag.
+
+    The firmware reports "Seestar " + a short name (S50, S50N, S30, S30P,
+    S50P); older builds and the OTA updater use "S30 Pro"/"S50 Pro". Match
+    loosely so all of them work. Returns (family, is_pro); family is None for unknown models
+    (including S30 Plus, which is not the S30 Pro).
+    """
+    compact = re.sub(r"[\s_-]+", "", str(model or "")).lower()
+    m = re.search(r"s(30|50)(pro|p(?!lus))?", compact)
+    if not m:
+        return None, False
+    return f"S{m.group(1)}", bool(m.group(2))
+
+
+def has_wide_camera(model):
+    """S30, S30 Pro and S50 Pro have a wide angle camera; the S50 does not."""
+    family, is_pro = _model_family(model)
+    return family == "S30" or (family == "S50" and is_pro)
+
+
+def planner_model_key(model):
+    """Key of the matching option in the planner's Seestar model dropdown."""
+    family, is_pro = _model_family(model)
+    if family is None:
+        return None
+    return f"{family} Pro" if is_pro else family
+
+
 def get_device_model(telescope_id):
     if check_api_state(telescope_id):
         state = method_sync("get_device_state", telescope_id)
@@ -1145,7 +1174,7 @@ def get_device_settings(telescope_id):
                     settings_result, "af_before_stack", False
                 ),
             }
-            if model == "Seestar S30 Pro":
+            if planner_model_key(model) == "S30 Pro":
                 settings |= {
                     "stack_star_trails": pydash.get(
                         settings_result, "stack.star_trails", False
@@ -1153,7 +1182,7 @@ def get_device_settings(telescope_id):
                 }
 
         # Wide angle camera settings (S30 and S30P only, experimental)
-        if Config.experimental and "S30" in (model or ""):
+        if Config.experimental and has_wide_camera(model):
             for key, val in {
                 "wide_cam": pydash.get(settings_result, "wide_cam"),
                 "wide_4k": pydash.get(settings_result, "wide_4k"),
@@ -3825,7 +3854,7 @@ class LiveWideCamResource:
             resp.status = falcon.HTTP_204
             return
         model = get_device_model(telescope_id)
-        if not model or "S30" not in str(model):
+        if not has_wide_camera(model):
             resp.set_header("HX-Reswap", "none")
             resp.status = falcon.HTTP_204
             return
@@ -3847,7 +3876,7 @@ class LiveWideCamResource:
             resp.status = falcon.HTTP_204
             return
         model = get_device_model(telescope_id)
-        if not model or "S30" not in str(model):
+        if not has_wide_camera(model):
             resp.set_header("HX-Reswap", "none")
             resp.status = falcon.HTTP_204
             return
@@ -4106,7 +4135,7 @@ class SettingsResource(BaseResource):
                 PostedSettings["auto_lenhance"]
             )
 
-        if "S30" in (model or ""):
+        if has_wide_camera(model):
             for key, converter in (
                 ("wide_cam", str2bool),
                 ("wide_4k", str2bool),
@@ -4254,7 +4283,7 @@ class SettingsResource(BaseResource):
         star_trails_output = {"ErrorNumber": 0}
         if (
             fw <= 2597
-            and model == "Seestar S30 Pro"
+            and planner_model_key(model) == "S30 Pro"
             and "stack_star_trails" in PostedSettings
         ):
             StarTrailsSettings = {
@@ -4459,7 +4488,7 @@ class SettingsResource(BaseResource):
             "rec_stablzn": "Record Stabilization",
             "isp_exp_ms": "isp_exp_ms",
             "calib_location": "calib_location",
-            "wide_cam": "Enable or disable the wide angle camera (S30/S30P only).",
+            "wide_cam": "Enable or disable the wide angle camera (S30/S30P/S50P only).",
             "wide_4k": "Enable 4K resolution mode for the wide angle camera.",
             "wide_denoise": "Enable noise reduction for wide angle camera images.",
             "wide_focal_pos": "User-defined focal position for the wide angle camera.",
@@ -4513,10 +4542,16 @@ class PlanningResource:
         config_long = round(
             Config.init_long, 2
         )  # Some of the 3rd party api's/embeds want rounded down.
+        # Pre-select the planner's Seestar model from the connected scope
+        # (telescope_id 0 is the all-devices view, which has no single model).
+        planner_model = (
+            planner_model_key(get_device_model(telescope_id)) if telescope_id else None
+        )
         render_template(
             req,
             resp,
             "planning.html",
+            planner_model=planner_model,
             twilight_times=twilight_times,
             config_lat=config_lat,
             config_long=config_long,
