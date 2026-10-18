@@ -26,6 +26,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libopencv-features2d3.2 \
     libopencv-calib3d3.2 \
     libopencv-video3.2 \
+    libopencv-shape3.2 \
+    libopencv-stitching3.2 \
+    libopencv-superres3.2 \
+    libopencv-videostab3.2 \
+    libopencv-contrib3.2 \
+    libopencv-objdetect3.2 \
+    libopencv-photo3.2 \
+    libopencv-ml3.2 \
+    libopencv-videoio3.2 \
+    libopencv-flann3.2 \
     libnova-0.16-0 \
     libxml2 \
     libjpeg62-turbo \
