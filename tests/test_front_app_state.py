@@ -2881,3 +2881,4 @@ def test_astro_mosaic_template_offers_s50_pro_and_preselects_model():
     )
     assert '<option value="S50 Pro" selected>' in html
     assert 'value="S50 Pro Wide"' in html
+    assert 'value="S30 Pro Wide"' in html

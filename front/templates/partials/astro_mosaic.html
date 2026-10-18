@@ -92,7 +92,7 @@
             <div class="control-cell">
                 <label for="seestar" class="form-label">Seestar</label>
                 <select class="form-select app-select" id="seestar" name="seestar" onchange="update_astro_mosaic()">
-                  {% for model in ["S50", "S50 Pro", "S50 Pro Wide", "S30", "S30 Pro"] %}
+                  {% for model in ["S50", "S50 Pro", "S50 Pro Wide", "S30", "S30 Pro", "S30 Pro Wide"] %}
                   <option value="{{ model }}" {% if model == planner_model %}selected{% endif %}>{{ model }}</option>
                   {% endfor %}
                 </select>
