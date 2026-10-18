@@ -70,3 +70,20 @@ def test_malformed_json_returns_defaults(tmp_path):
     assert fmt.width == 1920
     assert fmt.height == 1080
     assert fmt.stride_bytes == 1920 * 2
+
+
+def test_s50p_plate_scale_is_inside_the_scale_bounds_the_firmware_passes_to_solve_field():
+    # The 9.75 aarch64 imager calls solve-field with -L 2.22 -H 2.71 (arcsec/px)
+    # for the S50 Pro (2.9 um pixels, 260 mm focal length).  A rendered frame
+    # outside that window can never be solved, so every goto/polar-align on the
+    # S50P emulator would fail with "solve failed".
+    fmt = frame_format("S50P")
+    assert 2.22 <= fmt.plate_scale_arcsec <= 2.71
+    assert fmt.focal_len_mm == 260.0
+
+
+def test_dense_star_fields_are_capped_for_the_aarch64_models_only():
+    # Capping keeps plate-solve time bounded on dense fields; the 32-bit S50 lanes
+    # must keep rendering every star they always have.
+    assert frame_format("S50P").max_stars == 80
+    assert frame_format("S50").max_stars == 0
