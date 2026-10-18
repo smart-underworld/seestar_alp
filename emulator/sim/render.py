@@ -9,6 +9,9 @@ def render_field(
     radius = 1.2 * (max(fmt.width, fmt.height) * fmt.plate_scale_arcsec / 3600.0)
     near = _cat.near(cat, ra0_deg, dec0_deg, radius)
     xs, ys, mags = project(near, ra0_deg, dec0_deg, fmt)
+    if fmt.max_stars and len(mags) > fmt.max_stars:
+        keep = np.argsort(mags)[: fmt.max_stars]  # brightest = lowest magnitude
+        xs, ys, mags = xs[keep], ys[keep], mags[keep]
     img = np.full((fmt.height, fmt.width), float(bg))
     sigma = fwhm_px / 2.3548
     half = int(np.ceil(3 * sigma))

@@ -9,6 +9,7 @@ import pytest
 
 from emulator.firmware.provision import (
     _ensure_deb_build_dir,
+    variant_dir_name,
     _extract_download_url,
     _fetch_xapk_bytes,
     _unpack_debs,
@@ -433,3 +434,62 @@ def test_unpack_debs_raises_when_a_package_fails_to_unpack(tmp_path):
 
     with pytest.raises(RuntimeError, match="broken.deb"):
         _unpack_debs(deb_dir, tmp_path / "out")
+
+
+def _build_iscope64_xapk(xapk_path, files):
+    """XAPK whose only firmware asset is assets/iscope_64: no deb/ directory,
+    just a deb-build/ tree, which is how the real aarch64 build ships."""
+    src = xapk_path.parent / f"iscope64_src_{xapk_path.stem}"
+    for rel, contents in files.items():
+        path = src / "deb-build" / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents)
+
+    tar_path = xapk_path.parent / f"{xapk_path.stem}.tar.bz2"
+    with tarfile.open(tar_path, "w:bz2") as tar:
+        tar.add(src / "deb-build", arcname="deb-build")
+
+    with zipfile.ZipFile(xapk_path, "w") as z:
+        z.writestr("manifest.json", "{}")
+        io_buf = io.BytesIO()
+        with zipfile.ZipFile(io_buf, "w") as inner:
+            inner.writestr("assets/iscope_64", tar_path.read_bytes())
+        z.writestr("base.apk", io_buf.getvalue())
+
+
+def test_variant_dir_name_keeps_32bit_layout_and_separates_64bit():
+    assert variant_dir_name("3.4.0", "iscope") == "3.4.0"
+    assert variant_dir_name("3.4.0", "iscope_64") == "3.4.0-64"
+
+
+def test_provision_firmware_iscope_64_merges_deb_build_without_debs(tmp_path):
+    xapk_path = tmp_path / "firmware-3.4.0.xapk"
+    _build_iscope64_xapk(
+        xapk_path,
+        {
+            "asiair_armhf/home/pi/ASIAIR/bin/zwoair_imager": "aarch64 imager",
+            "sysfiles/oem/third/lib/libzwo_stitch.so.0.0": "stitch",
+            "sysfiles/oem/zwo/ai_model/denoise.rknn": "model",
+        },
+    )
+
+    with patch("emulator.firmware.provision.download_xapk", return_value=xapk_path):
+        deb_out = provision_firmware(
+            version="3.4.0",
+            work_dir=tmp_path / "work",
+            delta_base={},
+            variant="iscope_64",
+        )
+
+    # Own directory, so it can coexist with the 32-bit tree for the same version.
+    assert deb_out == tmp_path / "work" / "3.4.0-64" / "iscope_64" / "deb" / "out"
+    imager = deb_out / "home" / "pi" / "ASIAIR" / "bin" / "zwoair_imager"
+    assert imager.read_text() == "aarch64 imager"
+    assert (deb_out / "oem" / "third" / "lib" / "libzwo_stitch.so.0.0").exists()
+    assert (deb_out / "oem" / "zwo" / "ai_model" / "denoise.rknn").exists()
+    assert not (tmp_path / "work" / "3.4.0" / "iscope").exists()
+
+
+def test_provision_firmware_rejects_unknown_variant(tmp_path):
+    with pytest.raises(ValueError, match="unknown variant"):
+        provision_firmware(version="3.4.0", work_dir=tmp_path, variant="iscope_128")

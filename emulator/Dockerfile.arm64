@@ -1,0 +1,191 @@
+# aarch64 emulator image for the 64-bit firmware build ("iscope_64"): S30 Pro,
+# S50 Pro, S30 Plus, S80 (Rockchip RV1126B).  The 32-bit (armhf, S30/S50) image
+# is emulator/Dockerfile.
+#
+# The firmware package ships NO root filesystem: update_package.sh rsyncs the
+# app onto an OS that is already on the device.  On the Pro models that OS is a
+# Rockchip-SDK Buildroot (GCC 13.3, glibc >= 2.40, OpenSSL 3).  This image
+# approximates it from Debian packages:
+#
+#   * Debian trixie arm64 as the base: glibc 2.41 satisfies the binaries'
+#     GLIBC_2.38/2.40 requirements (bookworm's 2.36 does not).
+#   * Libraries the imager links by an OLDER soname than trixie ships (cfitsio.7,
+#     wcs.6, ffmpeg 4.x = avcodec.58, gsl.27) are copied out of buster/bookworm.
+#   * OpenCV: the imager wants 4.7 (soname .407), which no Debian release
+#     packages.  trixie's 4.10 is ABI-compatible enough for everything the
+#     imager and libasisdk call (verified: ldd -r is clean), so it is exposed
+#     under the .407 names.
+#   * onnxruntime 1.14.1 (Microsoft's aarch64 prebuilt, checksum-pinned) and
+#     SQLiteCpp 3.3.2 (built from source) are not packaged by Debian.
+#   * Rockchip userland (rockit, rkrawstream, rga, rtsp, tlog, rkaiq, rknn, mpp)
+#     is replaced by the stubs in emulator/stubs.
+#
+# Build and run: see emulator/run.sh (--arch arm64).
+
+FROM arm64v8/debian:buster AS buster
+# Buster reached EOL - repos moved to archive.debian.org.
+RUN sed -i \
+    -e 's|http://deb.debian.org/debian|http://archive.debian.org/debian|g' \
+    -e 's|http://security.debian.org|http://archive.debian.org/debian-security|g' \
+    -e '/buster-updates/d' \
+    /etc/apt/sources.list && \
+    echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libcfitsio7 libwcs6 libnova-0.16-0 \
+    libavcodec58 libavformat58 libavutil56 libswscale5 \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM arm64v8/debian:bookworm AS bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgsl27 libgslcblas0 \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM arm64v8/debian:trixie
+
+# Runtime dependencies of zwoair_imager / libasisdk, the plate-solve stack, and
+# the tools the imager shells out to.  OpenCV package names are discovered
+# rather than listed because the SONAME suffix (libopencv-core410t64 ...) is a
+# trixie detail.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ make cmake git libc6-dev curl ca-certificates binutils \
+    libsqlite3-dev sqlite3 \
+    libssl3t64 libxml2 libjpeg62-turbo libsqlite3-0 libpng16-16t64 libudev1 \
+    libcurl4t64 libidn2-0 libusb-1.0-0 libgomp1 libgslcblas0 libyuv0 \
+    libpaho-mqtt1.3 \
+    $(apt-cache search --names-only '^libopencv-(core|imgproc|imgcodecs|highgui|features2d|calib3d|video|stitching|videoio|objdetect|photo|dnn|ml|flann)[0-9.]+(t64)?$' | cut -d' ' -f1) \
+    procps psmisc net-tools iproute2 kmod i2c-tools alsa-utils openssl xxd \
+    netcat-openbsd strace file netpbm \
+    python3 python3-numpy python3-astropy \
+    astrometry.net source-extractor \
+    && rm -rf /var/lib/apt/lists/*
+
+# sextractor was renamed source-extractor; solve-field may look for either.
+RUN for n in sextractor sex; do [ -e /usr/local/bin/$n ] || ln -s "$(command -v source-extractor)" /usr/local/bin/$n; done
+
+# Old-soname libraries from buster/bookworm: only files trixie lacks, so nothing
+# modern is shadowed.  /opt/compat is searched after /opt/stubs (see ENV below).
+COPY --from=buster /usr/lib/aarch64-linux-gnu/ /tmp/buster/
+COPY --from=bookworm /usr/lib/aarch64-linux-gnu/ /tmp/bookworm/
+RUN mkdir -p /opt/compat && \
+    for d in /tmp/buster /tmp/bookworm; do \
+      for f in $d/*.so*; do \
+        b=$(basename "$f"); \
+        [ -e "/usr/lib/aarch64-linux-gnu/$b" ] || [ -e "/opt/compat/$b" ] || cp -a "$f" /opt/compat/; \
+      done; \
+    done; \
+    rm -rf /tmp/buster /tmp/bookworm
+
+# onnxruntime 1.14.1 (aarch64 prebuilt), pinned by checksum.
+RUN curl -fsSL -o /tmp/ort.tgz https://github.com/microsoft/onnxruntime/releases/download/v1.14.1/onnxruntime-linux-aarch64-1.14.1.tgz && \
+    echo "20965e05d2da6a0e6acedda8aca1a8f75c3f4cb1d7932403a9977b753b1b2120  /tmp/ort.tgz" | sha256sum -c - && \
+    tar xzf /tmp/ort.tgz -C /tmp && \
+    cp -a /tmp/onnxruntime-linux-aarch64-1.14.1/lib/libonnxruntime.so* /opt/compat/ && \
+    rm -rf /tmp/ort.tgz /tmp/onnxruntime-linux-aarch64-1.14.1
+
+# SQLiteCpp: libasisdk-adjacent code in the imager links libSQLiteCpp.so.0,
+# which Debian does not ship as a shared library.
+RUN git clone --depth 1 --branch 3.3.2 https://github.com/SRombauts/SQLiteCpp /tmp/sqlitecpp && \
+    cd /tmp/sqlitecpp && \
+    cmake -S . -B build -DBUILD_SHARED_LIBS=ON -DSQLITECPP_INTERNAL_SQLITE=OFF \
+          -DSQLITECPP_RUN_CPPLINT=OFF -DSQLITECPP_RUN_CPPCHECK=OFF \
+          -DSQLITECPP_BUILD_TESTS=OFF -DSQLITECPP_BUILD_EXAMPLES=OFF \
+          -DCMAKE_BUILD_TYPE=Release >/dev/null && \
+    cmake --build build -j4 && \
+    cp -a build/libSQLiteCpp.so* /opt/compat/ && \
+    ( [ -e /opt/compat/libSQLiteCpp.so.0 ] || ln -s "$(ls /opt/compat/libSQLiteCpp.so* | head -1)" /opt/compat/libSQLiteCpp.so.0 ) && \
+    rm -rf /tmp/sqlitecpp
+
+# Soname shims: trixie's libraries under the older / unversioned names the
+# 64-bit binaries ask for.  ZWO's own /oem/third/lib libraries also link
+# libopencv_gapi (not packaged by Debian); an empty placeholder satisfies the
+# loader because nothing the emulator exercises calls into it.
+RUN cd /opt/compat && L=/usr/lib/aarch64-linux-gnu && \
+    for m in core imgproc imgcodecs highgui features2d calib3d video stitching videoio objdetect photo dnn ml flann; do \
+      f=$(ls $L/libopencv_$m.so.4* 2>/dev/null | head -1); \
+      [ -n "$f" ] && ln -sf "$f" libopencv_$m.so.407; \
+    done && \
+    echo 'int cv_gapi_placeholder;' > /tmp/g.c && \
+    gcc -shared -fPIC -Wl,-soname,libopencv_gapi.so.407 -o libopencv_gapi.so.407 /tmp/g.c && rm /tmp/g.c && \
+    ln -sf $L/libsqlite3.so.0 libsqlite3.so && \
+    ln -sf $L/libyuv.so.0 libyuv.so && \
+    ln -sf $L/libpng16.so.16 libpng.so && \
+    ln -sf $L/libudev.so.1 libudev.so
+
+# sudo: pass-through wrapper (we're already root)
+RUN printf '#!/bin/sh\nexec "$@"\n' > /usr/local/bin/sudo && chmod +x /usr/local/bin/sudo
+
+# systemctl: no-op stub - the binary calls "systemctl restart hostapd.service"
+# once per minute to manage the WiFi AP.
+RUN printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/systemctl && chmod +x /usr/local/bin/systemctl
+
+# lsblk / wpa_cli / ifconfig / ip: same fakes as the 32-bit image (see
+# emulator/Dockerfile for what each one is for).  The wrappers shadow the real
+# tools, so resolve the real paths first.
+RUN printf '#!/bin/sh\ncase "$*" in\n  *-J*)\n    printf '"'"'{\n   "blockdevices": [\n      {"name":"mmcblk0", "mountpoint":null, "size":"59699M",\n         "children": [\n            {"name":"mmcblk0p8", "mountpoint":"/boot/Image", "size":"59699M"}\n         ]\n      }\n   ]\n}\n'"'"'\n    ;;\n  *) exec /bin/lsblk "$@" 2>/dev/null ;;\nesac\n' \
+    > /usr/local/bin/lsblk && chmod +x /usr/local/bin/lsblk
+RUN printf '#!/bin/sh\ncase "$*" in\n  *status*)\n    printf "bssid=aa:bb:cc:dd:ee:ff\nfreq=5805\nssid=sandbox-net\nid=0\nmode=station\npairwise_cipher=CCMP\ngroup_cipher=CCMP\nkey_mgmt=WPA2-PSK\nwpa_state=COMPLETED\nip_address=192.168.1.100\naddress=aa:bb:cc:dd:ee:ff\n"\n    ;;\n  *list_networks*)\n    printf "Network id / ssid / bssid / flags\n0\tsandbox-net\tany\t[CURRENT]\n"\n    ;;\n  *) printf "OK\n" ;;\nesac\n' \
+    > /usr/local/bin/wpa_cli && chmod +x /usr/local/bin/wpa_cli
+RUN IFCONFIG=$(command -v ifconfig) && \
+    printf '#!/bin/sh\nREAL=%s\nWLAN_INFO="wlan0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500\n        inet 192.168.1.100  netmask 255.255.255.0  broadcast 192.168.1.255\n        ether aa:bb:cc:dd:ee:ff  txqueuelen 1000  (Ethernet)"\ncase "$1" in\n  wlan0) printf "%%s\\n" "$WLAN_INFO" ;;\n  uap0) exit 0 ;;\n  "")\n    $REAL\n    printf "\\n%%s\\n" "$WLAN_INFO"\n    ;;\n  *) $REAL "$@" ;;\nesac\n' "$IFCONFIG" \
+    > /usr/local/bin/ifconfig && chmod +x /usr/local/bin/ifconfig
+RUN IP=$(command -v ip) && \
+    printf '#!/bin/sh\ncase "$*" in\n  *route*)\n    %s "$@"\n    printf "default via 192.168.1.1 dev wlan0 metric 302\\n"\n    ;;\n  *) exec %s "$@" ;;\nesac\n' "$IP" "$IP" \
+    > /usr/local/bin/ip && chmod +x /usr/local/bin/ip
+
+# iw / iwconfig / wpa_supplicant stubs (network.sh get_state relies on these).
+COPY scripts/ /usr/local/bin/
+RUN chmod +x /usr/local/bin/iw /usr/local/bin/iwconfig /usr/local/bin/wpa_supplicant && \
+    mkdir -p /var/log && touch /var/log/wpa_supplicant.log
+
+# solve-field shim: clamps the imager's "-5 180" (whole-sky) search radius so a
+# plate solve finishes inside the imager's 30 s window under x86-hosted QEMU.
+# See the script for why this is safe.  arm64 image only.
+COPY scripts-arm64/solve-field /usr/local/bin/solve-field
+RUN chmod +x /usr/local/bin/solve-field
+
+# Rockchip / hardware stubs, built natively for aarch64.  The Makefile adds the
+# aarch64-only libraries (librockit, librkrawstream, librga, librtsp, libtlog,
+# librknnrt) on this architecture.
+COPY stubs/ /opt/stubs/
+RUN make -C /opt/stubs
+
+# astrometry.net plate-solve stack: apt-installed above; the ~350 MB index files
+# are bind-mounted at runtime by run.sh.  The engine finds its config by a
+# bindir-relative fallback (<bindir>/../etc/astrometry.cfg), so the cfg is
+# placed at /etc and linked from /usr/etc.
+RUN printf 'cpulimit 90\ndepths 10 20 30\nminwidth 0.1\nadd_path /usr/local/astrometry/data\ninparallel\nautoindex\n' \
+    > /etc/astrometry.cfg && \
+    mkdir -p /usr/etc && ln -sf /etc/astrometry.cfg /usr/etc/astrometry.cfg
+
+# The pi user, the settings/db the imager expects, and the AI-model location:
+# the Pro firmware keeps models under /oem/zwo/ai_model (mounted by run.sh).
+RUN useradd -m -s /bin/bash pi && \
+    mkdir -p /root/.ZWO /tmp/zwo/log /etc/zwo /run/seestar-sim && \
+    sqlite3 /root/.ZWO/userData.db3 "VACUUM;" && \
+    ln -sfn /oem/zwo/ai_model /etc/zwo/ai_model
+
+WORKDIR /home/pi/ASIAIR
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Search order: stubs first, then the compat libs (old sonames, onnxruntime,
+# SQLiteCpp), then the firmware's own lib/ and the /oem third-party libs.
+ENV LD_LIBRARY_PATH=/opt/stubs:/opt/compat:/home/pi/ASIAIR/lib:/oem/third/lib
+
+# libhwid fakes /proc/device-tree/model, the camera/IMU/filter-wheel devices and
+# the V4L2 capture path; libmedia-ctl fakes the media-controller graph.  The
+# 32-bit imager links libmedia-ctl itself; the 64-bit one embeds libmediactl, so
+# the stub has to be preloaded to intercept those calls.
+ENV LD_PRELOAD="/opt/stubs/libhwid.so /opt/stubs/libmedia-ctl.so"
+
+# Keep OpenMP/BLAS/ONNX from using SIMD paths QEMU can't emulate.
+ENV OMP_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV ORT_DISABLE_ALL=1
+
+EXPOSE 4700 4701 4800 4801 80
+EXPOSE 4720/udp
+
+CMD ["/usr/local/bin/entrypoint.sh"]

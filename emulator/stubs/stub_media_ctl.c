@@ -26,6 +26,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Fake media_device struct.  info_model is at offset 28 = device+28,
@@ -39,14 +40,20 @@ struct fake_media_dev {
     char     info_rest[512];   /* padding — remaining info + entities fields */
 };
 
+#ifndef __aarch64__
 static struct fake_media_dev _rkispp_dev = {
     .info_driver = "rkispp",
     .info_model  = "rkispp0",
 };
+#endif
 
 static struct fake_media_dev _rkcif_dev = {
     .info_driver = "rkcif",
+#ifdef __aarch64__
+    .info_model  = "rkcif-mipi-lvds",
+#else
     .info_model  = "rkcif_mipi_lvds",
+#endif
 };
 
 /* Three distinct entity handles so media_entity_get_devname can dispatch. */
@@ -66,13 +73,50 @@ static struct {
     .type = 0x00020001,
 };
 
+#ifdef __aarch64__
+/* The aarch64 (RV1126B, S30 Pro / S50 Pro) libasisdk scans media0/2/4 for
+ * camera 0 (index starts at the camera number and steps by 2) and needs
+ * three hits for get_v4l2_devs_info() to succeed:
+ *   media0 "rkvpss0"          entity rkvpss_scale0       -> YUV device
+ *   media2 "rkcif-mipi-lvds"  entity stream_cif_mipi_id0 -> RAW device
+ *                              + an "m00_..." sensor entity -> control device
+ * media4 only has to exist (any model that matches nothing, no entities).
+ * Odd indices (camera 1) have no sensor: media_device_new() returns NULL. */
+static struct fake_media_dev _rkvpss_dev = {
+    .info_driver = "rkvpss",
+    .info_model  = "rkvpss0",
+};
+static struct fake_media_dev _rkisp_dev = {
+    .info_driver = "rkisp",
+    .info_model  = "rkisp0",
+};
+
+/* Sensor name follows SEESTAR_MODEL, same table as stub_hwid.c's
+ * camera_sensor_name(); the Pro models this build serves use imx585. */
+static const char *sensor_name(void) {
+    const char *m = getenv("SEESTAR_MODEL");
+    if (m && strcmp(m, "S30") == 0) return "imx662";
+    if (m && strcmp(m, "S50V2") == 0) return "imx662";
+    return "imx585";
+}
+#else
+static const char *sensor_name(void) { return "imx462"; }
+#endif
+
 void *media_device_new(const char *devnode) {
     fprintf(stderr, "[media_ctl] media_device_new(%s)\n", devnode ? devnode : "(null)");
     fflush(stderr);
     if (!devnode) return NULL;
+#ifdef __aarch64__
+    if (strcmp(devnode, "/dev/media0") == 0) return &_rkvpss_dev;
+    if (strcmp(devnode, "/dev/media2") == 0) return &_rkcif_dev;
+    if (strcmp(devnode, "/dev/media4") == 0) return &_rkisp_dev;
+    return NULL;
+#else
     if (strstr(devnode, "media0")) return &_rkispp_dev;
     if (strstr(devnode, "media1")) return &_rkcif_dev;
     return NULL;  /* media2+ are not exposed via access() */
+#endif
 }
 
 int media_device_enumerate(void *media) {
@@ -111,6 +155,7 @@ void *media_get_entity_by_name(void *media, const char *name, int len) {
     fflush(stderr);
     if (!name) return NULL;
     if (strstr(name, "rkispp_m_bypass"))    return (void *)&_rkispp_entity;
+    if (strstr(name, "rkvpss_scale0"))      return (void *)&_rkispp_entity;
     if (strstr(name, "stream_cif_mipi_id")) return (void *)&_cif_entity;
     return NULL;
 }
@@ -121,8 +166,11 @@ void *media_get_entity_by_name(void *media, const char *name, int len) {
 void *media_entity_get_info(void *entity) {
     fprintf(stderr, "[media_ctl] media_entity_get_info(entity=%p)\n", entity);
     fflush(stderr);
-    if (entity == (void *)&_sensor_entity)
+    if (entity == (void *)&_sensor_entity) {
+        snprintf(_sensor_desc.name, sizeof(_sensor_desc.name),
+                 "m00_b_%s 1-001a", sensor_name());
         return &_sensor_desc;
+    }
     return NULL;
 }
 
