@@ -24,5 +24,19 @@ libhwid.so: stub_hwid.c
 mount_stub: stub_mount.c
 	$(CC) -O0 -Wall -o $@ $<
 
+# aarch64 (RV1126B Pro models) only: the 64-bit imager links Rockchip libraries
+# the 32-bit one does not.  stub_rk64_generic.c is built once per soname;
+# librknnrt.so is the same RKNN stub the 32-bit image ships as librknn_api.so.
+ifneq (,$(findstring aarch64,$(shell $(CC) -dumpmachine)))
+ARM64_LIBS = librockit.so librkrawstream.so librga.so.2 librtsp.so libtlog.so librknnrt.so
+all: $(ARM64_LIBS)
+
+librockit.so librkrawstream.so librga.so.2 librtsp.so libtlog.so: stub_rk64_generic.c
+	$(CC) $(CFLAGS) -Wl,-soname,$@ -o $@ $<
+
+librknnrt.so: stub_rknn.c
+	$(CC) $(CFLAGS) -Wl,-soname,$@ -o $@ $<
+endif
+
 clean:
-	rm -f *.so *.so.1 mount_stub
+	rm -f *.so *.so.1 *.so.2 mount_stub

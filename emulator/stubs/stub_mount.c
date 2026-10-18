@@ -79,6 +79,28 @@
 #define PORT     4400
 #define BUF_SIZE 4096
 
+/* Observer location.  On the Pro models the imager proxies set_user_location
+ * to the mount and reads it back with scope_get_location, so the mount has to
+ * remember it.  Defaults match the emulator's fixed observer (lat 37.12,
+ * lon -123.45) until a client sets one. */
+static double g_loc_lat = 37.12;
+static double g_loc_lon = -123.45;
+
+/* Parse `"<key>": <number>` out of a JSON line; returns 1 and sets *out on hit. */
+static int json_number(const char *json, const char *key, double *out) {
+    char pat[32];
+    snprintf(pat, sizeof(pat), "\"%s\"", key);
+    const char *p = strstr(json, pat);
+    if (!p) return 0;
+    p = strchr(p + strlen(pat), ':');
+    if (!p) return 0;
+    char *end = NULL;
+    double v = strtod(p + 1, &end);
+    if (end == p + 1) return 0;
+    *out = v;
+    return 1;
+}
+
 static long extract_id(const char *json) {
     const char *p = strstr(json, "\"id\":");
     if (!p) return -1;
@@ -229,6 +251,24 @@ static void handle_client(int fd) {
                     snprintf(resp, sizeof(resp),
                         JRPC "\"method\":\"%s\",\"result\":false,\"code\":0,\"track_error\":\"\",\"track_code\":0,\"id\":%ld}\r\n",
                         method, id);
+                } else if (strcmp(method, "set_user_location") == 0 ||
+                           strcmp(method, "scope_set_location") == 0) {
+                    double v;
+                    if (json_number(line, "lat", &v)) g_loc_lat = v;
+                    if (json_number(line, "lon", &v)) g_loc_lon = v;
+                    fprintf(stderr, "[mount_stub] location set lat=%.4f lon=%.4f\n",
+                            g_loc_lat, g_loc_lon);
+                    fflush(stderr);
+                    snprintf(resp, sizeof(resp),
+                        JRPC "\"method\":\"%s\",\"result\":0,\"code\":0,\"id\":%ld}\r\n",
+                        method, id);
+                } else if (strcmp(method, "scope_get_location") == 0) {
+                    /* The firmware parses this with the regex
+                     * result": *\[(.*),(.*)\] -> [lat, lon] (first capture is
+                     * latitude, second longitude). */
+                    snprintf(resp, sizeof(resp),
+                        JRPC "\"method\":\"%s\",\"result\":[%.6f,%.6f],\"code\":0,\"id\":%ld}\r\n",
+                        method, g_loc_lat, g_loc_lon, id);
                 } else if (strcmp(method, "scope_send_cmd") == 0) {
                     snprintf(resp, sizeof(resp),
                         JRPC "\"method\":\"%s\",\"result\":0,\"code\":0,\"id\":%ld}\r\n",

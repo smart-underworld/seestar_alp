@@ -40,10 +40,12 @@ struct fake_media_dev {
     char     info_rest[512];   /* padding — remaining info + entities fields */
 };
 
+#ifndef __aarch64__
 static struct fake_media_dev _rkispp_dev = {
     .info_driver = "rkispp",
     .info_model  = "rkispp0",
 };
+#endif
 
 static struct fake_media_dev _rkcif_dev = {
     .info_driver = "rkcif",

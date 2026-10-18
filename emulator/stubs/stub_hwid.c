@@ -21,6 +21,8 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <pthread.h>
+#include <sys/syscall.h>
 #include <dirent.h>
 #include <errno.h>
 #include <sys/mman.h>
@@ -56,16 +58,19 @@ static int is_imager_process(void) {
     }
     return cached;
 }
+/* Hex digits per word: 8 on ARM32, 16 on aarch64 (so addresses aren't cut). */
+#define CRASH_HEXDIGITS ((int)(sizeof(unsigned long) * 2))
 static void crash_hex(char *out, unsigned long v) {
     static const char hx[] = "0123456789abcdef";
     out[0] = '0'; out[1] = 'x';
-    for (int i = 0; i < 8; i++) out[2 + i] = hx[(v >> ((7 - i) * 4)) & 0xf];
-    out[10] = '\0';
+    for (int i = 0; i < CRASH_HEXDIGITS; i++)
+        out[2 + i] = hx[(v >> ((CRASH_HEXDIGITS - 1 - i) * 4)) & 0xf];
+    out[2 + CRASH_HEXDIGITS] = '\0';
 }
 static void crash_line(const char *label, unsigned long v) {
-    char h[11]; crash_hex(h, v);
+    char h[2 + 16 + 1]; crash_hex(h, v);
     write(2, label, strlen(label));
-    write(2, h, 10);
+    write(2, h, 2 + CRASH_HEXDIGITS);
     write(2, "\n", 1);
 }
 static void crash_symbolize(const char *label, unsigned long addr) {
@@ -73,14 +78,22 @@ static void crash_symbolize(const char *label, unsigned long addr) {
     write(2, label, strlen(label));
     if (dladdr((void *)addr, &info) && info.dli_fname) {
         write(2, info.dli_fname, strlen(info.dli_fname));
+        {   /* module-relative offset: resolvable offline with nm/objdump even
+             * when the function isn't in the dynamic symbol table */
+            char h[2 + 16 + 1];
+            write(2, "[+", 2);
+            crash_hex(h, addr - (unsigned long)info.dli_fbase);
+            write(2, h, 2 + CRASH_HEXDIGITS);
+            write(2, "]", 1);
+        }
         if (info.dli_sname) {
-            char h[11];
+            char h[2 + 16 + 1];
             unsigned long off = addr - (unsigned long)info.dli_saddr;
             write(2, "(", 1);
             write(2, info.dli_sname, strlen(info.dli_sname));
             write(2, "+", 1);
             crash_hex(h, off);
-            write(2, h, 10);
+            write(2, h, 2 + CRASH_HEXDIGITS);
             write(2, ")", 1);
         }
         write(2, "\n", 1);
@@ -88,6 +101,58 @@ static void crash_symbolize(const char *label, unsigned long addr) {
         write(2, "?\n", 2);
     }
 }
+#ifdef __aarch64__
+/* PC/LR/SP plus a frame-pointer walk straight from the signal context.  Does
+ * not depend on backtrace()/unwind tables, which can fault again on a bad
+ * stack.  Shared by the crash trap and the SIGUSR1 all-thread stack dump. */
+static void crash_dump_context_aarch64(void *uctx) {
+    ucontext_t *uc = (ucontext_t *)uctx;
+    crash_line("pc          = ", (unsigned long)uc->uc_mcontext.pc);
+    crash_line("lr          = ", (unsigned long)uc->uc_mcontext.regs[30]);
+    crash_line("sp          = ", (unsigned long)uc->uc_mcontext.sp);
+    crash_line("x0          = ", (unsigned long)uc->uc_mcontext.regs[0]);
+    crash_line("x1          = ", (unsigned long)uc->uc_mcontext.regs[1]);
+    crash_line("x2          = ", (unsigned long)uc->uc_mcontext.regs[2]);
+    crash_symbolize("pc sym      = ", (unsigned long)uc->uc_mcontext.pc);
+    crash_symbolize("lr sym      = ", (unsigned long)uc->uc_mcontext.regs[30]);
+    unsigned long fp = (unsigned long)uc->uc_mcontext.regs[29];
+    for (int depth = 0; depth < 14; depth++) {
+        if (fp < 0x10000UL || (fp & 7UL)) break;
+        unsigned long next = ((unsigned long *)fp)[0];
+        unsigned long ret  = ((unsigned long *)fp)[1];
+        crash_symbolize("  frame     = ", ret);
+        if (next <= fp) break;
+        fp = next;
+    }
+}
+
+/* SIGUSR1 -> every thread prints where it is (debug aid: `kill -USR1 <imager>`).
+ * Used to find which thread is blocked when an operation never completes. */
+static volatile int stackdump_lock = 0;
+static void stackdump_thread_handler(int sig, siginfo_t *si, void *uctx) {
+    (void)sig; (void)si;
+    while (__sync_lock_test_and_set(&stackdump_lock, 1)) { }
+    crash_line("--- thread tid = ", (unsigned long)syscall(SYS_gettid));
+    if (uctx) crash_dump_context_aarch64(uctx);
+    __sync_lock_release(&stackdump_lock);
+}
+static void stackdump_all_handler(int sig, siginfo_t *si, void *uctx) {
+    (void)sig; (void)si; (void)uctx;
+    write(2, "\n=== [hwid_stub] THREAD STACKS ===\n", 35);
+    pid_t pid = getpid();
+    DIR *d = opendir("/proc/self/task");
+    if (!d) return;
+    struct dirent *e;
+    while ((e = readdir(d)) != NULL) {
+        if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
+        syscall(SYS_tgkill, pid, atoi(e->d_name), SIGUSR2);
+        usleep(40000);   /* let that thread print before the next one */
+    }
+    closedir(d);
+    write(2, "=== end thread stacks ===\n", 26);
+}
+#endif
+
 static void crash_handler(int sig, siginfo_t *si, void *uctx) {
     write(2, "\n=== [hwid_stub] CRASH TRAP ===\n", 31);
     crash_line("signal      = ", (unsigned long)sig);
@@ -103,6 +168,8 @@ static void crash_handler(int sig, siginfo_t *si, void *uctx) {
         crash_symbolize("pc sym      = ", (unsigned long)uc->uc_mcontext.arm_pc);
         crash_symbolize("lr sym      = ", (unsigned long)uc->uc_mcontext.arm_lr);
     }
+#elif defined(__aarch64__)
+    if (uctx) crash_dump_context_aarch64(uctx);
 #endif
     void *bt[32];
     int n = backtrace(bt, 32);
@@ -131,8 +198,26 @@ static void install_crash_trap(void) {
     real_sigaction(SIGSEGV, &sa, NULL);
     real_sigaction(SIGBUS,  &sa, NULL);
     real_sigaction(SIGABRT, &sa, NULL);
+#ifdef __aarch64__
+    /* Opt-in (SEESTAR_STACKDUMP=1): `kill -USR1 <imager>` prints every thread's
+     * stack.  Off by default because it claims SIGUSR1/SIGUSR2 from the binary. */
+    if (!getenv("SEESTAR_STACKDUMP")) return;
+    struct sigaction su;
+    memset(&su, 0, sizeof(su));
+    su.sa_flags = SA_SIGINFO | SA_RESTART;
+    sigemptyset(&su.sa_mask);
+    su.sa_sigaction = stackdump_all_handler;
+    real_sigaction(SIGUSR1, &su, NULL);
+    su.sa_sigaction = stackdump_thread_handler;
+    real_sigaction(SIGUSR2, &su, NULL);
+#endif
 }
 static int crash_trap_owns(int signum) {
+#ifdef __aarch64__
+    if (getenv("SEESTAR_STACKDUMP") && is_imager_process() &&
+            (signum == SIGUSR1 || signum == SIGUSR2))
+        return 1;
+#endif
     return !getenv("SEESTAR_NO_CRASH_TRAP") && is_imager_process() &&
            (signum == SIGSEGV || signum == SIGBUS || signum == SIGABRT);
 }
@@ -289,6 +374,21 @@ static int eaf_fd = -1;
 #define EFW_GET 0x80084301U
 #define EFW_SET 0x40084307U
 static int     pwm_fd = -1;
+/* Every fd handed out for the pwm-gpio node (the aarch64 imager opens it twice
+ * and uses both), so ioctls on an earlier fd are not mistaken for /dev/null. */
+#define MAX_PWM_FDS 8
+static int pwm_fds[MAX_PWM_FDS];
+static int pwm_fd_count = 0;
+static void pwm_fd_note(int fd) {
+    for (int i = 0; i < pwm_fd_count; i++) if (pwm_fds[i] == fd) return;
+    if (pwm_fd_count < MAX_PWM_FDS) pwm_fds[pwm_fd_count++] = fd;
+}
+#ifdef __aarch64__
+static int pwm_fd_is(int fd) {
+    for (int i = 0; i < pwm_fd_count; i++) if (pwm_fds[i] == fd) return 1;
+    return 0;
+}
+#endif
 static uint8_t efw_state[8] = {0};  /* last commanded EFW state, echoed on GET */
 
 #ifdef __aarch64__
@@ -448,6 +548,104 @@ static const char *solve_redirect(const char *path, int flags) {
     return SOLVE_DST;
 }
 
+#ifdef __aarch64__
+/* Fake IIO IMU for the aarch64 (Pro) imager.
+ *
+ * GetIMU() looks for an IIO device named icm43600 / qmi8658 / mpu6500 under
+ * /sys/bus/iio/devices and, without one, polls forever (~10x/s, 3 sysfs probes
+ * each, ~70% of the log) while polar alignment's tilt check (gsensor_test)
+ * has nothing to read.  /sys is read-only in a container, so paths under
+ * /sys/bus/iio/devices are redirected to a real directory tree we create, and
+ * /dev/iio:deviceN becomes a pipe fed by a thread.
+ *
+ * MPU6500 path (recovered from the disassembly): find_type_by_name("mpu6500"),
+ * chmod/write buffer/{length,watermark,enable} and scan_elements/in_*_en,
+ * sampling_frequency, read in_accel_scale and in_anglvel_scale, then epoll the
+ * /dev node and read() records of six BIG-ENDIAN int16: ax ay az gx gy gz. */
+#define IIO_ROOT "/tmp/seestar-iio"
+#define IIO_SYS_PREFIX "/sys/bus/iio/devices"
+
+static void iio_put(const char *rel, const char *content) {
+    char p[256];
+    snprintf(p, sizeof(p), IIO_ROOT "/devices/iio:device0/%s", rel);
+    FILE *f = fopen(p, "w");
+    if (!f) return;
+    fputs(content, f);
+    fclose(f);
+    chmod(p, 0666);
+}
+
+static pthread_once_t iio_once = PTHREAD_ONCE_INIT;
+static void iio_build_tree(void) {
+    mkdir(IIO_ROOT, 0777);
+    mkdir(IIO_ROOT "/devices", 0777);
+    mkdir(IIO_ROOT "/devices/iio:device0", 0777);
+    mkdir(IIO_ROOT "/devices/iio:device0/buffer", 0777);
+    mkdir(IIO_ROOT "/devices/iio:device0/scan_elements", 0777);
+    iio_put("name", "mpu6500\n");
+    iio_put("sampling_frequency", "100\n");
+    iio_put("in_accel_scale", "0.000598\n");     /* m/s^2 per LSB, +-2 g */
+    iio_put("in_anglvel_scale", "0.000133\n");   /* rad/s per LSB, +-250 dps */
+    iio_put("buffer/length", "2\n");
+    iio_put("buffer/watermark", "1\n");
+    iio_put("buffer/enable", "0\n");
+    const char *ch[] = {"in_accel_x_en", "in_accel_y_en", "in_accel_z_en",
+                        "in_anglvel_x_en", "in_anglvel_y_en", "in_anglvel_z_en"};
+    for (int i = 0; i < 6; i++) {
+        char rel[96];
+        snprintf(rel, sizeof(rel), "scan_elements/%s", ch[i]);
+        iio_put(rel, "0\n");
+    }
+}
+
+/* Map /sys/bus/iio/devices/... onto the fake tree; other paths pass through. */
+static const char *iio_path(const char *path, char *buf, size_t n) {
+    if (path && strncmp(path, IIO_SYS_PREFIX, strlen(IIO_SYS_PREFIX)) == 0) {
+        pthread_once(&iio_once, iio_build_tree);
+        snprintf(buf, n, IIO_ROOT "/devices%s", path + strlen(IIO_SYS_PREFIX));
+        return buf;
+    }
+    return path;
+}
+
+static void *iio_feed_thread(void *arg) {
+    int fd = (int)(intptr_t)arg;
+    sigset_t blk; sigemptyset(&blk); sigaddset(&blk, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &blk, NULL);
+    /* Resting scope: +1 g on Z (16384 LSB at +-2 g), no rotation. Big-endian. */
+    const uint8_t frame[12] = {0x00,0x00, 0x00,0x00, 0x40,0x00, 0x00,0x00, 0x00,0x00, 0x00,0x00};
+    for (;;) {
+        if (write(fd, frame, sizeof(frame)) < 0 && errno != EAGAIN) break;  /* reader gone */
+        usleep(10000);
+    }
+    close(fd);
+    return NULL;
+}
+
+/* /dev/iio:deviceN -> pipe fed at ~100 Hz.  Returns -2 if path isn't ours. */
+static int iio_open_dev(const char *path) {
+    if (!path || strncmp(path, "/dev/iio:device", 15) != 0) return -2;
+    int fds[2];
+    if (pipe2(fds, O_CLOEXEC) != 0) return -1;
+    fcntl(fds[1], F_SETFL, O_NONBLOCK);
+    pthread_t t;
+    if (pthread_create(&t, NULL, iio_feed_thread, (void *)(intptr_t)fds[1]) != 0) {
+        close(fds[0]); close(fds[1]);
+        return -1;
+    }
+    pthread_detach(t);
+    fprintf(stderr, "[hwid_stub] fake IMU %s -> pipe fd=%d\n", path, fds[0]);
+    fflush(stderr);
+    return fds[0];
+}
+#define IIO_REDIRECT_OPEN(path) \
+    char _iio_buf[512]; \
+    { int _ifd = iio_open_dev(path); if (_ifd != -2) return _ifd; } \
+    path = iio_path(path, _iio_buf, sizeof(_iio_buf))
+#else
+#define IIO_REDIRECT_OPEN(path) ((void)0)
+#endif
+
 int open(const char *path, int flags, ...) {
     static int (*real)(const char *, int, ...) = NULL;
     if (!real) real = dlsym(RTLD_NEXT, "open");
@@ -455,6 +653,7 @@ int open(const char *path, int flags, ...) {
     if (flags & O_CREAT) { va_list ap; va_start(ap, flags); mode = va_arg(ap, int); va_end(ap); }
     if (path) {
         path = solve_redirect(path, flags);
+        IIO_REDIRECT_OPEN(path);
         log_if_camera_probe(path);
         log_if_sensor_probe(path);
         int fd = fd_for_path(path); if (fd != -2) return fd;
@@ -466,6 +665,7 @@ int open(const char *path, int flags, ...) {
         }
         if (strcmp(path, PWM_MISC_PATH) == 0) {
             pwm_fd = real("/dev/null", flags, mode);
+            pwm_fd_note(pwm_fd);
             fprintf(stderr, "[hwid_stub] open(%s) -> /dev/null fd=%d (EFW)\n", path, pwm_fd);
             fflush(stderr);
             return pwm_fd;
@@ -482,6 +682,7 @@ int open64(const char *path, int flags, ...) {
     if (flags & O_CREAT) { va_list ap; va_start(ap, flags); mode = va_arg(ap, int); va_end(ap); }
     if (path) {
         path = solve_redirect(path, flags);
+        IIO_REDIRECT_OPEN(path);
         log_if_camera_probe(path);
         log_if_sensor_probe(path);
         int fd = fd_for_path(path); if (fd != -2) return fd;
@@ -493,6 +694,7 @@ int open64(const char *path, int flags, ...) {
         }
         if (strcmp(path, PWM_MISC_PATH) == 0) {
             pwm_fd = real("/dev/null", flags, mode);
+            pwm_fd_note(pwm_fd);
             fprintf(stderr, "[hwid_stub] open64(%s) -> /dev/null fd=%d (EFW)\n", path, pwm_fd);
             fflush(stderr);
             return pwm_fd;
@@ -511,6 +713,7 @@ int openat(int dirfd, const char *path, int flags, ...) {
     if (flags & O_CREAT) { va_list ap; va_start(ap, flags); mode = va_arg(ap, int); va_end(ap); }
     if (path) {
         path = solve_redirect(path, flags);
+        IIO_REDIRECT_OPEN(path);
         log_if_camera_probe(path);
         log_if_sensor_probe(path);
         int fd = fd_for_path(path); if (fd != -2) return fd;
@@ -522,6 +725,7 @@ int openat(int dirfd, const char *path, int flags, ...) {
         }
         if (strcmp(path, PWM_MISC_PATH) == 0) {
             pwm_fd = real_open("/dev/null", flags, mode);
+            pwm_fd_note(pwm_fd);
             fprintf(stderr, "[hwid_stub] openat(%s) -> /dev/null fd=%d (EFW)\n", path, pwm_fd);
             fflush(stderr);
             return pwm_fd;
@@ -531,13 +735,60 @@ int openat(int dirfd, const char *path, int flags, ...) {
     return real(dirfd, path, flags, mode);
 }
 
+#ifdef __aarch64__
+/* Exposure requested through the SDK, in microseconds (ASI_CAM_SetControlValue,
+ * control type 1 = ASI_EXPOSURE; decoded from the SDK's switch table).  The
+ * fake sensor needs it to pace frames like a real one: for exposures over 1 s
+ * ASI_CAM_GetFrame discards any frame arriving sooner than (exposure - 1 s)
+ * after the previous one as "stale" ("drop stale frame, elapsed: 33ms, expo:
+ * 2000ms"), so a sensor that emits a frame every 33 ms regardless of exposure
+ * makes every long exposure (goto, polar alignment, plate solve) hang. */
+static volatile long g_cam_exposure_us = 0;
+int ASI_CAM_SetControlValue(int cam, int type, long value, long extra) {
+    static int (*real)(int, int, long, long) = NULL;
+    if (!real) real = dlsym(RTLD_NEXT, "ASI_CAM_SetControlValue");
+    if (type == 1) g_cam_exposure_us = value;
+    return real ? real(cam, type, value, extra) : -1;
+}
+
+/* libasisdk's own log sink.  It is exported and called through the PLT, so a
+ * preloaded definition wins.  Its messages explain *why* the SDK drops a frame,
+ * rejects a control, etc.  Opt-in (SEESTAR_ASI_LOG=1) because it is chatty;
+ * otherwise the call is a no-op, which matches what a container sees anyway
+ * (the original writes to a log that is never collected). */
+void ASI_LOG_Ext(int level, const char *file, const char *func, int line,
+                 const char *fmt, ...) {
+    static int on = -1;
+    if (on == -1) on = getenv("SEESTAR_ASI_LOG") ? 1 : 0;
+    if (!on || !fmt) return;
+    const char *base = file ? strrchr(file, '/') : NULL;
+    base = base ? base + 1 : (file ? file : "?");
+    char msg[512];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, ap);
+    va_end(ap);
+    size_t n = strlen(msg);
+    while (n && (msg[n - 1] == '\n' || msg[n - 1] == '\r')) msg[--n] = '\0';
+    fprintf(stderr, "[asi L%d %s:%d %s] %s\n", level, base, line, func ? func : "?", msg);
+    fflush(stderr);
+}
+#endif
+
 /* V4L2 ioctl constants (avoid depending on kernel headers version).
  * Computed as _IOC(dir, 'V', nr, sizeof(struct)) where dir: 1=W,2=R,3=RW.
  * All size fields match kernel 4.19 struct sizes. */
 #define VIDIOC_QUERYCAP    0x80685600U  /* _IOR  'V'  0  struct v4l2_capability(104) */
+#ifdef __aarch64__
+/* aarch64 kernel: struct v4l2_format is 208 bytes (the union is 8-aligned). */
+#define VIDIOC_G_FMT       0xc0d05604U  /* _IOWR 'V'  4  struct v4l2_format(208)     */
+#define VIDIOC_S_FMT       0xc0d05605U  /* _IOWR 'V'  5  struct v4l2_format(208)     */
+#define VIDIOC_TRY_FMT     0xc0d05640U  /* _IOWR 'V' 64  struct v4l2_format(208)     */
+#else
 #define VIDIOC_G_FMT       0xc0cc5604U  /* _IOWR 'V'  4  struct v4l2_format(204)     */
 #define VIDIOC_S_FMT       0xc0cc5605U  /* _IOWR 'V'  5  struct v4l2_format(204)     */
 #define VIDIOC_TRY_FMT     0xc0cc5640U  /* _IOWR 'V' 64  struct v4l2_format(204)     */
+#endif
 
 /* struct v4l2_capability field offsets */
 #define V4L2_CAP_VIDEO_CAPTURE_MPLANE 0x00001000U  /* bit 12 in capabilities field */
@@ -600,9 +851,16 @@ static uint32_t frame_bytes(void) { return yuv_frame_bytes(); }
 /* V4L2 streaming ioctl constants (kernel 4.19 ARM32 struct sizes).
  * Encoding: (dir<<30)|(size<<16)|('V'<<8)|nr; dir: 1=W,2=R,3=RW. */
 #define VIDIOC_REQBUFS   0xc0145608U  /* _IOWR 'V'  8  v4l2_requestbuffers(20) */
+#ifdef __aarch64__
+/* aarch64 kernel: struct v4l2_buffer is 88 bytes (8-byte timeval, 8-byte m). */
+#define VIDIOC_QUERYBUF  0xc0585609U  /* _IOWR 'V'  9  v4l2_buffer(88)         */
+#define VIDIOC_QBUF      0xc058560fU  /* _IOWR 'V' 15  v4l2_buffer(88)         */
+#define VIDIOC_DQBUF     0xc0585611U  /* _IOWR 'V' 17  v4l2_buffer(88)         */
+#else
 #define VIDIOC_QUERYBUF  0xc0445609U  /* _IOWR 'V'  9  v4l2_buffer(68)         */
 #define VIDIOC_QBUF      0xc044560fU  /* _IOWR 'V' 15  v4l2_buffer(68)         */
 #define VIDIOC_DQBUF     0xc0445611U  /* _IOWR 'V' 17  v4l2_buffer(68)         */
+#endif
 #define VIDIOC_STREAMON  0x40045612U  /* _IOW  'V' 18  int(4)                   */
 #define VIDIOC_STREAMOFF 0x40045613U  /* _IOW  'V' 19  int(4)                   */
 /* Selection / crop API */
@@ -613,18 +871,61 @@ static uint32_t frame_bytes(void) { return yuv_frame_bytes(); }
 /* struct v4l2_selection offsets: [0]=type [4]=target [8]=flags
  *  [12]=r.left [16]=r.top [20]=r.width [24]=r.height [28..63]=reserved */
 
-/* struct v4l2_buffer (68 bytes, ARM32) field offsets used below */
+/* struct v4l2_buffer field offsets used below.  Offsets taken from the kernel
+ * headers (offsetof) for each ABI: ARM32 is 68 bytes, aarch64 is 88. */
 #define V4LBUFoff_INDEX   0   /* u32 buffer index */
+#define V4LBUFoff_TYPE    4   /* u32 buffer type */
 #define V4LBUFoff_BUSED   8   /* u32 bytesused (single-plane) */
 #define V4LBUFoff_FLAGS  12   /* u32 flags */
-#define V4LBUFoff_PLANES 52   /* u32 (pointer to struct v4l2_plane[]) */
-#define V4LBUFoff_LEN    56   /* u32 num_planes for MPLANE */
+#ifdef __aarch64__
+#define V4LBUFoff_TS_SEC  24  /* timestamp.tv_sec  (8 bytes) */
+#define V4LBUFoff_TS_USEC 32  /* timestamp.tv_usec (8 bytes) */
+#define V4LBUFoff_SEQ     56  /* u32 sequence */
+#define V4LBUFoff_MEMORY  60  /* u32 memory */
+#define V4LBUFoff_PLANES  64  /* pointer to struct v4l2_plane[] (8 bytes) */
+#define V4LBUFoff_LEN     72  /* u32 num_planes for MPLANE */
+#define V4LTS_BYTES        8
+#else
+#define V4LBUFoff_TS_SEC  20  /* timestamp.tv_sec  (4 bytes) */
+#define V4LBUFoff_TS_USEC 24  /* timestamp.tv_usec (4 bytes) */
+#define V4LBUFoff_SEQ     44  /* u32 sequence */
+#define V4LBUFoff_MEMORY  48  /* u32 memory */
+#define V4LBUFoff_PLANES  52  /* pointer to struct v4l2_plane[] (4 bytes) */
+#define V4LBUFoff_LEN     56  /* u32 num_planes for MPLANE */
+#define V4LTS_BYTES        4
+#endif
 
-/* struct v4l2_plane (60 bytes) field offsets */
+/* struct v4l2_plane field offsets (ARM32: 60 bytes, aarch64: 64 bytes) */
 #define V4LPLoff_BYTESUSED  0   /* u32 */
 #define V4LPLoff_LENGTH     4   /* u32 */
 #define V4LPLoff_MEM_OFFSET 8   /* u32 (mmap offset in union) */
+#ifdef __aarch64__
+#define V4LPLoff_DATA_OFF  16   /* u32 */
+#else
 #define V4LPLoff_DATA_OFF  12   /* u32 */
+#endif
+
+/* struct v4l2_format (type=MPLANE) field offsets.  The union starts at 4 on
+ * ARM32 and at 8 on aarch64 (it contains pointers). */
+#ifdef __aarch64__
+#define V4LFMT_SIZE        208
+#define V4LFMT_W            8
+#define V4LFMT_H           12
+#define V4LFMT_PIXFMT      16
+#define V4LFMT_FIELD       20
+#define V4LFMT_SIZEIMAGE   28
+#define V4LFMT_BPL         32
+#define V4LFMT_NUMPLANES  188
+#else
+#define V4LFMT_SIZE        204
+#define V4LFMT_W            4
+#define V4LFMT_H            8
+#define V4LFMT_PIXFMT      12
+#define V4LFMT_FIELD       16
+#define V4LFMT_SIZEIMAGE   24
+#define V4LFMT_BPL         28
+#define V4LFMT_NUMPLANES  180
+#endif
 
 /* One shared synthetic frame, flat neutral gray (see get_cam_frame_buf), sized
  * to the largest layout the binary may read.  All
@@ -709,8 +1010,8 @@ static uint8_t *get_cam_frame_buf(void) {
 
 /* Write bytesused/length/mem_offset into the first struct v4l2_plane.
  * planes_ptr is read from v4l2_buffer.m.planes (a 32-bit pointer in the arg). */
-static void fill_plane_struct(uint32_t planes_ptr, uint32_t bytesused) {
-    uint8_t *pl = (uint8_t *)(uintptr_t)planes_ptr;
+static void fill_plane_struct(uintptr_t planes_ptr, uint32_t bytesused) {
+    uint8_t *pl = (uint8_t *)planes_ptr;
     if (!pl) return;
     uint32_t zero = 0;
     memcpy(pl + V4LPLoff_BYTESUSED,  &bytesused, 4);
@@ -725,8 +1026,16 @@ static void fill_plane_struct(uint32_t planes_ptr, uint32_t bytesused) {
  * bytesused against the NV12 stride formula (3,317,760).  Always return
  * yuv_frame_bytes() so that check passes regardless of which fd is active. */
 static uint32_t cam_fd_frame_bytes(int fd) {
+#ifdef __aarch64__
+    /* The aarch64 libasisdk sizes its copy buffer per device: the RAW capture
+     * node (/dev/video0) is RAW10-sized, the ISP output node (/dev/video4) is
+     * NV12-sized.  Reporting NV12 bytes for the RAW node overruns that buffer. */
+    return cam_fd_get_type(fd) == CAM_FD_TYPE_YUV ? yuv_frame_bytes()
+                                                  : raw_frame_bytes();
+#else
     (void)fd;
     return yuv_frame_bytes();
+#endif
 }
 
 /* V4L2_PIX_FMT_NV12 = v4l2_fourcc('N','V','1','2') — NV12 semi-planar YUV420 */
@@ -747,15 +1056,15 @@ static void fill_v4l2_format_mplane(uint8_t *fmt, uint32_t w, uint32_t h, cam_fd
         bpl    = ((w * 10 / 8 + 255) >> 8) * 256;
         sz     = h * bpl;
     }
-    memset(fmt, 0, 204);
+    memset(fmt, 0, V4LFMT_SIZE);
     memcpy(fmt +  0, &fmttype, 4);
-    memcpy(fmt +  4, &w,      4);
-    memcpy(fmt +  8, &h,      4);
-    memcpy(fmt + 12, &pixfmt, 4);
-    memcpy(fmt + 16, &field,  4);
-    memcpy(fmt + 24, &sz,     4);  /* plane_fmt[0].sizeimage */
-    memcpy(fmt + 28, &bpl,    4);  /* plane_fmt[0].bytesperline */
-    fmt[180] = 1;                  /* num_planes = 1 */
+    memcpy(fmt + V4LFMT_W,         &w,      4);
+    memcpy(fmt + V4LFMT_H,         &h,      4);
+    memcpy(fmt + V4LFMT_PIXFMT,    &pixfmt, 4);
+    memcpy(fmt + V4LFMT_FIELD,     &field,  4);
+    memcpy(fmt + V4LFMT_SIZEIMAGE, &sz,     4);  /* plane_fmt[0].sizeimage */
+    memcpy(fmt + V4LFMT_BPL,       &bpl,    4);  /* plane_fmt[0].bytesperline */
+    fmt[V4LFMT_NUMPLANES] = 1;                   /* num_planes = 1 */
 }
 
 /* EAF ioctls (type 'E') all faked as success. The driver protocol is
@@ -774,6 +1083,9 @@ int ioctl(int fd, unsigned long request, ...) {
     void *arg;
     va_list ap; va_start(ap, request); arg = va_arg(ap, void *); va_end(ap);
     if (fd == eaf_fd && fd != -1) return 0;
+#ifdef __aarch64__
+    if (fd != -1 && pwm_fd_is(fd) && pwm_gpio_ioctl(request, arg)) return 0;
+#endif
     if (fd == pwm_fd && fd != -1) {
 #ifdef __aarch64__
         if (pwm_gpio_ioctl(request, arg)) return 0;
@@ -801,6 +1113,40 @@ int ioctl(int fd, unsigned long request, ...) {
             fprintf(stderr, "[hwid_stub] camera ioctl fd=%d req=0x%08lx\n", fd, request);
             fflush(stderr);
         }
+#ifdef __aarch64__
+        /* ZWO private sensor-subdev ioctls (type 'Z'), used by the aarch64
+         * libasisdk.  ASI_CAM_GetInfo reads a 184-byte info struct whose
+         * layout was recovered from its disassembly:
+         *   +0x00 name[32]  +0x20 width  +0x24 height  +0x58 bayer  +0x5c func
+         * ASI_CAM_Init sizes the per-camera frame buffer from width/height, so
+         * returning zeros here makes the next frame copy overrun a tiny heap
+         * chunk (the SIGSEGV in ASI_CAM_GetFrame). */
+        if (request == 0x80b85a01UL && arg) {
+            uint8_t *info = (uint8_t *)arg;
+            uint32_t w = sensor_width(), h = sensor_height();
+            uint32_t bayer = 3;  /* ASI_BAYER_GB: V4L2 SGBRG10 */
+            uint32_t func  = 0;
+            /* +0x3c: pixel size in um x 100 (img_cam_mipi::GetCamInfo divides by
+             * 100.0 into m_cam_info.PixSize).  All Seestar sensors are 2.9 um.
+             * Without it SolveFunc logs "pixsiz=0", passes solve-field no scale
+             * bounds, and the blind search outruns the imager's 30 s solve window.
+             * +0x40: stored into another CAM_INFO field; 12-bit depth. */
+            uint32_t pix_um_x100 = 290;
+            uint32_t bit_depth   = 12;
+            memset(info, 0, 184);
+            strncpy((char *)info, camera_sensor_name(), 31);
+            memcpy(info + 0x20, &w,           4);
+            memcpy(info + 0x24, &h,           4);
+            memcpy(info + 0x3c, &pix_um_x100, 4);
+            memcpy(info + 0x40, &bit_depth,   4);
+            memcpy(info + 0x58, &bayer,       4);
+            memcpy(info + 0x5c, &func,        4);
+            fprintf(stderr, "[hwid_stub] ZWO GetInfo → %s %ux%u bayer=%u\n",
+                    camera_sensor_name(), w, h, bayer);
+            fflush(stderr);
+            return 0;
+        }
+#endif
         if (request == VIDIOC_QUERYCAP && arg) {
             /* struct v4l2_capability: [0] driver[16], [16] card[32], [48] bus_info[32],
              *                         [80] version, [84] capabilities, [88] device_caps */
@@ -820,8 +1166,8 @@ int ioctl(int fd, unsigned long request, ...) {
             uint8_t *fmt = (uint8_t *)arg;
             uint32_t in_type, in_w, in_h;
             memcpy(&in_type, fmt + 0, 4);
-            memcpy(&in_w,    fmt + 4, 4);
-            memcpy(&in_h,    fmt + 8, 4);
+            memcpy(&in_w,    fmt + V4LFMT_W, 4);
+            memcpy(&in_h,    fmt + V4LFMT_H, 4);
             fprintf(stderr, "[hwid_stub] V4L2_FMT(req=0x%lx) in: type=%u %ux%u\n",
                     request, in_type, in_w, in_h);
             /* Return 1920x1080 regardless of what was requested.  The binary reads
@@ -876,17 +1222,28 @@ int ioctl(int fd, unsigned long request, ...) {
             fflush(stderr);
         } else if (request == VIDIOC_QUERYBUF && arg) {
             uint8_t *buf = (uint8_t *)arg;
-            uint32_t idx, planes_ptr, fbytes = cam_fd_frame_bytes(fd), zero = 0;
+            uint32_t idx, fbytes = cam_fd_frame_bytes(fd);
+            uintptr_t planes_ptr = 0;
+            uint8_t zero[sizeof(uintptr_t)] = {0};
             memcpy(&idx,        buf + V4LBUFoff_INDEX,  4);
-            memcpy(&planes_ptr, buf + V4LBUFoff_PLANES, 4);
+            memcpy(&planes_ptr, buf + V4LBUFoff_PLANES, sizeof(planes_ptr));
             /* The ASICAM layer uses m.offset/length (non-MPLANE style) even when
              * REQBUFS used type=9.  Fill both: planes array if non-NULL, and
              * always set m.offset=0 + length=fbytes at the union position. */
             if (planes_ptr) fill_plane_struct(planes_ptr, fbytes);
-            memcpy(buf + V4LBUFoff_PLANES, &zero,   4);  /* m.offset = 0 */
+#ifdef __aarch64__
+            /* aarch64 libasisdk embeds a standard multi-planar V4L2 helper: for
+             * MPLANE buffers `length` is the NUMBER OF PLANES and m.planes must
+             * stay pointing at the plane array (filled above).  Writing the frame
+             * size into `length` makes it walk ~10M planes off the array. */
+            { uint32_t nplanes = 1; memcpy(buf + V4LBUFoff_LEN, &nplanes, 4); }
+            (void)zero;
+#else
+            memcpy(buf + V4LBUFoff_PLANES, zero,    sizeof(zero));  /* m.offset = 0 */
             memcpy(buf + V4LBUFoff_LEN,    &fbytes, 4);  /* length in bytes */
-            fprintf(stderr, "[hwid_stub] VIDIOC_QUERYBUF idx=%u planes@0x%08x → m.offset=0 len=%u\n",
-                    idx, planes_ptr, fbytes);
+#endif
+            fprintf(stderr, "[hwid_stub] VIDIOC_QUERYBUF idx=%u planes@0x%08lx → m.offset=0 len=%u\n",
+                    idx, (unsigned long)planes_ptr, fbytes);
             fflush(stderr);
         } else if (request == VIDIOC_QBUF && arg) {
             uint32_t idx; memcpy(&idx, (uint8_t *)arg + V4LBUFoff_INDEX, 4);
@@ -897,20 +1254,31 @@ int ioctl(int fd, unsigned long request, ...) {
         } else if (request == VIDIOC_DQBUF && arg) {
             /* Throttle to ~30 fps so the binary doesn't spin-loop */
             struct timespec ts = {0, 33333333L};
+#ifdef __aarch64__
+            {   /* one frame per exposure period for long exposures (see
+                 * g_cam_exposure_us) */
+                long expo_us = g_cam_exposure_us;
+                if (expo_us > 1000000L) {
+                    ts.tv_sec  = expo_us / 1000000L;
+                    ts.tv_nsec = (expo_us % 1000000L) * 1000L;
+                }
+            }
+#endif
             nanosleep(&ts, NULL);
             refill_cam_frame_for_wheel();
             static uint32_t _frame_seq = 0;
             static uint32_t _buf_idx   = 0;
             uint8_t *buf = (uint8_t *)arg;
             uint32_t fbytes = cam_fd_frame_bytes(fd);
-            uint32_t planes_ptr;
-            memcpy(&planes_ptr, buf + V4LBUFoff_PLANES, 4);
+            uintptr_t planes_ptr = 0;
+            memcpy(&planes_ptr, buf + V4LBUFoff_PLANES, sizeof(planes_ptr));
             fill_plane_struct(planes_ptr, fbytes);
 
             struct timespec now;
             clock_gettime(CLOCK_MONOTONIC, &now);
-            uint32_t tv_sec  = (uint32_t)now.tv_sec;
-            uint32_t tv_usec = (uint32_t)(now.tv_nsec / 1000U);
+            /* timestamp.tv_sec/tv_usec: 4 bytes each on ARM32, 8 on aarch64 */
+            uint64_t tv_sec  = (uint64_t)now.tv_sec;
+            uint64_t tv_usec = (uint64_t)(now.tv_nsec / 1000U);
             uint32_t idx     = _buf_idx;
             uint32_t seq     = _frame_seq++;
             uint32_t type    = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -918,22 +1286,31 @@ int ioctl(int fd, unsigned long request, ...) {
              * V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC=0x2000 */
             uint32_t flags   = 0x00002005U;
             uint32_t memory  = 1U;   /* V4L2_MEMORY_MMAP */
-            uint32_t zero    = 0;
+            uint8_t zero[sizeof(uintptr_t)] = {0};
             _buf_idx = (_buf_idx + 1) % 3;
 
             memcpy(buf + V4LBUFoff_INDEX,  &idx,     4);
-            memcpy(buf + 4,                &type,    4);  /* buf.type */
+            memcpy(buf + V4LBUFoff_TYPE,   &type,    4);  /* buf.type */
             memcpy(buf + V4LBUFoff_BUSED,  &fbytes,  4);
             memcpy(buf + V4LBUFoff_FLAGS,  &flags,   4);
-            memcpy(buf + 20,               &tv_sec,  4);  /* timestamp.tv_sec */
-            memcpy(buf + 24,               &tv_usec, 4);  /* timestamp.tv_usec */
-            memcpy(buf + 44,               &seq,     4);  /* sequence */
-            memcpy(buf + 48,               &memory,  4);  /* memory */
-            memcpy(buf + V4LBUFoff_PLANES, &zero,    4);  /* m.offset = 0 */
+            {
+                /* little-endian: the low V4LTS_BYTES of the 64-bit value */
+                memcpy(buf + V4LBUFoff_TS_SEC,  &tv_sec,  V4LTS_BYTES);
+                memcpy(buf + V4LBUFoff_TS_USEC, &tv_usec, V4LTS_BYTES);
+            }
+            memcpy(buf + V4LBUFoff_SEQ,    &seq,     4);  /* sequence */
+            memcpy(buf + V4LBUFoff_MEMORY, &memory,  4);  /* memory */
+#ifdef __aarch64__
+            /* see QUERYBUF: length = number of planes, m.planes left intact */
+            { uint32_t nplanes = 1; memcpy(buf + V4LBUFoff_LEN, &nplanes, 4); }
+            (void)zero;
+#else
+            memcpy(buf + V4LBUFoff_PLANES, zero,     sizeof(zero));  /* m.offset = 0 */
             memcpy(buf + V4LBUFoff_LEN,    &fbytes,  4);
+#endif
             if (cam_verbose()) {
-                fprintf(stderr, "[hwid_stub] VIDIOC_DQBUF fd=%d type=%d fbytes=%u planes@0x%08x → idx=%u seq=%u\n",
-                        fd, (int)cam_fd_get_type(fd), fbytes, planes_ptr, idx, seq);
+                fprintf(stderr, "[hwid_stub] VIDIOC_DQBUF fd=%d type=%d fbytes=%u planes@0x%08lx → idx=%u seq=%u\n",
+                        fd, (int)cam_fd_get_type(fd), fbytes, (unsigned long)planes_ptr, idx, seq);
                 fflush(stderr);
             }
         } else if (request == VIDIOC_STREAMON && arg) {
@@ -1026,6 +1403,10 @@ FILE *fopen(const char *path, const char *mode) {
             int rdonly = (mode[0] == 'r' && !strchr(mode, '+'));
             path = solve_redirect(path, rdonly ? O_RDONLY : O_WRONLY);
         }
+#ifdef __aarch64__
+        char iio_buf[512];
+        path = iio_path(path, iio_buf, sizeof(iio_buf));
+#endif
         int fd = fd_for_path(path);
         if (fd != -2) return fd >= 0 ? fdopen(fd, "r") : NULL;
     }
@@ -1144,12 +1525,30 @@ FILE *popen(const char *cmd, const char *type) {
 DIR *opendir(const char *path) {
     static DIR *(*real)(const char *) = NULL;
     if (!real) real = dlsym(RTLD_NEXT, "opendir");
+#ifdef __aarch64__
+    /* A fake IMU now exists under a redirected tree: no need to log every
+     * (10 Hz) probe. */
+    char iio_buf[512];
+    path = iio_path(path, iio_buf, sizeof(iio_buf));
+#else
     if (path && strstr(path, "/sys/bus/iio")) {
         fprintf(stderr, "[hwid_stub] SENSOR PROBE opendir(%s)\n", path);
         fflush(stderr);
     }
+#endif
     return real(path);
 }
+
+#ifdef __aarch64__
+/* The IIO helpers chmod() the sysfs attribute files before writing them. */
+int chmod(const char *path, mode_t mode) {
+    static int (*real)(const char *, mode_t) = NULL;
+    if (!real) real = dlsym(RTLD_NEXT, "chmod");
+    char iio_buf[512];
+    path = iio_path(path, iio_buf, sizeof(iio_buf));
+    return real(path, mode);
+}
+#endif
 
 /* AutoFocus spoof: the real AutoFocusFunc algorithm can't converge in the
  * sandbox (no real focuser position feedback, and the RKNN star-detector's
