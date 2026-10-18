@@ -854,8 +854,9 @@ def _check_needs_auth_uncached(telescope_id):
 def _model_family(model):
     """Normalize a product_model string to "S30"/"S50" plus a Pro flag.
 
-    Firmware spellings vary ("Seestar S50 Pro", "S50Pro", "S50P"), so match
-    loosely. Returns (family, is_pro); family is None for unknown models
+    The firmware reports "Seestar " + a short name (S50, S50N, S30, S30P,
+    S50P); older builds and the OTA updater use "S30 Pro"/"S50 Pro". Match
+    loosely so all of them work. Returns (family, is_pro); family is None for unknown models
     (including S30 Plus, which is not the S30 Pro).
     """
     compact = re.sub(r"[\s_-]+", "", str(model or "")).lower()
@@ -1173,7 +1174,7 @@ def get_device_settings(telescope_id):
                     settings_result, "af_before_stack", False
                 ),
             }
-            if model == "Seestar S30 Pro":
+            if planner_model_key(model) == "S30 Pro":
                 settings |= {
                     "stack_star_trails": pydash.get(
                         settings_result, "stack.star_trails", False
@@ -4282,7 +4283,7 @@ class SettingsResource(BaseResource):
         star_trails_output = {"ErrorNumber": 0}
         if (
             fw <= 2597
-            and model == "Seestar S30 Pro"
+            and planner_model_key(model) == "S30 Pro"
             and "stack_star_trails" in PostedSettings
         ):
             StarTrailsSettings = {
