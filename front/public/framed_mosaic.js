@@ -4,8 +4,8 @@
 // only — it does not compute device commands.
 (function () {
   // Read per use: the model can change while the page is open.
-  const baseFovXDeg = () => window.seestarFov(true).fov_x / 60.0;
-  const baseFovYDeg = () => window.seestarFov(true).fov_y / 60.0;
+  const baseFovXDeg = () => window.seestarFov().fov_x / 60.0;
+  const baseFovYDeg = () => window.seestarFov().fov_y / 60.0;
 
   let aladin = null;
   let overlay = null;

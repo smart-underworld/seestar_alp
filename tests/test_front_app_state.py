@@ -2880,5 +2880,4 @@ def test_astro_mosaic_template_offers_s50_pro_and_preselects_model():
         root="",
     )
     assert '<option value="S50 Pro" selected>' in html
-    assert 'value="S50 Pro Wide"' in html
-    assert 'value="S30 Pro Wide"' in html
+    assert "Wide" not in html.split('id="seestar"')[1].split("</select>")[0]
