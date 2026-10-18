@@ -360,6 +360,7 @@ class Seestar:
             # {...}} (the wrapped session key for its encrypted-RPC layer)
             # instead of result==0; success is then signalled by code==0.
             ok = False
+            has_envelope = False
             if isinstance(verify_resp, dict):
                 result = verify_resp.get("result", verify_resp.get("code", -1))
                 if result == 0:
@@ -370,10 +371,19 @@ class Seestar:
                     and verify_resp.get("code", 0) == 0
                 ):
                     ok = True
+                    has_envelope = True
 
             if not ok:
                 self.logger.warning(f"verify_client failed: {verify_resp}")
                 return False
+
+            # The envelope is only ever returned for a client the device has
+            # just verified, and pi_is_verified on 9.75+ also reflects the
+            # unit's hardware/licence check rather than this client, so it can
+            # read false for a verified connection.  Don't second-guess it.
+            if has_envelope:
+                self.logger.info("Authentication successful")
+                return True
 
             # sanity check
             try:

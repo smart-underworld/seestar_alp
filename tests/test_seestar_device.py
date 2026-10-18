@@ -2851,11 +2851,14 @@ def test_authenticate_accepts_key_envelope_verify_reply(monkeypatch, seestar):
                 },
                 "code": 0,
             },
-            {"method": "pi_is_verified", "result": True, "code": 0},
+            # 9.75 reports the unit's licence state here, not the client's.
+            {"method": "pi_is_verified", "result": False, "code": 0},
         ]
     )
 
     assert seestar.authenticate() is True
+    methods = [json.loads(p.decode())["method"] for p in seestar.s.sent]
+    assert methods == ["get_verify_str", "verify_client"]
 
 
 def test_authenticate_rejects_verify_error_even_with_dict_result(monkeypatch, seestar):
