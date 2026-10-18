@@ -5,9 +5,10 @@ public astrometry.net star-kdtree index, via libastrometry's own startree API
 solve-field searches against (see emulator/astrometry/download_index.sh),
 so a field rendered from them is guaranteed to be solvable.
 
-Runs where libastrometry.so.0 exists — i.e. INSIDE the emulator container
-(armhf), not on a macOS host. libastrometry is installed via apt (the
-`astrometry.net` package) when the image is built (see ../Dockerfile); the
+Runs where libastrometry.so.0 exists — i.e. INSIDE an emulator container
+(armhf or arm64), not on a macOS host. libastrometry is installed via apt (the
+`astrometry.net` package) when the image is built (see ../Dockerfile and
+../Dockerfile.arm64); the
 public index files are downloaded separately by
 emulator/astrometry/download_index.sh into emulator/astrometry/index/, so:
 
@@ -27,16 +28,29 @@ end-to-end solve was validated this way).
 """
 
 import ctypes
+import glob
 import sys
 from pathlib import Path
 
 import numpy as np
 
+# The armhf image's location; kept as the fallback so a missing library still
+# fails with the path that has always been reported.
 DEFAULT_LIB = "/usr/lib/arm-linux-gnueabihf/libastrometry.so.0"
 
 
-def read_index_radec(index_path, lib_path=DEFAULT_LIB):
-    lib = ctypes.CDLL(lib_path)
+def find_libastrometry():
+    """Locate libastrometry.so.0 under whichever multiarch directory this image
+    uses (arm-linux-gnueabihf on armhf, aarch64-linux-gnu on arm64)."""
+    for pattern in ("/usr/lib/*/libastrometry.so.0", "/usr/lib/libastrometry.so.0"):
+        hits = sorted(glob.glob(pattern))
+        if hits:
+            return hits[0]
+    return DEFAULT_LIB
+
+
+def read_index_radec(index_path, lib_path=None):
+    lib = ctypes.CDLL(lib_path or find_libastrometry())
     lib.startree_open.restype = ctypes.c_void_p
     lib.startree_open.argtypes = [ctypes.c_char_p]
     lib.startree_N.restype = ctypes.c_int
@@ -63,7 +77,7 @@ def read_index_radec(index_path, lib_path=DEFAULT_LIB):
     return ra[:kept], dec[:kept]
 
 
-def build(index_path, out_npy, lib_path=DEFAULT_LIB):
+def build(index_path, out_npy, lib_path=None):
     ra, dec = read_index_radec(index_path, lib_path)
     # Deterministic placeholder magnitudes (index has positions only).
     # RandomState (not default_rng) so this runs on the container's numpy 1.16.
@@ -85,5 +99,5 @@ if __name__ == "__main__":
         else "/usr/local/astrometry/data/index-4107-Vt.fits"
     )
     out = sys.argv[2] if len(sys.argv) > 2 else "sim/data/stars.npy"
-    lib = sys.argv[3] if len(sys.argv) > 3 else DEFAULT_LIB
+    lib = sys.argv[3] if len(sys.argv) > 3 else None
     build(idx, out, lib)
