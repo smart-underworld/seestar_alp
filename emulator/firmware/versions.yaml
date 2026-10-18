@@ -17,6 +17,13 @@ full_versions:
   - "3.2.0"
   - "2.6.4"
 
+# 64-bit (aarch64) firmware builds: S30 Pro / S50 Pro (Rockchip RV1126B). Run by
+# emulator-full-arm64.yml on a NATIVE arm64 runner -- under x86-hosted QEMU the
+# plate solves overrun the imager's 30 s window. Each entry is a <version>; the
+# lane provisions its iscope_64 variant and runs it as model S50P.
+arm64_versions:
+  - "3.4.0"
+
 # A version can be declared a delta of a prior full release here if its
 # iscope/deb-build/asiair_armhf/home overlay is genuinely partial (only the
 # files that changed vs. the base, not a complete tree) -- provision.py
