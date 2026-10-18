@@ -376,6 +376,37 @@ static int fd_for_path(const char *path) {
 /* fd most recently opened for EAF_MISC_PATH, so ioctl() can log/handle it
  * without spamming logs for ioctls on unrelated fds (sockets, etc). */
 static int eaf_fd = -1;
+/* Every fd handed out for the focuser node.  The aarch64 SDK flock()s
+ * (LOCK_EX|LOCK_NB) each fd in ASI_EAF_Open and reports -595 when it fails;
+ * flock is per-inode, so fds that all alias /dev/null collide with each other.
+ * Hand out a private unlinked file per open instead. */
+#define MAX_EAF_FDS 16
+static int eaf_fds[MAX_EAF_FDS];
+static int eaf_fd_count = 0;
+static void eaf_fd_note(int fd) {
+    for (int i = 0; i < eaf_fd_count; i++) if (eaf_fds[i] == fd) return;
+    if (eaf_fd_count < MAX_EAF_FDS) eaf_fds[eaf_fd_count++] = fd;
+}
+static int eaf_fd_is(int fd) {
+    for (int i = 0; i < eaf_fd_count; i++) if (eaf_fds[i] == fd) return 1;
+    return 0;
+}
+static void eaf_fd_forget(int fd) {
+    for (int i = 0; i < eaf_fd_count; i++)
+        if (eaf_fds[i] == fd) { eaf_fds[i] = eaf_fds[--eaf_fd_count]; return; }
+}
+static int eaf_open_backing(int (*real)(const char *, int, ...), int flags, int mode) {
+    int fd = -1;
+#ifdef __aarch64__
+    char tmpl[] = "/tmp/seestar-eaf-XXXXXX";
+    fd = mkstemp(tmpl);
+    if (fd >= 0) unlink(tmpl);
+#endif
+    if (fd < 0) fd = real("/dev/null", flags, mode);
+    eaf_fd = fd;
+    if (fd >= 0) eaf_fd_note(fd);
+    return fd;
+}
 
 /* EFW (filter wheel) on /dev/pwm-gpio-misc. Real-device ioctls (strace):
  *   GET = _IOC(READ,  'C'=0x43, 1, 8)  = 0x80084301  (read current 8-byte state)
@@ -669,7 +700,7 @@ int open(const char *path, int flags, ...) {
         log_if_sensor_probe(path);
         int fd = fd_for_path(path); if (fd != -2) return fd;
         if (is_eaf_path(path)) {
-            eaf_fd = real("/dev/null", flags, mode);
+            eaf_open_backing(real, flags, mode);
             fprintf(stderr, "[hwid_stub] open(%s) -> /dev/null fd=%d\n", path, eaf_fd);
             fflush(stderr);
             return eaf_fd;
@@ -698,7 +729,7 @@ int open64(const char *path, int flags, ...) {
         log_if_sensor_probe(path);
         int fd = fd_for_path(path); if (fd != -2) return fd;
         if (is_eaf_path(path)) {
-            eaf_fd = real("/dev/null", flags, mode);
+            eaf_open_backing(real, flags, mode);
             fprintf(stderr, "[hwid_stub] open64(%s) -> /dev/null fd=%d\n", path, eaf_fd);
             fflush(stderr);
             return eaf_fd;
@@ -729,7 +760,7 @@ int openat(int dirfd, const char *path, int flags, ...) {
         log_if_sensor_probe(path);
         int fd = fd_for_path(path); if (fd != -2) return fd;
         if (is_eaf_path(path)) {
-            eaf_fd = real_open("/dev/null", flags, mode);
+            eaf_open_backing(real_open, flags, mode);
             fprintf(stderr, "[hwid_stub] openat(%s) -> /dev/null fd=%d\n", path, eaf_fd);
             fflush(stderr);
             return eaf_fd;
@@ -1094,6 +1125,7 @@ int ioctl(int fd, unsigned long request, ...) {
     void *arg;
     va_list ap; va_start(ap, request); arg = va_arg(ap, void *); va_end(ap);
     if (fd == eaf_fd && fd != -1) return 0;
+    if (fd != -1 && eaf_fd_is(fd)) return 0;
 #ifdef __aarch64__
     if (fd != -1 && pwm_fd_is(fd) && pwm_gpio_ioctl(request, arg)) return 0;
 #endif
@@ -1851,6 +1883,7 @@ int close(int fd) {
     static int (*real)(int) = NULL;
     if (!real) real = dlsym(RTLD_NEXT, "close");
     live_stream_end(fd);
+    eaf_fd_forget(fd);
     return real(fd);
 }
 
