@@ -326,6 +326,17 @@ static const char *model_str(void) {
  * in the container; redirect the open() to /dev/null so eaf_open() at least
  * gets a valid fd to probe with ioctl, instead of failing outright at open(). */
 #define EAF_MISC_PATH   "/dev/eaf-misc"
+/* True for any path that is the focuser device.  The aarch64 libasisdk's
+ * ASI_EAF_Open opens /dev/eaf or /dev/vcm (and flock()s it) instead of the
+ * 32-bit /dev/eaf-misc; without them it fails with -596 and the imager answers
+ * start_auto_focuse / get_focuser_position with "device not connected" (318). */
+static int is_eaf_path(const char *path) {
+    if (strcmp(path, EAF_MISC_PATH) == 0) return 1;
+#ifdef __aarch64__
+    if (strcmp(path, "/dev/eaf") == 0 || strcmp(path, "/dev/vcm") == 0) return 1;
+#endif
+    return 0;
+}
 /* The electronic filter wheel (EFW: dark/IRCUT/LP) is driven through this GPIO/PWM
  * misc device — verified on a real S50: the imager holds it open (fd) and moves
  * the wheel via two custom ioctls (type 'C'), returning 0. Absent in the
@@ -657,7 +668,7 @@ int open(const char *path, int flags, ...) {
         log_if_camera_probe(path);
         log_if_sensor_probe(path);
         int fd = fd_for_path(path); if (fd != -2) return fd;
-        if (strcmp(path, EAF_MISC_PATH) == 0) {
+        if (is_eaf_path(path)) {
             eaf_fd = real("/dev/null", flags, mode);
             fprintf(stderr, "[hwid_stub] open(%s) -> /dev/null fd=%d\n", path, eaf_fd);
             fflush(stderr);
@@ -686,7 +697,7 @@ int open64(const char *path, int flags, ...) {
         log_if_camera_probe(path);
         log_if_sensor_probe(path);
         int fd = fd_for_path(path); if (fd != -2) return fd;
-        if (strcmp(path, EAF_MISC_PATH) == 0) {
+        if (is_eaf_path(path)) {
             eaf_fd = real("/dev/null", flags, mode);
             fprintf(stderr, "[hwid_stub] open64(%s) -> /dev/null fd=%d\n", path, eaf_fd);
             fflush(stderr);
@@ -717,7 +728,7 @@ int openat(int dirfd, const char *path, int flags, ...) {
         log_if_camera_probe(path);
         log_if_sensor_probe(path);
         int fd = fd_for_path(path); if (fd != -2) return fd;
-        if (strcmp(path, EAF_MISC_PATH) == 0) {
+        if (is_eaf_path(path)) {
             eaf_fd = real_open("/dev/null", flags, mode);
             fprintf(stderr, "[hwid_stub] openat(%s) -> /dev/null fd=%d\n", path, eaf_fd);
             fflush(stderr);
