@@ -22,7 +22,7 @@ set -euo pipefail
 
 usage() {
   cat <<EOF
-Usage: ./run.sh [--model MODEL] [--firmware-dir DIR] [--skip-build] [version]
+Usage: ./run.sh [--arch armhf|arm64] [--model MODEL] [--firmware-dir DIR] [--skip-build] [version]
 
 Build and launch zwoair_imager in an armhf Debian Buster emulator container.
 
@@ -35,6 +35,11 @@ Options:
   --model=MODEL         S50V2, S50P, S30, S30P. Overrides SEESTAR_MODEL.
   --firmware-dir DIR    Root of extracted firmware (default: ${HOME}/dev/firmware)
   --firmware-dir=DIR
+  --arch ARCH           armhf (default): the 32-bit S30/S50 firmware build.
+                         arm64: the 64-bit S30 Pro / S50 Pro build (iscope_64;
+                         needs provision.py --variant iscope_64, expects the
+                         tree under unpacked/<version>-64, defaults the model
+                         to S50P).
   --skip-build          Skip the docker build step and launch the
                          already-built seestar-emulator image directly. For
                          callers (e.g. CI) that already built the image
@@ -63,11 +68,20 @@ VERSION=""
 MODEL_OPT=""
 FIRMWARE_DIR=""
 SKIP_BUILD=0
+ARCH="armhf"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help)
       usage
       exit 0
+      ;;
+    --arch)
+      ARCH="${2:?--arch requires a value}"
+      shift 2
+      ;;
+    --arch=*)
+      ARCH="${1#--arch=}"
+      shift
       ;;
     --model)
       MODEL_OPT="${2:?--model requires a value}"
@@ -105,8 +119,29 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+case "${ARCH}" in
+  armhf)
+    DOCKER_PLATFORM="linux/arm/v7"
+    BINFMT_ARCH="arm"
+    IMAGE="seestar-emulator"
+    DOCKERFILE="Dockerfile"
+    DEFAULT_MODEL="S50"
+    ;;
+  arm64)
+    DOCKER_PLATFORM="linux/arm64"
+    BINFMT_ARCH="arm64"
+    IMAGE="seestar-emulator-arm64"
+    DOCKERFILE="Dockerfile.arm64"
+    DEFAULT_MODEL="S50P"
+    ;;
+  *)
+    echo "ERROR: invalid --arch '${ARCH}' (expected armhf or arm64)" >&2
+    exit 1
+    ;;
+esac
+
 VERSION="${VERSION:-v3.1.2}"
-SEESTAR_MODEL="${MODEL_OPT:-${SEESTAR_MODEL:-S50}}"
+SEESTAR_MODEL="${MODEL_OPT:-${SEESTAR_MODEL:-${DEFAULT_MODEL}}}"
 FIRMWARE_DIR="${FIRMWARE_DIR:-${HOME}/dev/firmware}"
 
 # Keep in sync with the model table in stubs/stub_hwid.c's model_str().
@@ -119,7 +154,12 @@ case "${SEESTAR_MODEL}" in
     ;;
 esac
 
-FW_BASE="${FIRMWARE_DIR}/unpacked/${VERSION}/iscope/deb/out"
+if [[ "${ARCH}" == "arm64" ]]; then
+  # provision.py --variant iscope_64 puts the aarch64 tree in its own directory.
+  FW_BASE="${FIRMWARE_DIR}/unpacked/${VERSION}-64/iscope_64/deb/out"
+else
+  FW_BASE="${FIRMWARE_DIR}/unpacked/${VERSION}/iscope/deb/out"
+fi
 ASIAIR_DIR="${FW_BASE}/home/pi/ASIAIR"
 
 if [[ ! -d "${ASIAIR_DIR}" ]]; then
@@ -134,13 +174,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
   # One-time: register armhf binfmt_misc handler in Docker's Linux VM.
   # Safe to run repeatedly — tonistiigi/binfmt is idempotent.
-  echo "==> Ensuring arm/v7 binfmt support..."
-  docker run --privileged --rm tonistiigi/binfmt --install arm 2>/dev/null || true
+  echo "==> Ensuring ${BINFMT_ARCH} binfmt support..."
+  docker run --privileged --rm tonistiigi/binfmt --install "${BINFMT_ARCH}" 2>/dev/null || true
 
-  echo "==> Building image (seestar-emulator)..."
-  docker build --platform linux/arm/v7 -t seestar-emulator "${SCRIPT_DIR}"
+  echo "==> Building image (${IMAGE})..."
+  docker build --platform "${DOCKER_PLATFORM}" -f "${SCRIPT_DIR}/${DOCKERFILE}" -t "${IMAGE}" "${SCRIPT_DIR}"
 else
-  echo "==> --skip-build: using already-built seestar-emulator image"
+  echo "==> --skip-build: using already-built ${IMAGE} image"
 fi
 
 # libonnxruntime.so is named without the version suffix in the firmware deb,
@@ -182,7 +222,16 @@ fi
 # whenever the firmware tree has it, which all pinned versions do.
 AI_MODEL_DIR="${FW_BASE}/etc/zwo/ai_model"
 AI_MODEL_MOUNT=""
-if [[ -d "${AI_MODEL_DIR}" ]]; then
+OEM_MOUNT=""
+if [[ "${ARCH}" == "arm64" ]]; then
+  # The aarch64 firmware keeps its AI models and third-party libraries under
+  # /oem (zwo/ai_model, third/lib); the image links /etc/zwo/ai_model there.
+  if [[ -d "${FW_BASE}/oem" ]]; then
+    OEM_MOUNT="-v ${FW_BASE}/oem:/oem:ro"
+  else
+    echo "WARNING: ${FW_BASE}/oem not found — stitching libraries and AI models will be missing"
+  fi
+elif [[ -d "${AI_MODEL_DIR}" ]]; then
   AI_MODEL_MOUNT="-v ${AI_MODEL_DIR}:/etc/zwo/ai_model:ro"
 else
   echo "WARNING: ${AI_MODEL_DIR} not found — AI-model-dependent imager features (e.g. raw denoise) may crash"
@@ -193,7 +242,7 @@ echo "    Ctrl-C to stop."
 TTY_FLAG=""; [ -t 0 ] && TTY_FLAG="-t"
 # shellcheck disable=SC2086
 docker run --rm -i ${TTY_FLAG} \
-  --platform linux/arm/v7 \
+  --platform "${DOCKER_PLATFORM}" \
   --name seestar-emulator \
   -e HOME=/home/pi \
   -e SEESTAR_MODEL="${SEESTAR_MODEL}" \
@@ -211,4 +260,5 @@ docker run --rm -i ${TTY_FLAG} \
   -v "${ASTRO_DATA}:/usr/local/astrometry/data:ro" \
   -v "${SIM_SHARED}:/run/seestar-sim" \
   ${AI_MODEL_MOUNT} \
-  seestar-emulator
+  ${OEM_MOUNT} \
+  "${IMAGE}"

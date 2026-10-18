@@ -207,8 +207,26 @@ def _overlay_tree(src: Path, dst: Path) -> None:
         shutil.copy2(item, target)
 
 
+# The XAPK carries two firmware builds: assets/iscope (32-bit armhf: S30/S50)
+# and, from 3.3.0 on, assets/iscope_64 (aarch64: S30 Pro/S50 Pro/S30 Plus/S80).
+VARIANTS = ("iscope", "iscope_64")
+
+
+def variant_dir_name(version: str, variant: str) -> str:
+    """Directory (under work_dir) holding `version`'s `variant` tree.
+
+    The 32-bit tree keeps the plain version name so existing callers and the
+    CI cache keys are unchanged; the 64-bit tree gets a "-64" suffix so the two
+    can coexist without one overwriting the other.
+    """
+    return version if variant == "iscope" else f"{version}-64"
+
+
 def provision_firmware(
-    version: str, work_dir: Path, delta_base: dict[str, str] | None = None
+    version: str,
+    work_dir: Path,
+    delta_base: dict[str, str] | None = None,
+    variant: str = "iscope",
 ) -> Path:
     """Ensure firmware `version` is downloaded and extracted under work_dir.
 
@@ -238,17 +256,27 @@ def provision_firmware(
     is provisioned first and its home/pi/ASIAIR tree is overlaid with the
     delta's own overlay to produce a complete tree.
 
-    Returns the path to <work_dir>/<version>/iscope/deb/out, matching what
-    emulator/run.sh's FW_BASE expects.
+    `variant="iscope_64"` provisions the aarch64 build instead.  That tree has
+    no .debs at all, only deb-build/{sysfiles,asiair_armhf}, which is merged
+    onto an empty out/ exactly like the 3.3.1+ 32-bit case.  It lands in
+    <work_dir>/<version>-64/iscope_64/deb/out so it never collides with the
+    32-bit tree.
+
+    Returns the path to <work_dir>/<version>/iscope/deb/out (or
+    <work_dir>/<version>-64/iscope_64/deb/out for the 64-bit variant),
+    matching what emulator/run.sh's FW_BASE expects.
     """
+    if variant not in VARIANTS:
+        raise ValueError(f"unknown variant {variant!r}; expected one of {VARIANTS}")
     if delta_base is None:
         delta_base = _load_delta_base()
 
     work_dir = Path(work_dir)
-    version_dir = work_dir / version
+    version_dir = work_dir / variant_dir_name(version, variant)
     version_dir.mkdir(parents=True, exist_ok=True)
 
-    base_version = delta_base.get(version)
+    # delta_base describes 32-bit releases only; the 64-bit tree is always complete.
+    base_version = delta_base.get(version) if variant == "iscope" else None
     base_out_dir = None
     if base_version:
         print(
@@ -267,7 +295,7 @@ def provision_firmware(
             f"(no interop auth), skipping PEM extraction"
         )
     iscope_dir = extract_iscope_from_apk(
-        str(xapk_path), str(version_dir), variant="iscope"
+        str(xapk_path), str(version_dir), variant=variant
     )
 
     _ensure_deb_build_dir(iscope_dir)
@@ -301,8 +329,17 @@ def main():
     parser.add_argument(
         "--work-dir", required=True, help="Directory to download/extract into"
     )
+    parser.add_argument(
+        "--variant",
+        choices=VARIANTS,
+        default="iscope",
+        help="iscope = 32-bit armhf (S30/S50, default); "
+        "iscope_64 = aarch64 (S30 Pro/S50 Pro/S30 Plus/S80)",
+    )
     args = parser.parse_args()
-    deb_out = provision_firmware(version=args.version, work_dir=Path(args.work_dir))
+    deb_out = provision_firmware(
+        version=args.version, work_dir=Path(args.work_dir), variant=args.variant
+    )
     print(deb_out)
 
 

@@ -1,0 +1,24 @@
+#!/bin/sh
+# Emulator shim around astrometry.net's solve-field.
+#
+# zwoair_imager always passes "-5 180" (search the whole sky around the hint).
+# On real hardware, or a native arm64 host, that is fast.  Under x86-hosted QEMU
+# it takes minutes and overruns the imager's 30 s solve window, even though the
+# emulated mount reports its pointing exactly.  Clamp the radius to 30 degrees
+# (the hint is the mount's true position, so nothing is lost).  Every other
+# argument is passed through untouched.
+prev=""
+for a in "$@"; do
+  shift
+  orig="$a"
+  if [ "$prev" = "-5" ]; then
+    int="${a%%.*}"
+    case "$int" in
+      ''|*[!0-9]*) ;;
+      *) [ "$int" -gt 30 ] && a=30 ;;
+    esac
+  fi
+  set -- "$@" "$a"
+  prev="$orig"
+done
+exec /usr/bin/solve-field "$@"
