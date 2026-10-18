@@ -355,10 +355,20 @@ class Seestar:
             verify_params = {"sign": signed, "data": challenge_str}
             verify_resp = self._auth_rpc_sync("verify_client", verify_params)
 
-            # Accept either result==0 or code==0 depending on firmware responses
+            # Accept either result==0 or code==0 depending on firmware responses.
+            # Firmware 9.75+ (app 3.4.0) replies with result={"key_envelope":
+            # {...}} (the wrapped session key for its encrypted-RPC layer)
+            # instead of result==0; success is then signalled by code==0.
             ok = False
             if isinstance(verify_resp, dict):
-                if verify_resp.get("result", verify_resp.get("code", -1)) == 0:
+                result = verify_resp.get("result", verify_resp.get("code", -1))
+                if result == 0:
+                    ok = True
+                elif (
+                    isinstance(result, dict)
+                    and "key_envelope" in result
+                    and verify_resp.get("code", 0) == 0
+                ):
                     ok = True
 
             if not ok:
