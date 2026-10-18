@@ -2846,3 +2846,38 @@ def test_schedule_list_framed_mosaic_column_count_matches_mosaic(is_current):
     )
 
     assert _row_column_count(framed_html) == _row_column_count(mosaic_html)
+
+
+@pytest.mark.parametrize(
+    "model,wide,key",
+    [
+        ("Seestar S50", False, "S50"),
+        ("Seestar S50 Pro", True, "S50 Pro"),
+        ("S50Pro", True, "S50 Pro"),
+        ("S50P", True, "S50 Pro"),
+        ("Seestar S30", True, "S30"),
+        ("Seestar S30 Pro", True, "S30 Pro"),
+        ("Seestar S30 Plus", True, "S30"),
+        (None, False, None),
+        (0, False, None),
+    ],
+)
+def test_model_helpers_wide_camera_and_planner_key(model, wide, key):
+    assert front_app.has_wide_camera(model) is wide
+    assert front_app.planner_model_key(model) == key
+
+
+def test_astro_mosaic_template_offers_s50_pro_and_preselects_model():
+    from jinja2 import Environment, FileSystemLoader
+
+    env = Environment(loader=FileSystemLoader("front/templates"))
+    html = env.get_template("partials/astro_mosaic.html").render(
+        planner_model="S50 Pro",
+        utc_offset=0,
+        config_lat=0,
+        config_long=0,
+        telescope={"device_num": 1},
+        root="",
+    )
+    assert '<option value="S50 Pro" selected>' in html
+    assert 'value="S50 Pro Wide"' in html

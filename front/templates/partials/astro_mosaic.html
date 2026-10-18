@@ -92,9 +92,9 @@
             <div class="control-cell">
                 <label for="seestar" class="form-label">Seestar</label>
                 <select class="form-select app-select" id="seestar" name="seestar" onchange="update_astro_mosaic()">
-                  <option value="S50">S50</option>
-                  <option value="S30">S30</option>
-                  <option value="S30 Pro">S30 Pro</option>
+                  {% for model in ["S50", "S50 Pro", "S50 Pro Wide", "S30", "S30 Pro"] %}
+                  <option value="{{ model }}" {% if model == planner_model %}selected{% endif %}>{{ model }}</option>
+                  {% endfor %}
                 </select>
             </div>
             <div class="control-cell">
@@ -390,16 +390,9 @@
         const overlap = Number(document.getElementById("astro_mosaic_overlap").value);
         const seestar = document.getElementById("seestar").value;
 
-        if (seestar === "S50") {
-            viewer_params.fov_x = 43.8;
-            viewer_params.fov_y = 77.4;
-        } else if (seestar === "S30") {
-            viewer_params.fov_x = 73.2;
-            viewer_params.fov_y = 130.2;
-        } else if (seestar === "S30 Pro") {
-            viewer_params.fov_x = 144.4;
-            viewer_params.fov_y = 256.7;
-        }
+        const fov = window.seestarFov(false);
+        viewer_params.fov_x = fov.fov_x;
+        viewer_params.fov_y = fov.fov_y;
 
         if (grid_x === 1 && grid_y === 1) {
             viewer_params.grid_type = "fov";
