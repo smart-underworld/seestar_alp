@@ -1063,6 +1063,17 @@ int access(const char *path, int mode) {
 FILE *popen(const char *cmd, const char *type) {
     static FILE *(*real)(const char *, const char *) = NULL;
     if (!real) real = dlsym(RTLD_NEXT, "popen");
+    /* Sensor temperature (control 4) is read by running `i2cget -f -y 5 0x48
+     * 0x0 w`. The container has no I2C bus, so it fails; firmware 9.75's stack
+     * Initialise treats that as fatal ("get sensor temperature failed" then
+     * "fail to operate", code 207) and falls back to the live preview. The
+     * imager byte-swaps the SMBus word and reads it as signed 8.8 fixed point,
+     * so "0x0019" -> 0x1900 -> 25.0 degC. */
+    if (cmd && strstr(cmd, "i2cget") && strstr(cmd, "0x48")) {
+        fprintf(stderr, "[hwid_stub] i2cget temperature intercepted -> 25.0C\n");
+        fflush(stderr);
+        return real("printf '0x0019\\n'", type);
+    }
     if (cmd && strstr(cmd, "video4linux") && strstr(cmd, "imx")) {
         const char *sensor = camera_sensor_name();
         char fake_cmd[256];
