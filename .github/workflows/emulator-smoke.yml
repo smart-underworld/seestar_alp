@@ -15,7 +15,31 @@ permissions:
 
 jobs:
   smoke:
-    runs-on: ubuntu-latest
+    name: smoke (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 32-bit (iscope, armhf): S30 / S50, run under QEMU on an x86 runner.
+          - arch: armhf
+            runner: ubuntu-latest
+            variant: iscope
+            fw_dir_suffix: ""
+            platform: linux/arm/v7
+            dockerfile: emulator/Dockerfile
+            image: seestar-emulator
+            model: S50
+          # 64-bit (iscope_64, aarch64): S30 Pro / S50 Pro, native arm64 runner
+          # (see emulator-full-arm64.yml for why not QEMU).
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            variant: iscope_64
+            fw_dir_suffix: "-64"
+            platform: linux/arm64
+            dockerfile: emulator/Dockerfile.arm64
+            image: seestar-emulator-arm64
+            model: S50P
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -31,9 +55,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pyproject.toml') }}
 
       - name: Set up QEMU (armhf emulation)
+        if: matrix.arch == 'armhf'
         uses: docker/setup-qemu-action@v3
         with:
           platforms: arm
@@ -76,24 +101,26 @@ jobs:
         run: |
           python3 -m emulator.firmware.provision \
             --version "${{ steps.fw.outputs.version }}" \
+            --variant ${{ matrix.variant }} \
             --work-dir /tmp/emulator-fw/unpacked
 
       - name: Build emulator image
         uses: docker/build-push-action@v6
         with:
           context: emulator/
-          platforms: linux/arm/v7
-          tags: seestar-emulator:latest
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          tags: ${{ matrix.image }}:latest
           load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=emulator-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=emulator-${{ matrix.arch }}
 
       - name: Rebuild renderer star catalog for this run
         run: |
-          docker run --rm --platform linux/arm/v7 \
+          docker run --rm --platform ${{ matrix.platform }} \
             -v "$PWD/emulator/sim:/sim" \
             -v "$PWD/emulator/astrometry/index:/usr/local/astrometry/data:ro" \
-            --entrypoint python3 seestar-emulator \
+            --entrypoint python3 ${{ matrix.image }} \
             /sim/build_catalog.py /usr/local/astrometry/data/index-4107.fits /sim/data/stars.npy
 
       - name: Launch emulator container
@@ -103,7 +130,7 @@ jobs:
           # so `docker logs` after the fact can race a container that's
           # already gone. Redirect to a file now — captures the container's
           # own console output regardless of whether it's still around later.
-          ./run.sh --skip-build --firmware-dir /tmp/emulator-fw --model S50 "${{ steps.fw.outputs.version }}" \
+          ./run.sh --arch ${{ matrix.arch }} --skip-build --firmware-dir /tmp/emulator-fw --model ${{ matrix.model }} "${{ steps.fw.outputs.version }}" \
             > /tmp/emulator-launch.log 2>&1 &
           echo $! > /tmp/emulator.pid
 
@@ -114,23 +141,23 @@ jobs:
       - name: Launch synthetic-sky renderer
         run: |
           cd emulator
-          python3 -m sim.renderd --shared sim/shared --model S50 --catalog sim/data/stars.npy &
+          python3 -m sim.renderd --shared sim/shared --model ${{ matrix.model }} --catalog sim/data/stars.npy &
           echo $! > /tmp/renderd.pid
 
       - name: Run smoke tests
         run: |
           pytest tests/system --target emulator --host 127.0.0.1 \
-            --pem /tmp/emulator-fw/unpacked/${{ steps.fw.outputs.version }}/interop.pem \
+            --pem /tmp/emulator-fw/unpacked/${{ steps.fw.outputs.version }}${{ matrix.fw_dir_suffix }}/interop.pem \
             --renderer-shared-dir emulator/sim/shared \
             -m smoke \
-            --screenshot=on --video=on --junit-xml=test-results/emulator-smoke.xml -q
+            --screenshot=on --video=on --junit-xml=test-results/emulator-smoke-${{ matrix.arch }}.xml -q
 
       - name: Publish emulator smoke test results
         if: always()
         uses: dorny/test-reporter@v1
         with:
-          name: Emulator Smoke Test Results
-          path: 'test-results/emulator-smoke.xml'
+          name: Emulator Smoke Test Results (${{ matrix.arch }})
+          path: 'test-results/emulator-smoke-${{ matrix.arch }}.xml'
           reporter: java-junit
 
       - name: Print emulator container log on failure
@@ -148,7 +175,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: emulator-smoke-playwright-artifacts
+          name: emulator-smoke-playwright-artifacts-${{ matrix.arch }}
           path: |
             test-results/
             /tmp/seestar_alp_system_test/

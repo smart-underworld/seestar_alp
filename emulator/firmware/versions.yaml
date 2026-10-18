@@ -7,9 +7,10 @@
 # human-curated.
 #
 # `smoke` marks the single version used by the always-on PR smoke lane
-# (emulator-smoke.yml). `full` marks every version used by the full-matrix
+# (emulator-smoke.yml, run once per architecture: 32-bit armhf and 64-bit
+# arm64). `full` marks every version used by the full-matrix
 # lane (emulator-full.yml, label/nightly-gated).
-smoke_version: "3.3.1"
+smoke_version: "3.4.0"
 
 full_versions:
   - "3.4.0"
