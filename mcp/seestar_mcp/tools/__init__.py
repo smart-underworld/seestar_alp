@@ -3,7 +3,7 @@
 from importlib import import_module
 from typing import Any
 
-_MODULES = ("state", "pointing", "imaging", "settings")
+_MODULES = ("state", "pointing", "imaging", "settings", "scheduling")
 
 
 def register_all(mcp: Any) -> None:
