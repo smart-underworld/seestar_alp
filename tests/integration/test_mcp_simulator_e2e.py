@@ -98,7 +98,6 @@ def device_server():
         lambda logger, name, ip, port, num: real_start(logger, name, ip, sim_tcp, num),
     )
     mp.setattr(device_app, "DiscoveryResponder", _NoDiscovery)
-    old_excepthook = sys.excepthook
 
     main = device_app.DeviceMain()
     api_thread = threading.Thread(target=main.start, daemon=True)
@@ -107,13 +106,13 @@ def device_server():
         _wait_for_tcp(HOST, api_port, timeout=30.0)
     except TimeoutError:
         mp.undo()
+        listener.shutdown_event.set()
         pytest.skip("Alpaca device server could not be booted in this environment")
 
     yield {"base_url": f"http://{HOST}:{api_port}", "listener": listener}
 
     main.stop()
     api_thread.join(timeout=5)
-    sys.excepthook = old_excepthook
     mp.undo()
     listener.shutdown_event.set()
     for sock in (listener.tcp_socket, listener.udp_socket):
@@ -128,39 +127,76 @@ def tools_env(monkeypatch, device_server):
     return device_server
 
 
+def _run(coro, timeout=30):
+    async def _bounded():
+        return await asyncio.wait_for(coro, timeout)
+
+    return asyncio.run(_bounded())
+
+
+def _assert_ok(result):
+    assert result is not None, "tool returned None"
+    assert not (isinstance(result, dict) and result.get("ok") is False), result
+
+
+def _find_key(obj, key):
+    """Return the value of the first occurrence of key in nested dicts/lists."""
+    if isinstance(obj, dict):
+        if key in obj:
+            return obj[key]
+        for v in obj.values():
+            found = _find_key(v, key)
+            if found is not None:
+                return found
+    elif isinstance(obj, list):
+        for v in obj:
+            found = _find_key(v, key)
+            if found is not None:
+                return found
+    return None
+
+
 def test_get_device_state_returns_dict(tools_env):
-    result = asyncio.run(state.get_device_state_tool())
+    result = _run(state.get_device_state_tool())
+    _assert_ok(result)
     assert isinstance(result, dict)
+    assert result.get("method") == "get_device_state", result
+    assert result["result"]["device"]["sn"] == "simulated123", result
 
 
 def test_goto_target_round_trip(tools_env):
-    goto = asyncio.run(pointing.goto_target_tool("M31", 0.712, 41.27))
-    assert not (isinstance(goto, dict) and goto.get("ok") is False), goto
-    done = asyncio.run(pointing.is_goto_completed_ok_tool())
-    assert not (isinstance(done, dict) and done.get("ok") is False), done
+    goto = _run(pointing.goto_target_tool("M31", 0.712, 41.27))
+    _assert_ok(goto)
+    done = _run(pointing.is_goto_completed_ok_tool())
+    _assert_ok(done)
+    assert isinstance(done, bool), done
 
 
 def test_read_and_write_settings(tools_env):
-    before = asyncio.run(settings.read_settings_tool())
+    before = _run(settings.read_settings_tool())
     assert before.get("setting") is not None or before.get("stack_setting") is not None
-    write = asyncio.run(settings.write_setting_tool({"stack_lenhance": True}))
-    assert not (isinstance(write, dict) and write.get("ok") is False), write
-    after = asyncio.run(settings.read_settings_tool())
-    assert after.get("setting") is not None or after.get("stack_setting") is not None
+    write = _run(settings.write_setting_tool({"stack_lenhance": True}))
+    _assert_ok(write)
+    after = _run(settings.read_settings_tool())
     # The simulator persists the field; confirm the write is reflected on read.
-    flat = repr(after)
-    assert "'stack_lenhance': True" in flat, after
+    # Check the field in each read path's own result payload (either may carry it).
+    seen = [
+        _find_key(after[k].get("result"), "stack_lenhance")
+        for k in ("setting", "stack_setting")
+        if isinstance(after.get(k), dict)
+    ]
+    assert True in seen, (seen, after)
 
 
 def test_schedule_flow(tools_env):
-    created = asyncio.run(scheduling.create_schedule_tool())
+    created = _run(scheduling.create_schedule_tool())
     assert not (isinstance(created, dict) and created.get("ok") is False), created
-    added = asyncio.run(scheduling.add_schedule_item_tool("wait_for", {"timer_sec": 1}))
+    added = _run(scheduling.add_schedule_item_tool("wait_for", {"timer_sec": 1}))
     assert not (isinstance(added, dict) and added.get("ok") is False), added
-    schedule = asyncio.run(scheduling.get_schedule_tool())
+    schedule = _run(scheduling.get_schedule_tool())
     assert "wait_for" in repr(schedule)
     for fn in (scheduling.start_scheduler_tool, scheduling.stop_scheduler_tool):
-        res = asyncio.run(fn())
+        res = _run(fn())
         assert not (isinstance(res, dict) and res.get("ok") is False), res
 
 
@@ -171,6 +207,6 @@ def test_shutdown_without_confirm_makes_no_device_call(tools_env, monkeypatch):
         raise AssertionError("device call made for unconfirmed shutdown")
 
     monkeypatch.setattr(system_mod, "call", _boom)
-    result = asyncio.run(system.shutdown_tool(confirm=False))
+    result = _run(system.shutdown_tool(confirm=False))
     assert result["requires_confirmation"] is True
     assert result["ok"] is False
