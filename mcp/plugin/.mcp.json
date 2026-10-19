@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "seestar": {
+      "command": "seestar-mcp",
+      "args": [],
+      "env": { "SEESTAR_BASE_URL": "http://localhost:5555" }
+    }
+  }
+}
