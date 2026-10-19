@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "seestar-mcp"
+version = "0.1.0"
+description = "MCP server exposing Seestar telescope control via ssalp_api_client"
+requires-python = ">=3.13"
+dependencies = [
+    "mcp==1.30.0",
+    "ssalp-api-client",
+]
+
+[project.scripts]
+seestar-mcp = "seestar_mcp.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["seestar_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.24",
+]
