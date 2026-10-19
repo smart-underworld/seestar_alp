@@ -23,8 +23,13 @@ async def call(
     coro_factory: Callable[[SSAlpApiClient], Awaitable[Any]],
 ) -> Any:
     """Run a client coroutine, mapping client errors to {"ok": False, "error": str}."""
-    client = make_client(telescope_id)
+    client = make_client(telescope_id=telescope_id)
     try:
         return await coro_factory(client)
     except (SSAlpConnectionError, SSAlpError) as exc:
         return {"ok": False, "error": str(exc)}
+
+
+from seestar_mcp.tools import register_all  # noqa: E402
+
+register_all(mcp)
