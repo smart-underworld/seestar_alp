@@ -1,0 +1,8 @@
+{
+  "name": "seestar-alp",
+  "owner": { "name": "smart-underworld" },
+  "plugins": [
+    { "name": "seestar", "source": "./mcp/plugin",
+      "description": "Control a Seestar from your AI assistant: point, image, and schedule." }
+  ]
+}

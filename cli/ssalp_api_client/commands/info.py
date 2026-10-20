@@ -38,6 +38,16 @@ class InfoMixin:
         logger.info("get_setting")
         return await self.method_sync("get_setting")
 
+    async def set_setting(self, **kwargs) -> dict:
+        """Save stack fields via ``set_setting`` (newer firmware: ``params.stack``)."""
+        logger.info("set_setting stack kwargs=%s", kwargs)
+        return await self.method_sync("set_setting", {"stack": kwargs})
+
+    async def set_stack_settings(self, **kwargs) -> dict:
+        """Save stack fields via the plural ``set_stack_settings`` method."""
+        logger.info("set_stack_settings kwargs=%s", kwargs)
+        return await self.method_sync("set_stack_settings", kwargs)
+
     async def get_stack_info(self) -> dict:
         logger.info("get_stack_info")
         return await self.method_sync("get_stack_info")

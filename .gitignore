@@ -35,3 +35,4 @@ emulator/astrometry/index/
 emulator/sim/data/*.npy
 emulator/sim/shared/*
 !emulator/sim/shared/.gitkeep
+.venv-mcp/

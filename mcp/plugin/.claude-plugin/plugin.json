@@ -1,0 +1,6 @@
+{
+  "name": "seestar",
+  "version": "0.1.0",
+  "description": "Control a Seestar smart telescope via the seestar_alp server: pointing, imaging, settings, scheduling, with safety-gated physical actions.",
+  "author": { "name": "smart-underworld" }
+}
