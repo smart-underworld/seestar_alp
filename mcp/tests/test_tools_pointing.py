@@ -3,10 +3,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from seestar_mcp.tools.pointing import (
+    get_pa_error_tool,
     get_solve_result_tool,
     goto_target_tool,
     is_goto_completed_ok_tool,
+    polar_align_tool,
     scope_goto_tool,
+    set_3ppa_calibration_tool,
     start_solve_tool,
     stop_goto_target_tool,
 )
@@ -40,6 +43,22 @@ async def test_get_device_state_threads_telescope_id(make_client_spy):
 async def test_get_view_state(make_client_spy, mock_client):
     await get_view_state_tool()
     mock_client.get_view_state.assert_awaited_once_with()
+
+
+async def test_polar_align(make_client_spy, mock_client):
+    await polar_align_tool()
+    mock_client.start_polar_align.assert_awaited_once_with()
+
+
+async def test_get_pa_error(make_client_spy, mock_client):
+    await get_pa_error_tool(telescope_id=0)
+    make_client_spy.assert_called_once_with(telescope_id=0)
+    mock_client.get_pa_error.assert_awaited_once_with()
+
+
+async def test_set_3ppa_calibration(make_client_spy, mock_client):
+    await set_3ppa_calibration_tool(enabled=False)
+    mock_client.set_3ppa_calibration.assert_awaited_once_with(False)
 
 
 async def test_scope_goto(make_client_spy, mock_client):

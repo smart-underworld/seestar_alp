@@ -16,6 +16,9 @@ The same gate applies to the scheduler: `add_schedule_item` with a physical acti
 ## Sun
 Never slew (`goto_target`, `scope_goto`, mosaics, schedules) toward or near the Sun, and never start imaging in daylight without a solar filter the user has confirmed. If the target's position is near the Sun, refuse and explain.
 
+## Mount motion (not hard-gated, but still physical)
+`polar_align` (3PPA) and gotos move the mount. They are not behind the `confirm` gate, but run them only when the user asked for that action, and only at night / away from the Sun. `polar_align` drives the mount through its alignment routine — tell the user it will move before starting.
+
 ## Shutdown order
 1. `stop_view` / `stop_scheduler` if active.
 2. `scope_park` (with confirmation) and wait for completion via `get_device_state`.

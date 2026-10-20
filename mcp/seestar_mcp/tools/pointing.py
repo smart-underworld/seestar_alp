@@ -45,6 +45,24 @@ async def stop_goto_target_tool(telescope_id: int = 1) -> Any:
     return await call(telescope_id, lambda c: c.stop_goto_target())
 
 
+async def polar_align_tool(telescope_id: int = 1) -> Any:
+    """Start a polar alignment (3-point / 3PPA). Moves the mount; run only
+    when the user asked to align. Poll get_pa_error for the result."""
+    return await call(telescope_id, lambda c: c.start_polar_align())
+
+
+async def get_pa_error_tool(telescope_id: int = 1) -> Any:
+    """Get the current polar-alignment error (pa_error_alt / pa_error_az).
+    Values of 9999.9 mean no alignment has been measured yet."""
+    return await call(telescope_id, lambda c: c.get_pa_error())
+
+
+async def set_3ppa_calibration_tool(enabled: bool = True, telescope_id: int = 1) -> Any:
+    """Enable or disable automatic 3-point polar-align calibration
+    (the auto_3ppa_calib setting)."""
+    return await call(telescope_id, lambda c: c.set_3ppa_calibration(enabled))
+
+
 def register(mcp: Any) -> None:
     for fn in (
         goto_target_tool,
@@ -53,5 +71,8 @@ def register(mcp: Any) -> None:
         get_solve_result_tool,
         is_goto_completed_ok_tool,
         stop_goto_target_tool,
+        polar_align_tool,
+        get_pa_error_tool,
+        set_3ppa_calibration_tool,
     ):
         mcp.tool(name=fn.__name__.removesuffix("_tool"))(fn)
