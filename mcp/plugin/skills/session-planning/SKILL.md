@@ -10,10 +10,12 @@ Turn "image <target>" into concrete `seestar` MCP tool calls. Every tool takes `
 ## Startup (when setting up for the night)
 The whole startup sequence is drivable via MCP tools. Run the steps the situation needs, in this order, and only when the user is setting up (they move hardware — see `safety`):
 1. **Initialize.** `startup_sequence(lat, lon)` — `lat`/`lon` come from `get_device_state`'s `location_lon_lat` (or ask). Optionally `set_heater(state, value)` for dew control.
-2. **Dark frames.** `create_dark` — have the user cap the lens first.
+2. **Dark frames.** `create_dark` — have the user cap the lens first. Run this *before* `startup_sequence`, or only once startup has fully settled: it needs a free device and will return `function conflict` (code 524) if another operation is still running.
 3. **Polar align / 3PPA.** `polar_align`, then poll `get_pa_error` until it returns real values (`9999.9` = not yet measured). `set_3ppa_calibration(enabled)` toggles auto-calibration.
 4. **Autofocus.** `start_auto_focus` (stop with `stop_auto_focus`; `adjust_focus(steps)` / `get_focuser_position` for manual control).
 5. **Filter.** `set_lp_filter(enabled)` for the duo-band/LP filter, or `set_wheel_position(n)` where a wheel exists (`get_wheel_position` / `get_wheel_state`).
+
+**One step at a time.** The Seestar runs one operation at a time — do not fire these back-to-back. Start a step, then wait for it to finish before the next: poll `get_device_state` (and `get_pa_error` for alignment) until the device is idle / reports a result. Firing the next command while one is still running returns `function conflict` (code 524). A tool call returning `{"ok": true}`/code 0 only means the command was *accepted*, not that the motion or routine has completed.
 
 Then proceed to the per-target steps below.
 
