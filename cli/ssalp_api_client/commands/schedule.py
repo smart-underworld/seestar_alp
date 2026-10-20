@@ -108,6 +108,13 @@ class ScheduleMixin:
             raise ValueError("session_time_sec must be positive")
         if gain < 0:
             raise ValueError("gain must be non-negative")
+        # session_time_sec is the total across all panels; the current schedule
+        # spec (and the front-end schedule page) use per-panel panel_time_sec.
+        # Convert here, mirroring front/app.py's add-to-schedule path, so items
+        # built through this client render in the web UI. The device still
+        # accepts session_time_sec as a legacy fallback, but the page does not.
+        panels = max(1, ra_num * dec_num)
+        panel_time_sec = round(session_time_sec / panels)
         logger.info("schedule_mosaic target=%s ra=%s dec=%s", target_name, ra, dec)
         return await self.add_schedule_item(
             "start_mosaic",
@@ -118,7 +125,7 @@ class ScheduleMixin:
                 "is_j2000": is_j2000,
                 "is_use_lp_filter": is_use_lp_filter,
                 "is_use_autofocus": is_use_autofocus,
-                "session_time_sec": session_time_sec,
+                "panel_time_sec": panel_time_sec,
                 "ra_num": ra_num,
                 "dec_num": dec_num,
                 "panel_overlap_percent": panel_overlap_percent,

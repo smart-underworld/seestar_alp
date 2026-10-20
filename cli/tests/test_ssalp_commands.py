@@ -506,6 +506,25 @@ class TestScheduleMixinCoverage:
             "add_schedule_item",
         )
 
+    async def test_schedule_mosaic_sends_panel_time_sec(self, client, httpx_mock):
+        # The device scheduler and the front-end schedule page use panel_time_sec
+        # (per-panel); session_time_sec is the legacy field the front-end can't
+        # render. schedule_mosaic must send panel_time_sec = session/panels.
+        import json
+        from urllib.parse import parse_qs
+
+        _stub(httpx_mock)
+        await client.schedule_mosaic(
+            "M42", 1.0, 2.0, session_time_sec=3600, ra_num=2, dec_num=1
+        )
+        form = parse_qs(httpx_mock.get_request().content.decode())
+        assert form["Action"] == ["add_schedule_item"]
+        payload = json.loads(form["Parameters"][0])
+        assert payload["action"] == "start_mosaic"
+        params = payload["params"]
+        assert "session_time_sec" not in params
+        assert params["panel_time_sec"] == 1800  # 3600 / (2 * 1)
+
     async def test_schedule_spectra(self, client, httpx_mock):
         await _check_action(
             httpx_mock,
