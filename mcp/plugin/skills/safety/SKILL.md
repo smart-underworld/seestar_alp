@@ -11,6 +11,8 @@ description: Use before any physical or system action on the Seestar (park, move
 - Pass `confirm=true` ONLY after the user has said yes in this conversation. Never set it on your own initiative or on a standing assumption.
 - These move hardware or interrupt a session; say what will happen (e.g. "this will stop the current stack").
 
+The same gate applies to the scheduler: `add_schedule_item` with a physical action requires `confirm=true`, and `start_scheduler` (an unattended run) requires `confirm=true`. Pass them only after explicit user confirmation.
+
 ## Sun
 Never slew (`goto_target`, `scope_goto`, mosaics, schedules) toward or near the Sun, and never start imaging in daylight without a solar filter the user has confirmed. If the target's position is near the Sun, refuse and explain.
 

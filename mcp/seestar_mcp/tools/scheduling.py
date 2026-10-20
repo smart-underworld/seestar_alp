@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from seestar_mcp.safety import PHYSICAL_ACTIONS, gate
 from seestar_mcp.tools._util import call
 
 
@@ -16,9 +17,19 @@ async def create_schedule_tool(telescope_id: int = 1) -> Any:
 
 
 async def add_schedule_item_tool(
-    action: str, params: dict | None = None, telescope_id: int = 1
+    action: str,
+    params: dict | None = None,
+    telescope_id: int = 1,
+    confirm: bool = False,
 ) -> Any:
-    """Add an item with the given action and params to the schedule."""
+    """Add an item with the given action and params to the schedule.
+
+    Physical actions (park, horizon, reboot, shutdown) run unattended when the
+    scheduler starts, so they require confirm=true after the user confirms."""
+    if action in PHYSICAL_ACTIONS:
+        refusal = gate(action, confirm)
+        if refusal is not None:
+            return refusal
     return await call(telescope_id, lambda c: c.add_schedule_item(action, params))
 
 
@@ -88,8 +99,14 @@ async def start_mosaic_tool(
     )
 
 
-async def start_scheduler_tool(telescope_id: int = 1) -> Any:
-    """Start the scheduler."""
+async def start_scheduler_tool(telescope_id: int = 1, confirm: bool = False) -> Any:
+    """Start the scheduler (an unattended run; requires confirm=true after the user confirms)."""
+    if not confirm:
+        return {
+            "ok": False,
+            "error": "start_scheduler launches an unattended run; pass confirm=true after the user confirms",
+            "requires_confirmation": True,
+        }
     return await call(telescope_id, lambda c: c.start_scheduler())
 
 

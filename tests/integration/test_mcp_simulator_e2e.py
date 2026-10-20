@@ -195,7 +195,12 @@ def test_schedule_flow(tools_env):
     assert not (isinstance(added, dict) and added.get("ok") is False), added
     schedule = _run(scheduling.get_schedule_tool())
     assert "wait_for" in repr(schedule)
-    for fn in (scheduling.start_scheduler_tool, scheduling.stop_scheduler_tool):
+    refused = _run(scheduling.start_scheduler_tool())
+    assert refused["ok"] is False and refused["requires_confirmation"] is True
+    for fn in (
+        lambda: scheduling.start_scheduler_tool(confirm=True),
+        scheduling.stop_scheduler_tool,
+    ):
         res = _run(fn())
         assert not (isinstance(res, dict) and res.get("ok") is False), res
 

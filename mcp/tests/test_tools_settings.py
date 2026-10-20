@@ -78,3 +78,19 @@ async def test_write_setting_invalid_variant(mock_client):
 async def test_write_setting_empty_values(mock_client):
     out = await write_setting_tool(values={})
     assert out["ok"] is False
+
+
+@pytest.mark.parametrize(
+    "payload", [{"code": 207}, {"error": "unsupported"}, {"set_setting": {"code": 5}}]
+)
+async def test_write_setting_inline_rejection_is_failure(mock_client, payload):
+    mock_client.set_stack_setting.return_value = payload
+    out = await write_setting_tool(values={"gain": 80})
+    assert out["ok"] is False
+    assert "error" in out
+
+
+async def test_write_setting_inline_zero_code_is_success(mock_client):
+    mock_client.set_stack_setting.return_value = {"code": 0}
+    out = await write_setting_tool(values={"gain": 80})
+    assert out == {"code": 0}

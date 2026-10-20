@@ -32,13 +32,38 @@ async def test_add_schedule_item(make_client_spy, mock_client):
     mock_client.add_schedule_item.assert_awaited_once_with("wait_for", {"timer_sec": 5})
 
 
-async def test_add_schedule_item_default_params(make_client_spy, mock_client):
-    await add_schedule_item_tool("shutdown")
+@pytest.mark.parametrize(
+    "action", ["shutdown", "reboot", "scope_park", "scope_move_to_horizon"]
+)
+async def test_add_physical_item_requires_confirm(make_client_spy, mock_client, action):
+    out = await add_schedule_item_tool(action)
+    assert out["ok"] is False and out["requires_confirmation"] is True
+    make_client_spy.assert_not_called()
+    mock_client.add_schedule_item.assert_not_awaited()
+
+
+async def test_add_physical_item_with_confirm(make_client_spy, mock_client):
+    await add_schedule_item_tool("shutdown", confirm=True)
     mock_client.add_schedule_item.assert_awaited_once_with("shutdown", None)
 
 
+@pytest.mark.parametrize("action", ["start_mosaic", "wait_for"])
+async def test_add_non_physical_item_needs_no_confirm(
+    make_client_spy, mock_client, action
+):
+    await add_schedule_item_tool(action, {"x": 1})
+    mock_client.add_schedule_item.assert_awaited_once_with(action, {"x": 1})
+
+
+async def test_start_scheduler_requires_confirm(make_client_spy, mock_client):
+    out = await start_scheduler_tool()
+    assert out["ok"] is False and out["requires_confirmation"] is True
+    make_client_spy.assert_not_called()
+    mock_client.start_scheduler.assert_not_awaited()
+
+
 async def test_start_scheduler_threads_telescope_id(make_client_spy, mock_client):
-    await start_scheduler_tool(telescope_id=2)
+    await start_scheduler_tool(telescope_id=2, confirm=True)
     make_client_spy.assert_called_once_with(telescope_id=2)
     mock_client.start_scheduler.assert_awaited_once_with()
 

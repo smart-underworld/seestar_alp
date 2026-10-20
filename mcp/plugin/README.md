@@ -16,7 +16,7 @@ Verify resolution with `which seestar-mcp` (or `command -v seestar-mcp`); it sho
 
 Ensure `~/.local/bin` is on the PATH of the environment Claude Code runs in (GUI launches often do not inherit your shell profile). WARNING: `.mcp.json` runs the bare command `seestar-mcp`; if it is not resolvable from Claude Code's environment, the MCP server will fail to start. If in doubt, edit `command` in `.mcp.json` to the absolute path (e.g. `/Users/you/.venvs/seestar/bin/seestar-mcp`). Alternative: `uv tool install --with ./cli ./mcp`.
 
-Set `SEESTAR_BASE_URL` in `.mcp.json` if your seestar_alp server is not at `http://localhost:5555`.
+The seestar_alp server URL comes from the client's normal config (`SSALP_*` environment variables or your ssalp toml config; default `localhost:5555`), so an existing LAN/Pi setup is picked up automatically. To override, set `SEESTAR_BASE_URL` in your own environment (do not edit `.mcp.json`; marketplace updates overwrite it).
 
 ## Install the plugin
 

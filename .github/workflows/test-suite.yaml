@@ -51,6 +51,9 @@ jobs:
             --cov-report=term --cov-report=xml:coverage-unit.xml --cov-fail-under=30.0 \
             --junit-xml=test-results/unit.xml -q
 
+      - name: Install cli and mcp packages (so MCP e2e runs instead of skipping)
+        run: pip install -e ./cli -e ./mcp
+
       - name: Run simulator integration tests
         run: pytest -m integration tests/integration --junit-xml=test-results/integration.xml -q
 
@@ -127,3 +130,21 @@ jobs:
       - name: Add coverage to job summary
         if: always()
         run: cat code-coverage-results.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+  test-mcp:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.13
+
+      - name: Install cli and mcp packages and test dependencies
+        run: pip install -e ./cli -e ./mcp pytest pytest-asyncio
+
+      - name: Run mcp tests
+        run: python -m pytest mcp/tests -q
