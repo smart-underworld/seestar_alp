@@ -90,10 +90,14 @@ connection/API error.
 |---|---|
 | **State** | `get_device_state`, `get_view_state` |
 | **Pointing** | `goto_target`, `scope_goto`, `start_solve`, `get_solve_result`, `is_goto_completed_ok`, `stop_goto_target` |
-| **Imaging** | `start_stack`, `stop_view`, `set_gain`, `set_exposure`, `get_last_image` |
+| **Alignment** | `polar_align`, `get_pa_error`, `set_3ppa_calibration` |
+| **Focuser** | `get_focuser_position`, `adjust_focus`, `start_auto_focus`, `stop_auto_focus` |
+| **Filter wheel** | `get_wheel_position`, `get_wheel_state`, `get_wheel_setting`, `set_wheel_position`, `set_lp_filter` |
+| **Imaging** | `start_stack`, `stop_view`, `set_gain`, `set_exposure`, `get_last_image`, `create_dark` |
 | **Settings** | `read_settings`, `write_setting` |
 | **Scheduling** | `get_schedule`, `create_schedule`, `add_schedule_item`, `schedule_mosaic`, `start_mosaic`, `start_scheduler`, `stop_scheduler`, `export_schedule`, `import_schedule` |
-| **System (physical)** | `scope_park`, `scope_move_to_horizon`, `reboot`, `shutdown` |
+| **Startup / system** | `startup_sequence`, `set_heater` |
+| **System (physical, gated)** | `scope_park`, `scope_move_to_horizon`, `reboot`, `shutdown` |
 
 ### Settings
 

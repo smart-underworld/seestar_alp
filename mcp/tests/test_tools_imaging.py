@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from seestar_mcp.tools.imaging import (
+    create_dark_tool,
     get_last_image_tool,
     set_exposure_tool,
     set_gain_tool,
@@ -26,6 +27,11 @@ def make_client_spy(monkeypatch, mock_client):
 async def test_start_stack_passes_gain_and_restart(make_client_spy, mock_client):
     await start_stack_tool(gain=80, restart=False)
     mock_client.start_stack.assert_awaited_once_with(80, restart=False)
+
+
+async def test_create_dark(make_client_spy, mock_client):
+    await create_dark_tool()
+    mock_client.start_create_dark.assert_awaited_once_with()
 
 
 async def test_start_stack_default_restart(make_client_spy, mock_client):

@@ -6,7 +6,9 @@ from seestar_mcp.tools.system import (
     reboot_tool,
     scope_move_to_horizon_tool,
     scope_park_tool,
+    set_heater_tool,
     shutdown_tool,
+    startup_sequence_tool,
 )
 
 
@@ -28,6 +30,17 @@ CASES = [
     (reboot_tool, "pi_reboot"),
     (shutdown_tool, "pi_shutdown"),
 ]
+
+
+async def test_startup_sequence_not_gated(make_client_spy, mock_client):
+    # startup_sequence is user-initiated setup; it is not behind the confirm gate.
+    await startup_sequence_tool(37.12, -123.45)
+    mock_client.startup_sequence.assert_awaited_once_with(37.12, -123.45)
+
+
+async def test_set_heater(make_client_spy, mock_client):
+    await set_heater_tool(True, 80)
+    mock_client.set_heater.assert_awaited_once_with(True, 80)
 
 
 @pytest.mark.parametrize("tool,method", CASES)

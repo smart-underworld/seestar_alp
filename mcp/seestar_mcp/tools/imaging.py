@@ -34,6 +34,11 @@ async def get_last_image_tool(telescope_id: int = 1) -> Any:
     return await call(telescope_id, lambda c: c.get_last_image())
 
 
+async def create_dark_tool(telescope_id: int = 1) -> Any:
+    """Capture dark frames (dark-frame calibration). Cap the lens first."""
+    return await call(telescope_id, lambda c: c.start_create_dark())
+
+
 def register(mcp: Any) -> None:
     for fn in (
         start_stack_tool,
@@ -41,5 +46,6 @@ def register(mcp: Any) -> None:
         set_gain_tool,
         set_exposure_tool,
         get_last_image_tool,
+        create_dark_tool,
     ):
         mcp.tool(name=fn.__name__.removesuffix("_tool"))(fn)
