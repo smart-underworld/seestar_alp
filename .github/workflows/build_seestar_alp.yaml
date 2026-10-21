@@ -45,6 +45,7 @@ jobs:
           --add-data="downloaded_data/astroquery/simbad/data/query_criteria_fields.json;astroquery/simbad/data" `
           --paths=./front --paths=./device `
           --collect-all=geomag `
+          --collect-data=pyvo `
           root_app.py
           Compress-Archive -Path ./dist/seestar_alp/* -DestinationPath win_seestar_alp.zip
           echo "device_script_result=win_seestar_alp.zip" >> $env:GITHUB_ENV
@@ -105,6 +106,7 @@ jobs:
           --add-data="downloaded_data/astroquery/simbad/data/query_criteria_fields.json:astroquery/simbad/data" \
           --paths=./front --paths=./device \
           --collect-all=geomag \
+          --collect-data=pyvo \
           root_app.py
           cd dist
           zip -r ../MacOS_arm64_seestar_alp.zip ./seestar_alp/*
@@ -200,6 +202,7 @@ jobs:
           --add-data="downloaded_data/astroquery/simbad/data/query_criteria_fields.json:astroquery/simbad/data" \
           --paths=./front --paths=./device \
           --collect-all=geomag \
+          --collect-data=pyvo \
           root_app.py
           cd dist
           zip -r ../MacOS_x86_seestar_alp.zip ./seestar_alp/*
