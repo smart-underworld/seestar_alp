@@ -11,7 +11,7 @@ humanize==4.12.3
 ephem==4.2
 pytz==2022.7.1
 numpy==2.3.2
-opencv-python==4.10.0.84
+opencv-python==4.11.0.86
 scikit-image==0.25.2
 flask==3.1.1
 waitress==3.0.2
