@@ -16,6 +16,8 @@ uitheme = "dark" #all lower case
 #experimental = true
 confirm = true	# Enable/Disable the Commands page confirmation dialog
 # save_frames = false
+# For a Windows path use SINGLE quotes so backslashes aren't read as escapes:
+# save_frames_dir = 'C:\Users\you\Images'
 # save_frames_dir = "."
 
 # CSS overrides
@@ -60,7 +62,10 @@ is_frame_calibrated = true
 # device via the challenge-response authentication required by firmware 7.18+.
 # The legality of key use varies by jurisdiction. You are solely responsible for ensuring
 # compliance with the laws of your region.
-interop_pem = ""  # e.g. "/etc/seestar/seestar_client_key.pem"
+# Path to the PEM key. Windows paths contain backslashes, so use SINGLE quotes
+# (a TOML literal string) to avoid "\U"/"\s" escape errors that crash startup.
+# e.g. 'C:\Users\you\seestar_client_key.pem'  or  '/etc/seestar/seestar_client_key.pem'
+interop_pem = ''
 
 [logging]
 log_level = 'INFO'   #'WARN' only if trouble    #'INFO' to output more logging      #'DEBUG' still more output

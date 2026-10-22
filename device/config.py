@@ -49,6 +49,40 @@ import os
 ### end rwr
 import typing
 
+
+class ConfigError(Exception):
+    """Raised when config.toml exists but cannot be parsed.
+
+    Carries a human-readable, actionable message (offending file, location, and
+    the common Windows-backslash fix) so the app can report it cleanly instead
+    of dying with a raw tomlkit traceback.
+    """
+
+
+def _parse_toml(text: str, toml_path: str):
+    """Parse TOML text, converting tomlkit parse failures into a ConfigError
+    with an actionable message.
+
+    The usual culprit on Windows is a raw path such as ``"C:\\Users\\..."`` in a
+    double-quoted string: ``\\U`` (and friends) are read as string escapes and
+    the parse fails. The fix is single quotes, forward slashes, or doubled
+    backslashes, so the message spells that out.
+    """
+    try:
+        return tomlkit.loads(text)
+    except tomlkit.exceptions.ParseError as e:
+        # str(e) already reads e.g. "Invalid unicode value at line 63 col 18".
+        raise ConfigError(
+            f"Could not parse configuration file:\n  {toml_path}\n"
+            f"Error: {e}.\n\n"
+            "If this line contains a Windows path, the backslashes are being "
+            "read as string escapes. Fix it by using single quotes, e.g.\n"
+            "  save_frames_dir = 'C:\\Users\\you\\Images'\n"
+            "or forward slashes ('C:/Users/you/Images'), or doubled backslashes "
+            "('C:\\\\Users\\\\you\\\\Images')."
+        ) from e
+
+
 #
 # This slimy hack is for Sphinx which, despite the toml.load() being
 # run only once on the first import, it can't deal with _dict not being
@@ -112,7 +146,11 @@ class _Config:
             self._dict = preloaded_dict
         else:
             with open(toml_path) as fp:
-                self._dict = tomlkit.loads(fp.read())
+                text = fp.read()
+            # _parse_toml raises ConfigError on a malformed file BEFORE this
+            # assignment runs, so self._dict keeps its last-good value (a failed
+            # reload must not leave the running app with an empty config).
+            self._dict = _parse_toml(text, toml_path)
         """
         Load a config.toml file into a Config object.
 
@@ -920,4 +958,12 @@ class _Config:
         return self._dict
 
 
-Config = _Config()
+try:
+    Config = _Config()
+except ConfigError as e:
+    # The config file exists but is broken. Report it cleanly and stop, rather
+    # than crashing the frozen app with a raw tomlkit traceback. Falling back to
+    # defaults is deliberately avoided: a later settings save would overwrite
+    # the user's real config.toml (including their [[seestars]] list).
+    print(f"\nFATAL: {e}\n", file=sys.stderr)
+    sys.exit(1)
