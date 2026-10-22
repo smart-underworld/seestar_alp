@@ -13,7 +13,7 @@ from watchdog.events import FileSystemEventHandler
 from front.app import FrontMain, get_live_status
 
 from device.app import DeviceMain  # type: ignore
-from device.config import Config  # type: ignore
+from device.config import Config, ConfigError  # type: ignore
 from device import log  # type: ignore
 from device import telescope  # type: ignore
 
@@ -62,7 +62,16 @@ class ConfigChangeHandler(FileSystemEventHandler):
     def on_modified(self, event):
         if event.src_path == self.path:
             # print(f'ConfigChangeHandler event type: {event.event_type}  path : {event.src_path}')
-            Config.load_toml()
+            try:
+                Config.load_toml()
+            except ConfigError as e:
+                # A live edit left config.toml unparseable. Keep running on the
+                # last-good config instead of letting the exception kill the
+                # file-watcher thread; the user's next valid save will reload.
+                log.logger.error(
+                    "Ignoring config reload; config.toml is invalid.\n%s", e
+                )
+                return
             self.alp.reload()
             self.front.reload()
         # else:

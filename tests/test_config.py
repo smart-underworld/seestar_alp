@@ -1,9 +1,13 @@
 import os
+import subprocess
+import sys
 
 import pytest
 import tomlkit
 
-from device.config import _Config, _resolve_config_path
+from device.config import ConfigError, _Config, _resolve_config_path
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 
 
 def make_config():
@@ -168,6 +172,87 @@ def test_str_to_bool_truthy_variants():
     assert _Config.strToBool("on") is True
     assert _Config.strToBool("y") is True
     assert _Config.strToBool("Y") is True
+
+
+# ---------------------------------------------------------------------------
+# load — malformed TOML (Windows backslash path trap)
+# ---------------------------------------------------------------------------
+
+
+# A raw Windows path inside a double-quoted TOML string: the backslash before
+# "U" is read as the start of a \U unicode escape and the parse blows up. This
+# is exactly the crash reported from the Windows standalone build.
+_BAD_WINDOWS_CONFIG = (
+    '[seestar_initialization]\ninterop_pem = "C:\\Users\\me\\seestar_client_key.pem"\n'
+)
+
+
+def test_load_raises_configerror_on_windows_backslash_path(tmp_path):
+    """A config.toml with raw Windows backslashes must raise a clear ConfigError,
+    not an opaque tomlkit ParseError that crashes the whole app at startup."""
+    bad = tmp_path / "config.toml"
+    bad.write_text(_BAD_WINDOWS_CONFIG)
+
+    cfg = make_config()
+    with pytest.raises(ConfigError) as excinfo:
+        cfg.load(str(bad))
+
+    message = str(excinfo.value)
+    # Message must be actionable: name the offending file, where it broke, and
+    # the backslash fix (the whole point of the friendly error).
+    assert str(bad) in message
+    assert "line" in message.lower()
+    assert "backslash" in message.lower()
+
+
+def test_load_leaves_dict_untouched_on_parse_error(tmp_path):
+    """A failed reload must preserve the last-good in-memory config rather than
+    wiping it (which would otherwise let a later save clobber the real file)."""
+    cfg = make_config()
+    cfg.load("", preloaded_dict={"network": {"port": 4242}})
+    good_dict = cfg._dict
+
+    bad = tmp_path / "config.toml"
+    bad.write_text(_BAD_WINDOWS_CONFIG)
+    with pytest.raises(ConfigError):
+        cfg.load(str(bad))
+
+    # Untouched: same object, same contents.
+    assert cfg._dict is good_dict
+    assert cfg._dict["network"]["port"] == 4242
+
+
+def test_startup_exits_cleanly_on_malformed_config(tmp_path):
+    """Importing device.config with a malformed file (the module-level
+    ``Config = _Config()`` startup path) must exit non-zero with an actionable
+    message, not dump a raw tomlkit traceback. This guards the exact crash
+    reported from the Windows standalone build."""
+    bad = tmp_path / "config.toml"
+    bad.write_text(_BAD_WINDOWS_CONFIG)
+
+    result = subprocess.run(
+        [sys.executable, "-c", "import device.config"],
+        cwd=_REPO_ROOT,
+        env={**os.environ, "SEESTAR_ALP_CONFIG_PATH": str(bad)},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert str(bad) in result.stderr
+    assert "backslash" in result.stderr.lower()
+
+
+def test_config_example_still_parses():
+    """The shipped config.toml.example must never contain the backslash trap."""
+    example = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "device",
+        "config.toml.example",
+    )
+    with open(example) as fp:
+        tomlkit.loads(fp.read())  # must not raise
 
 
 # ---------------------------------------------------------------------------
