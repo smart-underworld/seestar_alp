@@ -726,3 +726,44 @@ def test_render_config_html_offers_horizon_settings():
     assert 'name="horizon_file"' in html
     assert 'name="horizon_skip_hidden_targets"' in html
     assert 'name="horizon_margin"' in html
+
+
+def test_load_from_form_saves_site_timezone(monkeypatch):
+    cfg = make_loaded_config()
+    monkeypatch.setattr(cfg, "load", lambda path, preloaded_dict=None: None)
+
+    req = FakeRequest(_base_form_media(init_timezone="  Europe/Paris "))
+    cfg.load_from_form(req)
+
+    assert cfg._dict["seestar_initialization"]["timezone"] == "Europe/Paris"
+
+
+def test_load_from_form_without_timezone_field_saves_empty(monkeypatch):
+    """An older settings form without the field means: this computer's zone."""
+    cfg = make_loaded_config()
+    monkeypatch.setattr(cfg, "load", lambda path, preloaded_dict=None: None)
+
+    req = FakeRequest(_base_form_media())
+    cfg.load_from_form(req)
+
+    assert cfg._dict["seestar_initialization"]["timezone"] == ""
+
+
+def test_site_timezone_setting_loads_and_defaults_to_empty():
+    cfg = make_config()
+    cfg.load("", preloaded_dict={})
+    assert cfg.init_timezone == ""
+    cfg.load(
+        "", preloaded_dict={"seestar_initialization": {"timezone": "Europe/Paris"}}
+    )
+    assert cfg.init_timezone == "Europe/Paris"
+
+
+def test_render_config_html_offers_site_timezone():
+    cfg = make_config()
+    cfg.load(
+        "", preloaded_dict={"seestar_initialization": {"timezone": "Europe/Paris"}}
+    )
+    html = cfg.render_config_html()
+    assert 'name="init_timezone"' in html
+    assert 'value="Europe/Paris"' in html

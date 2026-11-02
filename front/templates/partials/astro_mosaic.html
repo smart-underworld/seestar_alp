@@ -5,7 +5,7 @@
     <!-- script type="text/javascript" src="https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.js" charset="utf-8"></script -->
     <script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
-    <script type="text/javascript" src="/public/AstroMosaicEngine.js"></script>
+    <script type="text/javascript" src="/public/AstroMosaicEngine.js?v={{ version | default('', true) | urlencode }}"></script>
     <style>
         /* Bring the aladin control buttons to the top layer */
         .aladin-simbadPointer-control button {
@@ -136,6 +136,12 @@
         again from the first RA panel (it does not alternate direction row to row).</div>
     <div id="radec-div" style="width:100%; overflow-x:auto;"></div>
 </div>
+{% if not config_lat and not config_long %}
+<div class="alert alert-warning mt-2" id="astro-mosaic-location-unset">
+    The telescope location is not set (latitude and longitude are 0): the charts below are drawn
+    for 0&deg; N, 0&deg; E. Set the latitude and longitude in the settings.
+</div>
+{% endif %}
 <div id="day-div" style="height:300px; width: 100%; max-width: 100% !important;"></div>
 <div id="year-div" style="height:300px; width: 100%; max-width: 100% !important;"></div>
 <div id="dayvisibility-panel-text" style="display: none;"></div>
@@ -323,17 +329,17 @@
         grid_size_x: 1,
         grid_size_y: 1,
         grid_overlap: 20,
-        location_lat: {{ config_lat }},
-        location_lng: {{ config_long }},
+        location_lat: {{ config_lat | default(0, true) | tojson }},
+        location_lng: {{ config_long | default(0, true) | tojson }},
         horizonSoft: null,
         // The configured horizon profile, highest altitude every 5 degrees;
         // a flat 30 degrees without one.
         horizonHard: {% if horizon_limits %}{{ horizon_limits | tojson }}{% else %}[30]{% endif %},
         meridian_transit: null,
         UTCdate_ms: null,
-        // The browser's offset rather than the server's: servers and
-        // containers often run in UTC. It also follows daylight saving time.
-        timezoneOffset: -new Date().getTimezoneOffset() / 60,
+        // The time zone of the telescope site, which the charts are drawn
+        // for, not the browser's: the scope may be far from the viewer.
+        timezoneOffset: {{ utc_offset | default(0, true) | tojson }},
         isCustomMode: true,
         chartTextColor: "white",
         gridlinesColor: "gray",
