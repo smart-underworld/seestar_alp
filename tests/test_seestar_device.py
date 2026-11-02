@@ -2700,6 +2700,7 @@ def _setup_mosaic_item_test(monkeypatch, seestar):
     def fake_mosaic_thread_fn(*args, **kwargs):
         # stack_type is the last positional arg passed by the lambda in start_mosaic_item
         received["stack_type"] = args[-1] if args else kwargs.get("stack_type")
+        received["check_horizon"] = kwargs.get("check_horizon")
 
     class FakeThread:
         def __init__(self, target=None):
@@ -3160,6 +3161,99 @@ def test_start_mosaic_item_runs_a_target_above_the_horizon(
     horizon_site("0 -90\n")
     seestar.start_mosaic_item(_mosaic_item_params())
     assert received.get("stack_type") == "DeepSky"
+    assert received.get("check_horizon") is True  # panels checked in turn
+
+
+def test_start_mosaic_item_shows_a_skipped_target_in_the_scheduler_state(
+    monkeypatch, seestar, horizon_site
+):
+    _setup_mosaic_item_test(monkeypatch, seestar)
+    seestar.schedule["current_item_id"] = "item-7"
+    horizon_site("0 90\n")
+    seestar.start_mosaic_item(_mosaic_item_params())
+    item = seestar.event_state["scheduler"]["cur_scheduler_item"]
+    assert item["schedule_item_id"] == "item-7"
+    assert item["action"] == "skipped: below the local horizon"
+
+
+def _run_mosaic_panels(monkeypatch, seestar, n_ra, n_dec, check_horizon):
+    """Run mosaic_thread_fn; return the panels it slewed to, in order."""
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "device.seestar_device.Util.mosaic_next_center_spacing", lambda *_a: [0.1, 0.2]
+    )
+    slewed = []
+
+    def goto(*_a, **_k):
+        item = seestar.event_state["scheduler"]["cur_scheduler_item"]
+        slewed.append(f"{item['cur_ra_panel_num']}{item['cur_dec_panel_num']}")
+        return True
+
+    monkeypatch.setattr(seestar, "mosaic_goto_inner_worker", goto)
+    monkeypatch.setattr(seestar, "set_target_name", lambda _n: {"ok": True})
+    monkeypatch.setattr(seestar, "start_stack", lambda _p: True)
+    monkeypatch.setattr(seestar, "stop_stack", lambda: {"ok": True})
+    monkeypatch.setattr(seestar, "send_message_param_sync", lambda _p: {"ok": True})
+    seestar.schedule["state"] = "working"
+    seestar.schedule["is_skip_requested"] = False
+    seestar.schedule["current_item_id"] = "m1"
+    seestar.event_state["scheduler"] = {"cur_scheduler_item": {}}
+    seestar.mosaic_thread_fn(
+        "M31",
+        0.7122,
+        41.269,
+        False,
+        5,
+        n_ra,
+        n_dec,
+        10,
+        80,
+        False,
+        "",
+        1,
+        5,
+        check_horizon=check_horizon,
+    )
+    return slewed
+
+
+def test_mosaic_thread_fn_skips_only_the_hidden_panels(monkeypatch, seestar):
+    monkeypatch.setattr(Config, "horizon_skip_hidden_targets", True)
+    checked = []
+
+    def hidden(name, coord):
+        checked.append(name)
+        return name == "M31_11"
+
+    monkeypatch.setattr(seestar, "is_hidden_by_horizon", hidden)
+    slewed = _run_mosaic_panels(monkeypatch, seestar, 2, 1, check_horizon=True)
+    assert checked == ["M31_11", "M31_21"]
+    assert slewed == ["21"]
+
+
+def test_mosaic_thread_fn_checks_no_panel_unless_asked(monkeypatch, seestar):
+    monkeypatch.setattr(Config, "horizon_skip_hidden_targets", True)
+    monkeypatch.setattr(
+        seestar, "is_hidden_by_horizon", lambda *_a: pytest.fail("checked")
+    )
+    assert _run_mosaic_panels(monkeypatch, seestar, 2, 1, check_horizon=False) == [
+        "11",
+        "21",
+    ]
+
+
+def test_mosaic_thread_fn_single_panel_relies_on_the_item_check(monkeypatch, seestar):
+    monkeypatch.setattr(Config, "horizon_skip_hidden_targets", True)
+    monkeypatch.setattr(
+        seestar, "is_hidden_by_horizon", lambda *_a: pytest.fail("checked twice")
+    )
+    assert _run_mosaic_panels(monkeypatch, seestar, 1, 1, check_horizon=True) == ["11"]
+
+
+def test_panel_with_an_impossible_position_is_kept(monkeypatch, seestar):
+    monkeypatch.setattr(Config, "horizon_skip_hidden_targets", True)
+    assert seestar.is_panel_hidden_by_horizon("M31_12", 0.7, 95.0) is False
 
 
 def test_start_mosaic_item_ignores_the_horizon_unless_enabled(
