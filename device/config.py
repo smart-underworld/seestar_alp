@@ -38,6 +38,7 @@
 #               var here. MIT license and module header. No mcast.
 #
 import sys
+import math
 import tomlkit
 import logging
 import shutil
@@ -302,6 +303,10 @@ class _Config:
         """
         Save the config html form into a toml file
         """
+        # Validated before anything is written, so a bad value cannot leave
+        # the settings half applied.
+        horizon_margin = self.horizon_margin_from_form(req.media.get("horizon_margin"))
+
         # Reset arrays
         self.seestars = []
         self._dict["seestars"] = tomlkit.aot()
@@ -477,9 +482,33 @@ class _Config:
         self.set_toml(
             "seestar_initialization",
             "horizon_margin",
-            float(req.media.get("horizon_margin") or 0.0),
+            horizon_margin,
         )
         self.load(self.path_to_dat, preloaded_dict=self._dict)
+
+    def horizon_margin_from_form(self, value):
+        """Horizon margin from the settings form, in degrees, 0 to 90.
+
+        Empty means 0. A decimal comma and a trailing degree sign are
+        accepted. Anything else (text, a negative, out of range or NaN
+        value) keeps the current margin, with a warning in the log, rather
+        than failing the whole save.
+        """
+        current = getattr(self, "horizon_margin", 0.0)
+        text = str(value if value is not None else "").strip().rstrip("°").strip()
+        if not text:
+            return 0.0
+        try:
+            margin = float(text.replace(",", "."))
+        except ValueError:
+            margin = math.nan
+        if not (math.isfinite(margin) and 0.0 <= margin <= 90.0):
+            logging.getLogger().warning(
+                f"Horizon margin {value!r} ignored: expected degrees from 0 to 90; "
+                f"keeping {current}"
+            )
+            return current
+        return margin
 
     def load_toml(self, load_name=None):
         """
@@ -1001,7 +1030,7 @@ class _Config:
                     "horizon_margin",
                     "Horizon margin:",
                     self.horizon_margin,
-                    "Degrees a target must clear above the horizon for the scheduler",
+                    "Degrees, 0 to 90, a target must clear above the horizon for the scheduler",
                 ),
             )
             + self.render_config_section(

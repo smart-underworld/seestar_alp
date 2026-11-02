@@ -767,3 +767,44 @@ def test_render_config_html_offers_site_timezone():
     html = cfg.render_config_html()
     assert 'name="init_timezone"' in html
     assert 'value="Europe/Paris"' in html
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("", 0.0),
+        (None, 0.0),
+        ("2.5", 2.5),
+        ("2,5", 2.5),
+        ("5°", 5.0),
+        (" 5 ° ", 5.0),
+        ("90", 90.0),
+    ],
+)
+def test_horizon_margin_from_form_reads_degrees(value, expected):
+    cfg = make_config()
+    cfg.horizon_margin = 3.0
+    assert cfg.horizon_margin_from_form(value) == expected
+
+
+@pytest.mark.parametrize("value", ["abc", "-1", "91", "nan", "inf"])
+def test_horizon_margin_from_form_keeps_the_current_margin(value):
+    cfg = make_config()
+    cfg.horizon_margin = 3.0
+    assert cfg.horizon_margin_from_form(value) == 3.0
+
+
+def test_load_from_form_bad_horizon_margin_saves_the_rest(monkeypatch):
+    """A bad margin no longer raises halfway through the save."""
+    cfg = make_loaded_config()
+    cfg.horizon_margin = 1.5
+    monkeypatch.setattr(cfg, "load", lambda path, preloaded_dict=None: None)
+
+    req = FakeRequest(
+        _base_form_media(horizon_margin="abc", horizon_file=" /etc/site.hrz ")
+    )
+    cfg.load_from_form(req)
+
+    section = cfg._dict["seestar_initialization"]
+    assert section["horizon_margin"] == 1.5
+    assert section["horizon_file"] == "/etc/site.hrz"
