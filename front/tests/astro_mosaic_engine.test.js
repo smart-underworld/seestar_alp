@@ -44,7 +44,7 @@ function stubGoogleCharts(tables) {
 
 // Day-chart rows for a target, with the engine called the way the planner
 // card (partials/astro_mosaic.html) calls it.
-function dayRows(target, horizonHard) {
+function dayRows(target, horizonHard, horizonSoft = null) {
   const tables = [];
   stubGoogleCharts(tables);
   window.A = stub;
@@ -70,7 +70,7 @@ function dayRows(target, horizonHard) {
     grid_overlap: 100,
     location_lat: 44.06,
     location_lng: 0.65,
-    horizonSoft: null,
+    horizonSoft,
     horizonHard,
     meridian_transit: null,
     UTCdate_ms: Date.UTC(2026, 9, 24, 0, 0, 0, 0),
@@ -95,6 +95,12 @@ function dayRows(target, horizonHard) {
   };
   window.StartAstroMosaicViewerEngine("all", target, params, panels, null, 100, {});
   const day = tables.find((table) => table.columns.includes("Not visible"));
+  if (!day) {
+    // The stubs can swallow an exception thrown inside the engine: fail here
+    // with the reason rather than on an undefined table below.
+    const error = document.getElementById("error-text").innerHTML;
+    throw new Error(`no day-visibility table was built (engine error: ${error || "none"})`);
+  }
   const visible = day.columns.indexOf("Visible");
   const hidden = day.columns.indexOf("Not visible");
   const value = (cell) => (cell && typeof cell === "object" ? cell.v : cell);
@@ -115,6 +121,28 @@ describe("AstroMosaicEngine.js horizon", () => {
     expect(limits).toHaveLength(72);
     expect(limits.every((limit) => limit === 30)).toBe(true);
     expect(window.fillHorizonLimits(null)).toHaveLength(72);
+  });
+
+  it("leaves the caller's horizon array as it was", () => {
+    const horizon = [30];
+    const limits = window.fillHorizonLimits(horizon);
+    expect(limits).toHaveLength(72);
+    expect(horizon).toEqual([30]);
+  });
+
+  it("uses a soft-only horizon as the hard one, as the wrapper does", () => {
+    const params = { horizonSoft: [20], horizonHard: null };
+    window.normalizeHorizonLimits(params);
+    expect(params.horizonSoft).toBeNull();
+    expect(params.horizonHard).toHaveLength(72);
+    expect(params.horizonHard.every((limit) => limit === 20)).toBe(true);
+  });
+
+  it("draws a flat 0 degree horizon when none is given", () => {
+    const params = { horizonSoft: null, horizonHard: null };
+    window.normalizeHorizonLimits(params);
+    expect(params.horizonHard).toHaveLength(72);
+    expect(params.horizonHard.every((limit) => limit === 0)).toBe(true);
   });
 
   it("maps azimuths of 357.5 degrees and more to the limit at 0", () => {
@@ -142,5 +170,12 @@ describe("AstroMosaicEngine.js horizon", () => {
   it("draws Polaris as visible all night, across azimuth 360", () => {
     const rows = dayRows("02:31:49 +89:15:51", [30]);
     expect(rows.every((row) => row.visible != null)).toBe(true);
+  });
+
+  it("draws a soft-only horizon like a hard one", () => {
+    const rows = dayRows("00:42:44 +41:16:09", null, [30]);
+    const visible = rows.filter((row) => row.visible != null);
+    expect(visible.length).toBeGreaterThan(rows.length / 2);
+    expect(visible.every((row) => row.visible > 30)).toBe(true);
   });
 });

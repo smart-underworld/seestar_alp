@@ -126,16 +126,7 @@ function AstroMosaicEngine(target, params, target_div, day_div, year_div, radec_
         panel_view_text : null
     };
 
-    if (engine_params.horizonSoft != null && engine_params.horizonHard == null) {
-        // we have only soft horizon, use it as hard horizon
-        console.log('AstroMosaicEngine, use soft horizon as hard horizon');
-        engine_params.horizonHard = engine_params.horizonSoft;
-        engine_params.horizonSoft = null;
-    }
-    if (engine_params.horizonSoft != null) {
-        engine_params.horizonSoft = fillHorizonLimits(engine_params.horizonSoft);
-    }
-    engine_params.horizonHard = fillHorizonLimits(engine_params.horizonHard);
+    normalizeHorizonLimits(engine_params);
 
     if (engine_params.UTCdate_ms == null) {
         // Use current date
@@ -173,6 +164,9 @@ function fillHorizonLimits(horizon_limits)
 {
     if (horizon_limits == null || horizon_limits.length == 0) {
         horizon_limits = [0];
+    } else {
+        // A copy: the caller's array is left as it was.
+        horizon_limits = horizon_limits.slice();
     }
     var len = horizon_limits.length;
     if (len < 72) {
@@ -183,6 +177,27 @@ function fillHorizonLimits(horizon_limits)
         }
     }
     return horizon_limits;
+}
+
+/*
+ * Soft and hard horizon limits of engine_params, padded to one value every
+ * 5 degrees. With only a soft horizon, it is used as the hard one; with
+ * neither, the hard horizon is flat at 0 degrees. Padding is idempotent, so
+ * the AstroMosaicEngine() wrapper and direct callers of
+ * StartAstroMosaicViewerEngine() get the same horizon.
+ */
+function normalizeHorizonLimits(engine_params)
+{
+    if (engine_params.horizonSoft != null && engine_params.horizonHard == null) {
+        // we have only soft horizon, use it as hard horizon
+        console.log('AstroMosaicEngine, use soft horizon as hard horizon');
+        engine_params.horizonHard = engine_params.horizonSoft;
+        engine_params.horizonSoft = null;
+    }
+    if (engine_params.horizonSoft != null) {
+        engine_params.horizonSoft = fillHorizonLimits(engine_params.horizonSoft);
+    }
+    engine_params.horizonHard = fillHorizonLimits(engine_params.horizonHard);
 }
 
 /*
@@ -351,11 +366,8 @@ function StartAstroMosaicViewerEngine(
     }
 
     // Callers that bypass the AstroMosaicEngine() wrapper, like the planner
-    // card, may pass a partial horizon: pad it here as the wrapper does.
-    if (engine_params.horizonSoft != null) {
-        engine_params.horizonSoft = fillHorizonLimits(engine_params.horizonSoft);
-    }
-    engine_params.horizonHard = fillHorizonLimits(engine_params.horizonHard);
+    // card, may pass a partial horizon: normalize it as the wrapper does.
+    normalizeHorizonLimits(engine_params);
 
     if (!engine_params.timezoneOffset) {
         engine_params.timezoneOffset = 0;
