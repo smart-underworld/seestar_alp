@@ -453,10 +453,40 @@ def test_action_check_target_visibility(horizon_file):
     assert value["horizon_error"] is None
 
 
+def _put_action_error(action_name, params, devnum=1):
+    set_shr_logger(logging.getLogger("test-telescope"))
+    device_exceptions.logger = DummyLogger()
+    telescope.seestar_dev.clear()
+    fake = FakeDevice(connected=True)
+    telescope.seestar_dev[1] = fake
+    resp = DummyResp()
+    telescope.action().on_put(DummyReq(action_name, params), resp, devnum=devnum)
+    payload = json.loads(resp.text)
+    assert fake.calls == []
+    return payload["ErrorNumber"], payload["ErrorMessage"]
+
+
 def test_action_check_target_visibility_without_location(horizon_file, monkeypatch):
     from device.config import Config
 
     monkeypatch.setattr(Config, "init_lat", 0)
     monkeypatch.setattr(Config, "init_long", 0)
-    value = _put_action("check_target_visibility", {"ra": 0.7122, "dec": 41.269})
-    assert value == {"error": "site location not set: lat / long are 0"}
+    number, message = _put_action_error(
+        "check_target_visibility", {"ra": 0.7122, "dec": 41.269}
+    )
+    assert number == 0x402  # ValueNotSet
+    assert "site location not set" in message
+
+
+@pytest.mark.parametrize(
+    "params, detail",
+    [
+        ({"dec": 41.269}, "missing parameter(s): ra"),
+        ({"ra": "00:42:44"}, "missing parameter(s): dec"),
+        ({"ra": "north", "dec": "+41:16:09"}, "unreadable coordinates"),
+    ],
+)
+def test_action_check_target_visibility_invalid_target(horizon_file, params, detail):
+    number, message = _put_action_error("check_target_visibility", params)
+    assert number == 0x401  # InvalidValue
+    assert detail in message

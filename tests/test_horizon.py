@@ -47,14 +47,30 @@ def test_parse_hrz_keeps_the_higher_of_two_points_at_one_azimuth():
         ("0 10\n90\n", "line 2: expected 'azimuth altitude'"),
         ("0 10 20\n", "line 1: expected 'azimuth altitude'"),
         ("north 10\n", "line 1: expected 'azimuth altitude'"),
-        ("400 10\n", "line 1: azimuth must be within 0-360"),
-        ("10 95\n", "line 1: azimuth must be within 0-360"),
+        ("10 95\n", "line 1: altitude must be within -90-90"),
+        ("nan 10\n", "line 1: altitude must be within -90-90"),
+        ("12,5,30\n", "line 1: expected 'azimuth altitude'"),
         ("# nothing\n\n", "no 'azimuth altitude' line"),
     ],
 )
 def test_parse_hrz_rejects_malformed_files(text, message):
     with pytest.raises(HorizonError, match=message):
         HorizonProfile.parse_hrz(text, "site.hrz")
+
+
+def test_parse_hrz_reads_decimal_commas():
+    profile = HorizonProfile.parse_hrz("12,5 30,25\n90;20,5\n180\t7,5\n")
+    assert profile.points == [(12.5, 30.25), (90.0, 20.5), (180.0, 7.5)]
+
+
+def test_parse_hrz_comma_alone_separates_the_values():
+    profile = HorizonProfile.parse_hrz("12.5,30\n90, 20\n")
+    assert profile.points == [(12.5, 30.0), (90.0, 20.0)]
+
+
+def test_parse_hrz_folds_negative_and_large_azimuths():
+    profile = HorizonProfile.parse_hrz("-10 15\n-180 5\n370 8\n")
+    assert profile.points == [(10.0, 8.0), (180.0, 5.0), (350.0, 15.0)]
 
 
 def test_profile_needs_a_point():
@@ -158,6 +174,30 @@ def test_configured_profile_reports_a_malformed_file(monkeypatch, tmp_path):
     profile, error = horizon.configured_profile()
     assert profile is None
     assert "line 2" in error
+
+
+def test_configured_profile_logs_an_unusable_file_once(monkeypatch, tmp_path, caplog):
+    path = tmp_path / "site.hrz"
+    path.write_text("0 10\nnot a line\n")
+    monkeypatch.setattr(Config, "horizon_file", str(path), raising=False)
+    with caplog.at_level("WARNING"):
+        for _ in range(5):
+            assert horizon.configured_profile()[0] is None
+    assert sum("Horizon file not used" in r.message for r in caplog.records) == 1
+
+
+def test_configured_profile_rereads_a_same_time_rewrite_of_another_size(
+    monkeypatch, tmp_path
+):
+    path = tmp_path / "site.hrz"
+    path.write_text("0 10\n")
+    stat = os.stat(path)
+    monkeypatch.setattr(Config, "horizon_file", str(path), raising=False)
+    assert horizon.configured_profile()[0].points == [(0.0, 10.0)]
+
+    path.write_text("0 10\n180 25\n")
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))  # same mtime
+    assert horizon.configured_profile()[0].points == [(0.0, 10.0), (180.0, 25.0)]
 
 
 # ---------------------------------------------------------------------------

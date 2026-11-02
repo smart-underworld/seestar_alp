@@ -11,6 +11,7 @@ can skip a target hidden behind it (``horizon_skip_hidden_targets``).
 """
 
 import bisect
+import logging
 import math
 import os
 import threading
@@ -22,8 +23,20 @@ from device.config import Config
 from device.seestar_util import Util
 
 
+# The app's master logger (see device/log.py).
+logger = logging.getLogger()
+
+
 class HorizonError(ValueError):
     """Raised when a horizon file cannot be read."""
+
+
+class SiteLocationUnknown(LookupError):
+    """Raised when the site latitude and longitude are not set (both 0)."""
+
+
+class InvalidTarget(ValueError):
+    """Raised when the coordinates of a target to check are missing or invalid."""
 
 
 class HorizonProfile:
@@ -44,29 +57,29 @@ class HorizonProfile:
     def parse_hrz(cls, text, source="horizon file"):
         """Profile from the text of a ``.hrz`` file.
 
-        Blank lines and ``#`` comments are ignored; the two values may be
-        separated by spaces, tabs, a comma or a semicolon.
+        Blank lines and ``#`` comments are ignored. The two values may be
+        separated by spaces, tabs or a semicolon, and then a comma is a
+        decimal comma (``12,5 30``); a comma alone also separates them
+        (``12.5,30``). Azimuths are taken modulo 360, so an export from -180
+        to 180 degrees reads as well.
         """
         points = []
         for number, line in enumerate(text.splitlines(), start=1):
             line = line.split("#", 1)[0].strip()
             if not line:
                 continue
-            fields = line.replace(",", " ").replace(";", " ").split()
             try:
-                if len(fields) != 2:
-                    raise ValueError
-                azimuth, altitude = float(fields[0]), float(fields[1])
+                azimuth, altitude = _hrz_values(line)
             except ValueError:
                 raise HorizonError(
                     f"{source}, line {number}: expected 'azimuth altitude', got {line!r}"
                 ) from None
-            if not (0.0 <= azimuth <= 360.0 and -90.0 <= altitude <= 90.0):
+            if not (math.isfinite(azimuth) and -90.0 <= altitude <= 90.0):
                 raise HorizonError(
-                    f"{source}, line {number}: azimuth must be within 0-360 and "
-                    f"altitude within -90-90 degrees, got {line!r}"
+                    f"{source}, line {number}: altitude must be within -90-90 "
+                    f"degrees, got {line!r}"
                 )
-            points.append((azimuth, altitude))
+            points.append((azimuth % 360.0, altitude))
         if not points:
             raise HorizonError(f"{source}: no 'azimuth altitude' line")
         return cls(points)
@@ -107,6 +120,21 @@ class HorizonProfile:
         return limits
 
 
+def _hrz_values(line):
+    """``(azimuth, altitude)`` of a ``.hrz`` line; ValueError when unreadable."""
+    fields = line.replace(";", " ").split()
+    if len(fields) == 1 and fields[0].count(",") == 1:
+        # "12.5,30": the comma is the separator.
+        fields = fields[0].split(",")
+    else:
+        # "12,5 30" or "12,5;30": the comma is a decimal comma. "12, 30"
+        # reads as well, its "12," being 12.
+        fields = [field.replace(",", ".") for field in fields]
+    if len(fields) != 2:
+        raise ValueError(line)
+    return float(fields[0]), float(fields[1])
+
+
 def _in_arc(azimuth, low, high):
     """Whether ``azimuth`` lies between ``low`` and ``high``, across north if need be."""
     return (azimuth - low) % 360.0 <= high - low
@@ -119,16 +147,21 @@ _cache = {"key": None, "profile": None, "error": None}
 def configured_profile():
     """``(profile, error)`` for the configured ``horizon_file``.
 
-    ``(None, None)`` when no file is configured. The file is read again when
-    its path or modification time changes.
+    ``(None, None)`` when no file is configured. The file is parsed again
+    only when its path, modification time or size changes, so the planner
+    and the scheduler can call this freely: it costs one ``stat``. An
+    unusable file is logged once, when it is read, not on every call.
     """
     path = (Config.horizon_file or "").strip()
     if not path:
         return None, None
     try:
-        key = (path, os.path.getmtime(path))
+        stat = os.stat(path)
     except OSError as e:
-        return None, f"{path}: {e.strerror}"
+        error = f"{path}: {e.strerror}"
+        _log_once(("missing", path, e.errno), error)
+        return None, error
+    key = (path, stat.st_mtime_ns, stat.st_size)
     with _lock:
         if _cache["key"] != key:
             try:
@@ -136,8 +169,20 @@ def configured_profile():
                     profile, error = HorizonProfile.parse_hrz(f.read(), path), None
             except (OSError, UnicodeDecodeError, HorizonError) as e:
                 profile, error = None, str(e)
+                logger.warning(f"Horizon file not used, flat horizon instead: {error}")
             _cache.update(key=key, profile=profile, error=error)
         return _cache["profile"], _cache["error"]
+
+
+_logged = set()
+
+
+def _log_once(key, message):
+    with _lock:
+        if key in _logged:
+            return
+        _logged.add(key)
+    logger.warning(f"Horizon file not used, flat horizon instead: {message}")
 
 
 def site_location():
@@ -218,13 +263,25 @@ def check_target(params):
     ``params``: ``ra`` and ``dec`` (decimal hours and degrees, or
     sexagesimal strings) and ``is_j2000`` (default true). Answers for now,
     against the configured profile plus ``horizon_margin``.
+
+    Raises InvalidTarget when ``ra`` or ``dec`` is missing or unreadable,
+    and SiteLocationUnknown while the site location is not set.
     """
-    coord = Util.parse_coordinate(
-        params.get("is_j2000", True), params["ra"], params["dec"]
-    )
+    params = params or {}
+    missing = [name for name in ("ra", "dec") if params.get(name) in (None, "")]
+    if missing:
+        raise InvalidTarget(f"missing parameter(s): {', '.join(missing)}")
+    try:
+        coord = Util.parse_coordinate(
+            params.get("is_j2000", True), params["ra"], params["dec"]
+        )
+    except Exception as e:  # astropy raises several kinds on a bad angle
+        raise InvalidTarget(
+            f"unreadable coordinates ra={params['ra']!r}, dec={params['dec']!r}: {e}"
+        ) from None
     profile, error = configured_profile()
     result = visibility(coord, profile, Config.horizon_margin)
     if result is None:
-        return {"error": "site location not set: lat / long are 0"}
+        raise SiteLocationUnknown("site location not set: latitude and longitude are 0")
     result["horizon_error"] = error
     return result

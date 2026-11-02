@@ -312,8 +312,15 @@ class action:
                 result = horizon.describe()
                 resp.text = MethodResponse(req, value=result).json
             elif action_name == "check_target_visibility":
-                result = horizon.check_target(params)
-                resp.text = MethodResponse(req, value=result).json
+                try:
+                    result = horizon.check_target(params)
+                    resp.text = MethodResponse(req, value=result).json
+                except horizon.InvalidTarget as e:
+                    result = f"check_target_visibility: {e}"
+                    resp.text = MethodResponse(req, InvalidValueException(result)).json
+                except horizon.SiteLocationUnknown as e:
+                    result = f"check_target_visibility: {e}"
+                    resp.text = MethodResponse(req, ValueNotSetException(result)).json
             if log_debug:
                 cur_dev.logger.debug(f"response: {result}")
             else:
