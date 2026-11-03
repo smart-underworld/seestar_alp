@@ -961,7 +961,23 @@ def test_get_event_state_survives_concurrent_event_state_inserts(seestar):
     assert errors == []
 
 
+def test_send_message_param_sync_confirms_eq_mode_from_device_state(seestar):
+    seestar.response_dict[123] = {
+        "method": "get_device_state",
+        "result": {"mount": {"equ_mode": True}},
+    }
+    seestar.send_message_param = lambda data: 123
+    out = seestar.send_message_param_sync({"method": "get_device_state"})
+    assert out["result"]["mount"]["equ_mode"] is True
+    assert seestar.is_EQ_mode is True
+    assert seestar.is_EQ_mode_confirmed is True
+
+
 def test_get_event_state_injects_mount_equ_mode(seestar):
+    out = seestar.get_event_state()
+    assert "mount" not in out["result"]  # unconfirmed -> absent, never a default
+
+    seestar.is_EQ_mode_confirmed = True
     seestar.is_EQ_mode = True
     out = seestar.get_event_state()
     assert out["result"]["mount"]["Event"] == "Mount"
@@ -1325,6 +1341,49 @@ def test_start_up_thread_fn_success_and_old_firmware(monkeypatch, seestar):
     seestar.schedule["state"] = "stopped"
     seestar.start_up_thread_fn({"lat": 1.1, "lon": 2.2}, is_from_schedule=True)
     assert seestar.schedule["state"] == "stopped"
+
+
+@pytest.mark.parametrize(
+    "mount, confirmed, equ_mode",
+    [
+        ({}, False, False),
+        ({"move_type": "none"}, False, False),
+        ({"equ_mode": True}, True, True),
+    ],
+)
+def test_start_up_confirms_eq_mode_only_when_equ_mode_present(
+    monkeypatch, seestar, mount, confirmed, equ_mode
+):
+    # A startup get_device_state whose mount block lacks equ_mode must NOT mark
+    # the default as confirmed, or get_event_state would expose it as real.
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone_name", lambda: "UTC"
+    )
+
+    import datetime as _dt
+
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone", lambda: _dt.timezone.utc
+    )
+    monkeypatch.setattr("device.seestar_device.EarthLocation", lambda **_k: object())
+    monkeypatch.setattr(seestar, "set_setting", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(seestar, "play_sound", lambda _sid: None)
+
+    def fake_sync(payload):
+        if payload["method"] == "get_device_state":
+            return {"result": {"device": {"firmware_ver_int": 2500}, "mount": mount}}
+        return {"result": "ok"}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
+
+    seestar.start_up_thread_fn(
+        {"lat": 1.1, "lon": 2.2, "auto_focus": False, "3ppa": False}
+    )
+    assert seestar.is_EQ_mode_confirmed is confirmed
+    assert seestar.is_EQ_mode is equ_mode
+    out = seestar.get_event_state()
+    assert ("mount" in out["result"]) is confirmed
 
 
 def test_start_up_thread_fn_sends_pi_set_time_as_object_and_logs_failure(

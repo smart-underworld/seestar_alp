@@ -181,6 +181,7 @@ class Seestar:
         self.event_queue = collections.deque(maxlen=20)
         self.eventbus = signal(f"{self.device_name}.eventbus")
         self.is_EQ_mode: bool = False  # updated from device state on startup
+        self.is_EQ_mode_confirmed: bool = False  # True once read from the device
         # self.trace = MessageTrace(self.device_num, self.port)
 
     def _load_interop_pem(self) -> None:
@@ -894,7 +895,28 @@ class Seestar:
             time.sleep(0.5)
         self.logger.debug(f"response is {self.response_dict[cur_cmdid]}")
         self._note_sync_reply()
-        return self.response_dict[cur_cmdid]
+        response = self.response_dict[cur_cmdid]
+        # Opportunistically refresh the cached mount mode from ANY successful
+        # get_device_state passing through (not just the startup sequence), so
+        # get_event_state's mount block confirms at the first idle-gap poll.
+        if data.get("method") == "get_device_state":
+            self._update_eq_mode_from_device_state(response)
+        return response
+
+    def _update_eq_mode_from_device_state(self, response) -> bool:
+        """Cache mount mode from a get_device_state reply.
+
+        Confirms only when the reply actually carries ``mount.equ_mode``; an
+        absent, empty or partial mount block leaves the default unconfirmed,
+        so get_event_state never exposes it as real. Returns True if updated.
+        """
+        result = response.get("result") if isinstance(response, dict) else None
+        mount = result.get("mount") if isinstance(result, dict) else None
+        if not isinstance(mount, dict) or "equ_mode" not in mount:
+            return False
+        self.is_EQ_mode = mount["equ_mode"]
+        self.is_EQ_mode_confirmed = True
+        return True
 
     # No-reply sync timeouts on a fresh connection before we log the auth-gap
     # diagnostic. This is 1, not several: a cold-start-busy scope and an
@@ -962,13 +984,15 @@ class Seestar:
             )
 
             # Mount mode is not carried by any firmware event, but we cache it from
-            # get_device_state during the startup sequence (is_EQ_mode). Inject it
-            # here, like the scheduler block, so pollers get it without a blocking
-            # RPC to the scope (get_device_state times out during imaging).
-            if "mount" not in self.event_state:
-                self.event_state["mount"] = {}
-            self.event_state["mount"]["Event"] = "Mount"
-            self.event_state["mount"]["equ_mode"] = self.is_EQ_mode
+            # get_device_state (is_EQ_mode). Inject it here, like the scheduler
+            # block, so pollers get it without a blocking RPC to the scope
+            # (get_device_state times out during imaging). Only once it was
+            # actually read from the device: never expose the unconfirmed default.
+            if self.is_EQ_mode_confirmed:
+                if "mount" not in self.event_state:
+                    self.event_state["mount"] = {}
+                self.event_state["mount"]["Event"] = "Mount"
+                self.event_state["mount"]["equ_mode"] = self.is_EQ_mode
 
             if "EqModePA" in self.event_state:
                 self.event_state["3PPA"] = dict(self.event_state["EqModePA"])
@@ -1683,10 +1707,7 @@ class Seestar:
             self.logger.info(f"Firmware version: {self.firmware_ver_int}")
 
             # Update EQ mode from actual device state; config value may not reflect the mount
-            if "mount" in response.get("result", {}):
-                self.is_EQ_mode = response["result"]["mount"].get(
-                    "equ_mode", self.is_EQ_mode
-                )
+            if self._update_eq_mode_from_device_state(response):
                 self.logger.info(f"EQ mode from device state: {self.is_EQ_mode}")
 
             if do_3PPA and not self.is_EQ_mode:
