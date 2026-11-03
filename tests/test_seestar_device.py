@@ -1144,6 +1144,89 @@ def test_reconnect_clears_stale_eq_mode_from_previous_connection(monkeypatch, se
     assert seestar.is_EQ_mode is False
 
 
+def test_concurrent_sends_never_share_a_cmdid_or_overlap_on_the_socket(seestar):
+    # The Alpaca server is threaded: concurrent requests must each get a unique
+    # command id (replies are matched by id) and must not interleave writes.
+    import threading
+
+    guard = threading.Lock()
+    active = {"n": 0, "max": 0}
+    sent_ids = []
+
+    class SlowSock:
+        def sendall(self, payload):
+            with guard:
+                active["n"] += 1
+                active["max"] = max(active["max"], active["n"])
+            time.sleep(0.01)  # widen the window a racing writer would hit
+            sent_ids.append(json.loads(payload)["id"])
+            with guard:
+                active["n"] -= 1
+
+    seestar.s = SlowSock()
+    seestar.transform_message_for_verify = lambda data: data
+    returned = []
+
+    def worker():
+        returned.append(seestar.send_message_param({"method": "get_device_state"}))
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=5)
+
+    assert active["max"] == 1  # writes never overlapped
+    assert len(set(sent_ids)) == 8
+    assert sorted(returned) == sorted(sent_ids)
+
+
+def test_reconnect_after_failed_write_does_not_block_other_senders(seestar):
+    # A failed write disconnects and reconnects (which re-authenticates and can
+    # wait seconds on the scope). No send-path lock may be held during that, or
+    # every other thread -- including the receive thread's own reconnect and
+    # auth handshake -- queues behind it.
+    import threading
+
+    in_reconnect = threading.Event()
+    release_reconnect = threading.Event()
+    written = []
+
+    class Sock:
+        def sendall(self, payload):
+            if b"fails" in payload:
+                raise socket.error("boom")
+            written.append(json.loads(payload)["method"])
+
+    def slow_reconnect():
+        in_reconnect.set()
+        release_reconnect.wait(timeout=5)
+        return False
+
+    seestar.s = Sock()
+    seestar.is_watch_events = True
+    seestar.disconnect = lambda: None
+    seestar.reconnect = slow_reconnect
+    seestar.transform_message_for_verify = lambda data: data
+
+    failing = threading.Thread(target=lambda: seestar.json_message("fails"))
+    failing.start()
+    assert in_reconnect.wait(timeout=5)
+
+    other = threading.Thread(
+        target=lambda: seestar.send_message_param({"method": "get_view_state"})
+    )
+    other.start()
+    other.join(timeout=2)
+    blocked = other.is_alive()
+
+    release_reconnect.set()
+    failing.join(timeout=5)
+    other.join(timeout=5)
+    assert not blocked, "another sender was blocked while a reconnect was in progress"
+    assert written == ["get_view_state"]
+
+
 def test_get_event_state_injects_mount_equ_mode(seestar):
     # The mount block is always present (existing pollers never KeyError), but
     # equ_mode stays None until the device actually reports it.

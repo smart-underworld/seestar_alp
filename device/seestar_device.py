@@ -157,6 +157,13 @@ class Seestar:
             "item_number": 9999,
         }
         self.lock = threading.RLock()
+        # The Alpaca server is threaded, so concurrent requests reach the send
+        # path at once. _cmdid_lock makes command-id allocation atomic (replies
+        # are matched by id); _socket_write_lock keeps each message's bytes
+        # contiguous on the single scope socket. Both are held only for that
+        # instant -- never across reconnect/re-auth, which waits on the scope.
+        self._cmdid_lock = threading.Lock()
+        self._socket_write_lock = threading.Lock()
         self.is_cur_scheduler_item_working: bool = False
 
         # Guards insertion/removal of top-level event_state keys. IncomingMsgThread
@@ -247,12 +254,11 @@ class Seestar:
         events, etc.) are preserved in self._auth_leftover, in order, so the
         receive thread can process them once it starts.
         """
-        cur_cmdid = self.cmdid
-        self.cmdid += 1
-        msg = {"id": cur_cmdid, "method": method}
+        msg: dict[str, Any] = {"id": None, "method": method}
         if params is not None:
             msg["params"] = params
-        if not self.send_message(json.dumps(msg) + "\r\n"):
+        cur_cmdid, sent = self._send_json(msg)
+        if not sent:
             return None
 
         # When the receive thread is already draining the socket (mid-session
@@ -496,9 +502,10 @@ class Seestar:
                 return False
             # todo : don't send if not connected or socket is null?
             self.logger.debug(f"sending: {data}")
-            self.s.sendall(
-                data.encode()
-            )  # TODO: would utf-8 or unicode_escaped help here
+            with self._socket_write_lock:
+                self.s.sendall(
+                    data.encode()
+                )  # TODO: would utf-8 or unicode_escaped help here
             return True
         except socket.timeout:
             return False
@@ -800,19 +807,22 @@ class Seestar:
                     first_index = msg_remainder.find("\r\n")
             time.sleep(0.1)
 
+    def _send_json(self, data: dict[str, Any]) -> tuple[int, bool]:
+        """Allocate a command id (unless ``data`` carries one), stamp it into
+        ``data`` and write it to the scope. Returns (id, sent)."""
+        with self._cmdid_lock:
+            cur_cmdid = data.get("id") or self.cmdid
+            data["id"] = cur_cmdid
+            self.cmdid += 1  # can this overflow?  not in JSON...
+        sent = self.send_message(json.dumps(data) + "\r\n")
+        return cur_cmdid, sent
+
     def json_message(self, instruction: str, **kwargs):
-        data = {"id": self.cmdid, "method": instruction, **kwargs}
-        self.cmdid += 1
-        json_data = json.dumps(data)
-        self.send_message(json_data + "\r\n")
+        self._send_json({"id": None, "method": instruction, **kwargs})
 
     def send_message_param(self, data: MessageParams) -> int:
         data = self.transform_message_for_verify(data)
-        cur_cmdid = data.get("id") or self.cmdid
-        data["id"] = cur_cmdid
-        self.cmdid += 1  # can this overflow?  not in JSON...
-        json_data = json.dumps(data)
-        self.send_message(json_data + "\r\n")
+        cur_cmdid, _sent = self._send_json(data)
         return cur_cmdid
 
     def should_inject_verify(self) -> bool:
