@@ -233,34 +233,47 @@ def get_root_path(req):
 
 
 def with_root_path(root_path, url):
-    """Prefix a root-relative ``url`` with ``root_path``; leave anything else alone."""
+    """Prefix a root-relative route ``url`` with ``root_path``.
+
+    Callers pass SSC route URLs only (never an already-prefixed one), so the
+    prefix is applied unconditionally; absolute and protocol-relative URLs
+    are left alone.
+    """
     if (
         not root_path
         or not isinstance(url, str)
         or not url.startswith("/")
         or url.startswith("//")
-        or url == root_path
-        or url.startswith(root_path + "/")
     ):
         return url
     return root_path + url
 
 
-def apply_root_path(context, root_path, telescope_id):
-    """Return a copy of a page context with its URLs under ``root_path``.
+def _template_context(req, context):
+    """Return a copy of ``context`` ready to render for ``req``.
 
-    ``root`` gains the prefix. ``imager_root`` normally points the browser at
-    the imaging server's own port, which a sub-path proxy cannot reach, so it
-    is replaced by the same-origin relay (see ImagingProxyResource).
+    Page contexts (and the shared get_context cache) hold route URLs only; this
+    is the single place the request's prefix is added, so it happens exactly
+    once. ``root`` and ``action`` gain the prefix. ``imager_root`` normally
+    points the browser at the imaging port, which a sub-path proxy cannot
+    reach, so it is swapped for the same-origin relay (ImagingProxyResource).
     """
-    context = dict(context)
-    context["root_path"] = root_path
-    root = context["root"]
-    # "" (no matching telescope) means the server root, i.e. the prefix itself.
-    context["root"] = with_root_path(root_path, root) if root else root_path
-    if context.get("imager_root"):
-        context["imager_root"] = f"{root_path}/{telescope_id}/imaging"
-    return context
+    root_path = get_root_path(req)
+    out = dict(context)
+    out["root_path"] = root_path
+    if not root_path:
+        return out
+    if "root" in out:
+        # "" (no matching telescope) means the server root, i.e. the prefix.
+        out["root"] = (
+            with_root_path(root_path, out["root"]) if out["root"] else root_path
+        )
+    if "action" in out:
+        out["action"] = with_root_path(root_path, out["action"])
+    if out.get("imager_root"):
+        device_num = out["imager_root"].rsplit("/", 1)[-1]
+        out["imager_root"] = f"{root_path}/{device_num}/imaging"
+    return out
 
 
 def _get_context_real(telescope_id, req):
@@ -363,11 +376,7 @@ def get_context(telescope_id, req):
         ):
             _last_context_get_time[telescope_id] = time.time()
             _context_cached[telescope_id] = _get_context_real(telescope_id, req)
-        context = _context_cached[telescope_id]
-    # The cache is shared across requests, so the per-request prefix is applied
-    # to a copy, never stored.
-    root_path = get_root_path(req)
-    return apply_root_path(context, root_path, telescope_id) if root_path else context
+        return _context_cached[telescope_id]
 
 
 def get_flash_cookie(req, resp):
@@ -2043,7 +2052,11 @@ def redirect(location):
 
 
 class RootPathMiddleware:
-    """Keep server redirects inside the URL prefix SSC is served under."""
+    """Keep server redirects inside the URL prefix SSC is served under.
+
+    SSC's own redirects name route URLs, and this is the only place the
+    prefix is added to them.
+    """
 
     def process_response(self, req, resp, resource, req_succeeded):
         location = resp.get_header("Location")
@@ -2051,16 +2064,6 @@ class RootPathMiddleware:
             prefixed = with_root_path(get_root_path(req), location)
             if prefixed != location:
                 resp.set_header("Location", prefixed)
-
-
-def _merge_root_path(req, merged_context):
-    """Expose ``root_path`` to templates and prefix explicit ``root``/``action``."""
-    root_path = get_root_path(req)
-    merged_context.setdefault("root_path", root_path)
-    if root_path:
-        for key in ("root", "action"):
-            if key in merged_context:
-                merged_context[key] = with_root_path(root_path, merged_context[key])
 
 
 template_dir = os.path.join(os.path.dirname(__file__), "templates")
@@ -2103,7 +2106,7 @@ def render_template(req, resp, template_name, **context):
     resp.status = falcon.HTTP_200
     resp.content_type = "text/html"
     version = Version.app_version()
-    merged_context = dict(context)
+    merged_context = _template_context(req, context)
     merged_context.setdefault("webui_theme", Config.uitheme)
     merged_context.setdefault("webui_text_color", Config.webui_text_color)
     merged_context.setdefault("webui_font_family", Config.webui_font_family)
@@ -2111,7 +2114,6 @@ def render_template(req, resp, template_name, **context):
     merged_context.setdefault("webui_link_color", Config.webui_link_color)
     merged_context.setdefault("webui_accent_color", Config.webui_accent_color)
     merged_context.setdefault("version", version)
-    _merge_root_path(req, merged_context)
 
     resp.text = template.render(
         flashed_messages=get_flash_cookie(req, resp),
@@ -2125,7 +2127,7 @@ def render_fragment(req, resp, template_name, **context):
     resp.status = falcon.HTTP_200
     resp.content_type = "text/html"
     version = Version.app_version()
-    merged_context = dict(context)
+    merged_context = _template_context(req, context)
     merged_context.setdefault("webui_theme", Config.uitheme)
     merged_context.setdefault("webui_text_color", Config.webui_text_color)
     merged_context.setdefault("webui_font_family", Config.webui_font_family)
@@ -2133,7 +2135,6 @@ def render_fragment(req, resp, template_name, **context):
     merged_context.setdefault("webui_link_color", Config.webui_link_color)
     merged_context.setdefault("webui_accent_color", Config.webui_accent_color)
     merged_context.setdefault("version", version)
-    _merge_root_path(req, merged_context)
     resp.text = template.render(**merged_context)
 
 
@@ -3452,7 +3453,7 @@ class ScheduleReStartResource(BaseResource):
             webui_theme=webui_theme,
             version=version,
             schedule=schedule,
-            **context,
+            **_template_context(req, context),
         )
 
         return html
@@ -3468,7 +3469,7 @@ class ScheduleReStartResource(BaseResource):
             webui_theme=webui_theme,
             version=version,
             state=state,
-            **context,
+            **_template_context(req, context),
         )
 
         return html
@@ -3523,7 +3524,7 @@ class ScheduleRefreshResource(BaseResource):
             version=version,
             schedule=schedule,
             open_accordion_id=open_accordion_id,
-            **context,
+            **_template_context(req, context),
         )
 
         return html
@@ -5705,7 +5706,7 @@ class ImagingProxyResource:
     """Relay one of the imaging server's streams through the web-UI port.
 
     Only referenced when SSC is served under a URL prefix (see
-    apply_root_path): a sub-path reverse proxy has a single upstream, so the
+    _template_context): a sub-path reverse proxy has a single upstream, so the
     browser cannot open the imaging port directly. The stream (MJPEG or
     server-sent events) is passed through unchanged.
     """

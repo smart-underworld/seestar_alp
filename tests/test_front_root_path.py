@@ -78,7 +78,8 @@ def test_invalid_config_is_ignored(monkeypatch):
     [
         ("/1/schedule", "/p/1/schedule"),
         ("/", "/p/"),
-        ("/p/1/schedule", "/p/1/schedule"),  # already prefixed: idempotent
+        # No "already prefixed" guessing: the caller passes route URLs only.
+        ("/p/1/schedule", "/p/p/1/schedule"),
         ("//cdn.example/x.js", "//cdn.example/x.js"),
         ("https://example.com/x", "https://example.com/x"),
         ("relative/x", "relative/x"),
@@ -91,6 +92,12 @@ def test_with_root_path(url, expected):
 
 def test_with_root_path_without_prefix_is_identity():
     assert front_app.with_root_path("", "/1/schedule") == "/1/schedule"
+
+
+def test_prefix_that_looks_like_a_route_is_still_applied():
+    # root_path "/1" and telescope 1's root "/1" are different things.
+    assert front_app.with_root_path("/1", "/1") == "/1/1"
+    assert front_app.with_root_path("/1", "/1/schedule") == "/1/1/schedule"
 
 
 # --- full page rendering through the real context path ------------------------
@@ -133,20 +140,22 @@ def test_standalone_page_urls_are_unchanged(monkeypatch):
     assert "data-root-path" not in resp.text
 
 
-def test_prefixed_page_urls_carry_the_prefix(monkeypatch):
+@pytest.mark.parametrize("prefix", ["/ingress/abc", "/1"])
+def test_prefixed_page_urls_carry_the_prefix_once(monkeypatch, prefix):
+    # "/1" is a valid mount prefix that collides with telescope 1's route root.
     resp = _page_app(monkeypatch).simulate_get(
-        "/1/framed_mosaic", headers={"X-Forwarded-Prefix": "/ingress/abc"}
+        "/1/framed_mosaic", headers={"X-Forwarded-Prefix": prefix}
     )
 
     assert resp.status_code == 200
-    assert 'data-root-path="/ingress/abc"' in resp.text
-    assert 'src="/ingress/abc/public/htmx.min.js"' in resp.text
-    assert 'src="/ingress/abc/public/main.js"' in resp.text
-    assert 'href="/ingress/abc/public/bootstrap.min.css"' in resp.text
-    assert 'action="/ingress/abc/1/framed_mosaic"' in resp.text
-    assert 'href="/ingress/abc/schedule"' in resp.text
+    assert f'data-root-path="{prefix}"' in resp.text
+    assert f'src="{prefix}/public/htmx.min.js"' in resp.text
+    assert f'src="{prefix}/public/main.js"' in resp.text
+    assert f'href="{prefix}/public/bootstrap.min.css"' in resp.text
+    assert f'action="{prefix}/1/framed_mosaic"' in resp.text
+    assert f'href="{prefix}/schedule"' in resp.text
     assert 'src="/public/' not in resp.text
-    assert "/ingress/abc/ingress/abc" not in resp.text
+    assert f"{prefix}{prefix}/public" not in resp.text
 
 
 def test_configured_root_path_applies_without_header(monkeypatch):
@@ -157,9 +166,9 @@ def test_configured_root_path_applies_without_header(monkeypatch):
     assert 'action="/ssc/1/framed_mosaic"' in resp.text
 
 
-def test_cached_context_never_leaks_a_prefix_across_requests(monkeypatch):
-    # The page context is cached for ~1s per telescope; a prefixed request
-    # followed by a direct one must not hand the direct one prefixed URLs.
+def test_cached_context_holds_route_urls_only(monkeypatch):
+    # The page context is cached for ~1s per telescope and shared by every
+    # request, so it never carries a request's prefix.
     monkeypatch.setattr(
         front_app,
         "_get_context_real",
@@ -171,22 +180,64 @@ def test_cached_context_never_leaks_a_prefix_across_requests(monkeypatch):
     prefixed = front_app.get_context(1, _Req("/p"))
     direct = front_app.get_context(1, _Req(None))
 
-    assert prefixed["root"] == "/p/1"
-    assert prefixed["imager_root"] == "/p/1/imaging"
-    assert direct["root"] == "/1"
-    assert direct["imager_root"] == "http://scope-host:7556/1"
-    assert "root_path" not in direct
+    for context in (prefixed, direct):
+        assert context["root"] == "/1"
+        assert context["imager_root"] == "http://scope-host:7556/1"
+        assert "root_path" not in context
+
+
+@pytest.mark.parametrize("prefix", ["/p", "/1"])
+def test_template_context_prefixes_route_urls_exactly_once(prefix):
+    context = {
+        "root": "/1",
+        "action": "/1/goto",
+        "imager_root": "http://scope-host:7556/1",
+        "telescope": {"device_num": 1},
+    }
+    out = front_app._template_context(_Req(prefix), context)
+
+    assert out["root_path"] == prefix
+    assert out["root"] == f"{prefix}/1"
+    assert out["action"] == f"{prefix}/1/goto"
+    assert out["imager_root"] == f"{prefix}/1/imaging"
+    assert context["root"] == "/1"  # the caller's (possibly cached) dict is untouched
+
+
+def test_template_context_without_prefix_changes_nothing():
+    context = {"root": "/1", "action": "/1/goto", "imager_root": "http://h:7556/1"}
+    out = front_app._template_context(_Req(None), context)
+    assert out == {**context, "root_path": ""}
 
 
 def test_empty_root_means_the_prefix_itself():
-    context = front_app.apply_root_path({"root": "", "imager_root": ""}, "/p", 1)
-    assert context["root"] == "/p"
-    assert context["imager_root"] == ""
+    out = front_app._template_context(_Req("/p"), {"root": "", "imager_root": ""})
+    assert out["root"] == "/p"
+    assert out["imager_root"] == ""
+
+
+def test_direct_schedule_render_gets_the_prefix_once(monkeypatch):
+    # ScheduleReStartResource renders schedule_state.html itself (outside
+    # render_template); its {{ root }} URLs must still carry the prefix once.
+    monkeypatch.setattr(front_app, "get_flash_cookie", lambda req, resp: [])
+    monkeypatch.setattr(front_app, "get_messages", lambda: [])
+
+    class Req(_Req):
+        def get_param(self, name, default=None):
+            return default
+
+    html = front_app.ScheduleReStartResource().render_schedule_state_html(
+        Req("/1"), falcon.Response(), "stopped", {"root": "/1", "telescope": {}}
+    )
+    # The "stopped" state renders the import/upload/export/download forms.
+    assert 'action="/1/1/schedule/import"' in html
+    assert 'action="/1/1/schedule/download"' in html
+    assert 'action="/1/schedule/' not in html
+    assert "/1/1/1/" not in html
 
 
 @pytest.mark.parametrize(
     ("header", "expected"),
-    [(None, "/1/schedule"), ("/p", "/p/1/schedule")],
+    [(None, "/1/schedule"), ("/p", "/p/1/schedule"), ("/1", "/1/1/schedule")],
 )
 def test_redirects_stay_inside_the_prefix(header, expected):
     class Redirecting:
