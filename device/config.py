@@ -176,6 +176,9 @@ class _Config:
         # WebUI Section
         # --------------
         self.uiport: int = self.get_toml("webui_settings", "uiport", 5432)
+        # URL prefix when served under a reverse-proxy sub-path, e.g. "/ssc".
+        # A valid X-Forwarded-Prefix request header takes precedence.
+        self.root_path: str = self.get_toml("webui_settings", "root_path", "")
         self.uitheme: str = self.get_toml("webui_settings", "uitheme", "dark")
         self.experimental: bool = self.get_toml("webui_settings", "experimental", False)
         self.confirm: bool = self.get_toml("webui_settings", "confirm", True)

@@ -18,7 +18,7 @@
 	</p>
 </div>
 
-<form method="post" action="/config" class="bordered-form">
+<form method="post" action="{{ root_path }}/config" class="bordered-form">
 	{{ config.render_config_html() }}
 	<div class="card-body border">
 		<button type="submit" class="btn btn-primary">Save</button>

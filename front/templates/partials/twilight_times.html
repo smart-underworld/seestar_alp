@@ -1,6 +1,6 @@
             <div id="twilightcollapse">
                 <div class="card card-body">
-                    <form method="post" action="/updatetwilighttimes">
+                    <form method="post" action="{{ root_path }}/updatetwilighttimes">
                         <table class="table table-striped">
                             <tbody>
                                 {% for key, value in twilight_times.items() %}

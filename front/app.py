@@ -204,6 +204,65 @@ def get_imager_root(telescope_id, req):
     return ""
 
 
+# --- Serving under a URL prefix (reverse-proxy sub-path) ----------------------
+# SSC's own routes stay at the server root. When a reverse proxy serves it under
+# a sub-path (e.g. https://host/ssc/), the proxy strips the prefix on the way in,
+# so every URL SSC *emits* must carry it. The prefix comes, per request, from a
+# valid X-Forwarded-Prefix header, else from [webui_settings] root_path, else "".
+# With no prefix (the default) nothing below changes what SSC renders.
+_ROOT_PATH_RE = re.compile(r"^(/[A-Za-z0-9._~-]+)+$")
+
+
+def normalize_root_path(value):
+    """Return ``value`` as a ``/a/b`` prefix, ``""`` for none, ``None`` if invalid."""
+    value = (value or "").strip().rstrip("/")
+    if not value:
+        return ""
+    return value if _ROOT_PATH_RE.match(value) else None
+
+
+def get_root_path(req):
+    """The URL prefix SSC is served under for this request ("" when none)."""
+    header = req.get_header("X-Forwarded-Prefix")
+    if header is not None:
+        prefix = normalize_root_path(header)
+        if prefix is not None:
+            return prefix
+        logger.debug(f"Ignoring invalid X-Forwarded-Prefix header: {header!r}")
+    return normalize_root_path(Config.root_path) or ""
+
+
+def with_root_path(root_path, url):
+    """Prefix a root-relative ``url`` with ``root_path``; leave anything else alone."""
+    if (
+        not root_path
+        or not isinstance(url, str)
+        or not url.startswith("/")
+        or url.startswith("//")
+        or url == root_path
+        or url.startswith(root_path + "/")
+    ):
+        return url
+    return root_path + url
+
+
+def apply_root_path(context, root_path, telescope_id):
+    """Return a copy of a page context with its URLs under ``root_path``.
+
+    ``root`` gains the prefix. ``imager_root`` normally points the browser at
+    the imaging server's own port, which a sub-path proxy cannot reach, so it
+    is replaced by the same-origin relay (see ImagingProxyResource).
+    """
+    context = dict(context)
+    context["root_path"] = root_path
+    root = context["root"]
+    # "" (no matching telescope) means the server root, i.e. the prefix itself.
+    context["root"] = with_root_path(root_path, root) if root else root_path
+    if context.get("imager_root"):
+        context["imager_root"] = f"{root_path}/{telescope_id}/imaging"
+    return context
+
+
 def _get_context_real(telescope_id, req):
     # probably a better way of doing this...
     telescopes = get_telescopes()
@@ -304,7 +363,11 @@ def get_context(telescope_id, req):
         ):
             _last_context_get_time[telescope_id] = time.time()
             _context_cached[telescope_id] = _get_context_real(telescope_id, req)
-        return _context_cached[telescope_id]
+        context = _context_cached[telescope_id]
+    # The cache is shared across requests, so the per-request prefix is applied
+    # to a copy, never stored.
+    root_path = get_root_path(req)
+    return apply_root_path(context, root_path, telescope_id) if root_path else context
 
 
 def get_flash_cookie(req, resp):
@@ -1979,6 +2042,27 @@ def redirect(location):
     # raise HTTPTemporaryRedirect(location)
 
 
+class RootPathMiddleware:
+    """Keep server redirects inside the URL prefix SSC is served under."""
+
+    def process_response(self, req, resp, resource, req_succeeded):
+        location = resp.get_header("Location")
+        if location:
+            prefixed = with_root_path(get_root_path(req), location)
+            if prefixed != location:
+                resp.set_header("Location", prefixed)
+
+
+def _merge_root_path(req, merged_context):
+    """Expose ``root_path`` to templates and prefix explicit ``root``/``action``."""
+    root_path = get_root_path(req)
+    merged_context.setdefault("root_path", root_path)
+    if root_path:
+        for key in ("root", "action"):
+            if key in merged_context:
+                merged_context[key] = with_root_path(root_path, merged_context[key])
+
+
 template_dir = os.path.join(os.path.dirname(__file__), "templates")
 env = Environment(loader=FileSystemLoader(template_dir))
 
@@ -2027,6 +2111,7 @@ def render_template(req, resp, template_name, **context):
     merged_context.setdefault("webui_link_color", Config.webui_link_color)
     merged_context.setdefault("webui_accent_color", Config.webui_accent_color)
     merged_context.setdefault("version", version)
+    _merge_root_path(req, merged_context)
 
     resp.text = template.render(
         flashed_messages=get_flash_cookie(req, resp),
@@ -2048,6 +2133,7 @@ def render_fragment(req, resp, template_name, **context):
     merged_context.setdefault("webui_link_color", Config.webui_link_color)
     merged_context.setdefault("webui_accent_color", Config.webui_accent_color)
     merged_context.setdefault("version", version)
+    _merge_root_path(req, merged_context)
     resp.text = template.render(**merged_context)
 
 
@@ -5615,6 +5701,48 @@ class GetLocalSearch:
             resp.text = rtn
 
 
+class ImagingProxyResource:
+    """Relay one of the imaging server's streams through the web-UI port.
+
+    Only referenced when SSC is served under a URL prefix (see
+    apply_root_path): a sub-path reverse proxy has a single upstream, so the
+    browser cannot open the imaging port directly. The stream (MJPEG or
+    server-sent events) is passed through unchanged.
+    """
+
+    def __init__(self, path):
+        self._path = path
+
+    def on_get(self, req, resp, telescope_id):
+        url = (
+            f"http://{get_listening_ip()}:{Config.imgport}/{telescope_id}/{self._path}"
+        )
+        try:
+            upstream = requests.get(url, stream=True, timeout=(5, None))
+        except requests.RequestException as e:
+            logger.warning(f"Imaging relay: {url} unreachable: {e}")
+            raise falcon.HTTPBadGateway()
+        resp.status = upstream.status_code
+        resp.content_type = upstream.headers.get(
+            "Content-Type", "application/octet-stream"
+        )
+        resp.set_header("Cache-Control", "no-cache")
+        # Ask buffering proxies (nginx) to pass the stream through as it arrives.
+        resp.set_header("X-Accel-Buffering", "no")
+
+        def relay():
+            # read1 returns whatever has arrived (one read, chunked or not), so
+            # each frame/event reaches the browser now. These bodies never end:
+            # iter_content(chunk_size=None) would read a non-chunked one to EOF.
+            try:
+                while chunk := upstream.raw.read1(64 * 1024):
+                    yield chunk
+            finally:
+                upstream.close()
+
+        resp.stream = relay()
+
+
 class GetAAVSOSearch:
     @staticmethod
     def on_get(req: falcon.Request, resp: falcon.Response) -> None:
@@ -5649,7 +5777,10 @@ class FrontMain:
         """Application startup"""
 
         app = falcon.App(
-            middleware=falcon.CORSMiddleware(allow_origins="*", allow_credentials="*")
+            middleware=[
+                falcon.CORSMiddleware(allow_origins="*", allow_credentials="*"),
+                RootPathMiddleware(),
+            ]
         )
 
         def _log_unhandled_exception(req, resp, ex, params):
@@ -5727,6 +5858,11 @@ class FrontMain:
         app.add_route("/{telescope_id:int}/live/exposure", LiveExposureResource())
         app.add_route("/{telescope_id:int}/live/photo", LivePhotoResource())
         app.add_route("/{telescope_id:int}/live/video", LiveVideoResource())
+        for imaging_path in ("vid", "vid/status", "events", "live/status"):
+            app.add_route(
+                f"/{{telescope_id:int}}/imaging/{imaging_path}",
+                ImagingProxyResource(imaging_path),
+            )
         app.add_route("/{telescope_id:int}/live/zoom", LiveZoomResource())
         app.add_route(
             "/{telescope_id:int}/schedule/exposure", ScheduleExposureResource()

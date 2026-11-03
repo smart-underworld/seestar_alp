@@ -11,6 +11,10 @@ rtsp_udp = true
 
 [webui_settings]
 uiport = 5432
+# Serving the web UI under a reverse-proxy sub-path (e.g. https://host/ssc/)?
+# Set the prefix here. A proxy can instead send it per request in the
+# X-Forwarded-Prefix header, which takes precedence. Leave empty otherwise.
+#root_path = "/ssc"
 # light/dark theme
 uitheme = "dark" #all lower case
 #experimental = true

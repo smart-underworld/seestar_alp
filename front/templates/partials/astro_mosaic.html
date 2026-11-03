@@ -5,7 +5,7 @@
     <!-- script type="text/javascript" src="https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.js" charset="utf-8"></script -->
     <script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
-    <script type="text/javascript" src="/public/AstroMosaicEngine.js"></script>
+    <script type="text/javascript" src="{{ root_path }}/public/AstroMosaicEngine.js"></script>
     <style>
         /* Bring the aladin control buttons to the top layer */
         .aladin-simbadPointer-control button {
@@ -143,7 +143,7 @@
 <div id="status-text" style="display: none;"></div>
 <div id="error-text" style="display: none;"></div>
 <dialog id="send_to_schedule_modal">
-    <form method="post" action="/{{ telescope['device_num'] }}/schedule/mosaic">
+    <form method="post" action="{{ root_path }}/{{ telescope['device_num'] }}/schedule/mosaic">
         <div class="card border-primary mb-3">
             <div class="card-body">
                 <h5 class="card-title">Target</h5>
