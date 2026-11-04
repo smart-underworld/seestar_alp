@@ -164,7 +164,7 @@ def test_get_request_cache_identity_uses_headers_and_remote():
         remote_addr="10.0.0.5",
     )
     ident = get_request_cache_identity(req)
-    assert ident == ("10.0.0.5", "UA-1", "http://host/1/goto")
+    assert ident == ("10.0.0.5", "UA-1", "http://host/1/goto", "")
 
 
 def test_event_status_cache_is_scoped_per_client(monkeypatch):

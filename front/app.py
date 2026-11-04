@@ -16,6 +16,7 @@ from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 from pathlib import Path
 import urllib.parse
 import requests
+import urllib3
 import humanize
 import json
 import csv
@@ -215,20 +216,34 @@ _ROOT_PATH_RE = re.compile(r"^(/[A-Za-z0-9._~-]+)+$")
 
 def normalize_root_path(value):
     """Return ``value`` as a ``/a/b`` prefix, ``""`` for none, ``None`` if invalid."""
-    value = (value or "").strip().rstrip("/")
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        return None
+    value = value.strip().rstrip("/")
     if not value:
         return ""
-    return value if _ROOT_PATH_RE.match(value) else None
+    if not _ROOT_PATH_RE.match(value):
+        return None
+    # "." and ".." would let asset URLs climb out of the prefix.
+    if any(segment in (".", "..") for segment in value.split("/")):
+        return None
+    return value
 
 
 def get_root_path(req):
-    """The URL prefix SSC is served under for this request ("" when none)."""
+    """The URL prefix SSC is served under for this request ("" when none).
+
+    An empty or "/" X-Forwarded-Prefix means the proxy added no prefix, so the
+    configured [webui_settings] root_path still applies.
+    """
     header = req.get_header("X-Forwarded-Prefix")
     if header is not None:
         prefix = normalize_root_path(header)
-        if prefix is not None:
+        if prefix:
             return prefix
-        logger.debug(f"Ignoring invalid X-Forwarded-Prefix header: {header!r}")
+        if prefix is None:
+            logger.debug(f"Ignoring invalid X-Forwarded-Prefix header: {header!r}")
     return normalize_root_path(Config.root_path) or ""
 
 
@@ -2185,7 +2200,7 @@ def get_request_cache_identity(req):
         or req.get_header("Referer")
         or getattr(req, "relative_uri", "")
     )
-    return (remote_addr, user_agent, current_url)
+    return (remote_addr, user_agent, current_url, get_root_path(req))
 
 
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
@@ -3449,6 +3464,18 @@ class ScheduleUploadResource:
         redirect(f"/{telescope_id}/schedule")
 
 
+def _render_schedule_partial(req, resp, template_name, context, **values):
+    """Render one schedule partial (list or state) for this request."""
+    return fetch_template(template_name).render(
+        flashed_messages=get_flash_cookie(req, resp),
+        messages=get_messages(),
+        webui_theme=Config.uitheme,
+        version=Version.app_version(),
+        **values,
+        **_template_context(req, context),
+    )
+
+
 class ScheduleReStartResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         do_action_device("reset_scheduler_cur_item", telescope_id, {})
@@ -3471,36 +3498,14 @@ class ScheduleReStartResource(BaseResource):
         resp.status = falcon.HTTP_200
 
     def render_schedule_list_html(self, req, resp, schedule, context):
-        template = fetch_template("partials/schedule_list.html")
-        webui_theme = Config.uitheme
-        version = Version.app_version()
-
-        html = template.render(
-            flashed_messages=get_flash_cookie(req, resp),
-            messages=get_messages(),
-            webui_theme=webui_theme,
-            version=version,
-            schedule=schedule,
-            **_template_context(req, context),
+        return _render_schedule_partial(
+            req, resp, "partials/schedule_list.html", context, schedule=schedule
         )
-
-        return html
 
     def render_schedule_state_html(self, req, resp, state, context):
-        template = fetch_template("partials/schedule_state.html")
-        webui_theme = Config.uitheme
-        version = Version.app_version()
-
-        html = template.render(
-            flashed_messages=get_flash_cookie(req, resp),
-            messages=get_messages(),
-            webui_theme=webui_theme,
-            version=version,
-            state=state,
-            **_template_context(req, context),
+        return _render_schedule_partial(
+            req, resp, "partials/schedule_state.html", context, state=state
         )
-
-        return html
 
 
 class ScheduleRefreshResource(BaseResource):
@@ -3519,7 +3524,7 @@ class ScheduleRefreshResource(BaseResource):
 
         open_accordion_id = req.get_param("open_accordion_id", default="")
         html = self.render_schedule_list_html(req, resp, schedule, context)
-        cache_key = (int(telescope_id), open_accordion_id)
+        cache_key = (int(telescope_id), open_accordion_id, get_root_path(req))
         changed = True
         with ScheduleRefreshResource._lock:
             last_html = ScheduleRefreshResource._last_render_by_key.get(cache_key)
@@ -3540,22 +3545,14 @@ class ScheduleRefreshResource(BaseResource):
         resp.status = falcon.HTTP_200
 
     def render_schedule_list_html(self, req, resp, schedule, context):
-        template = fetch_template("partials/schedule_list.html")
-        webui_theme = Config.uitheme
-        version = Version.app_version()
-        open_accordion_id = req.get_param("open_accordion_id", default="")
-
-        html = template.render(
-            flashed_messages=get_flash_cookie(req, resp),
-            messages=get_messages(),
-            webui_theme=webui_theme,
-            version=version,
+        return _render_schedule_partial(
+            req,
+            resp,
+            "partials/schedule_list.html",
+            context,
             schedule=schedule,
-            open_accordion_id=open_accordion_id,
-            **_template_context(req, context),
+            open_accordion_id=req.get_param("open_accordion_id", default=""),
         )
-
-        return html
 
 
 class EventStatus:
@@ -4722,7 +4719,7 @@ class StatsContentResource:
             resp,
             StatsContentResource._last_render_by_key,
             StatsContentResource._lock,
-            ("stats-content", int(telescope_id)),
+            ("stats-content", int(telescope_id), get_root_path(req)),
         )
 
 
@@ -4846,7 +4843,7 @@ class GuestModeContentResource:
             resp,
             GuestModeContentResource._last_render_by_key,
             GuestModeContentResource._lock,
-            ("guestmode-content", int(telescope_id)),
+            ("guestmode-content", int(telescope_id), get_root_path(req)),
         )
 
 
@@ -5743,6 +5740,20 @@ class GetLocalSearch:
             resp.text = rtn
 
 
+def _read_some(raw, size):
+    """Return what has arrived on a urllib3 response body (b"" at end).
+
+    urllib3 2.x exposes read1 on the response; urllib3 1.26 (Debian's armhf
+    build) does not, so fall back to the buffered http.client reader beneath it.
+    """
+    read1 = getattr(raw, "read1", None) or getattr(
+        getattr(raw, "_fp", None), "read1", None
+    )
+    if read1 is not None:
+        return read1(size)
+    return raw.read(size)
+
+
 class ImagingProxyResource:
     """Relay one of the imaging server's streams through the web-UI port.
 
@@ -5760,7 +5771,7 @@ class ImagingProxyResource:
             f"http://{get_listening_ip()}:{Config.imgport}/{telescope_id}/{self._path}"
         )
         try:
-            upstream = requests.get(url, stream=True, timeout=(5, None))
+            upstream = requests.get(url, stream=True, timeout=(5, 30))
         except requests.RequestException as e:
             logger.warning(f"Imaging relay: {url} unreachable: {e}")
             raise falcon.HTTPBadGateway()
@@ -5773,12 +5784,15 @@ class ImagingProxyResource:
         resp.set_header("X-Accel-Buffering", "no")
 
         def relay():
-            # read1 returns whatever has arrived (one read, chunked or not), so
-            # each frame/event reaches the browser now. These bodies never end:
-            # iter_content(chunk_size=None) would read a non-chunked one to EOF.
+            # Hand each piece downstream as it arrives; these bodies never end.
+            # The read timeout bounds how long a stalled upstream (or a browser
+            # that left) holds this connection; the stream then ends and an
+            # EventSource client reconnects.
             try:
-                while chunk := upstream.raw.read1(64 * 1024):
+                while chunk := _read_some(upstream.raw, 64 * 1024):
                     yield chunk
+            except (OSError, urllib3.exceptions.HTTPError) as e:
+                logger.debug(f"Imaging relay: stream ended: {e}")
             finally:
                 upstream.close()
 

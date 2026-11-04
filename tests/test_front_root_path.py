@@ -5,8 +5,10 @@ The prefix comes from a valid X-Forwarded-Prefix header, else from
 exactly as before.
 """
 
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import falcon
 import pytest
@@ -38,7 +40,8 @@ def _isolate(monkeypatch):
         ("ssc", None),  # must be root-relative
         ("//evil.example", None),  # protocol-relative would leave the site
         ('/a"onmouseover=alert(1)', None),  # never reflected into HTML
-        ("/a/../b", "/a/../b"),  # dots are plain path characters here
+        ("/a/../b", None),  # dot segments would climb out of the prefix
+        ("/a/./b", None),
         ("/a b", None),
     ],
 )
@@ -254,6 +257,38 @@ def test_redirects_stay_inside_the_prefix(header, expected):
     assert resp.headers["Location"] == expected
 
 
+def test_cached_htmx_fragment_is_not_shared_across_prefixes(monkeypatch):
+    # The 204-if-unchanged cache must key on the prefix: identical device state
+    # served under /a and then /b must render for /b, not answer 204 from /a.
+    front_app.StatsContentResource._last_render_by_key.clear()
+    monkeypatch.setattr(front_app, "get_device_state", lambda _tid: {})
+    monkeypatch.setattr(
+        front_app,
+        "_get_context_real",
+        lambda telescope_id, req: {
+            "online": True,
+            "client_master": True,
+            "root": f"/{telescope_id}",
+            "imager_root": f"http://scope-host:7556/{telescope_id}",
+            "telescope": {"device_num": telescope_id},
+            "telescopes": [],
+        },
+    )
+    app = falcon.App(middleware=[front_app.RootPathMiddleware()])
+    app.add_route("/{telescope_id:int}/stats-content", front_app.StatsContentResource())
+    client = testing.TestClient(app)
+
+    first = client.simulate_get(
+        "/1/stats-content", headers={"X-Forwarded-Prefix": "/a"}
+    )
+    second = client.simulate_get(
+        "/1/stats-content", headers={"X-Forwarded-Prefix": "/b"}
+    )
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.text
+
+
 # --- live-view relay -----------------------------------------------------------
 
 
@@ -373,3 +408,97 @@ def test_relay_reports_an_unreachable_imaging_server(monkeypatch):
         port = free.getsockname()[1]
     resp = _relay_client(monkeypatch, port).simulate_get("/1/imaging/vid")
     assert resp.status_code == 502
+
+
+class _NoRead1:
+    """A raw body shaped like urllib3 1.26's: it has no read1 of its own."""
+
+    def __init__(self, data):
+        self._data = data
+
+    def read(self, amt):
+        out, self._data = self._data[:amt], self._data[amt:]
+        return out
+
+
+def test_read_some_falls_back_to_read_without_read1():
+    raw = _NoRead1(b"abc")
+    assert front_app._read_some(raw, 2) == b"ab"
+    assert front_app._read_some(raw, 2) == b"c"
+    assert front_app._read_some(raw, 2) == b""
+
+
+def test_read_some_uses_the_buffered_reader_beneath_urllib3_1x():
+    class FpReader:
+        def read1(self, amt):
+            return b"arrived"
+
+    class Raw:
+        _fp = FpReader()
+
+    assert front_app._read_some(Raw(), 64) == b"arrived"
+
+
+def test_relay_upstream_read_has_a_timeout(monkeypatch):
+    # A sparse or stalled upstream must not hold the relay (and the imaging
+    # server's connection) forever, so the read timeout must be bounded.
+    seen = {}
+
+    class Upstream:
+        status_code = 200
+        headers = {"Content-Type": "text/event-stream"}
+        raw = _NoRead1(b"")
+
+        def close(self):
+            pass
+
+    def fake_get(url, **kwargs):
+        seen.update(kwargs)
+        return Upstream()
+
+    monkeypatch.setattr(front_app.requests, "get", fake_get)
+    monkeypatch.setattr(front_app, "get_listening_ip", lambda: "127.0.0.1")
+    monkeypatch.setattr(Config, "imgport", 1)
+    resp = falcon.Response()
+    front_app.ImagingProxyResource("events").on_get(None, resp, 1)
+    assert seen["timeout"][1] is not None
+    assert list(resp.stream) == []
+
+
+def test_render_dedupe_key_separates_prefixes():
+    # The 204-if-unchanged caches store prefixed HTML, so two prefixes (or a
+    # prefix and none) must never share a dedupe identity.
+    def identity(prefix):
+        headers = {"X-Forwarded-Prefix": prefix} if prefix is not None else {}
+        req = testing.create_req(path="/1/stats", headers=headers)
+        return front_app.get_request_cache_identity(req)
+
+    assert identity("/a") != identity("/b")
+    assert identity("/a") != identity(None)
+    assert identity("/a") == identity("/a")
+
+
+_ROOT_ABSOLUTE_URL = re.compile(
+    r"""(?:\bhref|\bsrc|\baction|\bhx-(?:get|post|put|delete|patch)|\bfetch\(|\bEventSource\()\s*=?\s*["'`]/[A-Za-z0-9]"""
+)
+
+
+def test_templates_and_scripts_have_no_unprefixed_route_urls():
+    # A literal "/x" URL bypasses the prefix. Route URLs must go through
+    # {{ root_path }} / root (templates) or the prefixed context (Python).
+    front = Path(__file__).resolve().parents[1] / "front"
+    files = [
+        p
+        for pattern in ("templates/**/*.html", "public/**/*.js")
+        for p in front.glob(pattern)
+        if not p.name.endswith(".min.js")
+    ]
+    assert files, "guard found no templates or scripts to scan"
+    offenders = []
+    for path in files:
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            if "{#" in line or "//" in line.lstrip()[:2]:
+                continue  # commented-out template or script line
+            if _ROOT_ABSOLUTE_URL.search(line):
+                offenders.append(f"{path.relative_to(front)}:{number}: {line.strip()}")
+    assert offenders == []
