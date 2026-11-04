@@ -38,6 +38,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: front/package-lock.json
 
       - name: Run lint checks
         run: ruff check
@@ -50,6 +52,12 @@ jobs:
           pytest -m "not integration" --cov=device --cov=front \
             --cov-report=term --cov-report=xml:coverage-unit.xml --cov-fail-under=30.0 \
             --junit-xml=test-results/unit.xml -q
+
+      - name: Run front-end JS tests
+        working-directory: front
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
 
       - name: Install cli and mcp packages (so MCP e2e runs instead of skipping)
         run: pip install -e ./cli -e ./mcp
