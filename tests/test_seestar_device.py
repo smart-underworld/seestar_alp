@@ -410,15 +410,17 @@ def test_send_message_paths(monkeypatch, seestar):
     seestar.s = _DummySocket(send_error=socket.timeout())
     assert seestar.send_message("x") is False
 
-    disconnected = {"count": 0}
-    monkeypatch.setattr(
-        seestar, "disconnect", lambda: disconnected.__setitem__("count", 1)
-    )
-    monkeypatch.setattr(seestar, "reconnect", lambda: False)
+    reconnects = {"count": 0}
+
+    def fake_reconnect(wait=True):
+        reconnects["count"] += 1
+        return False
+
+    monkeypatch.setattr(seestar, "reconnect", fake_reconnect)
     seestar.is_watch_events = True
     seestar.s = _DummySocket(send_error=socket.error("boom"))
     assert seestar.send_message("x") is False
-    assert disconnected["count"] == 1
+    assert reconnects["count"] == 1
 
     class GeneralSock:
         def sendall(self, _payload):
@@ -652,12 +654,14 @@ def test_auth_rpc_sync_never_reads_socket_while_receive_thread_alive(seestar):
         "jsonrpc": "2.0",
         "method": "get_verify_str",
         "result": {"str": "CHALLENGE"},
-        "id": seestar.cmdid,
+        "id": 4242,
     }
-    seestar.response_dict[seestar.cmdid] = reply
+    seestar.response_dict[4242] = reply
+    seestar._send_json = lambda data: (4242, True)
     assert seestar._auth_rpc_sync("get_verify_str") is reply
 
     # No reply arriving: times out and returns None, still no socket reads.
+    seestar.response_dict.pop(4242)
     assert seestar._auth_rpc_sync("get_verify_str", timeout=0.25) is None
 
 
@@ -670,15 +674,18 @@ def test_get_socket_msg_paths(monkeypatch, seestar):
     seestar.s = _DummySocket(recv_error=socket.timeout())
     assert seestar.get_socket_msg() is None
 
-    disconnected = {"count": 0}
-    monkeypatch.setattr(
-        seestar, "disconnect", lambda: disconnected.__setitem__("count", 1)
-    )
-    monkeypatch.setattr(seestar, "reconnect", lambda: False)
+    reconnects = {}
+
+    def fake_reconnect(wait=True):
+        reconnects["wait"] = wait
+        return False
+
+    monkeypatch.setattr(seestar, "reconnect", fake_reconnect)
     seestar.is_watch_events = True
     seestar.s = _DummySocket(recv_error=socket.error("x"))
     assert seestar.get_socket_msg() is None
-    assert disconnected["count"] == 1
+    assert reconnects == {"wait": False}
+    assert seestar.s is None
 
     seestar.s = _DummySocket(recv_value=b"")
     assert seestar.get_socket_msg() is None
@@ -702,12 +709,13 @@ def test_update_equ_coord_and_view_state(seestar):
     assert seestar.view_state == {"a": 1}
 
 
-def test_json_message_increments_cmdid(monkeypatch, seestar):
+def test_json_message_stamps_unique_auto_ids(monkeypatch, seestar):
     sent = []
     monkeypatch.setattr(seestar, "send_message", lambda payload: sent.append(payload))
-    start = seestar.cmdid
-    seestar.json_message("scope_get_equ_coord", id=420)
-    assert seestar.cmdid == start + 1
+    seestar.json_message("scope_get_equ_coord")
+    seestar.json_message("scope_get_equ_coord")
+    ids = [json.loads(p)["id"] for p in sent]
+    assert ids[1] == ids[0] + 1
     assert '"method": "scope_get_equ_coord"' in sent[0]
 
 
@@ -1181,50 +1189,41 @@ def test_concurrent_sends_never_share_a_cmdid_or_overlap_on_the_socket(seestar):
     assert sorted(returned) == sorted(sent_ids)
 
 
-def test_reconnect_after_failed_write_does_not_block_other_senders(seestar):
-    # A failed write disconnects and reconnects (which re-authenticates and can
-    # wait seconds on the scope). No send-path lock may be held during that, or
-    # every other thread -- including the receive thread's own reconnect and
-    # auth handshake -- queues behind it.
+def test_reconnect_holds_no_socket_or_cmdid_lock(seestar):
+    # A failed write drops the socket and reconnects, which re-authenticates and
+    # can wait seconds on the scope. Neither send-path lock may be held then.
     import threading
 
+    held_free = {}
     in_reconnect = threading.Event()
     release_reconnect = threading.Event()
-    written = []
 
     class Sock:
         def sendall(self, payload):
-            if b"fails" in payload:
-                raise socket.error("boom")
-            written.append(json.loads(payload)["method"])
+            raise socket.error("boom")
 
-    def slow_reconnect():
+    def slow_reconnect(wait=True):
+        for name, lock in (
+            ("socket", seestar._socket_write_lock),
+            ("cmdid", seestar._cmdid_lock),
+        ):
+            held_free[name] = lock.acquire(timeout=1)
+            if held_free[name]:
+                lock.release()
         in_reconnect.set()
         release_reconnect.wait(timeout=5)
         return False
 
     seestar.s = Sock()
     seestar.is_watch_events = True
-    seestar.disconnect = lambda: None
     seestar.reconnect = slow_reconnect
-    seestar.transform_message_for_verify = lambda data: data
 
     failing = threading.Thread(target=lambda: seestar.json_message("fails"))
     failing.start()
     assert in_reconnect.wait(timeout=5)
-
-    other = threading.Thread(
-        target=lambda: seestar.send_message_param({"method": "get_view_state"})
-    )
-    other.start()
-    other.join(timeout=2)
-    blocked = other.is_alive()
-
     release_reconnect.set()
     failing.join(timeout=5)
-    other.join(timeout=5)
-    assert not blocked, "another sender was blocked while a reconnect was in progress"
-    assert written == ["get_view_state"]
+    assert held_free == {"socket": True, "cmdid": True}
 
 
 def test_get_event_state_injects_mount_equ_mode(seestar):
@@ -3254,9 +3253,10 @@ def test_auth_rpc_sync_accepts_reply_from_response_dict(seestar):
         "method": "get_verify_str",
         "result": {"str": "CHALLENGE"},
         "code": 0,
-        "id": seestar.cmdid,
+        "id": 4242,
     }
-    seestar.response_dict[seestar.cmdid] = stolen
+    seestar.response_dict[4242] = stolen
+    seestar._send_json = lambda data: (4242, True)
 
     assert seestar._auth_rpc_sync("get_verify_str") is stolen
 
