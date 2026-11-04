@@ -126,6 +126,20 @@ class MountMixin:
         logger.info("set_below_horizon_dec_offset offset=%s", offset)
         return await self.action("set_below_horizon_dec_offset", {"offset": offset})
 
+    async def get_horizon(self) -> dict:
+        logger.info("get_horizon")
+        return await self.action("get_horizon", {})
+
+    async def check_target_visibility(
+        self, ra: str | float, dec: str | float, is_j2000: bool = True
+    ) -> dict:
+        logger.info(
+            "check_target_visibility ra=%s dec=%s is_j2000=%s", ra, dec, is_j2000
+        )
+        return await self.action(
+            "check_target_visibility", {"ra": ra, "dec": dec, "is_j2000": is_j2000}
+        )
+
     async def set_dither(self, pix: int, interval: int, enable: bool = True) -> dict:
         logger.info("set_dither pix=%s interval=%s enable=%s", pix, interval, enable)
         return await self.method_sync(

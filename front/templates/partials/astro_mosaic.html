@@ -5,7 +5,7 @@
     <!-- script type="text/javascript" src="https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.js" charset="utf-8"></script -->
     <script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
-    <script type="text/javascript" src="{{ root_path }}/public/AstroMosaicEngine.js"></script>
+    <script type="text/javascript" src="{{ root_path }}/public/AstroMosaicEngine.js?v={{ version | default('', true) | urlencode }}"></script>
     <style>
         /* Bring the aladin control buttons to the top layer */
         .aladin-simbadPointer-control button {
@@ -136,6 +136,12 @@
         again from the first RA panel (it does not alternate direction row to row).</div>
     <div id="radec-div" style="width:100%; overflow-x:auto;"></div>
 </div>
+{% if not config_lat and not config_long %}
+<div class="alert alert-warning mt-2" id="astro-mosaic-location-unset">
+    The telescope location is not set (latitude and longitude are 0): the charts below are drawn
+    for 0&deg; N, 0&deg; E. Set the latitude and longitude in the settings.
+</div>
+{% endif %}
 <div id="day-div" style="height:300px; width: 100%; max-width: 100% !important;"></div>
 <div id="year-div" style="height:300px; width: 100%; max-width: 100% !important;"></div>
 <div id="dayvisibility-panel-text" style="display: none;"></div>
@@ -323,13 +329,17 @@
         grid_size_x: 1,
         grid_size_y: 1,
         grid_overlap: 20,
-        location_lat: 32.92,
-        location_lng: -96.72,
+        location_lat: {{ config_lat | default(0, true) | tojson }},
+        location_lng: {{ config_long | default(0, true) | tojson }},
         horizonSoft: null,
-        horizonHard: [30],
+        // The configured horizon profile, highest altitude every 5 degrees;
+        // a flat 30 degrees without one.
+        horizonHard: {% if horizon_limits %}{{ horizon_limits | tojson }}{% else %}[30]{% endif %},
         meridian_transit: null,
         UTCdate_ms: null,
-        timezoneOffset: -5,
+        // The time zone of the telescope site, which the charts are drawn
+        // for, not the browser's: the scope may be far from the viewer.
+        timezoneOffset: {{ utc_offset | default(0, true) | tojson }},
         isCustomMode: true,
         chartTextColor: "white",
         gridlinesColor: "gray",
@@ -349,20 +359,6 @@
     // ADD THIS FUNCTION - it's required by the engine
     function getAstroMosaicFov(fov) {
         return (fov * 60.0) / 3600.0;
-    }
-
-    function fillHorizonLimits(horizon_limits) {
-        if (horizon_limits == null || horizon_limits.length == 0) {
-            horizon_limits = [0];
-        }
-        var len = horizon_limits.length;
-        if (len < 71) {
-            var last = horizon_limits[len-1];
-            for (var k = len; k < 71; k++) {
-                horizon_limits[k] = last;
-            }
-        }
-        return horizon_limits;
     }
 
     // 2. GOOGLE CHARTS LOAD AND INIT

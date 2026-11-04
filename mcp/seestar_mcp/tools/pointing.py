@@ -63,6 +63,24 @@ async def set_3ppa_calibration_tool(enabled: bool = True, telescope_id: int = 1)
     return await call(telescope_id, lambda c: c.set_3ppa_calibration(enabled))
 
 
+async def get_horizon_tool(telescope_id: int = 1) -> Any:
+    """Get the site's horizon profile: obstruction altitude by azimuth
+    (`points`, and `limits_5deg`, the highest altitude every 5 degrees), the
+    horizon file and the scheduler's skip settings. No points: flat horizon."""
+    return await call(telescope_id, lambda c: c.get_horizon())
+
+
+async def check_target_visibility_tool(
+    ra: str | float, dec: str | float, is_j2000: bool = True, telescope_id: int = 1
+) -> Any:
+    """Check whether a target clears the site's horizon right now: its
+    altitude and azimuth, the horizon altitude at that azimuth, and `visible`.
+    Check before a goto: a target behind trees or a roof fails to plate-solve."""
+    return await call(
+        telescope_id, lambda c: c.check_target_visibility(ra, dec, is_j2000)
+    )
+
+
 def register(mcp: Any) -> None:
     for fn in (
         goto_target_tool,
@@ -74,5 +92,7 @@ def register(mcp: Any) -> None:
         polar_align_tool,
         get_pa_error_tool,
         set_3ppa_calibration_tool,
+        get_horizon_tool,
+        check_target_visibility_tool,
     ):
         mcp.tool(name=fn.__name__.removesuffix("_tool"))(fn)

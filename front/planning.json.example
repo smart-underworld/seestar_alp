@@ -7,6 +7,13 @@
         "planning_page_collapsed": false
     },
     {
+        "card_name": "horizon",
+        "card_friendly_name": "Horizon",
+        "template": "partials/horizon.html",
+        "planning_page_enable": true,
+        "planning_page_collapsed": false
+    },
+    {
         "card_name": "framed_mosaic",
         "card_friendly_name": "Framed Mosaic",
         "template": "partials/framed_mosaic_planning.html",

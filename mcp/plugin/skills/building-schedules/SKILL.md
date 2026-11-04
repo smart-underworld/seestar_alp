@@ -20,6 +20,8 @@ description: Use when the user wants a multi-target, mosaic, or unattended imagi
 ## Planning a whole night
 When the user wants "tonight"/"tomorrow night" across many targets: work out the dark window (astronomical dusk→dawn) and the moon (phase, and when it rises/sets) for the device's location — `get_device_state` reports `location_lon_lat`. Schedule moon-tolerant targets (open/globular clusters, bright galaxy cores, and emission nebulae with `is_use_lp_filter=true`) while the moon is up, and save faint broadband/reflection targets for after moonset. Order targets near their culmination, and anchor the start (and the moonset handover) with `wait_until` items.
 
+Mind the site's horizon: `get_horizon` gives the obstruction altitude by azimuth, so place each target in the part of the night when it clears it, not only when it is high. If `skip_hidden_targets` is true, the scheduler itself skips a mosaic target that is below the horizon plus `margin` when its turn comes, and moves on to the next item; tell the user when a planned target is at risk of that.
+
 For a large timed plan, building item-by-item is many calls and risks out-of-order appends; it is cleaner to assemble the full schedule JSON (a `{"list": [ {action, params, schedule_item_id}, … ]}` dict — mosaic items use `panel_time_sec`) and load it in one `import_schedule(filepath)` call, then `get_schedule` to review.
 
 End long unattended schedules with a park step, and confirm with the user before any physical action (see `safety`).

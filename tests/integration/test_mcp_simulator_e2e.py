@@ -215,3 +215,26 @@ def test_shutdown_without_confirm_makes_no_device_call(tools_env, monkeypatch):
     result = _run(system.shutdown_tool(confirm=False))
     assert result["requires_confirmation"] is True
     assert result["ok"] is False
+
+
+def test_horizon_tools_round_trip(tools_env, monkeypatch, tmp_path):
+    from astropy.utils import iers
+
+    from device import horizon
+
+    monkeypatch.setattr(iers.conf, "auto_download", False)
+    hrz = tmp_path / "site.hrz"
+    hrz.write_text("0 90\n")  # every target hidden, whatever the time
+    monkeypatch.setattr(Config, "horizon_file", str(hrz))
+    monkeypatch.setattr(Config, "init_lat", 44.06)
+    monkeypatch.setattr(Config, "init_long", 0.65)
+    horizon._cache.update(key=None, profile=None, error=None)
+
+    profile = _run(pointing.get_horizon_tool())
+    _assert_ok(profile)
+    assert profile["points"] == [[0.0, 90.0]], profile
+
+    result = _run(pointing.check_target_visibility_tool("00:42:44", "+41:16:09"))
+    _assert_ok(result)
+    assert result["visible"] is False, result
+    assert result["horizon"] == 90, result

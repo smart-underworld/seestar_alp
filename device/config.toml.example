@@ -47,6 +47,7 @@ save_good_frames = true
 save_all_frames = false             # including good and bad frames
 lat = 37.12                         # telescope location (lat), set to 0 if you want to guess from IP address
 long = -123.45                      # telescope location (long), set to 0 if you want to guess from IP address
+timezone = ""                       # telescope site time zone, e.g. "Europe/Paris"; empty = this computer's time zone
 gain = 80
 exposure_length_preview_ms = 500
 exposure_length_stack_ms = 10000
@@ -70,6 +71,13 @@ is_frame_calibrated = true
 # (a TOML literal string) to avoid "\U"/"\s" escape errors that crash startup.
 # e.g. 'C:\Users\you\seestar_client_key.pem'  or  '/etc/seestar/seestar_client_key.pem'
 interop_pem = ''
+
+# Local horizon profile: a N.I.N.A. horizon file (.hrz), one "azimuth altitude"
+# pair per line, in degrees. Drawn in the planner's AstroMosaic day chart.
+# Empty: flat horizon. Single quotes for Windows paths, as above.
+horizon_file = ''
+horizon_skip_hidden_targets = false # scheduler: skip a mosaic target below the horizon when its turn comes
+horizon_margin = 0.0                # degrees a target must clear above the horizon for the scheduler
 
 [logging]
 log_level = 'INFO'   #'WARN' only if trouble    #'INFO' to output more logging      #'DEBUG' still more output

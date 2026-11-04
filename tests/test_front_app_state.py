@@ -2884,3 +2884,140 @@ def test_astro_mosaic_template_offers_s50_pro_and_preselects_model():
     )
     assert '<option value="S50 Pro" selected>' in html
     assert "Wide" not in html.split('id="seestar"')[1].split("</select>")[0]
+
+
+def _render_astro_mosaic(**context):
+    from jinja2 import Environment, FileSystemLoader
+
+    env = Environment(loader=FileSystemLoader("front/templates"))
+    base = {"planner_model": "S50", "telescope": {"device_num": 1}, "root": ""}
+    base.update(context)
+    return env.get_template("partials/astro_mosaic.html").render(**base)
+
+
+def test_astro_mosaic_template_uses_configured_location():
+    html = _render_astro_mosaic(utc_offset=1.0, config_lat=44.06, config_long=0.65)
+    assert "location_lat: 44.06," in html
+    assert "location_lng: 0.65," in html
+    assert "32.92" not in html
+    assert "-96.72" not in html
+    # The chart's time zone is the site's, from the server, not a fixed UTC-5
+    # nor the browser's.
+    assert "timezoneOffset: 1.0," in html
+    assert "getTimezoneOffset" not in html
+    assert 'id="astro-mosaic-location-unset"' not in html
+
+
+def test_astro_mosaic_template_handles_half_hour_site_offset():
+    html = _render_astro_mosaic(utc_offset=5.5, config_lat=19.08, config_long=72.88)
+    assert "timezoneOffset: 5.5," in html
+
+
+def test_astro_mosaic_template_without_location_stays_valid_js():
+    # Rendered without the planner's variables, the parameters must still be
+    # JavaScript literals, not "location_lat: ," which breaks the card script.
+    html = _render_astro_mosaic()
+    assert "location_lat: 0," in html
+    assert "location_lng: 0," in html
+    assert "timezoneOffset: 0," in html
+
+
+def test_astro_mosaic_template_warns_when_location_unset():
+    html = _render_astro_mosaic(utc_offset=0, config_lat=0.0, config_long=0.0)
+    assert 'id="astro-mosaic-location-unset"' in html
+
+
+def test_astro_mosaic_template_versions_the_engine_script():
+    # A cached engine of an older release must not be run with this template.
+    html = _render_astro_mosaic(version="v3.3.1+17")
+    assert 'src="/public/AstroMosaicEngine.js?v=v3.3.1%2B17"' in html
+
+
+def test_site_utc_offset_follows_configured_timezone(monkeypatch):
+    from datetime import datetime
+
+    import pytz
+
+    monkeypatch.setattr(Config, "init_timezone", "Europe/Paris", raising=False)
+    winter = datetime(2026, 1, 15, 12, tzinfo=pytz.utc)
+    summer = datetime(2026, 7, 15, 12, tzinfo=pytz.utc)
+    assert front_app.site_utc_offset_hours(winter) == 1.0
+    assert front_app.site_utc_offset_hours(summer) == 2.0
+
+    monkeypatch.setattr(Config, "init_timezone", "Asia/Kolkata", raising=False)
+    assert front_app.site_utc_offset_hours(winter) == 5.5
+
+
+def test_site_utc_offset_falls_back_to_server_zone(monkeypatch):
+    from datetime import datetime
+
+    import pytz
+
+    monkeypatch.setattr(
+        front_app.tzlocal, "get_localzone", lambda: pytz.timezone("America/Chicago")
+    )
+    winter = datetime(2026, 1, 15, 12, tzinfo=pytz.utc)
+    monkeypatch.setattr(Config, "init_timezone", "", raising=False)
+    assert front_app.site_utc_offset_hours(winter) == -6.0
+    # An unknown name is ignored rather than breaking the planning page.
+    monkeypatch.setattr(Config, "init_timezone", "Mars/Olympus_Mons", raising=False)
+    assert front_app.site_utc_offset_hours(winter) == -6.0
+
+
+def _render_partial(name, **context):
+    from jinja2 import Environment, FileSystemLoader
+
+    env = Environment(loader=FileSystemLoader("front/templates"))
+    base = {
+        "planner_model": "S50",
+        "utc_offset": 0,
+        "config_lat": 44.06,
+        "config_long": 0.65,
+        "telescope": {"device_num": 1},
+        "root": "",
+    }
+    return env.get_template(name).render(**{**base, **context})
+
+
+def test_astro_mosaic_template_flat_horizon_without_profile():
+    html = _render_partial("partials/astro_mosaic.html", horizon_limits=None)
+    assert "horizonHard: [30]," in html
+
+
+def test_astro_mosaic_template_uses_horizon_profile():
+    limits = [12.5] * 71 + [40]
+    html = _render_partial("partials/astro_mosaic.html", horizon_limits=limits)
+    line = re.search(r"horizonHard: (\[[^\]]*\]),", html)
+    assert json.loads(line.group(1)) == limits
+
+
+def test_horizon_card_draws_the_profile():
+    curve = [(azimuth, 10) for azimuth in range(361)]
+    html = _render_partial(
+        "partials/horizon.html",
+        horizon_curve=curve,
+        horizon_point_count=4,
+        horizon_file="/etc/seestar/site.hrz",
+        horizon_error=None,
+    )
+    assert 'id="horizon-profile"' in html
+    assert "0,80 1,80" in html  # altitude 10 drawn 80 units down a 0-90 scale
+    assert "/etc/seestar/site.hrz" in html
+    assert "4 points" in html
+
+
+def test_horizon_card_reports_an_unusable_file():
+    html = _render_partial(
+        "partials/horizon.html",
+        horizon_curve=None,
+        horizon_error="site.hrz, line 2: expected 'azimuth altitude'",
+    )
+    assert "Horizon file not used" in html
+    assert "line 2" in html
+    assert 'id="horizon-profile"' not in html
+
+
+def test_horizon_card_explains_how_to_set_a_profile():
+    html = _render_partial("partials/horizon.html", horizon_curve=None)
+    assert "No horizon profile" in html
+    assert "Horizon file" in html

@@ -43,7 +43,7 @@ from skyfield.constants import GM_SUN_Pitjeva_2005_km3_s2 as GM_SUN
 from device.config import Config  # type: ignore
 from device.log import init_logging, get_logger  # type: ignore
 from device.version import Version  # type: ignore
-from device import telescope
+from device import horizon, telescope
 import threading
 import pydash
 
@@ -387,10 +387,38 @@ def get_flash_cookie(req, resp):
     return []
 
 
+def site_timezone():
+    """Time zone of the telescope site.
+
+    The ``timezone`` setting when it names a known zone, otherwise the time
+    zone of the computer running seestar_alp, which is not the site's when
+    the server runs in UTC or far from the scope (remote observatories).
+    """
+    name = str(Config.init_timezone or "").strip()
+    if name:
+        try:
+            return pytz.timezone(name)
+        except pytz.UnknownTimeZoneError:
+            logger.warning(
+                f"Unknown time zone {name!r} in the settings; using this computer's"
+            )
+    return tzlocal.get_localzone()
+
+
+def site_utc_offset_hours(when=None):
+    """UTC offset of the telescope site, in hours, at ``when`` (default: now).
+
+    A float: some zones are offset by half or quarter hours.
+    """
+    if when is None:
+        when = datetime.now(pytz.utc)
+    return when.astimezone(site_timezone()).utcoffset().total_seconds() / 3600
+
+
 def update_twilight_times(latitude=None, longitude=None):
     observer = ephem.Observer()
     observer.date = datetime.now()
-    local_timezone = tzlocal.get_localzone()
+    local_timezone = site_timezone()
     sun = ephem.Sun()
     current_date_formatted = str(datetime.now().strftime("%Y-%m-%d"))
 
@@ -4616,12 +4644,9 @@ class PlanningResource:
             nearest_csc["full_img"] = ""
 
         planning_cards = get_planning_cards()
-        local_timezone = tzlocal.get_localzone()
-        current_time = datetime.now(local_timezone)
-        utc_offset = current_time.utcoffset()
-        utc_offset = int(
-            utc_offset.total_seconds() / 3600
-        )  # Convert the offset to hours, used for astromosaic
+        # The planner charts are drawn for the configured site, so in the
+        # site's time zone rather than the browser's or the server's.
+        utc_offset = site_utc_offset_hours()
 
         config_lat = round(
             Config.init_lat, 2
@@ -4634,6 +4659,17 @@ class PlanningResource:
         planner_model = (
             planner_model_key(get_device_model(telescope_id)) if telescope_id else None
         )
+        horizon_profile, horizon_error = horizon.configured_profile()
+        horizon_curve = None
+        if horizon_profile is not None:
+            # One point per degree for the Horizon card, clamped to its 0-90 range.
+            horizon_curve = [
+                (
+                    azimuth,
+                    round(min(max(horizon_profile.altitude_at(azimuth), 0), 90), 2),
+                )
+                for azimuth in range(361)
+            ]
         render_template(
             req,
             resp,
@@ -4646,6 +4682,11 @@ class PlanningResource:
             clear_sky_img_src=nearest_csc["full_img"],
             planning_cards=planning_cards,
             utc_offset=utc_offset,
+            horizon_limits=horizon_profile.step_limits() if horizon_profile else None,
+            horizon_curve=horizon_curve,
+            horizon_point_count=len(horizon_profile.points) if horizon_profile else 0,
+            horizon_file=Config.horizon_file,
+            horizon_error=horizon_error,
             **context,
         )
 

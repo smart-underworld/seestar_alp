@@ -23,6 +23,7 @@ from device.shr import (
     to_bool,
 )
 from device.exceptions import *  # Nothing but exception classes
+from device import horizon
 from device.seestar_device import Seestar
 from device.seestar_federation import Seestar_Federation
 from alpaca.telescope import *
@@ -306,6 +307,20 @@ class action:
             elif action_name == "skip_scheduler_cur_item":
                 result = cur_dev.skip_scheduler_cur_item(params)
                 resp.text = MethodResponse(req, value=result).json
+            # The horizon belongs to the site, not to one scope.
+            elif action_name == "get_horizon":
+                result = horizon.describe()
+                resp.text = MethodResponse(req, value=result).json
+            elif action_name == "check_target_visibility":
+                try:
+                    result = horizon.check_target(params)
+                    resp.text = MethodResponse(req, value=result).json
+                except horizon.InvalidTarget as e:
+                    result = f"check_target_visibility: {e}"
+                    resp.text = MethodResponse(req, InvalidValueException(result)).json
+                except horizon.SiteLocationUnknown as e:
+                    result = f"check_target_visibility: {e}"
+                    resp.text = MethodResponse(req, ValueNotSetException(result)).json
             if log_debug:
                 cur_dev.logger.debug(f"response: {result}")
             else:

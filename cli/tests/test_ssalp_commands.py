@@ -289,6 +289,19 @@ class TestMountMixinCoverage:
             "set_below_horizon_dec_offset",
         )
 
+    async def test_get_horizon(self, client, httpx_mock):
+        await _check_action(httpx_mock, client.get_horizon(), "get_horizon")
+
+    async def test_check_target_visibility(self, client, httpx_mock):
+        await _check_action(
+            httpx_mock,
+            client.check_target_visibility("00:42:44", "+41:16:09"),
+            "check_target_visibility",
+        )
+        body = _body(httpx_mock)
+        assert "00%3A42%3A44" in body
+        assert "is_j2000" in body
+
     async def test_set_dither(self, client, httpx_mock):
         await _check_method(httpx_mock, client.set_dither(50, 10), "set_setting")
 

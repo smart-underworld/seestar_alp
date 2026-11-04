@@ -91,6 +91,7 @@ connection/API error.
 | **State** | `get_device_state`, `get_view_state` |
 | **Pointing** | `goto_target`, `scope_goto`, `start_solve`, `get_solve_result`, `is_goto_completed_ok`, `stop_goto_target` |
 | **Alignment** | `polar_align`, `get_pa_error`, `set_3ppa_calibration` |
+| **Horizon** | `get_horizon`, `check_target_visibility` |
 | **Focuser** | `get_focuser_position`, `adjust_focus`, `start_auto_focus`, `stop_auto_focus` |
 | **Filter wheel** | `get_wheel_position`, `get_wheel_state`, `get_wheel_setting`, `set_wheel_position`, `set_lp_filter` |
 | **Imaging** | `start_stack`, `stop_view`, `set_gain`, `set_exposure`, `get_last_image`, `create_dark` |
