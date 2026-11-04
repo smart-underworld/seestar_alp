@@ -548,15 +548,22 @@ class Seestar:
                             )  # TODO: would utf-8 or unicode_escaped help here
                             return True
                         except OSError as e:
+                            # Retire the socket before releasing the lock, so no
+                            # waiting writer can append to a half-written stream.
                             failure = e
+                            self._retire_socket_locked(sock)
                 if sock is None:
+                    # Another writer may have just retired a failed socket. Join
+                    # its single-flight reconnect and retry, rather than drop
+                    # the command.
+                    if attempt == 1 and self.is_watch_events and self.reconnect():
+                        continue
                     self.logger.warning("socket not initialized!")
                     time.sleep(3)
                     return False
                 # The write failed, possibly after part of the message went out.
-                # That socket is finished: drop it and never write to it again.
+                # That socket was retired under the lock; never write to it again.
                 self.logger.debug(f"Send socket error: {failure}")
-                self._drop_socket(sock)
                 if not (self.is_watch_events and self.reconnect()):
                     return False
                 if isinstance(failure, socket.timeout):
@@ -592,17 +599,22 @@ class Seestar:
             self.is_EQ_mode = False
             self.is_EQ_mode_confirmed = False
 
+    def _retire_socket_locked(self, sock: socket.socket) -> None:
+        """Retire ``sock``; the caller holds ``_socket_write_lock``. Connection
+        state is reset only if it is still the current socket; a reconnect may
+        have replaced it."""
+        if self.s is sock:
+            self.s = None
+            self._reset_connection_state()
+        try:
+            sock.close()
+        except Exception:
+            pass
+
     def _drop_socket(self, sock: socket.socket) -> None:
-        """Retire ``sock``, a dead or poisoned socket. Connection state is reset
-        only if it is still the current socket; a reconnect may have replaced it."""
+        """Retire ``sock``, a dead or poisoned socket."""
         with self._socket_write_lock:
-            if self.s is sock:
-                self.s = None
-                self._reset_connection_state()
-            try:
-                sock.close()
-            except Exception:
-                pass
+            self._retire_socket_locked(sock)
 
     def disconnect(self) -> None:
         # Disconnect tries to clean up the socket if it exists

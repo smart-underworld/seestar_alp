@@ -1410,40 +1410,40 @@ def test_simultaneous_send_failures_reconnect_and_authenticate_once(monkeypatch)
 
     monkeypatch.setattr(scope, "authenticate", authenticate)
     n = 4
-    failed = []
-    all_failed = threading.Event()
+    others_done = threading.Event()
 
     class DeadSock:
         def sendall(self, data):
-            failed.append(data)
-            if len(failed) == n:
-                all_failed.set()
             raise ConnectionResetError("connection reset by peer")
 
         def close(self):
             pass
 
-    def hold_until_all_failed(msg):
-        # Logged by every failed writer after it releases the write lock and
-        # before it recovers: hold each one here until all N writes failed.
-        if msg.startswith("Send socket error"):
-            all_failed.wait(timeout=5)
+    def send(i):
+        results[i] = scope.send_message(json.dumps({"id": i, "method": "m"}) + "\r\n")
 
-    logger.debug_hook = hold_until_all_failed
+    others = [threading.Thread(target=send, args=(i,)) for i in range(1, n)]
+
+    def start_others_while_first_recovers(msg):
+        # Logged by the first failed writer after it retired the dead socket and
+        # before it reconnects. Run the other N-1 writers concurrently now: they
+        # find the socket retired and must share one reconnect, not start N.
+        if msg.startswith("Send socket error") and not others_done.is_set():
+            others_done.set()
+            for thread in others:
+                thread.start()
+            _assert_threads_finished(others)
+
+    logger.debug_hook = start_others_while_first_recovers
     scope.s = DeadSock()
     scope.is_connected = True
     scope.is_watch_events = True
     results = {}
-
-    def send(i):
-        results[i] = scope.send_message(json.dumps({"id": i, "method": "m"}) + "\r\n")
-
-    threads = [threading.Thread(target=send, args=(i,)) for i in range(n)]
+    first = threading.Thread(target=send, args=(0,))
     try:
-        for thread in threads:
-            thread.start()
-        _assert_threads_finished(threads)
-        assert all_failed.is_set()
+        first.start()
+        _assert_threads_finished([first])
+        assert others_done.is_set()
         conns = server.stop()
         assert len(conns) == 1, f"{len(conns)} reconnects"
         assert len(auth_calls) == 1, f"{len(auth_calls)} auth handshakes"
@@ -1535,6 +1535,68 @@ def test_timed_out_partial_write_drops_socket_and_next_send_uses_new_one(
         # Not resent: the scope may already hold part of it.
         assert scope.send_message(first_msg) is False
         assert scope.send_message(second_msg) is True
+        stale = _recv_until_eof(old_peer, timeout=0.5)
+        assert stale == first_msg[: len(first_msg.encode()) // 2]
+        conns = server.stop()
+        assert len(conns) == 1
+        assert _recv_lines(conns[0], 1) == second_msg
+    finally:
+        scope.is_watch_events = False
+        scope.socket_force_close()
+        old_peer.close()
+        server.close()
+
+
+def test_failed_write_retires_socket_before_another_writer_can_use_it(monkeypatch):
+    # The failing sender must retire its socket before releasing the write lock.
+    # Pause it once the lock is released (at its "Send socket error" log line)
+    # and let a second writer run: that writer must not append to the stream
+    # that already holds half of the first message.
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
+    server = _ScopeServer()
+    scope = Seestar(DummyLogger(), "127.0.0.1", server.port, "TestScope", 1, True)
+    monkeypatch.setattr(scope, "send_udp_intro", lambda: None)
+    ours, old_peer = socket.socketpair()
+    first_msg = json.dumps({"id": 1, "method": "first"}) + "\r\n"
+    second_msg = json.dumps({"id": 2, "method": "second"}) + "\r\n"
+
+    class HalfThenHealthySock:
+        calls = 0
+
+        def sendall(self, data):
+            HalfThenHealthySock.calls += 1
+            if HalfThenHealthySock.calls == 1:
+                ours.sendall(data[: len(data) // 2])
+                raise socket.timeout("timed out")
+            ours.sendall(data)
+
+        def close(self):
+            ours.close()
+
+    second_result = []
+    second = threading.Thread(
+        target=lambda: second_result.append(scope.send_message(second_msg))
+    )
+    real_debug = scope.logger.debug
+
+    def debug(msg, *args, **kwargs):
+        if str(msg).startswith("Send socket error") and not second.is_alive():
+            if not second_result and second.ident is None:
+                second.start()
+                second.join(timeout=2)
+        return real_debug(msg, *args, **kwargs)
+
+    monkeypatch.setattr(scope.logger, "debug", debug)
+    scope.s = HalfThenHealthySock()
+    scope.is_connected = True
+    scope.is_watch_events = True
+    try:
+        assert scope.send_message(first_msg) is False
+        assert not second.is_alive()
+        # The second writer reconnected and sent on the new socket.
+        assert second_result == [True]
         stale = _recv_until_eof(old_peer, timeout=0.5)
         assert stale == first_msg[: len(first_msg.encode()) // 2]
         conns = server.stop()
