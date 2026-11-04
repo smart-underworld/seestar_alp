@@ -161,6 +161,12 @@ def test_prefixed_page_urls_carry_the_prefix_once(monkeypatch, prefix):
     assert f'href="{prefix}/schedule"' in resp.text
     assert 'src="/public/' not in resp.text
     assert f"{prefix}{prefix}/public" not in resp.text
+    # Byte-level: the prefixed page is the standalone page with each
+    # root-relative URL attribute given the prefix exactly once.
+    standalone = _page_app(monkeypatch).simulate_get("/1/framed_mosaic")
+    expected = re.sub(r'="/(?!/)', f'="{prefix}/', standalone.text)
+    actual = re.sub(r' data-root-path="[^"]*"', "", resp.text)
+    assert actual == expected
 
 
 def test_configured_root_path_applies_without_header(monkeypatch):
