@@ -507,6 +507,28 @@ def mount_set_horizon_offset(ctx: click.Context, offset: float) -> None:
     _run(ctx, ctx.obj["client"].set_below_horizon_dec_offset(offset=offset))
 
 
+@mount.command("horizon")
+@click.pass_context
+def mount_horizon(ctx: click.Context) -> None:
+    """Get the site's horizon profile and settings."""
+    _run(ctx, ctx.obj["client"].get_horizon())
+
+
+@mount.command("visibility")
+@click.option("--ra", required=True, help="RA (decimal hours or sexagesimal string).")
+@click.option(
+    "--dec", required=True, help="Dec (decimal degrees or sexagesimal string)."
+)
+@click.option("--j2000/--no-j2000", default=True, help="Treat coordinates as J2000.")
+@click.pass_context
+def mount_visibility(ctx: click.Context, ra: str, dec: str, j2000: bool) -> None:
+    """Check whether a target is above the site's horizon now."""
+    _run(
+        ctx,
+        ctx.obj["client"].check_target_visibility(ra=ra, dec=dec, is_j2000=j2000),
+    )
+
+
 @mount.command("set-dither")
 @click.option("--pix", required=True, type=int, help="Dither pixels.")
 @click.option("--interval", required=True, type=int, help="Dither interval (frames).")

@@ -68,6 +68,13 @@ is_frame_calibrated = true
 # e.g. 'C:\Users\you\seestar_client_key.pem'  or  '/etc/seestar/seestar_client_key.pem'
 interop_pem = ''
 
+# Local horizon profile: a N.I.N.A. horizon file (.hrz), one "azimuth altitude"
+# pair per line, in degrees. Drawn in the planner's AstroMosaic day chart.
+# Empty: flat horizon. Single quotes for Windows paths, as above.
+horizon_file = ''
+horizon_skip_hidden_targets = false # scheduler: skip a mosaic target below the horizon when its turn comes
+horizon_margin = 0.0                # degrees a target must clear above the horizon for the scheduler
+
 [logging]
 log_level = 'INFO'   #'WARN' only if trouble    #'INFO' to output more logging      #'DEBUG' still more output
 log_prefix = ''

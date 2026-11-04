@@ -26,6 +26,7 @@ from pyhocon import ConfigFactory
 
 from device.abstract_device import MessageParams, StartStackParams, Schedule
 from device.config import Config
+from device import horizon
 from device.version import Version  # type: ignore
 from device.seestar_util import Util
 from device.event_callbacks import *
@@ -1022,6 +1023,67 @@ class Seestar:
         )
         self.logger.info(f"coord in az-alt: {altaz.az.deg}, {altaz.alt.deg}")
         return [altaz.alt.deg, altaz.az.deg]
+
+    @staticmethod
+    def _at_current_position(params) -> bool:
+        """A mosaic item with RA and Dec -1 images where the scope already points."""
+        ra, dec = params["ra"], params["dec"]
+        return not isinstance(ra, str) and ra == -1 and dec == -1
+
+    def is_hidden_by_horizon(self, target_name, coord) -> bool:
+        """Whether the scheduler should skip ``target_name``, below the horizon now.
+
+        Only with ``horizon_skip_hidden_targets`` set. The horizon is the
+        configured profile, flat at 0 degrees without one, plus
+        ``horizon_margin``.
+        """
+        if not Config.horizon_skip_hidden_targets:
+            return False
+        # An unusable file is logged once by the horizon module, not per item.
+        profile, _error = horizon.configured_profile()
+        try:
+            result = horizon.visibility(coord, profile, Config.horizon_margin)
+        except Exception as e:
+            # Never let the check stop an unattended night: keep the target.
+            self.logger.warning(f"Horizon check failed, {target_name} kept: {e}")
+            return False
+        if result is None:
+            self.logger.warning(
+                "Horizon check skipped: the site location is not set (lat / long are 0)."
+            )
+            return False
+        if result["visible"]:
+            return False
+        self.logger.info(
+            f"{target_name} is below the horizon: altitude {result['altitude']}, "
+            f"azimuth {result['azimuth']}, horizon {result['horizon']} "
+            f"+ margin {result['margin']} degrees. Moving to next schedule item if any."
+        )
+        return True
+
+    def is_panel_hidden_by_horizon(self, panel_name, ra_hours, dec_deg) -> bool:
+        """``is_hidden_by_horizon`` for a mosaic panel centred on JNow
+        ``ra_hours``, ``dec_deg``; a panel whose position cannot be computed
+        is kept."""
+        if not Config.horizon_skip_hidden_targets:
+            return False
+        try:
+            coord = Util.parse_coordinate(False, ra_hours, dec_deg)
+        except Exception as e:
+            self.logger.warning(f"Horizon check failed, {panel_name} kept: {e}")
+            return False
+        return self.is_hidden_by_horizon(panel_name, coord)
+
+    def _publish_skipped_item(self, item_type, target_name):
+        """Show a schedule item skipped behind the horizon in the scheduler
+        state, until the next item starts."""
+        item_state: SchedulerItemState = {
+            "type": item_type,
+            "schedule_item_id": self.schedule.get("current_item_id", "UNKNOWN"),
+            "target_name": target_name,
+            "action": "skipped: below the local horizon",
+        }
+        self.update_scheduler_state_obj(item_state)
 
     def get_pa_error(self, param):
         if self.cur_pa_error_x is None or self.cur_pa_error_y is None:
@@ -2103,6 +2165,7 @@ class Seestar:
         num_tries,
         retry_wait_s,
         stack_type="DeepSky",
+        check_horizon=False,
     ):
         try:
             spacing_result = Util.mosaic_next_center_spacing(
@@ -2159,6 +2222,22 @@ class Seestar:
                     # check if we are doing a subset of the panels
                     panel_string = str(index_ra + 1) + str(index_dec + 1)
                     if is_use_selected_panels and panel_string not in panel_set:
+                        cur_ra += delta_RA
+                        continue
+
+                    # The item check covers the centre; a panel of a larger
+                    # mosaic can still be hidden, and its goto or plate-solve
+                    # would fail: skip it, checked when its turn comes.
+                    if (
+                        check_horizon
+                        and nRA * nDec > 1
+                        and self.is_panel_hidden_by_horizon(
+                            f"{target_name}_{panel_string}", cur_ra, cur_dec
+                        )
+                    ):
+                        self.event_state["scheduler"]["cur_scheduler_item"][
+                            "action"
+                        ] = f"panel {panel_string} skipped: below the local horizon"
                         cur_ra += delta_RA
                         continue
 
@@ -2358,6 +2437,12 @@ class Seestar:
         center_RA = parsed_coord.ra.hour
         center_Dec = parsed_coord.dec.deg
 
+        if not self._at_current_position(params) and self.is_hidden_by_horizon(
+            target_name, parsed_coord
+        ):
+            self._publish_skipped_item("mosaic", target_name)
+            return
+
         response = self.send_message_param_sync({"method": "get_setting"})
         result = response["result"]
         self.logger.info(f"get_setting response: {result}")
@@ -2408,6 +2493,7 @@ class Seestar:
                 num_tries,
                 retry_wait_s,
                 stack_type,
+                check_horizon=not self._at_current_position(params),
             )
         )
         self.mosaic_thread.name = f"MosaicThread:{self.device_name}"
@@ -2455,6 +2541,12 @@ class Seestar:
         parsed_coord = Util.parse_coordinate(is_j2000, center_RA, center_Dec)
         center_RA = parsed_coord.ra.hour
         center_Dec = parsed_coord.dec.deg
+
+        if not self._at_current_position(params) and self.is_hidden_by_horizon(
+            target_name, parsed_coord
+        ):
+            self._publish_skipped_item("framed_mosaic", target_name)
+            return
 
         self.logger.info("received framed mosaic parameters:")
         self.logger.info("  target        : " + target_name)

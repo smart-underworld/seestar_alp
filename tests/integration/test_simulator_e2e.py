@@ -1,6 +1,7 @@
 import collections
 import json
 import logging
+import re
 import socket
 import sys
 import threading
@@ -534,6 +535,38 @@ def test_06c_planning_page_warns_when_location_unset(front_sim_bridge, monkeypat
     assert resp.status_code == 200
     assert 'id="astro-mosaic-location-unset"' in resp.text
     assert "location_lat: 0," in resp.text
+
+
+def test_06c_planning_page_uses_horizon_profile(
+    front_sim_bridge, monkeypatch, tmp_path
+):
+    hrz = tmp_path / "site.hrz"
+    hrz.write_text("# test site\n0 12\n60 24.5\n90 18\n180 15\n270 5.5\n")
+    monkeypatch.setattr(Config, "horizon_file", str(hrz))
+    monkeypatch.setattr(
+        front_app,
+        "get_planning_cards",
+        lambda: [
+            {
+                "card_name": name,
+                "card_friendly_name": name,
+                "template": f"partials/{name}.html",
+                "planning_page_enable": True,
+                "planning_page_collapsed": False,
+            }
+            for name in ("astro_mosaic", "horizon")
+        ],
+    )
+    resp = front_sim_bridge["client"].simulate_get("/1/planning")
+    assert resp.status_code == 200
+
+    limits = json.loads(re.search(r"horizonHard: (\[[^\]]*\]),", resp.text).group(1))
+    assert len(limits) == 72
+    assert limits[12] == 24.5  # 57.5 to 62.5 degrees holds the 60-degree point
+    # 267.5 to 272.5 degrees: highest at 267.5, on the slope down from 180.
+    assert limits[54] == pytest.approx(5.76, abs=0.01)
+    assert 'id="horizon-profile"' in resp.text
+    assert "5 points" in resp.text
 
 
 def test_07_schedule_lifecycle(front_sim_bridge):

@@ -43,7 +43,7 @@ from skyfield.constants import GM_SUN_Pitjeva_2005_km3_s2 as GM_SUN
 from device.config import Config  # type: ignore
 from device.log import init_logging, get_logger  # type: ignore
 from device.version import Version  # type: ignore
-from device import telescope
+from device import horizon, telescope
 import threading
 import pydash
 
@@ -4572,6 +4572,17 @@ class PlanningResource:
         planner_model = (
             planner_model_key(get_device_model(telescope_id)) if telescope_id else None
         )
+        horizon_profile, horizon_error = horizon.configured_profile()
+        horizon_curve = None
+        if horizon_profile is not None:
+            # One point per degree for the Horizon card, clamped to its 0-90 range.
+            horizon_curve = [
+                (
+                    azimuth,
+                    round(min(max(horizon_profile.altitude_at(azimuth), 0), 90), 2),
+                )
+                for azimuth in range(361)
+            ]
         render_template(
             req,
             resp,
@@ -4584,6 +4595,11 @@ class PlanningResource:
             clear_sky_img_src=nearest_csc["full_img"],
             planning_cards=planning_cards,
             utc_offset=utc_offset,
+            horizon_limits=horizon_profile.step_limits() if horizon_profile else None,
+            horizon_curve=horizon_curve,
+            horizon_point_count=len(horizon_profile.points) if horizon_profile else 0,
+            horizon_file=Config.horizon_file,
+            horizon_error=horizon_error,
             **context,
         )
 

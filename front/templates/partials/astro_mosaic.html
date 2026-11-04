@@ -332,7 +332,9 @@
         location_lat: {{ config_lat | default(0, true) | tojson }},
         location_lng: {{ config_long | default(0, true) | tojson }},
         horizonSoft: null,
-        horizonHard: [30],
+        // The configured horizon profile, highest altitude every 5 degrees;
+        // a flat 30 degrees without one.
+        horizonHard: {% if horizon_limits %}{{ horizon_limits | tojson }}{% else %}[30]{% endif %},
         meridian_transit: null,
         UTCdate_ms: null,
         // The time zone of the telescope site, which the charts are drawn

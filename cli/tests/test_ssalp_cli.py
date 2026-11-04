@@ -174,6 +174,27 @@ class TestMountCommands:
             result = runner.invoke(cli, ["mount", "park"])
         assert result.exit_code == 0
 
+    def test_horizon(self, runner):
+        with patch("ssalp_api_client.cli.main.SSAlpApiClient") as MockClient:
+            client = MockClient.return_value = _mock_client()
+            client.get_horizon = AsyncMock(return_value={"points": [[0, 12]]})
+            result = runner.invoke(cli, ["mount", "horizon"])
+        assert result.exit_code == 0
+        client.get_horizon.assert_awaited_once_with()
+
+    def test_visibility(self, runner):
+        with patch("ssalp_api_client.cli.main.SSAlpApiClient") as MockClient:
+            client = MockClient.return_value = _mock_client()
+            client.check_target_visibility = AsyncMock(return_value={"visible": True})
+            result = runner.invoke(
+                cli,
+                ["mount", "visibility", "--ra", "00:42:44", "--dec", "+41:16:09"],
+            )
+        assert result.exit_code == 0
+        client.check_target_visibility.assert_awaited_once_with(
+            ra="00:42:44", dec="+41:16:09", is_j2000=True
+        )
+
 
 # ── camera subcommands ─────────────────────────────────────────────────────
 

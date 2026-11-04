@@ -3,6 +3,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from seestar_mcp.tools.pointing import (
+    check_target_visibility_tool,
+    get_horizon_tool,
     get_pa_error_tool,
     get_solve_result_tool,
     goto_target_tool,
@@ -85,3 +87,18 @@ async def test_client_error_mapped(make_client_spy, mock_client):
 
     mock_client.start_solve.side_effect = SSAlpError("boom")
     assert await start_solve_tool() == {"ok": False, "error": "boom"}
+
+
+async def test_get_horizon(make_client_spy, mock_client):
+    await get_horizon_tool(telescope_id=0)
+    make_client_spy.assert_called_once_with(telescope_id=0)
+    mock_client.get_horizon.assert_awaited_once_with()
+
+
+async def test_check_target_visibility_accepts_sexagesimal(
+    make_client_spy, mock_client
+):
+    await check_target_visibility_tool(ra="00:42:44", dec="+41:16:09")
+    mock_client.check_target_visibility.assert_awaited_once_with(
+        "00:42:44", "+41:16:09", True
+    )

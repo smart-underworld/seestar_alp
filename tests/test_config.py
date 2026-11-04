@@ -657,6 +657,77 @@ def test_load_from_form_no_seestars_key_in_dict(monkeypatch):
     assert cfg.seestars[0]["name"] == "Test Scope"
 
 
+# ---------------------------------------------------------------------------
+# horizon settings
+# ---------------------------------------------------------------------------
+
+
+def test_load_horizon_defaults():
+    cfg = make_config()
+    cfg.load("", preloaded_dict={})
+    assert cfg.horizon_file == ""
+    assert cfg.horizon_skip_hidden_targets is False
+    assert cfg.horizon_margin == 0.0
+
+
+def test_load_reads_horizon_settings():
+    cfg = make_config()
+    cfg.load(
+        "",
+        preloaded_dict={
+            "seestar_initialization": {
+                "horizon_file": "/etc/seestar/site.hrz",
+                "horizon_skip_hidden_targets": True,
+                "horizon_margin": 2.5,
+            }
+        },
+    )
+    assert cfg.horizon_file == "/etc/seestar/site.hrz"
+    assert cfg.horizon_skip_hidden_targets is True
+    assert cfg.horizon_margin == 2.5
+
+
+def test_load_from_form_saves_horizon_settings(monkeypatch):
+    cfg = make_loaded_config()
+    monkeypatch.setattr(cfg, "load", lambda path, preloaded_dict=None: None)
+
+    req = FakeRequest(
+        _base_form_media(
+            horizon_file=" /etc/seestar/site.hrz ",
+            horizon_skip_hidden_targets="on",
+            horizon_margin="3",
+        )
+    )
+    cfg.load_from_form(req)
+
+    section = cfg._dict["seestar_initialization"]
+    assert section["horizon_file"] == "/etc/seestar/site.hrz"
+    assert section["horizon_skip_hidden_targets"] is True
+    assert section["horizon_margin"] == 3.0
+
+
+def test_load_from_form_without_horizon_fields_keeps_a_flat_horizon(monkeypatch):
+    # A settings form rendered before the horizon fields existed.
+    cfg = make_loaded_config()
+    monkeypatch.setattr(cfg, "load", lambda path, preloaded_dict=None: None)
+
+    cfg.load_from_form(FakeRequest(_base_form_media()))
+
+    section = cfg._dict["seestar_initialization"]
+    assert section["horizon_file"] == ""
+    assert section["horizon_skip_hidden_targets"] is False
+    assert section["horizon_margin"] == 0.0
+
+
+def test_render_config_html_offers_horizon_settings():
+    cfg = make_config()
+    cfg.load("", preloaded_dict={})
+    html = cfg.render_config_html()
+    assert 'name="horizon_file"' in html
+    assert 'name="horizon_skip_hidden_targets"' in html
+    assert 'name="horizon_margin"' in html
+
+
 def test_load_from_form_saves_site_timezone(monkeypatch):
     cfg = make_loaded_config()
     monkeypatch.setattr(cfg, "load", lambda path, preloaded_dict=None: None)
@@ -696,3 +767,44 @@ def test_render_config_html_offers_site_timezone():
     html = cfg.render_config_html()
     assert 'name="init_timezone"' in html
     assert 'value="Europe/Paris"' in html
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("", 0.0),
+        (None, 0.0),
+        ("2.5", 2.5),
+        ("2,5", 2.5),
+        ("5°", 5.0),
+        (" 5 ° ", 5.0),
+        ("90", 90.0),
+    ],
+)
+def test_horizon_margin_from_form_reads_degrees(value, expected):
+    cfg = make_config()
+    cfg.horizon_margin = 3.0
+    assert cfg.horizon_margin_from_form(value) == expected
+
+
+@pytest.mark.parametrize("value", ["abc", "-1", "91", "nan", "inf"])
+def test_horizon_margin_from_form_keeps_the_current_margin(value):
+    cfg = make_config()
+    cfg.horizon_margin = 3.0
+    assert cfg.horizon_margin_from_form(value) == 3.0
+
+
+def test_load_from_form_bad_horizon_margin_saves_the_rest(monkeypatch):
+    """A bad margin no longer raises halfway through the save."""
+    cfg = make_loaded_config()
+    cfg.horizon_margin = 1.5
+    monkeypatch.setattr(cfg, "load", lambda path, preloaded_dict=None: None)
+
+    req = FakeRequest(
+        _base_form_media(horizon_margin="abc", horizon_file=" /etc/site.hrz ")
+    )
+    cfg.load_from_form(req)
+
+    section = cfg._dict["seestar_initialization"]
+    assert section["horizon_margin"] == 1.5
+    assert section["horizon_file"] == "/etc/site.hrz"

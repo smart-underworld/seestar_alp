@@ -1,0 +1,34 @@
+<div id="horizoncollapse">
+    {% if horizon_error %}
+        <div class="alert alert-warning" role="alert">
+            Horizon file not used: {{ horizon_error }}
+        </div>
+    {% elif horizon_curve %}
+        {# Altitude 0 to 90 degrees upwards, azimuth 0 to 360 degrees rightwards. #}
+        <svg id="horizon-profile" viewBox="-14 -4 384 104" width="100%" role="img"
+             aria-label="Horizon profile: altitude of the obstructions by azimuth">
+            {% for altitude in [30, 60] %}
+                <line x1="0" y1="{{ 90 - altitude }}" x2="360" y2="{{ 90 - altitude }}"
+                      stroke="currentColor" stroke-opacity="0.25" stroke-width="0.3"/>
+                <text x="-1" y="{{ 91 - altitude }}" font-size="4" text-anchor="end" fill="currentColor">{{ altitude }}&deg;</text>
+            {% endfor %}
+            <polygon fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-width="0.6"
+                     points="0,90 {% for azimuth, altitude in horizon_curve %}{{ azimuth }},{{ 90 - altitude }} {% endfor %}360,90"/>
+            <line x1="0" y1="90" x2="360" y2="90" stroke="currentColor" stroke-width="0.4"/>
+            {% for azimuth, name in [(0, "N"), (90, "E"), (180, "S"), (270, "W"), (360, "N")] %}
+                <text x="{{ azimuth }}" y="98" font-size="5" text-anchor="middle" fill="currentColor">{{ name }}</text>
+            {% endfor %}
+        </svg>
+        <p class="small text-body-secondary mb-0">
+            {{ horizon_file }} &middot; {{ horizon_point_count }} points &middot;
+            the AstroMosaic day chart uses this profile as its horizon.
+        </p>
+    {% else %}
+        <p class="mb-0">
+            No horizon profile: the planner assumes a flat horizon at 30&deg;.
+            Set <em>Horizon file</em> in Settings to a N.I.N.A. horizon file (.hrz,
+            one "azimuth altitude" pair per line) to draw the trees and roofs around
+            the site.
+        </p>
+    {% endif %}
+</div>

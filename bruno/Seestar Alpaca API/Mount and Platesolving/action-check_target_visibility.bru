@@ -1,0 +1,23 @@
+meta {
+  name: action-check_target_visibility
+  type: http
+  seq: 101
+}
+
+put {
+  url: {{base_url}}/api/v1/telescope/{{dev_num}}/action
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+  Accept: application/json
+}
+
+body:form-urlencoded {
+  Action: check_target_visibility
+  Parameters: {"ra":"00:42:44","dec":"+41:16:09","is_j2000":true}
+  ClientID: 1
+  ClientTransactionID: 999
+}

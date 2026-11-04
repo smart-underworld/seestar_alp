@@ -2962,3 +2962,62 @@ def test_site_utc_offset_falls_back_to_server_zone(monkeypatch):
     # An unknown name is ignored rather than breaking the planning page.
     monkeypatch.setattr(Config, "init_timezone", "Mars/Olympus_Mons", raising=False)
     assert front_app.site_utc_offset_hours(winter) == -6.0
+
+
+def _render_partial(name, **context):
+    from jinja2 import Environment, FileSystemLoader
+
+    env = Environment(loader=FileSystemLoader("front/templates"))
+    base = {
+        "planner_model": "S50",
+        "utc_offset": 0,
+        "config_lat": 44.06,
+        "config_long": 0.65,
+        "telescope": {"device_num": 1},
+        "root": "",
+    }
+    return env.get_template(name).render(**{**base, **context})
+
+
+def test_astro_mosaic_template_flat_horizon_without_profile():
+    html = _render_partial("partials/astro_mosaic.html", horizon_limits=None)
+    assert "horizonHard: [30]," in html
+
+
+def test_astro_mosaic_template_uses_horizon_profile():
+    limits = [12.5] * 71 + [40]
+    html = _render_partial("partials/astro_mosaic.html", horizon_limits=limits)
+    line = re.search(r"horizonHard: (\[[^\]]*\]),", html)
+    assert json.loads(line.group(1)) == limits
+
+
+def test_horizon_card_draws_the_profile():
+    curve = [(azimuth, 10) for azimuth in range(361)]
+    html = _render_partial(
+        "partials/horizon.html",
+        horizon_curve=curve,
+        horizon_point_count=4,
+        horizon_file="/etc/seestar/site.hrz",
+        horizon_error=None,
+    )
+    assert 'id="horizon-profile"' in html
+    assert "0,80 1,80" in html  # altitude 10 drawn 80 units down a 0-90 scale
+    assert "/etc/seestar/site.hrz" in html
+    assert "4 points" in html
+
+
+def test_horizon_card_reports_an_unusable_file():
+    html = _render_partial(
+        "partials/horizon.html",
+        horizon_curve=None,
+        horizon_error="site.hrz, line 2: expected 'azimuth altitude'",
+    )
+    assert "Horizon file not used" in html
+    assert "line 2" in html
+    assert 'id="horizon-profile"' not in html
+
+
+def test_horizon_card_explains_how_to_set_a_profile():
+    html = _render_partial("partials/horizon.html", horizon_curve=None)
+    assert "No horizon profile" in html
+    assert "Horizon file" in html
