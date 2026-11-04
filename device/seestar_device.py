@@ -182,6 +182,7 @@ class Seestar:
         self.event_queue = collections.deque(maxlen=20)
         self.eventbus = signal(f"{self.device_name}.eventbus")
         self.is_EQ_mode: bool = False  # updated from device state on startup
+        self.is_EQ_mode_confirmed: bool = False  # True once read from the device
         # self.trace = MessageTrace(self.device_num, self.port)
 
     def _load_interop_pem(self) -> None:
@@ -530,6 +531,12 @@ class Seestar:
         self._connection_had_sync_reply = False
         self._consecutive_sync_timeouts = 0
         self._auth_gap_logged = False
+        # Mount mode is per-connection too: the user can switch Alt/Az <-> EQ
+        # while the scope is powered off, so a reconnect must re-confirm it
+        # rather than keep reporting the previous session's mode.
+        with self.event_state_lock:
+            self.is_EQ_mode = False
+            self.is_EQ_mode_confirmed = False
         self.socket_force_close()
 
     def send_udp_intro(self) -> None:
@@ -722,6 +729,12 @@ class Seestar:
                             self.logger.debug(f"{parsed_data}")
                         if parsed_data["method"] == "get_view_state":
                             self.update_view_state(parsed_data)
+                        # Refresh the cached mount mode from EVERY get_device_state
+                        # reply (sync, async, reauth wait, late after a sync
+                        # timeout), before publishing it below so a sync waiter
+                        # that wakes on response_dict already sees the update.
+                        if parsed_data["method"] == "get_device_state":
+                            self._update_eq_mode_from_device_state(parsed_data)
                         # keep a running queue of last 100 responses for sync call results
                         self.response_dict[parsed_data["id"]] = parsed_data
 
@@ -897,6 +910,27 @@ class Seestar:
         self._note_sync_reply()
         return self.response_dict[cur_cmdid]
 
+    def _update_eq_mode_from_device_state(self, response) -> bool:
+        """Cache mount mode from a get_device_state reply.
+
+        Confirms only when the reply actually carries a bool/int
+        ``mount.equ_mode``; an absent, empty, partial or malformed mount block
+        (e.g. ``null`` or the string ``"false"``, which is truthy) leaves the
+        mode unconfirmed, so get_event_state never exposes it as real. Returns
+        True if updated.
+        """
+        result = response.get("result") if isinstance(response, dict) else None
+        mount = result.get("mount") if isinstance(result, dict) else None
+        equ_mode = mount.get("equ_mode") if isinstance(mount, dict) else None
+        if not isinstance(equ_mode, int):  # bool is an int subclass
+            return False
+        # Under the lock get_event_state reads these with, so a poller never
+        # sees confirmed=True next to the previous mode.
+        with self.event_state_lock:
+            self.is_EQ_mode = bool(equ_mode)
+            self.is_EQ_mode_confirmed = True
+        return True
+
     # No-reply sync timeouts on a fresh connection before we log the auth-gap
     # diagnostic. This is 1, not several: a cold-start-busy scope and an
     # unauthenticated one look identical no matter how many timeouts you
@@ -963,13 +997,19 @@ class Seestar:
             )
 
             # Mount mode is not carried by any firmware event, but we cache it from
-            # get_device_state during the startup sequence (is_EQ_mode). Inject it
-            # here, like the scheduler block, so pollers get it without a blocking
-            # RPC to the scope (get_device_state times out during imaging).
+            # get_device_state (is_EQ_mode). Inject it here, like the scheduler
+            # block, so pollers get it without a blocking RPC to the scope
+            # (get_device_state times out during imaging). The block and its
+            # equ_mode key are always present for existing pollers, but equ_mode
+            # is None until actually read from the device (equ_mode_confirmed):
+            # never expose the unconfirmed default as a real mode.
             if "mount" not in self.event_state:
                 self.event_state["mount"] = {}
             self.event_state["mount"]["Event"] = "Mount"
-            self.event_state["mount"]["equ_mode"] = self.is_EQ_mode
+            self.event_state["mount"]["equ_mode"] = (
+                self.is_EQ_mode if self.is_EQ_mode_confirmed else None
+            )
+            self.event_state["mount"]["equ_mode_confirmed"] = self.is_EQ_mode_confirmed
 
             if "EqModePA" in self.event_state:
                 self.event_state["3PPA"] = dict(self.event_state["EqModePA"])
@@ -1744,11 +1784,9 @@ class Seestar:
             self.firmware_ver_int = response["result"]["device"]["firmware_ver_int"]
             self.logger.info(f"Firmware version: {self.firmware_ver_int}")
 
-            # Update EQ mode from actual device state; config value may not reflect the mount
-            if "mount" in response.get("result", {}):
-                self.is_EQ_mode = response["result"]["mount"].get(
-                    "equ_mode", self.is_EQ_mode
-                )
+            # EQ mode from actual device state; config value may not reflect the
+            # mount. The receive thread already cached it from this reply.
+            if self.is_EQ_mode_confirmed:
                 self.logger.info(f"EQ mode from device state: {self.is_EQ_mode}")
 
             if do_3PPA and not self.is_EQ_mode:

@@ -961,7 +961,197 @@ def test_get_event_state_survives_concurrent_event_state_inserts(seestar):
     assert errors == []
 
 
+def _receive_device_replies(monkeypatch, seestar, *replies):
+    """Feed JSON-RPC replies through the real receive loop, one per socket read.
+
+    The scope answers on the event socket; the receive thread caches the mount
+    mode and publishes each reply for any sync waiter.
+    """
+    pending = [json.dumps(reply) + "\r\n" for reply in replies]
+    was_watching = seestar.is_watch_events
+    seestar.is_watch_events = True
+
+    def fake_get_socket_msg():
+        if not pending:
+            seestar.is_watch_events = False
+            return None
+        return pending.pop(0)
+
+    monkeypatch.setattr(seestar, "get_socket_msg", fake_get_socket_msg)
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    try:
+        seestar.receive_message_thread_fn()
+    finally:
+        seestar.is_watch_events = was_watching
+
+
+def test_send_message_param_sync_confirms_eq_mode_from_device_state(
+    monkeypatch, seestar
+):
+    reply = {
+        "jsonrpc": "2.0",
+        "method": "get_device_state",
+        "result": {"mount": {"equ_mode": True}},
+        "id": 123,
+    }
+
+    def send(_data):
+        # The scope answers on the socket; the receive thread files the reply.
+        _receive_device_replies(monkeypatch, seestar, reply)
+        return 123
+
+    monkeypatch.setattr(seestar, "send_message_param", send)
+    out = seestar.send_message_param_sync({"method": "get_device_state"})
+    assert out["result"]["mount"]["equ_mode"] is True
+    assert seestar.is_EQ_mode is True
+    assert seestar.is_EQ_mode_confirmed is True
+
+
+def test_async_get_device_state_reply_confirms_eq_mode(monkeypatch, seestar):
+    # No sync waiter: an async poll or reauth-wait reply must still update the mode.
+    _receive_device_replies(
+        monkeypatch,
+        seestar,
+        {
+            "jsonrpc": "2.0",
+            "method": "get_device_state",
+            "result": {"mount": {"equ_mode": False}},
+            "id": 900,
+        },
+    )
+    assert seestar.is_EQ_mode_confirmed is True
+    assert seestar.is_EQ_mode is False
+
+
+def test_late_get_device_state_reply_after_sync_timeout_confirms_eq_mode(
+    monkeypatch, seestar
+):
+    out = _run_one_sync_timeout(monkeypatch, seestar, 41)
+    assert "Exceeded" in out["result"]  # timeout returns the request, not a reply
+    assert seestar.is_EQ_mode_confirmed is False
+
+    # The scope's reply lands after the caller gave up: it must still count.
+    _receive_device_replies(
+        monkeypatch,
+        seestar,
+        {
+            "jsonrpc": "2.0",
+            "method": "get_device_state",
+            "result": {"mount": {"equ_mode": True}},
+            "id": 41,
+        },
+    )
+    assert seestar.is_EQ_mode_confirmed is True
+    assert seestar.is_EQ_mode is True
+
+
+def test_sync_timeout_error_result_never_confirms_eq_mode(monkeypatch, seestar):
+    out = _run_one_sync_timeout(monkeypatch, seestar, 42)
+    assert out["method"] == "get_device_state"
+    assert isinstance(out["result"], str)  # the error string, not a device reply
+    assert seestar.is_EQ_mode_confirmed is False
+
+
+def test_firmware_error_reply_does_not_confirm_eq_mode(monkeypatch, seestar):
+    _receive_device_replies(
+        monkeypatch,
+        seestar,
+        {
+            "jsonrpc": "2.0",
+            "method": "get_device_state",
+            "error": {"code": -1, "message": "busy"},
+            "id": 7,
+        },
+    )
+    assert seestar.response_dict[7]["error"]["message"] == "busy"
+    assert seestar.is_EQ_mode_confirmed is False
+
+
+@pytest.mark.parametrize("equ_mode", ["false", "true", None, 1.0, [], {}])
+def test_sync_get_device_state_rejects_non_integer_equ_mode(
+    monkeypatch, seestar, equ_mode
+):
+    # "false" is truthy and 1.0 is not a firmware flag: neither may confirm.
+    reply = {
+        "jsonrpc": "2.0",
+        "method": "get_device_state",
+        "result": {"mount": {"equ_mode": equ_mode}},
+        "id": 11,
+    }
+
+    def send(_data):
+        _receive_device_replies(monkeypatch, seestar, reply)
+        return 11
+
+    monkeypatch.setattr(seestar, "send_message_param", send)
+    seestar.send_message_param_sync({"method": "get_device_state"})
+    assert seestar.is_EQ_mode_confirmed is False
+    assert seestar.is_EQ_mode is False
+
+
+@pytest.mark.parametrize(
+    "equ_mode, expected", [(True, True), (False, False), (1, True), (0, False)]
+)
+def test_get_device_state_confirms_bool_and_int_equ_mode(
+    monkeypatch, seestar, equ_mode, expected
+):
+    _receive_device_replies(
+        monkeypatch,
+        seestar,
+        {
+            "jsonrpc": "2.0",
+            "method": "get_device_state",
+            "result": {"mount": {"equ_mode": equ_mode}},
+            "id": 12,
+        },
+    )
+    assert seestar.is_EQ_mode_confirmed is True
+    assert seestar.is_EQ_mode is expected
+
+
+def test_disconnect_clears_confirmed_eq_mode(seestar):
+    seestar.is_EQ_mode = True
+    seestar.is_EQ_mode_confirmed = True
+    seestar.is_connected = True
+    seestar.s = _DummySocket()
+    seestar.disconnect()
+    assert seestar.is_EQ_mode is False
+    assert seestar.is_EQ_mode_confirmed is False
+    assert seestar.get_event_state()["result"]["mount"]["equ_mode"] is None
+
+
+def test_reconnect_clears_stale_eq_mode_from_previous_connection(monkeypatch, seestar):
+    # A power-cycled scope must not keep reporting the previous session's mode.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
+    monkeypatch.setattr(seestar, "send_udp_intro", lambda: None)
+
+    class Sock:
+        def settimeout(self, _v):
+            return None
+
+        def connect(self, _addr):
+            return None
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr("device.seestar_device.socket.socket", lambda *_a: Sock())
+    seestar.is_EQ_mode = True
+    seestar.is_EQ_mode_confirmed = True
+    seestar.is_connected = False
+    assert seestar.reconnect() is True
+    assert seestar.is_EQ_mode_confirmed is False
+    assert seestar.is_EQ_mode is False
+
+
 def test_get_event_state_injects_mount_equ_mode(seestar):
+    # The mount block is always present (existing pollers never KeyError), but
+    # equ_mode stays None until the device actually reports it.
+    out = seestar.get_event_state()
+    assert out["result"]["mount"]["equ_mode"] is None
+    assert out["result"]["mount"]["equ_mode_confirmed"] is False
+
+    seestar.is_EQ_mode_confirmed = True
     seestar.is_EQ_mode = True
     out = seestar.get_event_state()
     assert out["result"]["mount"]["Event"] == "Mount"
@@ -1325,6 +1515,59 @@ def test_start_up_thread_fn_success_and_old_firmware(monkeypatch, seestar):
     seestar.schedule["state"] = "stopped"
     seestar.start_up_thread_fn({"lat": 1.1, "lon": 2.2}, is_from_schedule=True)
     assert seestar.schedule["state"] == "stopped"
+
+
+@pytest.mark.parametrize(
+    "mount, confirmed, equ_mode",
+    [
+        ({}, False, False),
+        ({"move_type": "none"}, False, False),
+        ({"equ_mode": None}, False, False),
+        ({"equ_mode": True}, True, True),
+        ({"equ_mode": False}, True, False),
+    ],
+)
+def test_start_up_confirms_eq_mode_only_when_equ_mode_present(
+    monkeypatch, seestar, mount, confirmed, equ_mode
+):
+    # A startup get_device_state whose mount block lacks equ_mode must NOT mark
+    # the default as confirmed, or get_event_state would expose it as real.
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone_name", lambda: "UTC"
+    )
+
+    import datetime as _dt
+
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone", lambda: _dt.timezone.utc
+    )
+    monkeypatch.setattr("device.seestar_device.EarthLocation", lambda **_k: object())
+    monkeypatch.setattr(seestar, "set_setting", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(seestar, "play_sound", lambda _sid: None)
+
+    def fake_sync(payload):
+        if payload["method"] == "get_device_state":
+            reply = {
+                "jsonrpc": "2.0",
+                "method": "get_device_state",
+                "result": {"device": {"firmware_ver_int": 2500}, "mount": mount},
+                "id": 501,
+            }
+            # The receive thread caches the mode from the reply, as on the socket.
+            _receive_device_replies(monkeypatch, seestar, reply)
+            return reply
+        return {"result": "ok"}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
+
+    seestar.start_up_thread_fn(
+        {"lat": 1.1, "lon": 2.2, "auto_focus": False, "3ppa": False}
+    )
+    assert seestar.is_EQ_mode_confirmed is confirmed
+    assert seestar.is_EQ_mode is equ_mode
+    out = seestar.get_event_state()
+    assert out["result"]["mount"]["equ_mode"] is (equ_mode if confirmed else None)
 
 
 def test_start_up_thread_fn_sends_pi_set_time_as_object_and_logs_failure(
