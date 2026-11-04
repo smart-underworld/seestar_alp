@@ -43,6 +43,8 @@ def _isolate(monkeypatch):
         ("/a/../b", None),  # dot segments would climb out of the prefix
         ("/a/./b", None),
         ("/a b", None),
+        (1, None),  # a non-string TOML value must not raise AttributeError
+        (True, None),
     ],
 )
 def test_normalize_root_path(value, expected):
