@@ -231,6 +231,17 @@ def normalize_root_path(value):
     return value
 
 
+_warned_root_paths = set()
+
+
+def _warn_invalid_root_path(value):
+    # Warn once per distinct value; a rejected [webui_settings] root_path would
+    # otherwise be dropped silently on every request.
+    if repr(value) not in _warned_root_paths:
+        _warned_root_paths.add(repr(value))
+        logger.warning(f"Ignoring invalid [webui_settings] root_path: {value!r}")
+
+
 def get_root_path(req):
     """The URL prefix SSC is served under for this request ("" when none).
 
@@ -244,7 +255,10 @@ def get_root_path(req):
             return prefix
         if prefix is None:
             logger.debug(f"Ignoring invalid X-Forwarded-Prefix header: {header!r}")
-    return normalize_root_path(Config.root_path) or ""
+    configured = normalize_root_path(Config.root_path)
+    if configured is None:
+        _warn_invalid_root_path(Config.root_path)
+    return configured or ""
 
 
 def with_root_path(root_path, url):

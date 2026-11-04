@@ -78,6 +78,22 @@ def test_invalid_config_is_ignored(monkeypatch):
     assert front_app.get_root_path(_Req(None)) == ""
 
 
+def test_invalid_config_warns_once_per_value(monkeypatch):
+    from unittest import mock
+
+    logger = mock.MagicMock()
+    monkeypatch.setattr(front_app, "logger", logger)
+    monkeypatch.setattr(front_app, "_warned_root_paths", set())
+    monkeypatch.setattr(Config, "root_path", "no-leading-slash")
+    for _ in range(3):
+        assert front_app.get_root_path(_Req(None)) == ""
+    assert logger.warning.call_count == 1
+
+    monkeypatch.setattr(Config, "root_path", "/ok")
+    assert front_app.get_root_path(_Req(None)) == "/ok"
+    assert logger.warning.call_count == 1
+
+
 @pytest.mark.parametrize(
     ("url", "expected"),
     [
