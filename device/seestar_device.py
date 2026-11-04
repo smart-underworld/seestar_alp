@@ -465,38 +465,38 @@ class Seestar:
         now = time.time()
         if now - self._last_auth_attempt < self._AUTH_RETRY_INTERVAL_S:
             return
-        me = threading.current_thread()
         with self._conn_cond:
             if self._reconnect_leader is not None:
                 return  # a reconnect is handshaking; it authenticates
-            self._reconnect_leader = me
+            sock = self.s
         self._last_auth_attempt = now
         # debug level: this repeats every retry interval while the scope is
         # busy, which can be a multi-hour imaging session.
         self.logger.debug("Attempting firmware authentication")
+        # No reconnect leadership here: this socket already carries traffic, and
+        # a busy scope can stall get_verify_str for ~8 s of every retry interval.
+        # Ordinary commands keep going out meanwhile, as they did before the
+        # retry. Only a fresh socket (reconnect) holds commands back for auth.
         try:
-            # Leadership is held through the handshake, so ordinary senders wait
-            # for auth. authenticate() never disconnects.
-            try:
-                ok = self.authenticate()
-            except Exception as e:
-                # authenticate() already guards its own errors; this is a last-resort
-                # net so a surprise never takes down the heartbeat loop or the socket.
-                self.logger.warning(
-                    f"Authentication attempt raised (staying connected, will retry): {e}"
-                )
-                ok = False
-            if ok:
-                self.is_authenticated = True
-                self.logger.info("Firmware authentication succeeded")
-            else:
-                self.logger.debug(
-                    "Firmware authentication still busy; staying connected, will retry"
-                )
-        finally:
-            with self._conn_cond:
-                self._reconnect_leader = None
-                self._conn_cond.notify_all()
+            ok = self.authenticate()
+        except Exception as e:
+            # authenticate() already guards its own errors; this is a last-resort
+            # net so a surprise never takes down the heartbeat loop or the socket.
+            self.logger.warning(
+                f"Authentication attempt raised (staying connected, will retry): {e}"
+            )
+            ok = False
+        if not ok:
+            self.logger.debug(
+                "Firmware authentication still busy; staying connected, will retry"
+            )
+        elif self.s is not sock:
+            # A reconnect replaced the socket mid-handshake; it authenticates
+            # the new one itself.
+            self.logger.debug("Socket replaced during authentication; not reusing it")
+        else:
+            self.is_authenticated = True
+            self.logger.info("Firmware authentication succeeded")
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
     #       "result":0, "error":"dummy error",

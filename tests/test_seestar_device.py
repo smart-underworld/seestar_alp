@@ -1457,15 +1457,15 @@ def test_simultaneous_send_failures_reconnect_and_authenticate_once(monkeypatch)
         server.close()
 
 
-def test_command_waits_for_auth_while_auth_rpc_goes_through(monkeypatch):
-    # While the heartbeat thread authenticates, its own handshake RPC must
-    # reach the scope, and any other command must wait until auth finishes
+def test_command_waits_for_reconnect_auth_while_auth_rpc_goes_through(monkeypatch):
+    # While a reconnect authenticates its fresh socket, its own handshake RPC
+    # must reach the scope, and any other command must wait until auth finishes
     # (unauthenticated firmware drops it). Nothing may deadlock.
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
     monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem", raising=False)
-    scope = Seestar(DummyLogger(), "127.0.0.1", 4700, "TestScope", 1, True)
-    ours, peer = socket.socketpair()
-    scope.s = ours
-    scope.is_connected = True
+    server = _ScopeServer()
+    scope = Seestar(DummyLogger(), "127.0.0.1", server.port, "TestScope", 1, True)
+    monkeypatch.setattr(scope, "send_udp_intro", lambda: None)
     auth_sent = threading.Event()
     finish_auth = threading.Event()
 
@@ -1478,6 +1478,55 @@ def test_command_waits_for_auth_while_auth_rpc_goes_through(monkeypatch):
 
     monkeypatch.setattr(scope, "authenticate", authenticate)
     results = []
+    reconnecting = threading.Thread(target=scope.reconnect)
+    command = threading.Thread(
+        target=lambda: results.append(
+            scope.send_message('{"id": 1, "method": "get_device_state"}\r\n')
+        )
+    )
+    try:
+        reconnecting.start()
+        assert auth_sent.wait(timeout=5), "the leader's own auth RPC was blocked"
+        command.start()
+        command.join(timeout=0.3)
+        assert command.is_alive(), "command reached the scope mid-handshake"
+    finally:
+        finish_auth.set()
+        _assert_threads_finished([reconnecting, command])
+    try:
+        conns = server.stop()
+        assert len(conns) == 1
+        received = _recv_lines(conns[0], 2)
+        methods = [json.loads(line)["method"] for line in received.split("\r\n")[:-1]]
+        assert methods == ["get_verify_str", "get_device_state"]
+        assert results == [True]
+        assert scope.is_authenticated
+    finally:
+        scope.socket_force_close()
+        server.close()
+
+
+def test_heartbeat_auth_retry_does_not_hold_back_commands(monkeypatch):
+    # A heartbeat retry runs on a socket already carrying traffic. While a busy
+    # scope stalls get_verify_str (up to ~8 s of every retry interval), ordinary
+    # commands must keep going straight out, not wait for the handshake.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem", raising=False)
+    scope = Seestar(DummyLogger(), "127.0.0.1", 4700, "TestScope", 1, True)
+    ours, peer = socket.socketpair()
+    scope.s = ours
+    scope.is_connected = True
+    auth_sent = threading.Event()
+    finish_auth = threading.Event()
+
+    def authenticate():
+        _cmdid, sent = scope._send_json({"id": None, "method": "get_verify_str"})
+        if sent:
+            auth_sent.set()
+        finish_auth.wait(timeout=5)  # the busy scope hasn't answered yet
+        return sent
+
+    monkeypatch.setattr(scope, "authenticate", authenticate)
+    results = []
     auth = threading.Thread(target=scope._maybe_authenticate)
     command = threading.Thread(
         target=lambda: results.append(
@@ -1486,10 +1535,11 @@ def test_command_waits_for_auth_while_auth_rpc_goes_through(monkeypatch):
     )
     try:
         auth.start()
-        assert auth_sent.wait(timeout=5), "the leader's own auth RPC was blocked"
+        assert auth_sent.wait(timeout=5)
         command.start()
-        command.join(timeout=0.3)
-        assert command.is_alive(), "command reached the scope mid-handshake"
+        command.join(timeout=2)
+        assert not command.is_alive(), "command held back by a heartbeat auth retry"
+        assert results == [True]
     finally:
         finish_auth.set()
         _assert_threads_finished([auth, command])
@@ -1497,11 +1547,34 @@ def test_command_waits_for_auth_while_auth_rpc_goes_through(monkeypatch):
         received = _recv_lines(peer, 2)
         methods = [json.loads(line)["method"] for line in received.split("\r\n")[:-1]]
         assert methods == ["get_verify_str", "get_device_state"]
-        assert results == [True]
         assert scope.is_authenticated
     finally:
         ours.close()
         peer.close()
+
+
+def test_heartbeat_auth_does_not_mark_a_replaced_socket_authenticated(monkeypatch):
+    # Without leadership, a reconnect can replace the socket while a heartbeat
+    # handshake is in flight. That handshake's success belongs to the old
+    # socket; the new one must not be reported authenticated because of it.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem", raising=False)
+    scope = Seestar(DummyLogger(), "127.0.0.1", 4700, "TestScope", 1, True)
+    old, old_peer = socket.socketpair()
+    new, new_peer = socket.socketpair()
+    scope.s = old
+    scope.is_connected = True
+
+    def authenticate():
+        scope.s = new  # a reconnect lands mid-handshake
+        return True
+
+    monkeypatch.setattr(scope, "authenticate", authenticate)
+    try:
+        scope._maybe_authenticate()
+        assert scope.is_authenticated is False
+    finally:
+        for s in (old, old_peer, new, new_peer):
+            s.close()
 
 
 def test_timed_out_partial_write_drops_socket_and_next_send_uses_new_one(
