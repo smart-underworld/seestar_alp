@@ -1,17 +1,17 @@
 <!doctype html>
-<html lang="en" data-bs-theme="{{ webui_theme }}">
+<html lang="en" data-bs-theme="{{ webui_theme }}"{% if root_path %} data-root-path="{{ root_path }}"{% endif %}>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}{% endblock %} - SSC</title>
     {#    <link href="/public/xterm.css" rel="stylesheet">#}
-    <script src="/public/htmx.min.js"></script>
-    <script src="/public/sse.js"></script>
-    <script src="/public/nipplejs.min.js"></script>
-    <script src="/public/liveview.js"></script>
+    <script src="{{ root_path }}/public/htmx.min.js"></script>
+    <script src="{{ root_path }}/public/sse.js"></script>
+    <script src="{{ root_path }}/public/nipplejs.min.js"></script>
+    <script src="{{ root_path }}/public/liveview.js"></script>
     {#    <script src="/public/xterm.js"></script>#}
-    <link rel="icon" type="image/x-icon" href="/public/favicon.ico">
-    <link href="/public/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" href="{{ root_path }}/public/favicon.ico">
+    <link href="{{ root_path }}/public/bootstrap.min.css" rel="stylesheet">
     {% if webui_font_url %}
     <link href="{{ webui_font_url }}" rel="stylesheet">
     {% endif %}
@@ -1107,8 +1107,8 @@
     </section>
 </main>
 
-<script src="/public/bootstrap.bundle.min.js"></script>
-<script src="/public/main.js"></script>
+<script src="{{ root_path }}/public/bootstrap.bundle.min.js"></script>
+<script src="{{ root_path }}/public/main.js"></script>
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const hoistModalsToBody = function (root) {

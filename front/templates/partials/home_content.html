@@ -75,7 +75,7 @@
 {% for telescope in telescopes %}
     <div class="panel-card">
         <h2 class="panel-title mb-3">
-            <a href="/{{ telescope["device_num"] }}/">{{ telescope["name"] }} ({{ telescope["ip_address"] }})</a>
+            <a href="{{ root_path }}/{{ telescope["device_num"] }}/">{{ telescope["name"] }} ({{ telescope["ip_address"] }})</a>
         </h2>
 
         {% if telescope.stats %}

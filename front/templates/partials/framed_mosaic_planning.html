@@ -2,7 +2,7 @@
     <link href="https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.css" rel="stylesheet">
     <script type="text/javascript" src="https://code.jquery.com/jquery-1.12.1.min.js" charset="utf-8"></script>
     <script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
-    <script type="text/javascript" src="/public/framed_mosaic.js"></script>
+    <script type="text/javascript" src="{{ root_path }}/public/framed_mosaic.js"></script>
 {% endblock %}
 <div>
     <fieldset class="border rounded-3 mb-3 pb-3">
@@ -46,7 +46,7 @@
 <div id="framed-mosaic-aladin-div" style="height:500px; width: 100%;"></div>
 
 <dialog id="framed_mosaic_schedule_modal">
-    <form method="post" action="/{{ telescope['device_num'] }}/schedule/framed_mosaic">
+    <form method="post" action="{{ root_path }}/{{ telescope['device_num'] }}/schedule/framed_mosaic">
         <div class="card border-primary mb-3">
             <div class="card-body">
                 <h5 class="card-title">Target</h5>

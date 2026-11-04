@@ -1,5 +1,5 @@
 <!-- Import javascript for reading fits tags -->
-<script src="/public/fit_import.js"></script>
+<script src="{{ root_path }}/public/fit_import.js"></script>
 <form method="post" action="{{ action }}">
     <div class="card border-primary mb-3"> <!-- Target details card-->
         <div class="card-body">
@@ -112,7 +112,7 @@
         <button type="submit" class="btn btn-primary">Submit</button>
         <button type="button" class="btn btn-warning"
                 id="forceStopGotoBtn"
-                hx-post="/api/{{ telescope.device_num }}/force_stop_goto"
+                hx-post="{{ root_path }}/api/{{ telescope.device_num }}/force_stop_goto"
                 hx-params="none"
                 hx-target="#forceStopGotoStatus"
                 hx-swap="innerHTML"

@@ -1,5 +1,9 @@
 // main source code
 
+// URL prefix when the web UI is served under a reverse-proxy sub-path; base.html
+// sets data-root-path only then, so this is "" otherwise.
+const sscRootPath = document.documentElement.dataset.rootPath || "";
+
 async function fetchCoordinates() {
     switch (document.getElementById('searchFor').value){
         // Local Deepsky Search
@@ -9,7 +13,7 @@ async function fetchCoordinates() {
                 return;
             }
             target = document.getElementById('targetName').value;
-            queryURL = '/localsearch?target=' + target
+            queryURL = sscRootPath + '/localsearch?target=' + target
             fetch(queryURL)
             .then(response => {
                 if (!response.ok) {
@@ -60,7 +64,7 @@ async function fetchCoordinates() {
             // compose the url to retreive the data from the server
             const baseURL =
                 `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
-            simbadURL = baseURL + '/simbad?name=' + encodeURIComponent(document.getElementById('targetName').value);
+            simbadURL = baseURL + sscRootPath + '/simbad?name=' + encodeURIComponent(document.getElementById('targetName').value);
             // fetch the data
             fetch(simbadURL)
             .then(response => {
@@ -96,7 +100,7 @@ async function fetchCoordinates() {
             }
             // Grab request text
             planet = document.getElementById('targetName').value;
-            queryURL = '/getplanetcoordinates?planetname=' + encodeURIComponent(planet);
+            queryURL = sscRootPath + '/getplanetcoordinates?planetname=' + encodeURIComponent(planet);
             // Moon / Sun doesn't have 'BARYCENTER' after it but more checks needed for Sun first so just do Moon
             if (planet.toLowerCase() != 'moon') {queryURL += " BARYCENTER"};
             fetch(queryURL)
@@ -133,7 +137,7 @@ async function fetchCoordinates() {
                 return;
             }
             minorname = document.getElementById('targetName').value;
-            queryURL = '/getminorplanetcoordinates?minorname=' + encodeURIComponent(minorname);
+            queryURL = sscRootPath + '/getminorplanetcoordinates?minorname=' + encodeURIComponent(minorname);
             fetch(queryURL)
             .then(response => {
                 // If a server error or object not found
@@ -168,7 +172,7 @@ async function fetchCoordinates() {
                 return;
             }
             cometname = document.getElementById('targetName').value;
-            queryURL = '/getcometcoordinates?cometname=' + encodeURIComponent(cometname);
+            queryURL = sscRootPath + '/getcometcoordinates?cometname=' + encodeURIComponent(cometname);
             fetch(queryURL)
             .then(response => {
                 // If a server error or object not found
@@ -214,7 +218,7 @@ async function fetchCoordinates() {
                 return;
             }
             starName = document.getElementById('targetName').value;
-            queryURL = '/getaavsocoordinates?target=' + encodeURIComponent(starName);
+            queryURL = sscRootPath + '/getaavsocoordinates?target=' + encodeURIComponent(starName);
             fetch(queryURL)
             .then(response => {
                 // If a server error or object not found
@@ -298,7 +302,7 @@ async function fetchStellarium() {
 try {
     const baseURL =
          `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
-    stellariumURL = baseURL + '/stellarium';
+    stellariumURL = baseURL + sscRootPath + '/stellarium';
     fetch(stellariumURL)
     .then(response => {
         if (!response.ok) {
@@ -340,7 +344,7 @@ async function toggleuitheme() {
     try{
         const baseURL =
          `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
-        toggleuithemeURL = baseURL + '/toggleuitheme';
+        toggleuithemeURL = baseURL + sscRootPath + '/toggleuitheme';
         fetch(toggleuithemeURL)
     } catch(err) {
         console.error('Failed to toggle ui theme', err);

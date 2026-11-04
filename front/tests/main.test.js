@@ -48,6 +48,28 @@ describe("main.js", () => {
     expect(document.getElementById("useLpFilter").checked).toBe(true);
   });
 
+  it("prefixes server URLs with data-root-path when served under a sub-path", async () => {
+    document.documentElement.dataset.rootPath = "/proxy/ssc";
+    try {
+      loadScript("public/main.js");
+      document.getElementById("searchFor").value = "DS";
+      document.getElementById("targetName").value = "M42";
+      globalThis.fetch.mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve("01h00m00s +02d00m00s on"),
+      });
+
+      await window.fetchCoordinates();
+      await flush();
+
+      const url = new URL(globalThis.fetch.mock.calls[0][0]);
+      expect(url.pathname).toBe("/proxy/ssc/simbad");
+      expect(url.searchParams.get("name")).toBe("M42");
+    } finally {
+      delete document.documentElement.dataset.rootPath;
+    }
+  });
+
   it("fetchCoordinates in DS mode alerts when target is missing", async () => {
     document.getElementById("searchFor").value = "DS";
     document.getElementById("targetName").value = "";

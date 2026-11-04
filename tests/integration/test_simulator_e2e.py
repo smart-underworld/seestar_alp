@@ -95,6 +95,28 @@ def _build_front_test_app():
     return app
 
 
+def test_prefixed_front_pages_render_under_forwarded_prefix(simulator_server):
+    # Prefix-once: a reverse proxy strips nothing and forwards X-Forwarded-Prefix;
+    # every rendered link must carry the prefix exactly once.
+    app = falcon.App(middleware=[front_app.RootPathMiddleware()])
+    for route, resource in (
+        ("/{telescope_id:int}/", front_app.HomeTelescopeResource()),
+        ("/{telescope_id:int}/stats-content", front_app.StatsContentResource()),
+    ):
+        app.add_route(route, resource)
+    client = testing.TestClient(app)
+    headers = {"X-Forwarded-Prefix": "/p"}
+
+    page = client.simulate_get("/1/", headers=headers)
+    assert page.status_code == 200
+    assert "/p/p/" not in page.text
+    assert 'href="/p/1/"' in page.text
+
+    fragment = client.simulate_get("/1/stats-content", headers=headers)
+    assert fragment.status_code in (200, 204)
+    assert "/p/p/" not in fragment.text
+
+
 @pytest.fixture(scope="module")
 def simulator_server():
     host = "127.0.0.1"

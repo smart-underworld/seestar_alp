@@ -16,6 +16,7 @@ from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 from pathlib import Path
 import urllib.parse
 import requests
+import urllib3
 import humanize
 import json
 import csv
@@ -202,6 +203,106 @@ def get_imager_root(telescope_id, req):
             root = f"{scheme}://{hostname}:{Config.imgport}/{telescope['device_num']}"
             return root
     return ""
+
+
+# --- Serving under a URL prefix (reverse-proxy sub-path) ----------------------
+# SSC's own routes stay at the server root. When a reverse proxy serves it under
+# a sub-path (e.g. https://host/ssc/), the proxy strips the prefix on the way in,
+# so every URL SSC *emits* must carry it. The prefix comes, per request, from a
+# valid X-Forwarded-Prefix header, else from [webui_settings] root_path, else "".
+# With no prefix (the default) nothing below changes what SSC renders.
+_ROOT_PATH_RE = re.compile(r"^(/[A-Za-z0-9._~-]+)+$")
+
+
+def normalize_root_path(value):
+    """Return ``value`` as a ``/a/b`` prefix, ``""`` for none, ``None`` if invalid."""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        return None
+    value = value.strip().rstrip("/")
+    if not value:
+        return ""
+    if not _ROOT_PATH_RE.match(value):
+        return None
+    # "." and ".." would let asset URLs climb out of the prefix.
+    if any(segment in (".", "..") for segment in value.split("/")):
+        return None
+    return value
+
+
+_warned_root_paths = set()
+
+
+def _warn_invalid_root_path(value):
+    # Warn once per distinct value; a rejected [webui_settings] root_path would
+    # otherwise be dropped silently on every request.
+    if repr(value) not in _warned_root_paths:
+        _warned_root_paths.add(repr(value))
+        logger.warning(f"Ignoring invalid [webui_settings] root_path: {value!r}")
+
+
+def get_root_path(req):
+    """The URL prefix SSC is served under for this request ("" when none).
+
+    An empty or "/" X-Forwarded-Prefix means the proxy added no prefix, so the
+    configured [webui_settings] root_path still applies.
+    """
+    header = req.get_header("X-Forwarded-Prefix")
+    if header is not None:
+        prefix = normalize_root_path(header)
+        if prefix:
+            return prefix
+        if prefix is None:
+            logger.debug(f"Ignoring invalid X-Forwarded-Prefix header: {header!r}")
+    configured = normalize_root_path(Config.root_path)
+    if configured is None:
+        _warn_invalid_root_path(Config.root_path)
+    return configured or ""
+
+
+def with_root_path(root_path, url):
+    """Prefix a root-relative route ``url`` with ``root_path``.
+
+    Callers pass SSC route URLs only (never an already-prefixed one), so the
+    prefix is applied unconditionally; absolute and protocol-relative URLs
+    are left alone.
+    """
+    if (
+        not root_path
+        or not isinstance(url, str)
+        or not url.startswith("/")
+        or url.startswith("//")
+    ):
+        return url
+    return root_path + url
+
+
+def _template_context(req, context):
+    """Return a copy of ``context`` ready to render for ``req``.
+
+    Page contexts (and the shared get_context cache) hold route URLs only; this
+    is the single place the request's prefix is added, so it happens exactly
+    once. ``root`` and ``action`` gain the prefix. ``imager_root`` normally
+    points the browser at the imaging port, which a sub-path proxy cannot
+    reach, so it is swapped for the same-origin relay (ImagingProxyResource).
+    """
+    root_path = get_root_path(req)
+    out = dict(context)
+    out["root_path"] = root_path
+    if not root_path:
+        return out
+    if "root" in out:
+        # "" (no matching telescope) means the server root, i.e. the prefix.
+        out["root"] = (
+            with_root_path(root_path, out["root"]) if out["root"] else root_path
+        )
+    if "action" in out:
+        out["action"] = with_root_path(root_path, out["action"])
+    if out.get("imager_root"):
+        device_num = out["imager_root"].rsplit("/", 1)[-1]
+        out["imager_root"] = f"{root_path}/{device_num}/imaging"
+    return out
 
 
 def _get_context_real(telescope_id, req):
@@ -2007,6 +2108,21 @@ def redirect(location):
     # raise HTTPTemporaryRedirect(location)
 
 
+class RootPathMiddleware:
+    """Keep server redirects inside the URL prefix SSC is served under.
+
+    SSC's own redirects name route URLs, and this is the only place the
+    prefix is added to them.
+    """
+
+    def process_response(self, req, resp, resource, req_succeeded):
+        location = resp.get_header("Location")
+        if location:
+            prefixed = with_root_path(get_root_path(req), location)
+            if prefixed != location:
+                resp.set_header("Location", prefixed)
+
+
 template_dir = os.path.join(os.path.dirname(__file__), "templates")
 env = Environment(loader=FileSystemLoader(template_dir))
 
@@ -2047,7 +2163,7 @@ def render_template(req, resp, template_name, **context):
     resp.status = falcon.HTTP_200
     resp.content_type = "text/html"
     version = Version.app_version()
-    merged_context = dict(context)
+    merged_context = _template_context(req, context)
     merged_context.setdefault("webui_theme", Config.uitheme)
     merged_context.setdefault("webui_text_color", Config.webui_text_color)
     merged_context.setdefault("webui_font_family", Config.webui_font_family)
@@ -2068,7 +2184,7 @@ def render_fragment(req, resp, template_name, **context):
     resp.status = falcon.HTTP_200
     resp.content_type = "text/html"
     version = Version.app_version()
-    merged_context = dict(context)
+    merged_context = _template_context(req, context)
     merged_context.setdefault("webui_theme", Config.uitheme)
     merged_context.setdefault("webui_text_color", Config.webui_text_color)
     merged_context.setdefault("webui_font_family", Config.webui_font_family)
@@ -2098,7 +2214,7 @@ def get_request_cache_identity(req):
         or req.get_header("Referer")
         or getattr(req, "relative_uri", "")
     )
-    return (remote_addr, user_agent, current_url)
+    return (remote_addr, user_agent, current_url, get_root_path(req))
 
 
 def render_schedule_tab(req, resp, telescope_id, template_name, tab, values, errors):
@@ -3362,6 +3478,18 @@ class ScheduleUploadResource:
         redirect(f"/{telescope_id}/schedule")
 
 
+def _render_schedule_partial(req, resp, template_name, context, **values):
+    """Render one schedule partial (list or state) for this request."""
+    return fetch_template(template_name).render(
+        flashed_messages=get_flash_cookie(req, resp),
+        messages=get_messages(),
+        webui_theme=Config.uitheme,
+        version=Version.app_version(),
+        **values,
+        **_template_context(req, context),
+    )
+
+
 class ScheduleReStartResource(BaseResource):
     def on_get(self, req, resp, telescope_id=0):
         do_action_device("reset_scheduler_cur_item", telescope_id, {})
@@ -3384,36 +3512,14 @@ class ScheduleReStartResource(BaseResource):
         resp.status = falcon.HTTP_200
 
     def render_schedule_list_html(self, req, resp, schedule, context):
-        template = fetch_template("partials/schedule_list.html")
-        webui_theme = Config.uitheme
-        version = Version.app_version()
-
-        html = template.render(
-            flashed_messages=get_flash_cookie(req, resp),
-            messages=get_messages(),
-            webui_theme=webui_theme,
-            version=version,
-            schedule=schedule,
-            **context,
+        return _render_schedule_partial(
+            req, resp, "partials/schedule_list.html", context, schedule=schedule
         )
-
-        return html
 
     def render_schedule_state_html(self, req, resp, state, context):
-        template = fetch_template("partials/schedule_state.html")
-        webui_theme = Config.uitheme
-        version = Version.app_version()
-
-        html = template.render(
-            flashed_messages=get_flash_cookie(req, resp),
-            messages=get_messages(),
-            webui_theme=webui_theme,
-            version=version,
-            state=state,
-            **context,
+        return _render_schedule_partial(
+            req, resp, "partials/schedule_state.html", context, state=state
         )
-
-        return html
 
 
 class ScheduleRefreshResource(BaseResource):
@@ -3432,7 +3538,7 @@ class ScheduleRefreshResource(BaseResource):
 
         open_accordion_id = req.get_param("open_accordion_id", default="")
         html = self.render_schedule_list_html(req, resp, schedule, context)
-        cache_key = (int(telescope_id), open_accordion_id)
+        cache_key = (int(telescope_id), open_accordion_id, get_root_path(req))
         changed = True
         with ScheduleRefreshResource._lock:
             last_html = ScheduleRefreshResource._last_render_by_key.get(cache_key)
@@ -3453,22 +3559,14 @@ class ScheduleRefreshResource(BaseResource):
         resp.status = falcon.HTTP_200
 
     def render_schedule_list_html(self, req, resp, schedule, context):
-        template = fetch_template("partials/schedule_list.html")
-        webui_theme = Config.uitheme
-        version = Version.app_version()
-        open_accordion_id = req.get_param("open_accordion_id", default="")
-
-        html = template.render(
-            flashed_messages=get_flash_cookie(req, resp),
-            messages=get_messages(),
-            webui_theme=webui_theme,
-            version=version,
+        return _render_schedule_partial(
+            req,
+            resp,
+            "partials/schedule_list.html",
+            context,
             schedule=schedule,
-            open_accordion_id=open_accordion_id,
-            **context,
+            open_accordion_id=req.get_param("open_accordion_id", default=""),
         )
-
-        return html
 
 
 class EventStatus:
@@ -4635,7 +4733,7 @@ class StatsContentResource:
             resp,
             StatsContentResource._last_render_by_key,
             StatsContentResource._lock,
-            ("stats-content", int(telescope_id)),
+            ("stats-content", int(telescope_id), get_root_path(req)),
         )
 
 
@@ -4759,7 +4857,7 @@ class GuestModeContentResource:
             resp,
             GuestModeContentResource._last_render_by_key,
             GuestModeContentResource._lock,
-            ("guestmode-content", int(telescope_id)),
+            ("guestmode-content", int(telescope_id), get_root_path(req)),
         )
 
 
@@ -5656,6 +5754,65 @@ class GetLocalSearch:
             resp.text = rtn
 
 
+def _read_some(raw, size):
+    """Return what has arrived on a urllib3 response body (b"" at end).
+
+    urllib3 2.x exposes read1 on the response; urllib3 1.26 (Debian's armhf
+    build) does not, so fall back to the buffered http.client reader beneath it.
+    """
+    read1 = getattr(raw, "read1", None) or getattr(
+        getattr(raw, "_fp", None), "read1", None
+    )
+    if read1 is not None:
+        return read1(size)
+    return raw.read(size)
+
+
+class ImagingProxyResource:
+    """Relay one of the imaging server's streams through the web-UI port.
+
+    Only referenced when SSC is served under a URL prefix (see
+    _template_context): a sub-path reverse proxy has a single upstream, so the
+    browser cannot open the imaging port directly. The stream (MJPEG or
+    server-sent events) is passed through unchanged.
+    """
+
+    def __init__(self, path):
+        self._path = path
+
+    def on_get(self, req, resp, telescope_id):
+        url = (
+            f"http://{get_listening_ip()}:{Config.imgport}/{telescope_id}/{self._path}"
+        )
+        try:
+            upstream = requests.get(url, stream=True, timeout=(5, 30))
+        except requests.RequestException as e:
+            logger.warning(f"Imaging relay: {url} unreachable: {e}")
+            raise falcon.HTTPBadGateway()
+        resp.status = upstream.status_code
+        resp.content_type = upstream.headers.get(
+            "Content-Type", "application/octet-stream"
+        )
+        resp.set_header("Cache-Control", "no-cache")
+        # Ask buffering proxies (nginx) to pass the stream through as it arrives.
+        resp.set_header("X-Accel-Buffering", "no")
+
+        def relay():
+            # Hand each piece downstream as it arrives; these bodies never end.
+            # The read timeout bounds how long a stalled upstream (or a browser
+            # that left) holds this connection; the stream then ends and an
+            # EventSource client reconnects.
+            try:
+                while chunk := _read_some(upstream.raw, 64 * 1024):
+                    yield chunk
+            except (OSError, urllib3.exceptions.HTTPError) as e:
+                logger.debug(f"Imaging relay: stream ended: {e}")
+            finally:
+                upstream.close()
+
+        resp.stream = relay()
+
+
 class GetAAVSOSearch:
     @staticmethod
     def on_get(req: falcon.Request, resp: falcon.Response) -> None:
@@ -5690,7 +5847,10 @@ class FrontMain:
         """Application startup"""
 
         app = falcon.App(
-            middleware=falcon.CORSMiddleware(allow_origins="*", allow_credentials="*")
+            middleware=[
+                falcon.CORSMiddleware(allow_origins="*", allow_credentials="*"),
+                RootPathMiddleware(),
+            ]
         )
 
         def _log_unhandled_exception(req, resp, ex, params):
@@ -5768,6 +5928,11 @@ class FrontMain:
         app.add_route("/{telescope_id:int}/live/exposure", LiveExposureResource())
         app.add_route("/{telescope_id:int}/live/photo", LivePhotoResource())
         app.add_route("/{telescope_id:int}/live/video", LiveVideoResource())
+        for imaging_path in ("vid", "vid/status", "events", "live/status"):
+            app.add_route(
+                f"/{{telescope_id:int}}/imaging/{imaging_path}",
+                ImagingProxyResource(imaging_path),
+            )
         app.add_route("/{telescope_id:int}/live/zoom", LiveZoomResource())
         app.add_route(
             "/{telescope_id:int}/schedule/exposure", ScheduleExposureResource()
