@@ -315,10 +315,38 @@ def get_flash_cookie(req, resp):
     return []
 
 
+def site_timezone():
+    """Time zone of the telescope site.
+
+    The ``timezone`` setting when it names a known zone, otherwise the time
+    zone of the computer running seestar_alp, which is not the site's when
+    the server runs in UTC or far from the scope (remote observatories).
+    """
+    name = str(Config.init_timezone or "").strip()
+    if name:
+        try:
+            return pytz.timezone(name)
+        except pytz.UnknownTimeZoneError:
+            logger.warning(
+                f"Unknown time zone {name!r} in the settings; using this computer's"
+            )
+    return tzlocal.get_localzone()
+
+
+def site_utc_offset_hours(when=None):
+    """UTC offset of the telescope site, in hours, at ``when`` (default: now).
+
+    A float: some zones are offset by half or quarter hours.
+    """
+    if when is None:
+        when = datetime.now(pytz.utc)
+    return when.astimezone(site_timezone()).utcoffset().total_seconds() / 3600
+
+
 def update_twilight_times(latitude=None, longitude=None):
     observer = ephem.Observer()
     observer.date = datetime.now()
-    local_timezone = tzlocal.get_localzone()
+    local_timezone = site_timezone()
     sun = ephem.Sun()
     current_date_formatted = str(datetime.now().strftime("%Y-%m-%d"))
 
@@ -4529,12 +4557,9 @@ class PlanningResource:
             nearest_csc["full_img"] = ""
 
         planning_cards = get_planning_cards()
-        local_timezone = tzlocal.get_localzone()
-        current_time = datetime.now(local_timezone)
-        utc_offset = current_time.utcoffset()
-        utc_offset = int(
-            utc_offset.total_seconds() / 3600
-        )  # Convert the offset to hours, used for astromosaic
+        # The planner charts are drawn for the configured site, so in the
+        # site's time zone rather than the browser's or the server's.
+        utc_offset = site_utc_offset_hours()
 
         config_lat = round(
             Config.init_lat, 2

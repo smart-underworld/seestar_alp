@@ -126,16 +126,7 @@ function AstroMosaicEngine(target, params, target_div, day_div, year_div, radec_
         panel_view_text : null
     };
 
-    if (engine_params.horizonSoft != null && engine_params.horizonHard == null) {
-        // we have only soft horizon, use it as hard horizon
-        console.log('AstroMosaicEngine, use soft horizon as hard horizon');
-        engine_params.horizonHard = engine_params.horizonSoft;
-        engine_params.horizonSoft = null;
-    }
-    if (engine_params.horizonSoft != null) {
-        engine_params.horizonSoft = fillHorizonLimits(engine_params.horizonSoft);
-    }
-    engine_params.horizonHard = fillHorizonLimits(engine_params.horizonHard);
+    normalizeHorizonLimits(engine_params);
 
     if (engine_params.UTCdate_ms == null) {
         // Use current date
@@ -166,23 +157,56 @@ function getAstroMosaicFov(fov)
     return (fov*60.0)/3600.0;
 }
 
-/* 
- * Ensure that we have horizon limits fov every 5 arcminutes.
+/*
+ * Ensure that we have horizon limits for every 5 degrees, 0 to 355.
  */
 function fillHorizonLimits(horizon_limits)
 {
     if (horizon_limits == null || horizon_limits.length == 0) {
         horizon_limits = [0];
+    } else {
+        // A copy: the caller's array is left as it was.
+        horizon_limits = horizon_limits.slice();
     }
     var len = horizon_limits.length;
-    if (len < 71) {
-        // we need limit for every 5 arcminutes
+    if (len < 72) {
+        // we need limit for every 5 degrees
         var last = horizon_limits[len-1];
-        for (var k = len; k < 71; k++) {
+        for (var k = len; k < 72; k++) {
             horizon_limits[k] = last;
         }
     }
     return horizon_limits;
+}
+
+/*
+ * Soft and hard horizon limits of engine_params, padded to one value every
+ * 5 degrees. With only a soft horizon, it is used as the hard one; with
+ * neither, the hard horizon is flat at 0 degrees. Padding is idempotent, so
+ * the AstroMosaicEngine() wrapper and direct callers of
+ * StartAstroMosaicViewerEngine() get the same horizon.
+ */
+function normalizeHorizonLimits(engine_params)
+{
+    if (engine_params.horizonSoft != null && engine_params.horizonHard == null) {
+        // we have only soft horizon, use it as hard horizon
+        console.log('AstroMosaicEngine, use soft horizon as hard horizon');
+        engine_params.horizonHard = engine_params.horizonSoft;
+        engine_params.horizonSoft = null;
+    }
+    if (engine_params.horizonSoft != null) {
+        engine_params.horizonSoft = fillHorizonLimits(engine_params.horizonSoft);
+    }
+    engine_params.horizonHard = fillHorizonLimits(engine_params.horizonHard);
+}
+
+/*
+ * Index in the horizon limits of azimuth az, in degrees. Azimuths of
+ * 357.5 degrees and more round to 360, which is limit 0.
+ */
+function horizonLimitIndex(az)
+{
+    return Math.round(az / 5) % 72;
 }
 
 function filterImageTargetList(image_target_list)
@@ -340,6 +364,10 @@ function StartAstroMosaicViewerEngine(
         engine_native_resources.getTargetAboveRightNow = getTargetAboveRightNow;
         return;
     }
+
+    // Callers that bypass the AstroMosaicEngine() wrapper, like the planner
+    // card, may pass a partial horizon: normalize it as the wrapper does.
+    normalizeHorizonLimits(engine_params);
 
     if (!engine_params.timezoneOffset) {
         engine_params.timezoneOffset = 0;
@@ -1037,7 +1065,7 @@ function StartAstroMosaicViewerEngine(
             var softalt = null;        // target below soft horizon
             var hardalt = null;        // target below hard horizon or meridian transit
 
-            var horizon_index = Math.round(altaz.az / 5);
+            var horizon_index = horizonLimitIndex(altaz.az);
 
             if (prevaz != null) {
                 if ((prevaz > 180 && altaz.az < 180) || // from 360 to 0

@@ -264,6 +264,9 @@ class _Config:
         )
         self.init_lat: float = self.get_toml(section, "lat", 0)
         self.init_long: float = self.get_toml(section, "long", 0)
+        # IANA name of the telescope site's time zone, e.g. "Europe/Paris".
+        # Empty: the time zone of the computer running seestar_alp.
+        self.init_timezone: str = self.get_toml(section, "timezone", "")
         self.init_gain: int = self.get_toml(section, "gain", 80)
         self.init_expo_preview_ms: int = self.get_toml(
             section, "exposure_length_preview_ms", 500
@@ -396,6 +399,11 @@ class _Config:
         )
         self.set_toml("seestar_initialization", "lat", float(req.media["init_lat"]))
         self.set_toml("seestar_initialization", "long", float(req.media["init_long"]))
+        self.set_toml(
+            "seestar_initialization",
+            "timezone",
+            str(req.media.get("init_timezone", "")).strip(),
+        )
         self.set_toml("seestar_initialization", "gain", int(req.media["init_gain"]))
         self.set_toml(
             "seestar_initialization",
@@ -877,6 +885,12 @@ class _Config:
                     "Longitude:",
                     self.init_long,
                     "Your Longitude in decimal format",
+                )
+                + self.render_text(
+                    "init_timezone",
+                    "Time zone:",
+                    self.init_timezone,
+                    "Time zone of the telescope site, e.g. Europe/Paris. Leave empty to use the time zone of this computer.",
                 )
                 + self.render_text(
                     "init_gain",

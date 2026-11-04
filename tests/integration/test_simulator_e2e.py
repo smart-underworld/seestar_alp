@@ -487,6 +487,55 @@ def test_06_live_page_mode_routing(front_sim_bridge):
         assert "Video" in resp.text or "Capture" in resp.text
 
 
+def test_06b_planning_page_uses_configured_location(front_sim_bridge, monkeypatch):
+    monkeypatch.setattr(Config, "init_lat", 44.0612)
+    monkeypatch.setattr(Config, "init_long", 0.6504)
+    # A zone without daylight saving time, so the expected offset is fixed.
+    monkeypatch.setattr(Config, "init_timezone", "Asia/Kolkata", raising=False)
+    monkeypatch.setattr(
+        front_app,
+        "get_planning_cards",
+        lambda: [
+            {
+                "card_name": "astro_mosaic",
+                "card_friendly_name": "AstroMosaic",
+                "template": "partials/astro_mosaic.html",
+                "planning_page_enable": True,
+                "planning_page_collapsed": False,
+            }
+        ],
+    )
+    resp = front_sim_bridge["client"].simulate_get("/1/planning")
+    assert resp.status_code == 200
+    assert "location_lat: 44.06," in resp.text
+    assert "location_lng: 0.65," in resp.text
+    assert "-96.72" not in resp.text
+    assert "timezoneOffset: 5.5," in resp.text
+    assert 'id="astro-mosaic-location-unset"' not in resp.text
+
+
+def test_06c_planning_page_warns_when_location_unset(front_sim_bridge, monkeypatch):
+    monkeypatch.setattr(Config, "init_lat", 0)
+    monkeypatch.setattr(Config, "init_long", 0)
+    monkeypatch.setattr(
+        front_app,
+        "get_planning_cards",
+        lambda: [
+            {
+                "card_name": "astro_mosaic",
+                "card_friendly_name": "AstroMosaic",
+                "template": "partials/astro_mosaic.html",
+                "planning_page_enable": True,
+                "planning_page_collapsed": False,
+            }
+        ],
+    )
+    resp = front_sim_bridge["client"].simulate_get("/1/planning")
+    assert resp.status_code == 200
+    assert 'id="astro-mosaic-location-unset"' in resp.text
+    assert "location_lat: 0," in resp.text
+
+
 def test_07_schedule_lifecycle(front_sim_bridge):
     client = front_sim_bridge["client"]
     get_page = client.simulate_get("/1/schedule")
