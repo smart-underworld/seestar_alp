@@ -39,6 +39,7 @@ import sqlite3
 from skyfield.api import Loader
 from skyfield.data import mpc
 from skyfield.constants import GM_SUN_Pitjeva_2005_km3_s2 as GM_SUN
+from astropy.time import Time
 
 from device.config import Config  # type: ignore
 from device.log import init_logging, get_logger  # type: ignore
@@ -4604,6 +4605,80 @@ class PlanningResource:
         )
 
 
+class HorizonResource:
+    """Horizon page: the local horizon from a 360-degree panorama.
+
+    The photo is analysed in the browser by the MMhorizon core, compiled to
+    WebAssembly (front/public/mmhorizon); only the resulting profile is posted.
+    """
+
+    # A .hrz has one line per degree or so: a few kilobytes.
+    MAX_UPLOAD = 1024 * 1024
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        context = get_context(telescope_id, req)
+        profile, error = horizon.configured_profile()
+        render_template(
+            req,
+            resp,
+            "horizon.html",
+            config_lat=Config.init_lat,
+            config_long=Config.init_long,
+            horizon_file=Config.horizon_file,
+            horizon_error=error,
+            horizon_point_count=len(profile.points) if profile else 0,
+            **context,
+        )
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        if (req.content_length or 0) > HorizonResource.MAX_UPLOAD:
+            raise falcon.HTTPContentTooLarge(
+                description="A horizon profile is a few kilobytes"
+            )
+        body = req.get_media(default_when_empty=None)
+        if not isinstance(body, dict) or not isinstance(body.get("hrz"), str):
+            raise falcon.HTTPBadRequest(description='Expected {"hrz": "<.hrz text>"}')
+        horizon_json = body.get("horizon_json")
+        if horizon_json is not None and not isinstance(horizon_json, str):
+            raise falcon.HTTPBadRequest(description="horizon_json must be a string")
+        try:
+            path, previous, profile = horizon.save_panorama_profile(
+                body["hrz"], horizon_json
+            )
+        except horizon.HorizonError as e:
+            raise falcon.HTTPBadRequest(description=str(e))
+        logger.info(f"Horizon profile saved to {path} ({len(profile.points)} points)")
+        resp.media = {
+            "file": path,
+            "previous_file": previous,
+            "points": len(profile.points),
+        }
+
+
+class HorizonSunResource:
+    """Apparent position of the Sun, to orient a panorama: ?when=ISO&lat=&lon=."""
+
+    @staticmethod
+    def on_get(req, resp):
+        lat = req.get_param_as_float("lat", required=True, min_value=-90, max_value=90)
+        lon = req.get_param_as_float(
+            "lon", required=True, min_value=-180, max_value=360
+        )
+        try:
+            when = datetime.fromisoformat(req.get_param("when", required=True))
+        except ValueError:
+            raise falcon.HTTPBadRequest(description="when: expected an ISO 8601 date")
+        if when.tzinfo is None:
+            raise falcon.HTTPBadRequest(description="when: give the UTC offset")
+        utc = Time(when.astimezone(pytz.utc).replace(tzinfo=None), scale="utc")
+        altitude, azimuth = horizon.sun_altaz(lat, lon, utc)
+        # Apparent altitude: where the photo shows the Sun.
+        altitude += horizon.refraction(altitude)
+        resp.media = {"altitude": round(altitude, 3), "azimuth": round(azimuth, 3)}
+
+
 class StatsResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -5779,6 +5854,9 @@ class FrontMain:
         app.add_route("/{telescope_id:int}/mosaic", MosaicResource())
         app.add_route("/{telescope_id:int}/framed_mosaic", FramedMosaicResource())
         app.add_route("/{telescope_id:int}/planning", PlanningResource())
+        app.add_route("/horizon", HorizonResource())
+        app.add_route("/{telescope_id:int}/horizon", HorizonResource())
+        app.add_route("/horizon/sun", HorizonSunResource())
         app.add_route("/{telescope_id:int}/position", TelescopePositionResource())
         app.add_route("/{telescope_id:int}/search", SearchObjectResource())
         app.add_route("/{telescope_id:int}/settings", SettingsResource())
