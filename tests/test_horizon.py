@@ -1,7 +1,9 @@
+import json
 import math
 import os
 
 import pytest
+import tomlkit
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 from astropy.utils import iers
@@ -287,3 +289,111 @@ def test_visibility_needs_no_earth_orientation_table(astaffort, monkeypatch):
     # Any time of day: Polaris circles within 0.74 degree of the pole, whose
     # altitude is the latitude, 44.06.
     assert result["altitude"] == pytest.approx(44.06, abs=0.8)
+
+
+# ---------------------------------------------------------------------------
+# sun_altaz
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "when",
+    [
+        "2026-10-23T13:59:04",
+        "2026-06-21T12:00:00",
+        "2026-03-20T17:30:00",
+        "2026-01-15T08:45:00",
+    ],
+)
+def test_sun_altaz_matches_astropy(astaffort, when):
+    from astropy import units as u
+    from astropy.coordinates import AltAz, EarthLocation, get_sun
+
+    t = Time(when, scale="utc")
+    altitude, azimuth = horizon.sun_altaz(44.06, 0.65, t)
+    site = EarthLocation(lat=44.06 * u.deg, lon=0.65 * u.deg)
+    reference = get_sun(t).transform_to(AltAz(obstime=t, location=site))
+    assert altitude == pytest.approx(reference.alt.deg, abs=0.05)
+    gap = (azimuth - reference.az.deg + 180) % 360 - 180
+    assert abs(gap) * math.cos(math.radians(altitude)) < 0.05
+
+
+def test_sun_of_the_first_real_panorama():
+    # MMhorizon's first panorama, 2026-10-23 15:59:04 (UTC+2), was oriented on
+    # the Sun: azimuth 218.0, altitude 26.3 by astronomy-engine.
+    t = Time("2026-10-23T13:59:04", scale="utc")
+    altitude, azimuth = horizon.sun_altaz(44.06504, 0.65041, t)
+    assert azimuth == pytest.approx(218.0, abs=0.1)
+    assert altitude == pytest.approx(26.3, abs=0.1)
+
+
+# ---------------------------------------------------------------------------
+# save_panorama_profile
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def config_file(monkeypatch, tmp_path):
+    from device.config import _Config
+
+    path = tmp_path / "config.toml"
+    path.write_text(
+        "[seestar_initialization]\nlat = 44.06\nlong = 0.65\n"
+        'horizon_file = "/etc/seestar/old.hrz"\n'
+    )
+    config = _Config.__new__(_Config)
+    config.path_to_dat = str(path)
+    config.load_toml()
+    monkeypatch.setattr(horizon, "Config", config)
+    return config
+
+
+def test_save_panorama_profile_writes_and_configures(config_file, tmp_path):
+    record = json.dumps({"format": "horizon", "version": 1})
+    path, previous, profile = horizon.save_panorama_profile("0 10\n180 20\n", record)
+
+    assert path == str(tmp_path / "horizon.hrz")
+    assert previous == "/etc/seestar/old.hrz"
+    assert (tmp_path / "horizon.hrz").read_text() == "0 10\n180 20\n"
+    assert json.loads((tmp_path / "horizon.horizon.json").read_text()) == {
+        "format": "horizon",
+        "version": 1,
+    }
+    assert profile.points == [(0.0, 10.0), (180.0, 20.0)]
+    # In memory and on disk.
+    assert config_file.horizon_file == path
+    saved = tomlkit.parse((tmp_path / "config.toml").read_text())
+    assert saved["seestar_initialization"]["horizon_file"] == path
+    assert horizon.configured_profile()[0].points == profile.points
+
+
+def test_save_panorama_profile_without_record(config_file, tmp_path):
+    horizon.save_panorama_profile("0 10\n")
+    assert (tmp_path / "horizon.hrz").exists()
+    assert not (tmp_path / "horizon.horizon.json").exists()
+
+
+@pytest.mark.parametrize(
+    "hrz, record, message",
+    [
+        ("north 10\n", None, "line 1"),
+        ("0 10\n", "{", "uploaded .horizon.json"),
+        ("0 10\n", '{"format": "other"}', "not an MMhorizon file"),
+        ("0 10\n", "[1, 2]", "not an MMhorizon file"),
+    ],
+)
+def test_save_panorama_profile_rejects_invalid_input(
+    config_file, tmp_path, hrz, record, message
+):
+    with pytest.raises(HorizonError, match=message):
+        horizon.save_panorama_profile(hrz, record)
+    assert not (tmp_path / "horizon.hrz").exists()
+    assert config_file.horizon_file == "/etc/seestar/old.hrz"
+
+
+@pytest.mark.parametrize(
+    "altitude, lift",
+    [(25.0, 0.036), (5.0, 0.161), (0.0, 0.483), (-5.0, 0.0), (90.0, 0.0)],
+)
+def test_refraction(altitude, lift):
+    assert horizon.refraction(altitude) == pytest.approx(lift, abs=0.002)

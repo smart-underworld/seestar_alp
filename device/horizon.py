@@ -7,10 +7,12 @@ panorama of the site. Between two points the horizon is interpolated
 linearly, wrapping at 360 degrees.
 
 The planner draws the profile in AstroMosaic's day chart, and the scheduler
-can skip a target hidden behind it (``horizon_skip_hidden_targets``).
+can skip a target hidden behind it (``horizon_skip_hidden_targets``). The
+Horizon page makes one from a 360-degree panorama, in the browser.
 """
 
 import bisect
+import json
 import logging
 import math
 import os
@@ -206,10 +208,48 @@ def altaz(coord: SkyCoord, latitude, longitude, when: Time):
     so the check errs on the hidden side.
     """
     of_date = coord.transform_to(FK5(equinox=when))
+    return _altaz_of_date(of_date.ra.deg, of_date.dec.deg, latitude, longitude, when)
+
+
+def sun_altaz(latitude, longitude, when: Time):
+    """Altitude and azimuth of the Sun at ``when``, in degrees.
+
+    Low-precision formulae of the Astronomical Almanac, good to a hundredth of
+    a degree between 1950 and 2050: enough to orient a panorama on the Sun.
+    Geometric position: add ``refraction`` for where a photo shows it.
+    """
+    days = when.utc.jd - 2451545.0
+    mean_longitude = 280.460 + 0.9856474 * days
+    anomaly = math.radians(357.528 + 0.9856003 * days)
+    ecliptic = math.radians(
+        mean_longitude + 1.915 * math.sin(anomaly) + 0.020 * math.sin(2 * anomaly)
+    )
+    obliquity = math.radians(23.439 - 0.0000004 * days)
+    ra = math.atan2(math.cos(obliquity) * math.sin(ecliptic), math.cos(ecliptic))
+    dec = math.asin(math.sin(obliquity) * math.sin(ecliptic))
+    return _altaz_of_date(
+        math.degrees(ra), math.degrees(dec), latitude, longitude, when
+    )
+
+
+def refraction(altitude):
+    """Atmospheric refraction, in degrees, of a body at geometric ``altitude``.
+
+    Saemundsson's formula, standard pressure and temperature: 0.04 degree at
+    25 degrees of altitude, 0.16 at 5, half a degree at the horizon. A photo
+    shows the Sun lifted by this much.
+    """
+    if altitude < -1.0:
+        return 0.0
+    return 1.02 / math.tan(math.radians(altitude + 10.3 / (altitude + 5.11))) / 60.0
+
+
+def _altaz_of_date(ra_deg, dec_deg, latitude, longitude, when: Time):
+    """Altitude and azimuth from right ascension and declination of the date."""
     days = when.utc.jd - 2451545.0
     sidereal = (280.46061837 + 360.98564736629 * days + longitude) % 360.0
-    hour_angle = math.radians(sidereal - of_date.ra.deg)
-    dec, lat = of_date.dec.radian, math.radians(latitude)
+    hour_angle = math.radians(sidereal - ra_deg)
+    dec, lat = math.radians(dec_deg), math.radians(latitude)
     altitude = math.asin(
         math.sin(dec) * math.sin(lat)
         + math.cos(dec) * math.cos(lat) * math.cos(hour_angle)
@@ -285,3 +325,45 @@ def check_target(params):
         raise SiteLocationUnknown("site location not set: latitude and longitude are 0")
     result["horizon_error"] = error
     return result
+
+
+# Profile made from a panorama on the Horizon page, saved next to config.toml.
+PANORAMA_HRZ = "horizon.hrz"
+PANORAMA_JSON = "horizon.horizon.json"
+
+
+def save_panorama_profile(hrz_text, horizon_json=None):
+    """Save a profile made from a panorama, and make it the configured horizon.
+
+    ``hrz_text`` is the ``.hrz`` the page exported; ``horizon_json``, when
+    given, the MMhorizon ``.horizon.json`` it came from, kept beside it as a
+    record of the photo and of how north was set. Both go next to
+    config.toml, and ``horizon_file`` then points to the ``.hrz``; a file
+    configured before is left in place. Returns ``(path, previous_file,
+    profile)``. Raises ``HorizonError`` on an invalid profile.
+    """
+    profile = HorizonProfile.parse_hrz(hrz_text, "uploaded profile")
+    if horizon_json is not None:
+        try:
+            record = json.loads(horizon_json)
+        except ValueError as e:
+            raise HorizonError(f"uploaded .horizon.json: {e}") from None
+        if not isinstance(record, dict) or record.get("format") != "horizon":
+            raise HorizonError("uploaded .horizon.json: not an MMhorizon file")
+    folder = os.path.dirname(Config.path_to_dat)
+    path = os.path.join(folder, PANORAMA_HRZ)
+    _write_atomic(path, hrz_text)
+    if horizon_json is not None:
+        _write_atomic(os.path.join(folder, PANORAMA_JSON), horizon_json)
+    previous = Config.horizon_file
+    Config.set_toml("seestar_initialization", "horizon_file", path)
+    Config.save_toml()
+    Config.load_toml()
+    return path, previous, profile
+
+
+def _write_atomic(path, text):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, path)
