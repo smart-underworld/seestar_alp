@@ -1,6 +1,8 @@
 import collections
 import json
 import socket
+import struct
+import threading
 import time
 from types import SimpleNamespace
 
@@ -410,15 +412,17 @@ def test_send_message_paths(monkeypatch, seestar):
     seestar.s = _DummySocket(send_error=socket.timeout())
     assert seestar.send_message("x") is False
 
-    disconnected = {"count": 0}
-    monkeypatch.setattr(
-        seestar, "disconnect", lambda: disconnected.__setitem__("count", 1)
-    )
-    monkeypatch.setattr(seestar, "reconnect", lambda: False)
+    reconnects = {"count": 0}
+
+    def fake_reconnect(wait=True):
+        reconnects["count"] += 1
+        return False
+
+    monkeypatch.setattr(seestar, "reconnect", fake_reconnect)
     seestar.is_watch_events = True
     seestar.s = _DummySocket(send_error=socket.error("boom"))
     assert seestar.send_message("x") is False
-    assert disconnected["count"] == 1
+    assert reconnects["count"] == 1
 
     class GeneralSock:
         def sendall(self, _payload):
@@ -516,6 +520,9 @@ def test_maybe_authenticate_retries_until_scope_idle(monkeypatch, seestar):
     # Auth is configured; first attempt times out (scope busy), a later attempt
     # succeeds (scope idle). The socket must never be dropped in between.
     monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem")
+    # A connected scope: auth is only ever published for a live socket.
+    seestar.s = _DummySocket()
+    seestar.is_connected = True
 
     clock = {"t": 1000.0}
     monkeypatch.setattr("device.seestar_device.time.time", lambda: clock["t"])
@@ -652,12 +659,14 @@ def test_auth_rpc_sync_never_reads_socket_while_receive_thread_alive(seestar):
         "jsonrpc": "2.0",
         "method": "get_verify_str",
         "result": {"str": "CHALLENGE"},
-        "id": seestar.cmdid,
+        "id": 4242,
     }
-    seestar.response_dict[seestar.cmdid] = reply
+    seestar.response_dict[4242] = reply
+    seestar._send_json = lambda data: (4242, True)
     assert seestar._auth_rpc_sync("get_verify_str") is reply
 
     # No reply arriving: times out and returns None, still no socket reads.
+    seestar.response_dict.pop(4242)
     assert seestar._auth_rpc_sync("get_verify_str", timeout=0.25) is None
 
 
@@ -670,15 +679,18 @@ def test_get_socket_msg_paths(monkeypatch, seestar):
     seestar.s = _DummySocket(recv_error=socket.timeout())
     assert seestar.get_socket_msg() is None
 
-    disconnected = {"count": 0}
-    monkeypatch.setattr(
-        seestar, "disconnect", lambda: disconnected.__setitem__("count", 1)
-    )
-    monkeypatch.setattr(seestar, "reconnect", lambda: False)
+    reconnects = {}
+
+    def fake_reconnect(wait=True):
+        reconnects["wait"] = wait
+        return False
+
+    monkeypatch.setattr(seestar, "reconnect", fake_reconnect)
     seestar.is_watch_events = True
     seestar.s = _DummySocket(recv_error=socket.error("x"))
     assert seestar.get_socket_msg() is None
-    assert disconnected["count"] == 1
+    assert reconnects == {"wait": False}
+    assert seestar.s is None
 
     seestar.s = _DummySocket(recv_value=b"")
     assert seestar.get_socket_msg() is None
@@ -702,12 +714,13 @@ def test_update_equ_coord_and_view_state(seestar):
     assert seestar.view_state == {"a": 1}
 
 
-def test_json_message_increments_cmdid(monkeypatch, seestar):
+def test_json_message_stamps_unique_auto_ids(monkeypatch, seestar):
     sent = []
     monkeypatch.setattr(seestar, "send_message", lambda payload: sent.append(payload))
-    start = seestar.cmdid
-    seestar.json_message("scope_get_equ_coord", id=420)
-    assert seestar.cmdid == start + 1
+    seestar.json_message("scope_get_equ_coord")
+    seestar.json_message("scope_get_equ_coord")
+    ids = [json.loads(p)["id"] for p in sent]
+    assert ids[1] == ids[0] + 1
     assert '"method": "scope_get_equ_coord"' in sent[0]
 
 
@@ -1142,6 +1155,666 @@ def test_reconnect_clears_stale_eq_mode_from_previous_connection(monkeypatch, se
     assert seestar.reconnect() is True
     assert seestar.is_EQ_mode_confirmed is False
     assert seestar.is_EQ_mode is False
+
+
+def test_concurrent_sends_never_share_a_cmdid_or_overlap_on_the_socket(seestar):
+    # The Alpaca server is threaded: concurrent requests must each get a unique
+    # command id (replies are matched by id) and must not interleave writes.
+    import threading
+
+    guard = threading.Lock()
+    active = {"n": 0, "max": 0}
+    sent_ids = []
+
+    class SlowSock:
+        def sendall(self, payload):
+            with guard:
+                active["n"] += 1
+                active["max"] = max(active["max"], active["n"])
+            time.sleep(0.01)  # widen the window a racing writer would hit
+            sent_ids.append(json.loads(payload)["id"])
+            with guard:
+                active["n"] -= 1
+
+    seestar.s = SlowSock()
+    seestar.transform_message_for_verify = lambda data: data
+    returned = []
+
+    def worker():
+        returned.append(seestar.send_message_param({"method": "get_device_state"}))
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=5)
+
+    assert active["max"] == 1  # writes never overlapped
+    assert len(set(sent_ids)) == 8
+    assert sorted(returned) == sorted(sent_ids)
+
+
+def test_reconnect_holds_no_socket_or_cmdid_lock(seestar):
+    # A failed write drops the socket and reconnects, which re-authenticates and
+    # can wait seconds on the scope. Neither send-path lock may be held then.
+    import threading
+
+    held_free = {}
+    in_reconnect = threading.Event()
+    release_reconnect = threading.Event()
+
+    class Sock:
+        def sendall(self, payload):
+            raise socket.error("boom")
+
+    def slow_reconnect(wait=True):
+        for name, lock in (
+            ("socket", seestar._socket_write_lock),
+            ("cmdid", seestar._cmdid_lock),
+        ):
+            held_free[name] = lock.acquire(timeout=1)
+            if held_free[name]:
+                lock.release()
+        in_reconnect.set()
+        release_reconnect.wait(timeout=5)
+        return False
+
+    seestar.s = Sock()
+    seestar.is_watch_events = True
+    seestar.reconnect = slow_reconnect
+
+    failing = threading.Thread(target=lambda: seestar.json_message("fails"))
+    failing.start()
+    assert in_reconnect.wait(timeout=5)
+    release_reconnect.set()
+    failing.join(timeout=5)
+    assert held_free == {"socket": True, "cmdid": True}
+
+
+class _RecordingLogger(DummyLogger):
+    """Collects error() calls; debug() can pause a thread at a named log line."""
+
+    def __init__(self):
+        self.errors = []
+        self.debug_hook = None
+
+    def debug(self, *args, **kwargs):
+        if self.debug_hook is not None and args:
+            self.debug_hook(str(args[0]))
+
+    def error(self, *args, **kwargs):
+        self.errors.append(args)
+
+
+class _ScopeServer:
+    """A real TCP listener standing in for the scope; reconnect() dials it."""
+
+    def __init__(self):
+        self._listener = socket.create_server(("127.0.0.1", 0))
+        self._listener.settimeout(0.05)
+        self.port = self._listener.getsockname()[1]
+        self._stopped = False
+        self.conns = []
+        self._cond = threading.Condition()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._accept_loop, daemon=True)
+        self._thread.start()
+
+    def _accept_loop(self):
+        while not self._stop.is_set():
+            try:
+                conn, _ = self._listener.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                return
+            with self._cond:
+                self.conns.append(conn)
+                self._cond.notify_all()
+
+    def wait_for_conns(self, n, timeout=5.0):
+        with self._cond:
+            return self._cond.wait_for(lambda: len(self.conns) >= n, timeout)
+
+    def stop(self):
+        """Stop listening and return every connection the client completed."""
+        if not self._stopped:
+            self._stopped = True
+            self._stop.set()
+            self._thread.join(timeout=5)
+            self._listener.setblocking(False)
+            while True:
+                try:
+                    conn, _ = self._listener.accept()
+                except OSError:
+                    break
+                self.conns.append(conn)
+            self._listener.close()
+        return self.conns
+
+    def close(self):
+        self.stop()
+        for conn in self.conns:
+            conn.close()
+
+
+def _recv_lines(sock, n, timeout=2.0):
+    """Read until ``n`` CRLF-terminated lines arrived; return the raw text."""
+    sock.settimeout(timeout)
+    buf = b""
+    while buf.count(b"\r\n") < n:
+        try:
+            chunk = sock.recv(65536)
+        except OSError:
+            break
+        if not chunk:
+            break
+        buf += chunk
+    return buf.decode()
+
+
+def _recv_until_eof(sock, timeout=2.0):
+    sock.settimeout(timeout)
+    buf = b""
+    while True:
+        try:
+            chunk = sock.recv(65536)
+        except OSError:
+            break
+        if not chunk:
+            break
+        buf += chunk
+    return buf.decode()
+
+
+def _assert_threads_finished(threads, timeout=5.0):
+    for thread in threads:
+        thread.join(timeout=timeout)
+    assert not [t.name for t in threads if t.is_alive()], "threads hung"
+
+
+def test_force_close_mid_send_never_tears_a_message(monkeypatch):
+    # socket_force_close() used to close (and null) self.s while another thread
+    # was inside sendall(): the scope got half a message, and queued writers
+    # hit `None.sendall` (AttributeError). Close must wait for the write.
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    logger = _RecordingLogger()
+    scope = Seestar(logger, "127.0.0.1", 4700, "TestScope", 1, True)
+    ours, peer = socket.socketpair()
+    in_send = threading.Event()
+    resume = threading.Event()
+    closed = threading.Event()
+
+    class PausingSock:
+        """Real socket; the first write pauses halfway through."""
+
+        first = True
+
+        def sendall(self, data):
+            if PausingSock.first:
+                PausingSock.first = False
+                half = len(data) // 2
+                ours.sendall(data[:half])
+                in_send.set()
+                resume.wait(timeout=5)
+                ours.sendall(data[half:])
+            else:
+                ours.sendall(data)
+
+        def close(self):
+            closed.set()
+            ours.close()
+
+    scope.s = PausingSock()
+
+    def send(i):
+        scope.send_message(json.dumps({"id": i, "method": "m"}) + "\r\n")
+
+    first = threading.Thread(target=send, args=(0,))
+    first.start()
+    try:
+        assert in_send.wait(timeout=5)
+        others = [threading.Thread(target=send, args=(i,)) for i in range(1, 5)]
+        for thread in others:
+            thread.start()
+        closer = threading.Thread(target=scope.socket_force_close)
+        closer.start()
+        # Unfixed, the close lands now, mid-write; fixed, it waits for the lock.
+        closed.wait(timeout=0.3)
+    finally:
+        resume.set()
+    _assert_threads_finished([first, *others, closer])
+    assert closed.is_set()
+    received = _recv_until_eof(peer)
+    peer.close()
+
+    assert logger.errors == []  # no AttributeError from a nulled socket
+    assert received.endswith("\r\n"), f"torn message on the wire: {received!r}"
+    ids = [json.loads(line)["id"] for line in received.split("\r\n")[:-1]]
+    assert ids[0] == 0
+    assert len(ids) == len(set(ids))
+
+
+def test_simultaneous_send_failures_reconnect_and_authenticate_once(monkeypatch):
+    # N writers all fail on the same dead socket. Each used to run its own
+    # disconnect + reconnect + auth, killing the others' fresh sockets.
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem", raising=False)
+    server = _ScopeServer()
+    logger = _RecordingLogger()
+    scope = Seestar(logger, "127.0.0.1", server.port, "TestScope", 1, True)
+    monkeypatch.setattr(scope, "send_udp_intro", lambda: None)
+    auth_calls = []
+
+    def authenticate():
+        auth_calls.append(threading.current_thread().name)
+        return True
+
+    monkeypatch.setattr(scope, "authenticate", authenticate)
+    n = 4
+    others_done = threading.Event()
+
+    class DeadSock:
+        def sendall(self, data):
+            raise ConnectionResetError("connection reset by peer")
+
+        def close(self):
+            pass
+
+    def send(i):
+        results[i] = scope.send_message(json.dumps({"id": i, "method": "m"}) + "\r\n")
+
+    others = [threading.Thread(target=send, args=(i,)) for i in range(1, n)]
+
+    def start_others_while_first_recovers(msg):
+        # Logged by the first failed writer after it retired the dead socket and
+        # before it reconnects. Run the other N-1 writers concurrently now: they
+        # find the socket retired and must share one reconnect, not start N.
+        if msg.startswith("Send socket error") and not others_done.is_set():
+            others_done.set()
+            for thread in others:
+                thread.start()
+            _assert_threads_finished(others)
+
+    logger.debug_hook = start_others_while_first_recovers
+    scope.s = DeadSock()
+    scope.is_connected = True
+    scope.is_watch_events = True
+    results = {}
+    first = threading.Thread(target=send, args=(0,))
+    try:
+        first.start()
+        _assert_threads_finished([first])
+        assert others_done.is_set()
+        conns = server.stop()
+        assert len(conns) == 1, f"{len(conns)} reconnects"
+        assert len(auth_calls) == 1, f"{len(auth_calls)} auth handshakes"
+        assert results == {i: True for i in range(n)}
+        received = _recv_lines(conns[0], n)
+        ids = sorted(json.loads(line)["id"] for line in received.split("\r\n")[:-1])
+        assert ids == list(range(n))
+    finally:
+        scope.is_watch_events = False
+        scope.socket_force_close()
+        server.close()
+
+
+def test_command_waits_for_reconnect_auth_while_auth_rpc_goes_through(monkeypatch):
+    # While a reconnect authenticates its fresh socket, its own handshake RPC
+    # must reach the scope, and any other command must wait until auth finishes
+    # (unauthenticated firmware drops it). Nothing may deadlock.
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem", raising=False)
+    server = _ScopeServer()
+    scope = Seestar(DummyLogger(), "127.0.0.1", server.port, "TestScope", 1, True)
+    monkeypatch.setattr(scope, "send_udp_intro", lambda: None)
+    auth_sent = threading.Event()
+    finish_auth = threading.Event()
+
+    def authenticate():
+        _cmdid, sent = scope._send_json({"id": None, "method": "get_verify_str"})
+        if sent:
+            auth_sent.set()
+        finish_auth.wait(timeout=5)
+        return sent
+
+    monkeypatch.setattr(scope, "authenticate", authenticate)
+    results = []
+    reconnecting = threading.Thread(target=scope.reconnect)
+    command = threading.Thread(
+        target=lambda: results.append(
+            scope.send_message('{"id": 1, "method": "get_device_state"}\r\n')
+        )
+    )
+    try:
+        reconnecting.start()
+        assert auth_sent.wait(timeout=5), "the leader's own auth RPC was blocked"
+        command.start()
+        command.join(timeout=0.3)
+        assert command.is_alive(), "command reached the scope mid-handshake"
+    finally:
+        finish_auth.set()
+        _assert_threads_finished([reconnecting, command])
+    try:
+        conns = server.stop()
+        assert len(conns) == 1
+        received = _recv_lines(conns[0], 2)
+        methods = [json.loads(line)["method"] for line in received.split("\r\n")[:-1]]
+        assert methods == ["get_verify_str", "get_device_state"]
+        assert results == [True]
+        assert scope.is_authenticated
+    finally:
+        scope.socket_force_close()
+        server.close()
+
+
+def test_heartbeat_auth_retry_does_not_hold_back_commands(monkeypatch):
+    # A heartbeat retry runs on a socket already carrying traffic. While a busy
+    # scope stalls get_verify_str (up to ~8 s of every retry interval), ordinary
+    # commands must keep going straight out, not wait for the handshake.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem", raising=False)
+    scope = Seestar(DummyLogger(), "127.0.0.1", 4700, "TestScope", 1, True)
+    ours, peer = socket.socketpair()
+    scope.s = ours
+    scope.is_connected = True
+    auth_sent = threading.Event()
+    finish_auth = threading.Event()
+
+    def authenticate():
+        _cmdid, sent = scope._send_json({"id": None, "method": "get_verify_str"})
+        if sent:
+            auth_sent.set()
+        finish_auth.wait(timeout=5)  # the busy scope hasn't answered yet
+        return sent
+
+    monkeypatch.setattr(scope, "authenticate", authenticate)
+    results = []
+    auth = threading.Thread(target=scope._maybe_authenticate)
+    command = threading.Thread(
+        target=lambda: results.append(
+            scope.send_message('{"id": 1, "method": "get_device_state"}\r\n')
+        )
+    )
+    try:
+        auth.start()
+        assert auth_sent.wait(timeout=5)
+        command.start()
+        command.join(timeout=2)
+        assert not command.is_alive(), "command held back by a heartbeat auth retry"
+        assert results == [True]
+    finally:
+        finish_auth.set()
+        _assert_threads_finished([auth, command])
+    try:
+        received = _recv_lines(peer, 2)
+        methods = [json.loads(line)["method"] for line in received.split("\r\n")[:-1]]
+        assert methods == ["get_verify_str", "get_device_state"]
+        assert scope.is_authenticated
+    finally:
+        ours.close()
+        peer.close()
+
+
+def test_heartbeat_auth_does_not_mark_a_replaced_socket_authenticated(monkeypatch):
+    # Without leadership, a reconnect can replace the socket while a heartbeat
+    # handshake is in flight. That handshake's success belongs to the old
+    # socket; the new one must not be reported authenticated because of it.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem", raising=False)
+    scope = Seestar(DummyLogger(), "127.0.0.1", 4700, "TestScope", 1, True)
+    old, old_peer = socket.socketpair()
+    new, new_peer = socket.socketpair()
+    scope.s = old
+    scope.is_connected = True
+
+    def authenticate():
+        scope.s = new  # a reconnect lands mid-handshake
+        return True
+
+    monkeypatch.setattr(scope, "authenticate", authenticate)
+    try:
+        scope._maybe_authenticate()
+        assert scope.is_authenticated is False
+    finally:
+        for s in (old, old_peer, new, new_peer):
+            s.close()
+
+
+def test_disconnect_between_socket_check_and_auth_publish_is_not_authenticated(
+    monkeypatch,
+):
+    # The heartbeat's handshake succeeded; it re-reads self.s to check the socket
+    # is still current, then publishes is_authenticated. A disconnect() landing
+    # between those two steps used to reset the state first, after which the
+    # stale True was written over the reset. Pause the heartbeat at that read
+    # and run the disconnect there.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem", raising=False)
+    auth_done = threading.Event()
+    paused = {"done": False}
+    disconnector = {}
+
+    class PausingScope(Seestar):
+        @property
+        def s(self):
+            value = self._s_real  # the value this read returns
+            if (
+                auth_done.is_set()
+                and not paused["done"]
+                and threading.current_thread() is disconnector["auth_thread"]
+            ):
+                paused["done"] = True
+                # The check has its answer; now disconnect before it publishes.
+                # Fixed, disconnect() blocks on the write lock held around this
+                # read and runs after the publish; unfixed, it finishes here.
+                t = threading.Thread(target=self.disconnect)
+                disconnector["t"] = t
+                t.start()
+                t.join(timeout=0.5)
+            return value
+
+        @s.setter
+        def s(self, value):
+            self._s_real = value
+
+    scope = PausingScope(DummyLogger(), "127.0.0.1", 4700, "TestScope", 1, True)
+    ours, peer = socket.socketpair()
+    scope.s = ours
+    scope.is_connected = True
+
+    def authenticate():
+        auth_done.set()
+        return True
+
+    monkeypatch.setattr(scope, "authenticate", authenticate)
+    auth = threading.Thread(target=scope._maybe_authenticate)
+    disconnector["auth_thread"] = auth
+    try:
+        auth.start()
+        _assert_threads_finished([auth])
+        assert paused["done"], "never reached the post-handshake socket check"
+        _assert_threads_finished([disconnector["t"]])
+        assert scope._s_real is None
+        assert scope.is_authenticated is False
+    finally:
+        ours.close()
+        peer.close()
+
+
+def test_timed_out_partial_write_drops_socket_and_next_send_uses_new_one(
+    monkeypatch,
+):
+    # A sendall() that times out may have put part of the message on the wire.
+    # That socket must never be written again: the next message on it would be
+    # glued to the fragment. Drop it, reconnect, and send on the new socket.
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
+    server = _ScopeServer()
+    scope = Seestar(DummyLogger(), "127.0.0.1", server.port, "TestScope", 1, True)
+    monkeypatch.setattr(scope, "send_udp_intro", lambda: None)
+    ours, old_peer = socket.socketpair()
+    first_msg = json.dumps({"id": 1, "method": "first"}) + "\r\n"
+    second_msg = json.dumps({"id": 2, "method": "second"}) + "\r\n"
+
+    class StalledSock:
+        def sendall(self, data):
+            ours.sendall(data[: len(data) // 2])
+            raise socket.timeout("timed out")
+
+        def close(self):
+            ours.close()
+
+    scope.s = StalledSock()
+    scope.is_connected = True
+    scope.is_watch_events = True
+    try:
+        # Not resent: the scope may already hold part of it.
+        assert scope.send_message(first_msg) is False
+        assert scope.send_message(second_msg) is True
+        stale = _recv_until_eof(old_peer, timeout=0.5)
+        assert stale == first_msg[: len(first_msg.encode()) // 2]
+        conns = server.stop()
+        assert len(conns) == 1
+        assert _recv_lines(conns[0], 1) == second_msg
+    finally:
+        scope.is_watch_events = False
+        scope.socket_force_close()
+        old_peer.close()
+        server.close()
+
+
+def test_failed_write_retires_socket_before_another_writer_can_use_it(monkeypatch):
+    # The failing sender must retire its socket before releasing the write lock.
+    # Pause it once the lock is released (at its "Send socket error" log line)
+    # and let a second writer run: that writer must not append to the stream
+    # that already holds half of the first message.
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
+    server = _ScopeServer()
+    scope = Seestar(DummyLogger(), "127.0.0.1", server.port, "TestScope", 1, True)
+    monkeypatch.setattr(scope, "send_udp_intro", lambda: None)
+    ours, old_peer = socket.socketpair()
+    first_msg = json.dumps({"id": 1, "method": "first"}) + "\r\n"
+    second_msg = json.dumps({"id": 2, "method": "second"}) + "\r\n"
+
+    class HalfThenHealthySock:
+        calls = 0
+
+        def sendall(self, data):
+            HalfThenHealthySock.calls += 1
+            if HalfThenHealthySock.calls == 1:
+                ours.sendall(data[: len(data) // 2])
+                raise socket.timeout("timed out")
+            ours.sendall(data)
+
+        def close(self):
+            ours.close()
+
+    second_result = []
+    second = threading.Thread(
+        target=lambda: second_result.append(scope.send_message(second_msg))
+    )
+    real_debug = scope.logger.debug
+
+    def debug(msg, *args, **kwargs):
+        if str(msg).startswith("Send socket error") and not second.is_alive():
+            if not second_result and second.ident is None:
+                second.start()
+                second.join(timeout=2)
+        return real_debug(msg, *args, **kwargs)
+
+    monkeypatch.setattr(scope.logger, "debug", debug)
+    scope.s = HalfThenHealthySock()
+    scope.is_connected = True
+    scope.is_watch_events = True
+    try:
+        assert scope.send_message(first_msg) is False
+        assert not second.is_alive()
+        # The second writer reconnected and sent on the new socket.
+        assert second_result == [True]
+        stale = _recv_until_eof(old_peer, timeout=0.5)
+        assert stale == first_msg[: len(first_msg.encode()) // 2]
+        conns = server.stop()
+        assert len(conns) == 1
+        assert _recv_lines(conns[0], 1) == second_msg
+    finally:
+        scope.is_watch_events = False
+        scope.socket_force_close()
+        old_peer.close()
+        server.close()
+
+
+def test_receive_error_during_another_reconnect_does_not_block_reader(monkeypatch):
+    # The receive thread hits a socket error while another thread is mid-
+    # reconnect (waiting on the scope's auth reply). It must return at once and
+    # keep reading -- not start, or wait on, a second reconnect -- or nothing
+    # drains the socket and the handshake reply is never read.
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem", raising=False)
+    server = _ScopeServer()
+    scope = Seestar(DummyLogger(), "127.0.0.1", server.port, "TestScope", 1, True)
+    monkeypatch.setattr(scope, "send_udp_intro", lambda: None)
+    auth_started = threading.Event()
+    finish_auth = threading.Event()
+    auth_calls = []
+
+    def authenticate():
+        auth_calls.append(threading.current_thread().name)
+        auth_started.set()
+        finish_auth.wait(timeout=5)
+        return True
+
+    monkeypatch.setattr(scope, "authenticate", authenticate)
+    scope.is_watch_events = True
+    out = []
+    reconnecting = threading.Thread(target=scope.reconnect)
+    reader = threading.Thread(target=lambda: out.append(scope.get_socket_msg()))
+    scope.get_msg_thread = reader
+    try:
+        reconnecting.start()
+        assert auth_started.wait(timeout=5)
+        assert server.wait_for_conns(1)
+        # The scope resets the fresh connection, so the reader's recv() fails.
+        conn = server.conns[0]
+        conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+        conn.close()
+        reader.start()
+        reader.join(timeout=2)
+        assert not reader.is_alive(), "receive thread blocked behind a reconnect"
+    finally:
+        finish_auth.set()
+        _assert_threads_finished([reconnecting, reader])
+        scope.is_watch_events = False
+        scope.socket_force_close()
+        server.close()
+    assert out == [None]
+    assert len(auth_calls) == 1
+
+
+def test_pinned_command_ids_are_sent_unchanged_and_never_reallocated(seestar):
+    ours, peer = socket.socketpair()
+    seestar.s = ours
+    try:
+        seestar.json_message("pinned", id=10001)  # inside the auto range
+        for _ in range(3):
+            seestar.json_message("auto")
+        seestar.heartbeat()  # pins 420
+        seestar.json_message("zero", id=0)
+    finally:
+        ours.close()
+    received = _recv_until_eof(peer)
+    peer.close()
+    sent = [json.loads(line) for line in received.split("\r\n")[:-1]]
+    ids = {}
+    for msg in sent:
+        ids.setdefault(msg["method"], []).append(msg["id"])
+    assert ids["pinned"] == [10001]
+    assert ids["scope_get_equ_coord"] == [420]
+    assert ids["zero"] == [0]
+    assert 10001 not in ids["auto"]
+    assert len(set(ids["auto"])) == 3
 
 
 def test_get_event_state_injects_mount_equ_mode(seestar):
@@ -3171,9 +3844,10 @@ def test_auth_rpc_sync_accepts_reply_from_response_dict(seestar):
         "method": "get_verify_str",
         "result": {"str": "CHALLENGE"},
         "code": 0,
-        "id": seestar.cmdid,
+        "id": 4242,
     }
-    seestar.response_dict[seestar.cmdid] = stolen
+    seestar.response_dict[4242] = stolen
+    seestar._send_json = lambda data: (4242, True)
 
     assert seestar._auth_rpc_sync("get_verify_str") is stolen
 
