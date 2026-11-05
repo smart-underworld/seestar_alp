@@ -16,6 +16,7 @@ from device.app import DeviceMain  # type: ignore
 from device.config import Config, ConfigError  # type: ignore
 from device import log  # type: ignore
 from device import telescope  # type: ignore
+from device.version import Version  # type: ignore
 
 
 import os
@@ -85,6 +86,7 @@ if __name__ == "__main__":
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;udp"
     # We want to initialize ALP logger
     logger = log.init_logging()
+    logger.info(f"seestar_alp version {Version.app_version()}")
 
     logger.info("Starting ALP web server")
     main = AppRunner(logger, "ALP", DeviceMain)
@@ -138,7 +140,7 @@ if __name__ == "__main__":
         )
 
     n.notify("READY=1")
-    print("Startup Complete")
+    print(f"Startup Complete (seestar_alp {Version.app_version()})")
 
     # telescope.telescopes()
 
