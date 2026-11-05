@@ -520,6 +520,9 @@ def test_maybe_authenticate_retries_until_scope_idle(monkeypatch, seestar):
     # Auth is configured; first attempt times out (scope busy), a later attempt
     # succeeds (scope idle). The socket must never be dropped in between.
     monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem")
+    # A connected scope: auth is only ever published for a live socket.
+    seestar.s = _DummySocket()
+    seestar.is_connected = True
 
     clock = {"t": 1000.0}
     monkeypatch.setattr("device.seestar_device.time.time", lambda: clock["t"])
@@ -1575,6 +1578,66 @@ def test_heartbeat_auth_does_not_mark_a_replaced_socket_authenticated(monkeypatc
     finally:
         for s in (old, old_peer, new, new_peer):
             s.close()
+
+
+def test_disconnect_between_socket_check_and_auth_publish_is_not_authenticated(
+    monkeypatch,
+):
+    # The heartbeat's handshake succeeded; it re-reads self.s to check the socket
+    # is still current, then publishes is_authenticated. A disconnect() landing
+    # between those two steps used to reset the state first, after which the
+    # stale True was written over the reset. Pause the heartbeat at that read
+    # and run the disconnect there.
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem", raising=False)
+    auth_done = threading.Event()
+    paused = {"done": False}
+    disconnector = {}
+
+    class PausingScope(Seestar):
+        @property
+        def s(self):
+            value = self._s_real  # the value this read returns
+            if (
+                auth_done.is_set()
+                and not paused["done"]
+                and threading.current_thread() is disconnector["auth_thread"]
+            ):
+                paused["done"] = True
+                # The check has its answer; now disconnect before it publishes.
+                # Fixed, disconnect() blocks on the write lock held around this
+                # read and runs after the publish; unfixed, it finishes here.
+                t = threading.Thread(target=self.disconnect)
+                disconnector["t"] = t
+                t.start()
+                t.join(timeout=0.5)
+            return value
+
+        @s.setter
+        def s(self, value):
+            self._s_real = value
+
+    scope = PausingScope(DummyLogger(), "127.0.0.1", 4700, "TestScope", 1, True)
+    ours, peer = socket.socketpair()
+    scope.s = ours
+    scope.is_connected = True
+
+    def authenticate():
+        auth_done.set()
+        return True
+
+    monkeypatch.setattr(scope, "authenticate", authenticate)
+    auth = threading.Thread(target=scope._maybe_authenticate)
+    disconnector["auth_thread"] = auth
+    try:
+        auth.start()
+        _assert_threads_finished([auth])
+        assert paused["done"], "never reached the post-handshake socket check"
+        _assert_threads_finished([disconnector["t"]])
+        assert scope._s_real is None
+        assert scope.is_authenticated is False
+    finally:
+        ours.close()
+        peer.close()
 
 
 def test_timed_out_partial_write_drops_socket_and_next_send_uses_new_one(

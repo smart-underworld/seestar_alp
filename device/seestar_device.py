@@ -490,13 +490,23 @@ class Seestar:
             self.logger.debug(
                 "Firmware authentication still busy; staying connected, will retry"
             )
-        elif self.s is not sock:
-            # A reconnect replaced the socket mid-handshake; it authenticates
-            # the new one itself.
-            self.logger.debug("Socket replaced during authentication; not reusing it")
-        else:
-            self.is_authenticated = True
+        elif self._publish_authenticated(sock):
             self.logger.info("Firmware authentication succeeded")
+        else:
+            # The socket was retired or replaced mid-handshake; a reconnect
+            # authenticates the new one itself.
+            self.logger.debug("Socket replaced during authentication; not reusing it")
+
+    def _publish_authenticated(self, sock: Optional[socket.socket]) -> bool:
+        """Mark the connection authenticated if ``sock`` is still the current
+        socket. Checked and set under ``_socket_write_lock``, the lock every
+        retire/disconnect path resets auth state under, so a socket retired
+        after a successful handshake can never be reported authenticated."""
+        with self._socket_write_lock:
+            if sock is None or self.s is not sock:
+                return False
+            self.is_authenticated = True
+            return True
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
     #       "result":0, "error":"dummy error",
@@ -617,9 +627,17 @@ class Seestar:
             self._retire_socket_locked(sock)
 
     def disconnect(self) -> None:
-        # Disconnect tries to clean up the socket if it exists
-        self._reset_connection_state()
-        self.socket_force_close()
+        # Reset and close in one step under the write lock, so a concurrent
+        # auth publish (_publish_authenticated) lands either before the reset
+        # or sees the socket gone.
+        with self._socket_write_lock:
+            self._reset_connection_state()
+            sock, self.s = self.s, None
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
 
     def send_udp_intro(self) -> None:
         # {"id":1,"method":"scan_iscope","params":""}
@@ -745,7 +763,8 @@ class Seestar:
             try:
                 if getattr(Config, "seestar_interop_pem", ""):
                     if self.authenticate():
-                        self.is_authenticated = True
+                        # Only if this socket survived the handshake.
+                        self._publish_authenticated(sock)
                     else:
                         # Scope is likely busy; throttle the heartbeat retry so
                         # we don't immediately stall on another handshake.
