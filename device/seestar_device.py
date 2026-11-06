@@ -792,7 +792,10 @@ class Seestar:
                 if self._reconnect_leader is not None:
                     # A reconnect is installing the socket; the reader loops back.
                     return None
-                self.logger.warning("socket not initialized!")
+                # No socket yet (or the reconnect retired it): wait
+                # quietly for the heartbeat thread's backed-off
+                # reconnect instead of warning every loop.
+                self.logger.debug("socket not initialized!")
                 time.sleep(3)
                 return None
             data = sock.recv(1024 * 60)  # comet data is >50kb
@@ -811,6 +814,13 @@ class Seestar:
 
         data = data.decode("utf-8")
         if len(data) == 0:
+            # Peer closed the socket: treat it as a disconnect
+            # (drop + reconnect) instead of spinning on a dead
+            # socket that still reads as connected.
+            self.logger.debug("peer closed the scope socket")
+            self._drop_socket(sock)
+            if self.is_watch_events:
+                self.reconnect(wait=False)
             return None
 
         return data
