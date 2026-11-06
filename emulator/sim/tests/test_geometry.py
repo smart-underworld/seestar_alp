@@ -87,3 +87,30 @@ def test_dense_star_fields_are_capped_for_the_aarch64_models_only():
     # must keep rendering every star they always have.
     assert frame_format("S50P").max_stars == 80
     assert frame_format("S50").max_stars == 0
+
+
+def _field_arcmin(fmt):
+    return (
+        fmt.height * fmt.plate_scale_arcsec / 60.0,
+        fmt.width * fmt.plate_scale_arcsec / 60.0,
+    )
+
+
+def test_s30_models_render_their_own_field_of_view_not_the_s50s():
+    # Issue #795: S30 reused the S50's 2.37"/px and S30P the discarded 1.18"/px
+    # guess, so mosaics rendered a field 1.7x / 3.2x too small.  The rendered
+    # field must agree (within a few percent) with the planner's per-model FoV
+    # in front/public/seestar_models.js (short axis, long axis in arcmin).
+    planner = {"S30": (73.2, 130.2), "S30P": (134.6, 239.2)}
+    for model, (short_arcmin, long_arcmin) in planner.items():
+        got_short, got_long = _field_arcmin(frame_format(model))
+        assert abs(got_short / short_arcmin - 1) < 0.03, model
+        assert abs(got_long / long_arcmin - 1) < 0.03, model
+
+
+def test_s30_plate_scales_follow_from_focal_length_and_2_9um_pixels():
+    for model, focal in {"S30": 150.0, "S30P": 160.0}.items():
+        fmt = frame_format(model)
+        assert fmt.focal_len_mm == focal
+        expected = 2.9e-3 / focal * 206264.806
+        assert abs(fmt.plate_scale_arcsec - expected) < 0.01, model
