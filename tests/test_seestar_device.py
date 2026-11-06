@@ -699,9 +699,7 @@ def test_get_socket_msg_paths(monkeypatch, seestar):
     assert seestar.get_socket_msg() == "hello"
 
 
-def test_get_socket_msg_logs_socket_none_at_debug_not_warning(
-    monkeypatch, seestar
-):
+def test_get_socket_msg_logs_socket_none_at_debug_not_warning(monkeypatch, seestar):
     # A dead device's receive thread used to warn "socket not
     # initialized!" every loop (~20/min); it now waits quietly at
     # DEBUG for the heartbeat thread's backed-off reconnect.
