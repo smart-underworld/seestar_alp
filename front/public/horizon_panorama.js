@@ -11,6 +11,7 @@ import {
   photoTimeUtc,
   profilePoints,
   summary,
+  sunUnavailable,
   turnBetween,
 } from "./horizon_panorama_core.js";
 
@@ -211,14 +212,15 @@ async function openPhoto(file) {
     canvas.width = photo.previewWidth;
     canvas.height = photo.previewHeight;
     $("hz-work").hidden = false;
-    const exif = state.infos.photo;
-    $("hz-mode-sun").disabled = !exif.date;
-    if (!exif.date && mode() === "sun") {
+    const noSun = sunUnavailable(state.infos.photo, configLat, configLon);
+    $("hz-mode-sun").disabled = noSun !== null;
+    document.querySelector('label[for="hz-mode-sun"]').title = noSun ? `Sun mode unavailable: ${noSun}.` : "";
+    if (noSun && mode() === "sun") {
       $("hz-mode-north").checked = true;
     }
     updateHint();
     await apply(state);
-    setStatus(`${file.name} analysed.`, "success");
+    setStatus(noSun ? `${file.name} analysed. Sun mode is off: ${noSun}.` : `${file.name} analysed.`, "success");
   } catch (e) {
     setStatus(`This photo could not be analysed: ${e.message}`, "danger");
   }
@@ -308,16 +310,23 @@ async function clickSun(column, row) {
 
 async function orientOnSun(column, row, prefix = "") {
   const exif = current.infos.photo;
+  const noSun = sunUnavailable(exif, configLat, configLon);
+  if (noSun) {
+    throw new Error(`The Sun cannot orient this photo: ${noSun}.`);
+  }
   const when = photoTimeUtc(exif.date);
-  const lat = exif.latitude ?? configLat;
-  const lon = exif.longitude ?? configLon;
-  const response = await fetch(`/horizon/sun?when=${encodeURIComponent(when)}&lat=${lat}&lon=${lon}`);
+  // Without the photo's own position the server uses the ALP's, and refuses
+  // an unset one.
+  const fromPhoto = exif.latitude != null && exif.longitude != null;
+  const place = fromPhoto ? `&lat=${exif.latitude}&lon=${exif.longitude}` : "";
+  const response = await fetch(`/horizon/sun?when=${encodeURIComponent(when)}${place}`);
   if (!response.ok) {
-    throw new Error(`Sun position: ${response.status} ${await response.text()}`);
+    const error = await response.json().catch(() => ({}));
+    throw new Error(`Sun position: ${error.description || error.title || response.status}`);
   }
   const sun = await response.json();
-  await apply(await call("orientOnSun", { column, row, ...sun }));
-  const where = exif.latitude != null ? "the photo's location" : "the ALP's location";
+  await apply(await call("orientOnSun", { column, row, altitude: sun.altitude, azimuth: sun.azimuth }));
+  const where = fromPhoto ? "the photo's location" : "the ALP's location";
   const zone = hasUtcOffset(exif.date) ? "" : ", photo time taken as this browser's local time";
   setStatus(
     `${prefix}Sun at azimuth ${sun.azimuth.toFixed(1)}°, altitude ${sun.altitude.toFixed(1)}° on ${exif.date} ` +
@@ -392,10 +401,12 @@ async function save() {
     $("hz-result").className = "alert alert-success mt-3";
     $("hz-result").textContent =
       `Saved to ${body.file} (${body.points} points): the planner and the scheduler use it from now on.${previous}`;
-    const shown = $("hz-current");
-    if (shown) {
-      shown.textContent = `${body.file} · ${body.points} points`;
-    }
+    // The Current horizon card, whatever it showed before (none, a file, or
+    // a warning about an unusable one).
+    const shown = document.createElement("p");
+    shown.className = "mb-0";
+    shown.textContent = `${body.file} · ${body.points} points`;
+    $("hz-current").replaceChildren(shown);
   } catch (e) {
     $("hz-result").className = "alert alert-danger mt-3";
     $("hz-result").textContent = `Not saved: ${e.message}`;

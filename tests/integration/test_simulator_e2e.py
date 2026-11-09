@@ -608,7 +608,7 @@ def test_06d_horizon_page_profile_reaches_the_planner(
 
     sun = client.simulate_get(
         "/horizon/sun",
-        params={"when": "2026-10-23T13:59:04Z", "lat": "44.06504", "lon": "0.65041"},
+        params={"when": "2026-10-23T13:59:04Z", "lat": "44.06", "lon": "0.65"},
     )
     assert sun.status_code == 200
     assert sun.json["azimuth"] == pytest.approx(218.0, abs=0.1)

@@ -24,15 +24,34 @@ export function horizonLineFromSun(sunRow, rowOfSunAltitude, currentHorizon) {
 }
 
 /*
- * Photo date (EXIF, ISO 8601) as a UTC ISO string for /horizon/sun. A date
- * without UTC offset is read as this browser's local time.
+ * Photo date (ISO 8601, or EXIF's own "2026:10:23 15:59:17") as a UTC ISO
+ * string for /horizon/sun; null when it cannot be read. A date without UTC
+ * offset is read as this browser's local time.
  */
 export function photoTimeUtc(exifDate) {
   if (!exifDate) {
     return null;
   }
-  const date = new Date(exifDate);
+  const iso = String(exifDate).replace(/^(\d{4}):(\d\d):(\d\d)[ T]/, "$1-$2-$3T");
+  const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+/*
+ * Why the Sun cannot orient this photo, or null when it can. Its position
+ * needs the time of the photo, and the place: the photo's GPS position, or
+ * else the ALP's Latitude and Longitude, where 0, 0 stands for "not set".
+ */
+export function sunUnavailable(exif, siteLat, siteLon) {
+  if (photoTimeUtc(exif.date) === null) {
+    return exif.date ? `the photo's date (${exif.date}) cannot be read` : "the photo has no date";
+  }
+  const photoPlace = exif.latitude != null && exif.longitude != null;
+  const sitePlace = Number.isFinite(siteLat) && Number.isFinite(siteLon) && !(siteLat === 0 && siteLon === 0);
+  if (!photoPlace && !sitePlace) {
+    return "the photo has no GPS position and this ALP's Latitude and Longitude are not set (Settings)";
+  }
+  return null;
 }
 
 export function hasUtcOffset(exifDate) {

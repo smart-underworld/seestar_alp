@@ -21,7 +21,7 @@ import threading
 from astropy.coordinates import FK5, SkyCoord
 from astropy.time import Time
 
-from device.config import Config
+from device.config import Config, stage_file
 from device.seestar_util import Util
 
 
@@ -31,6 +31,10 @@ logger = logging.getLogger()
 
 class HorizonError(ValueError):
     """Raised when a horizon file cannot be read."""
+
+
+class HorizonSaveError(Exception):
+    """Raised when a valid profile cannot be written; the former one stays in use."""
 
 
 class SiteLocationUnknown(LookupError):
@@ -150,9 +154,11 @@ def configured_profile():
     """``(profile, error)`` for the configured ``horizon_file``.
 
     ``(None, None)`` when no file is configured. The file is parsed again
-    only when its path, modification time or size changes, so the planner
-    and the scheduler can call this freely: it costs one ``stat``. An
-    unusable file is logged once, when it is read, not on every call.
+    only when its path, inode, modification time or size changes, so the
+    planner and the scheduler can call this freely: it costs one ``stat``.
+    The inode catches a file replaced within one tick of a coarse clock (an
+    atomic save gives it a new one); ``forget_cached_profile`` covers the
+    rest. An unusable file is logged once, when it is read, not on every call.
     """
     path = (Config.horizon_file or "").strip()
     if not path:
@@ -163,7 +169,7 @@ def configured_profile():
         error = f"{path}: {e.strerror}"
         _log_once(("missing", path, e.errno), error)
         return None, error
-    key = (path, stat.st_mtime_ns, stat.st_size)
+    key = (path, stat.st_ino, stat.st_mtime_ns, stat.st_size)
     with _lock:
         if _cache["key"] != key:
             try:
@@ -174,6 +180,12 @@ def configured_profile():
                 logger.warning(f"Horizon file not used, flat horizon instead: {error}")
             _cache.update(key=key, profile=profile, error=error)
         return _cache["profile"], _cache["error"]
+
+
+def forget_cached_profile():
+    """Make the next ``configured_profile`` call read the file again."""
+    with _lock:
+        _cache.update(key=None, profile=None, error=None)
 
 
 _logged = set()
@@ -208,48 +220,10 @@ def altaz(coord: SkyCoord, latitude, longitude, when: Time):
     so the check errs on the hidden side.
     """
     of_date = coord.transform_to(FK5(equinox=when))
-    return _altaz_of_date(of_date.ra.deg, of_date.dec.deg, latitude, longitude, when)
-
-
-def sun_altaz(latitude, longitude, when: Time):
-    """Altitude and azimuth of the Sun at ``when``, in degrees.
-
-    Low-precision formulae of the Astronomical Almanac, good to a hundredth of
-    a degree between 1950 and 2050: enough to orient a panorama on the Sun.
-    Geometric position: add ``refraction`` for where a photo shows it.
-    """
-    days = when.utc.jd - 2451545.0
-    mean_longitude = 280.460 + 0.9856474 * days
-    anomaly = math.radians(357.528 + 0.9856003 * days)
-    ecliptic = math.radians(
-        mean_longitude + 1.915 * math.sin(anomaly) + 0.020 * math.sin(2 * anomaly)
-    )
-    obliquity = math.radians(23.439 - 0.0000004 * days)
-    ra = math.atan2(math.cos(obliquity) * math.sin(ecliptic), math.cos(ecliptic))
-    dec = math.asin(math.sin(obliquity) * math.sin(ecliptic))
-    return _altaz_of_date(
-        math.degrees(ra), math.degrees(dec), latitude, longitude, when
-    )
-
-
-def refraction(altitude):
-    """Atmospheric refraction, in degrees, of a body at geometric ``altitude``.
-
-    Saemundsson's formula, standard pressure and temperature: 0.04 degree at
-    25 degrees of altitude, 0.16 at 5, half a degree at the horizon. A photo
-    shows the Sun lifted by this much.
-    """
-    if altitude < -1.0:
-        return 0.0
-    return 1.02 / math.tan(math.radians(altitude + 10.3 / (altitude + 5.11))) / 60.0
-
-
-def _altaz_of_date(ra_deg, dec_deg, latitude, longitude, when: Time):
-    """Altitude and azimuth from right ascension and declination of the date."""
     days = when.utc.jd - 2451545.0
     sidereal = (280.46061837 + 360.98564736629 * days + longitude) % 360.0
-    hour_angle = math.radians(sidereal - ra_deg)
-    dec, lat = math.radians(dec_deg), math.radians(latitude)
+    hour_angle = math.radians(sidereal - of_date.ra.deg)
+    dec, lat = of_date.dec.radian, math.radians(latitude)
     altitude = math.asin(
         math.sin(dec) * math.sin(lat)
         + math.cos(dec) * math.cos(lat) * math.cos(hour_angle)
@@ -339,8 +313,18 @@ def save_panorama_profile(hrz_text, horizon_json=None):
     given, the MMhorizon ``.horizon.json`` it came from, kept beside it as a
     record of the photo and of how north was set. Both go next to
     config.toml, and ``horizon_file`` then points to the ``.hrz``; a file
-    configured before is left in place. Returns ``(path, previous_file,
-    profile)``. Raises ``HorizonError`` on an invalid profile.
+    configured before is left in place. A save without ``horizon_json``
+    removes the record an earlier save left, which described another photo.
+    The planner and the scheduler use the new profile from their next call.
+    Returns ``(path, previous_file, profile)``.
+
+    Both files are written in full, to temporary files, before anything is
+    replaced; config.toml is saved next, and the files then take their place.
+    An OSError on the way (folder not writable by the service, disk full)
+    removes the temporary files, puts ``horizon_file`` back and raises
+    ``HorizonSaveError``: the former profile stays in use.
+
+    Raises ``HorizonError`` on an invalid profile, before anything is written.
     """
     profile = HorizonProfile.parse_hrz(hrz_text, "uploaded profile")
     if horizon_json is not None:
@@ -352,18 +336,53 @@ def save_panorama_profile(hrz_text, horizon_json=None):
             raise HorizonError("uploaded .horizon.json: not an MMhorizon file")
     folder = os.path.dirname(Config.path_to_dat)
     path = os.path.join(folder, PANORAMA_HRZ)
-    _write_atomic(path, hrz_text)
-    if horizon_json is not None:
-        _write_atomic(os.path.join(folder, PANORAMA_JSON), horizon_json)
+    record_path = os.path.join(folder, PANORAMA_JSON)
     previous = Config.horizon_file
-    Config.set_toml("seestar_initialization", "horizon_file", path)
-    Config.save_toml()
-    Config.load_toml()
+    config_changes = previous != path
+    config_saved = False
+    staged = []
+    try:
+        staged.append((stage_file(path, hrz_text, "utf-8"), path))
+        if horizon_json is not None:
+            staged.append((stage_file(record_path, horizon_json, "utf-8"), record_path))
+        if config_changes:
+            Config.set_toml("seestar_initialization", "horizon_file", path)
+            Config.save_toml()
+            config_saved = True
+        # The profile last: whenever this raises, the former one is in use.
+        for tmp, target in reversed(staged):
+            os.replace(tmp, target)
+        if horizon_json is None and os.path.exists(record_path):
+            os.remove(record_path)
+    except OSError as e:
+        for tmp, _ in staged:
+            _remove_quietly(tmp)
+        if config_changes:
+            _put_back_horizon_file(previous, config_saved)
+        raise HorizonSaveError(f"horizon profile not saved: {e}") from e
+    finally:
+        forget_cached_profile()
+    if config_changes:
+        Config.load_toml()
     return path, previous, profile
 
 
-def _write_atomic(path, text):
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(text)
-    os.replace(tmp, path)
+def _remove_quietly(path):
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.warning(f"Could not remove {path}: {e}")
+
+
+def _put_back_horizon_file(previous, saved):
+    """``horizon_file`` as it was in memory, and in config.toml if ``saved``."""
+    Config.set_toml("seestar_initialization", "horizon_file", previous)
+    if not saved:
+        return
+    try:
+        Config.save_toml()
+        Config.load_toml()
+    except OSError as e:
+        logger.warning(f"Could not put horizon_file back to {previous!r}: {e}")

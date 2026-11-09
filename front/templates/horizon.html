@@ -10,13 +10,14 @@
 <div id="hz-page" data-lat="{{ config_lat }}" data-lon="{{ config_long }}">
     <div class="card border-primary mb-3">
         <div class="card-header"><h3>Current horizon</h3></div>
-        <div class="card-body">
+        {# Replaced by the saved profile once the page saves one (horizon_panorama.js). #}
+        <div class="card-body" id="hz-current">
             {% if horizon_error %}
                 <div class="alert alert-warning mb-0" role="alert">Horizon file not used: {{ horizon_error }}</div>
             {% elif horizon_file %}
-                <p class="mb-0" id="hz-current">{{ horizon_file }} &middot; {{ horizon_point_count }} points</p>
+                <p class="mb-0">{{ horizon_file }} &middot; {{ horizon_point_count }} points</p>
             {% else %}
-                <p class="mb-0" id="hz-current">None: the planner assumes a flat horizon at 30&deg;.</p>
+                <p class="mb-0">None: the planner assumes a flat horizon at 30&deg;.</p>
             {% endif %}
         </div>
     </div>

@@ -3021,3 +3021,43 @@ def test_horizon_card_explains_how_to_set_a_profile():
     html = _render_partial("partials/horizon.html", horizon_curve=None)
     assert "No horizon profile" in html
     assert "Horizon file" in html
+
+
+def test_nav_links_to_the_horizon_page():
+    html = _render_nav("planning")
+    assert 'href="/1/horizon">Horizon (MMhorizon)</a>' in html
+
+
+def test_horizon_card_links_to_the_panorama_page():
+    for curve in (None, [(azimuth, 10) for azimuth in range(361)]):
+        html = _render_partial("partials/horizon.html", horizon_curve=curve, root="/1")
+        assert 'href="/1/horizon">Make the horizon from a 360&deg; panorama</a>' in html
+
+
+@pytest.mark.parametrize(
+    "horizon_file, horizon_error, shown",
+    [
+        ("", None, "flat horizon at 30"),
+        ("/etc/seestar/site.hrz", None, "/etc/seestar/site.hrz &middot; 4 points"),
+        ("/etc/seestar/gone.hrz", "No such file or directory", "Horizon file not used"),
+    ],
+)
+def test_horizon_page_current_card_is_always_replaceable(
+    horizon_file, horizon_error, shown
+):
+    # The page replaces #hz-current after a save, whatever it showed before,
+    # a warning about an unusable file included.
+    html = front_app.fetch_template("horizon.html").render(
+        **_minimal_context("horizon"),
+        config_lat=44.06,
+        config_long=0.65,
+        horizon_file=horizon_file,
+        horizon_error=horizon_error,
+        horizon_point_count=4,
+    )
+    current = re.search(
+        r'<div class="card-body" id="hz-current">(.*?)</div>', html, re.S
+    )
+    assert current is not None
+    assert shown in current.group(0)
+    assert 'id="hz-page" data-lat="44.06" data-lon="0.65"' in html

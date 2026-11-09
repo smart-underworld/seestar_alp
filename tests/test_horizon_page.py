@@ -2,11 +2,13 @@
 
 import hashlib
 import json
+import math
 import re
 from pathlib import Path
 
 import falcon
 import pytest
+from astropy.utils import iers
 from falcon import testing
 
 import front.app as front_app
@@ -59,8 +61,6 @@ def test_page_renders_the_panorama_tool(client, monkeypatch):
     assert 'src="/public/horizon_panorama.js"' in resp.text
     assert 'type="file" id="hz-photo"' in resp.text
     assert "flat horizon at 30" in resp.text
-    # Reachable from the Functions menu of every page.
-    assert 'href="/1/horizon">Horizon (MMhorizon)</a>' in resp.text
 
 
 def test_page_shows_the_current_profile(client, monkeypatch):
@@ -110,33 +110,98 @@ def test_post_refuses_a_large_body(client, config_file):
     assert resp.status_code == 413
 
 
-def test_sun_position(client):
+def test_post_refuses_a_large_body_under_falcon_3(client, config_file, monkeypatch):
+    # Falcon 3 (requirements_full_overload.txt) names it HTTPPayloadTooLarge.
+    monkeypatch.delattr(falcon, "HTTPContentTooLarge")
+    resp = client.simulate_post("/horizon", json={"hrz": "0 10\n" * 200_000})
+    assert resp.status_code == 413
+
+
+def test_post_reports_a_write_failure(client, config_file, tmp_path, monkeypatch):
+    def read_only(path, text, encoding=None):
+        raise PermissionError(13, "Permission denied", path)
+
+    monkeypatch.setattr(horizon, "stage_file", read_only)
+    resp = client.simulate_post("/horizon", json={"hrz": "0 10\n"})
+    assert resp.status_code == 500
+    assert "Permission denied" in resp.json["description"]
+    assert "previous horizon is still in use" in resp.json["description"]
+    assert config_file.horizon_file == ""
+    assert not (tmp_path / "horizon.hrz").exists()
+
+
+@pytest.mark.parametrize(
+    "when",
+    [
+        "2026-10-23T13:59:04Z",
+        "2026-06-21T12:00:00Z",
+        "2026-03-20T17:30:00Z",
+        "2026-01-15T08:45:00Z",
+    ],
+)
+def test_sun_position_matches_astropy(client, monkeypatch, when):
+    from astropy import units as u
+    from astropy.coordinates import AltAz, EarthLocation, get_sun
+    from astropy.time import Time
+
+    monkeypatch.setattr(iers.conf, "auto_download", False)
+    resp = client.simulate_get(
+        "/horizon/sun", params={"when": when, "lat": "44.06", "lon": "0.65"}
+    )
+    assert resp.status_code == 200
+    # Apparent position, with the same atmosphere as ephem's default.
+    t = Time(when.rstrip("Z"), scale="utc")
+    frame = AltAz(
+        obstime=t,
+        location=EarthLocation(lat=44.06 * u.deg, lon=0.65 * u.deg),
+        pressure=1010 * u.hPa,
+        temperature=15 * u.deg_C,
+        relative_humidity=0,
+        obswl=0.55 * u.micron,
+    )
+    reference = get_sun(t).transform_to(frame)
+    altitude, azimuth = resp.json["altitude"], resp.json["azimuth"]
+    assert altitude == pytest.approx(reference.alt.deg, abs=0.02)
+    gap = (azimuth - reference.az.deg + 180) % 360 - 180
+    assert abs(gap) * math.cos(math.radians(altitude)) < 0.02
+
+
+def test_sun_of_the_first_real_panorama(client):
+    # MMhorizon's first panorama, 2026-10-23 15:59:04 (UTC+2), was oriented on
+    # the Sun: azimuth 218.0, altitude 26.3 by astronomy-engine.
     resp = client.simulate_get(
         "/horizon/sun",
-        params={
-            "when": "2026-10-23T15:59:04+02:00",
-            "lat": "44.06504",
-            "lon": "0.65041",
-        },
+        params={"when": "2026-10-23T15:59:04+02:00", "lat": "44.06", "lon": "0.65"},
     )
     assert resp.status_code == 200
     assert resp.json["azimuth"] == pytest.approx(218.0, abs=0.1)
     assert resp.json["altitude"] == pytest.approx(26.3, abs=0.1)
-    # Apparent altitude: the geometric one lifted by refraction.
-    geometric, _ = horizon.sun_altaz(
-        44.06504, 0.65041, horizon.Time("2026-10-23T13:59:04", scale="utc")
-    )
-    assert resp.json["altitude"] - geometric == pytest.approx(0.034, abs=0.002)
     # The browser sends UTC.
     utc = client.simulate_get(
         "/horizon/sun",
-        params={
-            "when": "2026-10-23T13:59:04.000Z",
-            "lat": "44.06504",
-            "lon": "0.65041",
-        },
+        params={"when": "2026-10-23T13:59:04.000Z", "lat": "44.06", "lon": "0.65"},
     )
     assert utc.json == resp.json
+
+
+def test_sun_position_at_the_site_when_the_photo_has_no_location(client, monkeypatch):
+    monkeypatch.setattr(horizon, "site_location", lambda: (44.06, 0.65))
+    resp = client.simulate_get("/horizon/sun", params={"when": "2026-10-23T13:59:04Z"})
+    assert resp.status_code == 200
+    assert (resp.json["latitude"], resp.json["longitude"]) == (44.06, 0.65)
+    assert resp.json["azimuth"] == pytest.approx(218.0, abs=0.1)
+
+
+@pytest.mark.parametrize("params", [{}, {"lat": "0", "lon": "0"}])
+def test_sun_position_refuses_an_unknown_site(client, monkeypatch, params):
+    # Settings never filled in (0, 0) and no location in the photo: no Sun
+    # computed for 0 N 0 E, which would turn north by tens of degrees.
+    monkeypatch.setattr(horizon, "site_location", lambda: None)
+    resp = client.simulate_get(
+        "/horizon/sun", params={"when": "2026-10-23T13:59:04Z", **params}
+    )
+    assert resp.status_code == 400
+    assert "Site location unknown" in resp.json["description"]
 
 
 @pytest.mark.parametrize(

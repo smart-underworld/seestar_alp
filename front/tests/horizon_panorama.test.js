@@ -7,6 +7,7 @@ import {
   photoTimeUtc,
   profilePoints,
   summary,
+  sunUnavailable,
   turnBetween,
 } from "../public/horizon_panorama_core.js";
 
@@ -25,6 +26,25 @@ describe("horizon_panorama_core.js", () => {
     expect(hasUtcOffset("2026-10-23T15:59:17+02:00")).toBe(true);
     expect(hasUtcOffset("2026-10-23T15:59:17Z")).toBe(true);
     expect(hasUtcOffset("2026-10-23T15:59:17")).toBe(false);
+  });
+
+  it("reads EXIF's own date form, which Date does not", () => {
+    expect(photoTimeUtc("2026:10:23 15:59:17")).toBe(new Date(2026, 9, 23, 15, 59, 17).toISOString());
+    expect(photoTimeUtc("2026:10:23 15:59:17+02:00")).toBe("2026-10-23T13:59:17.000Z");
+    expect(hasUtcOffset("2026:10:23 15:59:17")).toBe(false);
+  });
+
+  it("offers Sun mode only with a readable date and a known place", () => {
+    const located = { date: "2026-10-23T15:59:17+02:00", latitude: 44.06, longitude: 0.65 };
+    expect(sunUnavailable(located, 0, 0)).toBeNull();
+    // No GPS in the photo: the ALP's location, unless it is unset (0, 0).
+    const unplaced = { date: "2026-10-23T15:59:17+02:00", latitude: null, longitude: null };
+    expect(sunUnavailable(unplaced, 44.06, 0.65)).toBeNull();
+    expect(sunUnavailable(unplaced, 0, 0)).toMatch(/Latitude and Longitude are not set/);
+    expect(sunUnavailable({ ...unplaced, latitude: undefined, longitude: undefined }, 0, 0)).not.toBeNull();
+    // A date the browser cannot read, or none.
+    expect(sunUnavailable({ ...located, date: "23/10/2026 15h59" }, 44.06, 0.65)).toMatch(/cannot be read/);
+    expect(sunUnavailable({ ...located, date: null }, 44.06, 0.65)).toBe("the photo has no date");
   });
 
   it("maps a click on the scaled canvas to photo pixels", () => {

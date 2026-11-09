@@ -39,7 +39,6 @@ import sqlite3
 from skyfield.api import Loader
 from skyfield.data import mpc
 from skyfield.constants import GM_SUN_Pitjeva_2005_km3_s2 as GM_SUN
-from astropy.time import Time
 
 from device.config import Config  # type: ignore
 from device.log import init_logging, get_logger  # type: ignore
@@ -4634,9 +4633,12 @@ class HorizonResource:
     @staticmethod
     def on_post(req, resp, telescope_id=0):
         if (req.content_length or 0) > HorizonResource.MAX_UPLOAD:
-            raise falcon.HTTPContentTooLarge(
-                description="A horizon profile is a few kilobytes"
+            # HTTPPayloadTooLarge before Falcon 4.
+            too_large = (
+                getattr(falcon, "HTTPContentTooLarge", None)
+                or falcon.HTTPPayloadTooLarge
             )
+            raise too_large(description="A horizon profile is a few kilobytes")
         body = req.get_media(default_when_empty=None)
         if not isinstance(body, dict) or not isinstance(body.get("hrz"), str):
             raise falcon.HTTPBadRequest(description='Expected {"hrz": "<.hrz text>"}')
@@ -4649,6 +4651,11 @@ class HorizonResource:
             )
         except horizon.HorizonError as e:
             raise falcon.HTTPBadRequest(description=str(e))
+        except horizon.HorizonSaveError as e:
+            logger.error(str(e))
+            raise falcon.HTTPInternalServerError(
+                description=f"{e}. The previous horizon is still in use."
+            )
         logger.info(f"Horizon profile saved to {path} ({len(profile.points)} points)")
         resp.media = {
             "file": path,
@@ -4658,25 +4665,47 @@ class HorizonResource:
 
 
 class HorizonSunResource:
-    """Apparent position of the Sun, to orient a panorama: ?when=ISO&lat=&lon=."""
+    """Apparent position of the Sun, to orient a panorama: ?when=ISO&lat=&lon=.
+
+    ``lat`` and ``lon`` are the photo's location; without them, the site's
+    from Settings. 0, 0 stands for an unknown site, as in check_target: the
+    request is refused rather than answered for 0 N 0 E, which would turn
+    the panorama's north by tens of degrees.
+    """
 
     @staticmethod
     def on_get(req, resp):
-        lat = req.get_param_as_float("lat", required=True, min_value=-90, max_value=90)
-        lon = req.get_param_as_float(
-            "lon", required=True, min_value=-180, max_value=360
-        )
+        lat = req.get_param_as_float("lat", min_value=-90, max_value=90)
+        lon = req.get_param_as_float("lon", min_value=-180, max_value=360)
+        if (lat is None) != (lon is None):
+            raise falcon.HTTPBadRequest(description="give both lat and lon, or neither")
+        if lat is None:
+            lat, lon = horizon.site_location() or (0.0, 0.0)
+        if lat == 0 and lon == 0:
+            raise falcon.HTTPBadRequest(
+                description="Site location unknown: set Latitude and Longitude in "
+                "Settings, or use a photo that records where it was taken"
+            )
         try:
             when = datetime.fromisoformat(req.get_param("when", required=True))
         except ValueError:
             raise falcon.HTTPBadRequest(description="when: expected an ISO 8601 date")
         if when.tzinfo is None:
             raise falcon.HTTPBadRequest(description="when: give the UTC offset")
-        utc = Time(when.astimezone(pytz.utc).replace(tzinfo=None), scale="utc")
-        altitude, azimuth = horizon.sun_altaz(lat, lon, utc)
-        # Apparent altitude: where the photo shows the Sun.
-        altitude += horizon.refraction(altitude)
-        resp.media = {"altitude": round(altitude, 3), "azimuth": round(azimuth, 3)}
+        observer = ephem.Observer()
+        observer.lat = str(lat)  # ephem reads a str as degrees
+        observer.lon = str(lon)
+        observer.elevation = 0
+        observer.date = ephem.Date(when.astimezone(pytz.utc).replace(tzinfo=None))
+        # Apparent position, refraction included (ephem's default 1010 mbar,
+        # 15 degrees C): where the photo shows the Sun.
+        sun = ephem.Sun(observer)
+        resp.media = {
+            "altitude": round(math.degrees(sun.alt), 3),
+            "azimuth": round(math.degrees(sun.az), 3),
+            "latitude": lat,
+            "longitude": lon,
+        }
 
 
 class StatsResource:

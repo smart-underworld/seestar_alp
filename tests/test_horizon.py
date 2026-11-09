@@ -10,7 +10,7 @@ from astropy.utils import iers
 
 from device import horizon
 from device.config import Config
-from device.horizon import HorizonError, HorizonProfile
+from device.horizon import HorizonError, HorizonProfile, HorizonSaveError
 from device.seestar_util import Util
 
 
@@ -292,42 +292,6 @@ def test_visibility_needs_no_earth_orientation_table(astaffort, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# sun_altaz
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "when",
-    [
-        "2026-10-23T13:59:04",
-        "2026-06-21T12:00:00",
-        "2026-03-20T17:30:00",
-        "2026-01-15T08:45:00",
-    ],
-)
-def test_sun_altaz_matches_astropy(astaffort, when):
-    from astropy import units as u
-    from astropy.coordinates import AltAz, EarthLocation, get_sun
-
-    t = Time(when, scale="utc")
-    altitude, azimuth = horizon.sun_altaz(44.06, 0.65, t)
-    site = EarthLocation(lat=44.06 * u.deg, lon=0.65 * u.deg)
-    reference = get_sun(t).transform_to(AltAz(obstime=t, location=site))
-    assert altitude == pytest.approx(reference.alt.deg, abs=0.05)
-    gap = (azimuth - reference.az.deg + 180) % 360 - 180
-    assert abs(gap) * math.cos(math.radians(altitude)) < 0.05
-
-
-def test_sun_of_the_first_real_panorama():
-    # MMhorizon's first panorama, 2026-10-23 15:59:04 (UTC+2), was oriented on
-    # the Sun: azimuth 218.0, altitude 26.3 by astronomy-engine.
-    t = Time("2026-10-23T13:59:04", scale="utc")
-    altitude, azimuth = horizon.sun_altaz(44.06504, 0.65041, t)
-    assert azimuth == pytest.approx(218.0, abs=0.1)
-    assert altitude == pytest.approx(26.3, abs=0.1)
-
-
-# ---------------------------------------------------------------------------
 # save_panorama_profile
 # ---------------------------------------------------------------------------
 
@@ -391,9 +355,90 @@ def test_save_panorama_profile_rejects_invalid_input(
     assert config_file.horizon_file == "/etc/seestar/old.hrz"
 
 
-@pytest.mark.parametrize(
-    "altitude, lift",
-    [(25.0, 0.036), (5.0, 0.161), (0.0, 0.483), (-5.0, 0.0), (90.0, 0.0)],
-)
-def test_refraction(altitude, lift):
-    assert horizon.refraction(altitude) == pytest.approx(lift, abs=0.002)
+def test_save_without_record_removes_the_record_of_an_earlier_photo(
+    config_file, tmp_path
+):
+    record = json.dumps({"format": "horizon", "version": 1})
+    horizon.save_panorama_profile("0 10\n", record)
+    horizon.save_panorama_profile("0 20\n")
+    assert (tmp_path / "horizon.hrz").read_text() == "0 20\n"
+    assert not (tmp_path / "horizon.horizon.json").exists()
+
+
+def test_a_second_save_is_used_at_once_within_one_clock_tick(config_file, tmp_path):
+    horizon.save_panorama_profile("0 10\n")
+    first = os.stat(tmp_path / "horizon.hrz")
+    assert horizon.configured_profile()[0].points == [(0.0, 10.0)]
+    # Same size, and the same modification time, as on a coarse clock.
+    horizon.save_panorama_profile("0 20\n")
+    os.utime(tmp_path / "horizon.hrz", ns=(first.st_atime_ns, first.st_mtime_ns))
+    assert horizon.configured_profile()[0].points == [(0.0, 20.0)]
+
+
+def test_a_file_replaced_within_one_clock_tick_is_read_again(monkeypatch, tmp_path):
+    hrz = tmp_path / "site.hrz"
+    hrz.write_text("0 10\n")
+    monkeypatch.setattr(Config, "horizon_file", str(hrz), raising=False)
+    assert horizon.configured_profile()[0].points == [(0.0, 10.0)]
+    before = os.stat(hrz)
+    # Another tool replaces it atomically: same size, same time, new inode.
+    (tmp_path / "new.hrz").write_text("0 20\n")
+    os.replace(tmp_path / "new.hrz", hrz)
+    os.utime(hrz, ns=(before.st_atime_ns, before.st_mtime_ns))
+    assert horizon.configured_profile()[0].points == [(0.0, 20.0)]
+
+
+def _no_temporary_file_left(folder):
+    return not [name for name in os.listdir(folder) if name.endswith(".tmp")]
+
+
+def test_a_write_failure_changes_nothing(config_file, tmp_path, monkeypatch):
+    (tmp_path / "horizon.hrz").write_text("0 5\n")
+    real_stage = horizon.stage_file
+
+    def disk_full_on_the_record(path, text, encoding=None):
+        if path.endswith(".json"):
+            raise OSError(28, "No space left on device")
+        return real_stage(path, text, encoding)
+
+    monkeypatch.setattr(horizon, "stage_file", disk_full_on_the_record)
+    record = json.dumps({"format": "horizon", "version": 1})
+    with pytest.raises(HorizonSaveError, match="No space left on device"):
+        horizon.save_panorama_profile("0 10\n", record)
+    assert (tmp_path / "horizon.hrz").read_text() == "0 5\n"
+    assert _no_temporary_file_left(tmp_path)
+    assert config_file.horizon_file == "/etc/seestar/old.hrz"
+    saved = tomlkit.parse((tmp_path / "config.toml").read_text())
+    assert saved["seestar_initialization"]["horizon_file"] == "/etc/seestar/old.hrz"
+
+
+def test_a_config_save_failure_changes_nothing(config_file, tmp_path, monkeypatch):
+    def read_only(*args, **kwargs):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(config_file, "save_toml", read_only)
+    with pytest.raises(HorizonSaveError, match="Permission denied"):
+        horizon.save_panorama_profile("0 10\n")
+    assert not (tmp_path / "horizon.hrz").exists()
+    assert _no_temporary_file_left(tmp_path)
+    assert config_file.horizon_file == "/etc/seestar/old.hrz"
+
+
+def test_a_failure_after_the_config_save_puts_it_back(
+    config_file, tmp_path, monkeypatch
+):
+    real_replace = os.replace
+
+    def locked(source, target):
+        if str(target).endswith("horizon.hrz"):
+            raise PermissionError(13, "Permission denied")
+        return real_replace(source, target)
+
+    monkeypatch.setattr(horizon.os, "replace", locked)
+    with pytest.raises(HorizonSaveError):
+        horizon.save_panorama_profile("0 10\n")
+    assert not (tmp_path / "horizon.hrz").exists()
+    assert _no_temporary_file_left(tmp_path)
+    assert config_file.horizon_file == "/etc/seestar/old.hrz"
+    saved = tomlkit.parse((tmp_path / "config.toml").read_text())
+    assert saved["seestar_initialization"]["horizon_file"] == "/etc/seestar/old.hrz"
