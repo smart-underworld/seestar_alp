@@ -121,7 +121,7 @@
     async function getBalanceSensor() {
         try {
             const baseURL = `${window.location.protocol}//${window.location.hostname}${window.location.port ? ":" + window.location.port : ""}`;
-            const response = await fetch(baseURL + "/getbalancesensor");
+            const response = await fetch(baseURL + "{{ root_path }}/getbalancesensor");
             const data = await response.json();
             updateBubbleOrientation(data["x"], data["y"]);
         } catch (error) {

@@ -150,7 +150,7 @@
   const alt_err = document.getElementById("alt_err")
   const az_err = document.getElementById("az_err")
   const baseURL = `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
-  const get_pa_refine_URL = baseURL + '/pa_refine';
+  const get_pa_refine_URL = baseURL + '{{ root_path }}/pa_refine';
 
   startStopButton.textContent = "Start"
   var pa_interval

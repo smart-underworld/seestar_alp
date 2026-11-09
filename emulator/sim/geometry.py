@@ -16,9 +16,13 @@ SENSOR = {
 # itself expects when it builds solve-field's scale bounds (-L 2.22 -H 2.71).
 # (An earlier 1.18"/px assumed the same field of view at twice the pixel count;
 # the solver can't match a frame at that scale against those bounds.)
-# S30P is left at the old guess: its optics are unknown here.
-_SCALE = {"S50": 2.37, "S50V2": 2.37, "S30": 2.37, "S50P": 2.30, "S30P": 1.18}
-_FOCAL = {"S50": 252.0, "S50V2": 252.0, "S30": 252.0, "S50P": 260.0, "S30P": 252.0}
+# S30 / S30P: derived the same way, from ZWO's published optics -- 150 mm and
+# 160 mm focal length, 2.9 um pixels (IMX662 / IMX585) -- giving 3.99"/px and
+# 3.74"/px.  Both fields land within ~2% of the planner's per-model FoV in
+# front/public/seestar_models.js.  (They previously reused the S50's 2.37 and the
+# discarded 1.18 guess, rendering fields 1.7x and 3.2x too small -- issue #795.)
+_SCALE = {"S50": 2.37, "S50V2": 2.37, "S30": 3.99, "S50P": 2.30, "S30P": 3.74}
+_FOCAL = {"S50": 252.0, "S50V2": 252.0, "S30": 150.0, "S50P": 260.0, "S30P": 160.0}
 
 
 # Upper bound on stars drawn per frame (0 = unlimited).  The solver only uses the

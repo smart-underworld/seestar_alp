@@ -11,6 +11,7 @@ import uuid
 from time import sleep
 import collections
 import copy
+import itertools
 from typing import Optional, Any, TypedDict, NotRequired
 
 import pydash
@@ -97,7 +98,6 @@ class Seestar:
         self.port: int = port
         self.device_name: str = device_name
         self.device_num: int = device_num
-        self.cmdid: int = 10000
         self.site_latitude: float = Config.init_lat
         self.site_longitude: float = Config.init_long
         self.site_elevation: float = 0
@@ -157,6 +157,32 @@ class Seestar:
             "item_number": 9999,
         }
         self.lock = threading.RLock()
+        # The Alpaca server is threaded, so concurrent requests reach the send
+        # path at once.
+        #
+        # Command ids: replies are matched by id in response_dict, so every
+        # auto-allocated id (from _cmdids) must be unique. A caller may pin its
+        # own id instead (the heartbeat's 420, an explicit 0); a pinned id that
+        # falls inside the auto range is reserved so the counter skips it.
+        # _cmdid_lock makes that skip-or-reserve step atomic.
+        self._cmdids = itertools.count(self._FIRST_AUTO_CMDID)
+        self._reserved_cmdids: set[int] = set()
+        self._cmdid_lock = threading.Lock()
+        # _socket_write_lock keeps each message's bytes contiguous on the
+        # single scope socket, and guards every close and swap of self.s, so
+        # the socket is never closed or replaced mid-sendall. It is held only
+        # for that instant -- never across reconnect/re-auth, which waits on
+        # the scope.
+        self._socket_write_lock = threading.Lock()
+        # Single-flight reconnect. _reconnect_leader is the thread running a
+        # reconnect (disconnect, connect, firmware handshake), or None. While it
+        # is set, ordinary senders wait on _conn_cond (bounded), so no command
+        # reaches the scope before the handshake is done. The leader itself and
+        # the receive thread (which must keep draining the socket so the
+        # handshake reply can arrive) never wait. Neither _socket_write_lock nor
+        # _conn_cond is held while taking the other, or across a reconnect.
+        self._conn_cond = threading.Condition()
+        self._reconnect_leader: Optional[threading.Thread] = None
         self.is_cur_scheduler_item_working: bool = False
 
         # Guards insertion/removal of top-level event_state keys. IncomingMsgThread
@@ -182,6 +208,7 @@ class Seestar:
         self.event_queue = collections.deque(maxlen=20)
         self.eventbus = signal(f"{self.device_name}.eventbus")
         self.is_EQ_mode: bool = False  # updated from device state on startup
+        self.is_EQ_mode_confirmed: bool = False  # True once read from the device
         # self.trace = MessageTrace(self.device_num, self.port)
 
     def _load_interop_pem(self) -> None:
@@ -246,12 +273,11 @@ class Seestar:
         events, etc.) are preserved in self._auth_leftover, in order, so the
         receive thread can process them once it starts.
         """
-        cur_cmdid = self.cmdid
-        self.cmdid += 1
-        msg = {"id": cur_cmdid, "method": method}
+        msg: dict[str, Any] = {"id": None, "method": method}
         if params is not None:
             msg["params"] = params
-        if not self.send_message(json.dumps(msg) + "\r\n"):
+        cur_cmdid, sent = self._send_json(msg)
+        if not sent:
             return None
 
         # When the receive thread is already draining the socket (mid-session
@@ -276,14 +302,16 @@ class Seestar:
                 time.sleep(0.1)
             return None
 
-        prev_timeout = self.s.gettimeout() if self.s else None
+        with self._socket_write_lock:
+            sock = self.s
+        prev_timeout = sock.gettimeout() if sock else None
         deadline = time.monotonic() + timeout
         buf = self._auth_leftover  # unprocessed bytes (may hold a partial line)
         carry = ""  # complete, non-matching lines to hand back to the reader
         self._auth_leftover = ""
         try:
-            if self.s:
-                self.s.settimeout(1.0)
+            if sock:
+                sock.settimeout(1.0)
             while time.monotonic() < deadline:
                 # During a mid-session re-auth (e.g. reconnect from the
                 # heartbeat thread) the receive thread is already running and
@@ -309,15 +337,18 @@ class Seestar:
                         return parsed
                     carry += line + "\r\n"
                 try:
-                    chunk = self.s.recv(1024 * 60) if self.s else b""
+                    chunk = sock.recv(1024 * 60) if sock else b""
                 except socket.timeout:
                     continue
                 if not chunk:
                     break
                 buf += chunk.decode("utf-8", errors="replace")
         finally:
-            if self.s and prev_timeout is not None:
-                self.s.settimeout(prev_timeout)
+            if sock and prev_timeout is not None:
+                try:
+                    sock.settimeout(prev_timeout)
+                except OSError:
+                    pass  # closed underneath us by a reconnect
             if not self._auth_leftover:
                 self._auth_leftover = carry + buf
         return None
@@ -434,10 +465,18 @@ class Seestar:
         now = time.time()
         if now - self._last_auth_attempt < self._AUTH_RETRY_INTERVAL_S:
             return
+        with self._conn_cond:
+            if self._reconnect_leader is not None:
+                return  # a reconnect is handshaking; it authenticates
+            sock = self.s
         self._last_auth_attempt = now
         # debug level: this repeats every retry interval while the scope is
         # busy, which can be a multi-hour imaging session.
         self.logger.debug("Attempting firmware authentication")
+        # No reconnect leadership here: this socket already carries traffic, and
+        # a busy scope can stall get_verify_str for ~8 s of every retry interval.
+        # Ordinary commands keep going out meanwhile, as they did before the
+        # retry. Only a fresh socket (reconnect) holds commands back for auth.
         try:
             ok = self.authenticate()
         except Exception as e:
@@ -446,14 +485,28 @@ class Seestar:
             self.logger.warning(
                 f"Authentication attempt raised (staying connected, will retry): {e}"
             )
-            return
-        if ok:
-            self.is_authenticated = True
-            self.logger.info("Firmware authentication succeeded")
-        else:
+            ok = False
+        if not ok:
             self.logger.debug(
                 "Firmware authentication still busy; staying connected, will retry"
             )
+        elif self._publish_authenticated(sock):
+            self.logger.info("Firmware authentication succeeded")
+        else:
+            # The socket was retired or replaced mid-handshake; a reconnect
+            # authenticates the new one itself.
+            self.logger.debug("Socket replaced during authentication; not reusing it")
+
+    def _publish_authenticated(self, sock: Optional[socket.socket]) -> bool:
+        """Mark the connection authenticated if ``sock`` is still the current
+        socket. Checked and set under ``_socket_write_lock``, the lock every
+        retire/disconnect path resets auth state under, so a socket retired
+        after a successful handshake can never be reported authenticated."""
+        with self._socket_write_lock:
+            if sock is None or self.s is not sock:
+                return False
+            self.is_authenticated = True
+            return True
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
     #       "result":0, "error":"dummy error",
@@ -489,48 +542,102 @@ class Seestar:
 
     def send_message(self, data):
         try:
-            if self.s is None:
-                self.logger.warning("socket not initialized!")
-                time.sleep(3)
-                return False
-            # todo : don't send if not connected or socket is null?
-            self.logger.debug(f"sending: {data}")
-            self.s.sendall(
-                data.encode()
-            )  # TODO: would utf-8 or unicode_escaped help here
-            return True
-        except socket.timeout:
-            return False
-        except socket.error as e:
-            # Don't bother trying to recover if watch events is False
-            self.logger.debug(f"Send socket error: {e}")
-            self.disconnect()
-            if self.is_watch_events and self.reconnect():
-                return self.send_message(data)
+            for attempt in (1, 2):
+                if not self._wait_for_reconnect():
+                    return False
+                # The check and the write share the lock, so a close or swap of
+                # self.s cannot land between them.
+                self.logger.debug(f"sending: {data}")
+                failure: Optional[OSError] = None
+                with self._socket_write_lock:
+                    sock = self.s
+                    if sock is not None:
+                        try:
+                            sock.sendall(
+                                data.encode()
+                            )  # TODO: would utf-8 or unicode_escaped help here
+                            return True
+                        except OSError as e:
+                            # Retire the socket before releasing the lock, so no
+                            # waiting writer can append to a half-written stream.
+                            failure = e
+                            self._retire_socket_locked(sock)
+                if sock is None:
+                    # Another writer may have just retired a failed socket. Join
+                    # its single-flight reconnect and retry, rather than drop
+                    # the command.
+                    if attempt == 1 and self.is_watch_events and self.reconnect():
+                        continue
+                    self.logger.warning("socket not initialized!")
+                    time.sleep(3)
+                    return False
+                # The write failed, possibly after part of the message went out.
+                # That socket was retired under the lock; never write to it again.
+                self.logger.debug(f"Send socket error: {failure}")
+                if not (self.is_watch_events and self.reconnect()):
+                    return False
+                if isinstance(failure, socket.timeout):
+                    # A timed-out write may have reached the scope in part, so
+                    # report the failure rather than resend a possible duplicate.
+                    return False
             return False
         except Exception:
-            self.logger.error("General error trying to send message: ", data)
+            self.logger.error("General error trying to send message: %s", data)
             return False
 
     def socket_force_close(self) -> None:
-        if self.s:
-            try:
-                self.s.close()
-                self.s = None
-            except Exception:
-                pass
+        with self._socket_write_lock:
+            sock, self.s = self.s, None
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
 
-    def disconnect(self) -> None:
-        # Disconnect tries to clean up the socket if it exists
+    def _reset_connection_state(self) -> None:
+        """Per-connection state. A fresh socket must re-authenticate, and gets a
+        fresh chance before the auth-gap warning fires."""
         self.is_connected = False
-        # A fresh socket must re-authenticate; auth state is per-connection.
         self.is_authenticated = False
-        # The auth-gap tracking below is also per-connection: a fresh socket
-        # deserves a fresh chance before we accuse it of needing a PEM.
         self._connection_had_sync_reply = False
         self._consecutive_sync_timeouts = 0
         self._auth_gap_logged = False
-        self.socket_force_close()
+        # Mount mode is per-connection too: the user can switch Alt/Az <-> EQ
+        # while the scope is powered off, so a reconnect must re-confirm it
+        # rather than keep reporting the previous session's mode.
+        with self.event_state_lock:
+            self.is_EQ_mode = False
+            self.is_EQ_mode_confirmed = False
+
+    def _retire_socket_locked(self, sock: socket.socket) -> None:
+        """Retire ``sock``; the caller holds ``_socket_write_lock``. Connection
+        state is reset only if it is still the current socket; a reconnect may
+        have replaced it."""
+        if self.s is sock:
+            self.s = None
+            self._reset_connection_state()
+        try:
+            sock.close()
+        except Exception:
+            pass
+
+    def _drop_socket(self, sock: socket.socket) -> None:
+        """Retire ``sock``, a dead or poisoned socket."""
+        with self._socket_write_lock:
+            self._retire_socket_locked(sock)
+
+    def disconnect(self) -> None:
+        # Reset and close in one step under the write lock, so a concurrent
+        # auth publish (_publish_authenticated) lands either before the reset
+        # or sees the socket gone.
+        with self._socket_write_lock:
+            self._reset_connection_state()
+            sock, self.s = self.s, None
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
 
     def send_udp_intro(self) -> None:
         # {"id":1,"method":"scan_iscope","params":""}
@@ -570,23 +677,79 @@ class Seestar:
             if sock is not None:
                 sock.close()
 
-    def reconnect(self) -> bool:
-        if self.is_connected:
+    # How long an ordinary caller waits for an in-flight reconnect (connect plus
+    # the firmware handshake, up to ~25 s) before giving up.
+    _RECONNECT_WAIT_S = 45.0
+
+    def _wait_for_reconnect(self) -> bool:
+        """Wait (bounded) while another thread's reconnect is in flight.
+
+        Returns True when the socket may be used. False means the wait timed out,
+        or the caller is the receive thread, which must never block here: it has
+        to keep reading the handshake reply.
+        """
+        me = threading.current_thread()
+        deadline = time.monotonic() + self._RECONNECT_WAIT_S
+        with self._conn_cond:
+            while self._reconnect_leader is not None:
+                if self._reconnect_leader is me:
+                    return True
+                remaining = deadline - time.monotonic()
+                if me is self.get_msg_thread or remaining <= 0:
+                    return False
+                self._conn_cond.wait(remaining)
             return True
 
+    def reconnect(self, wait: bool = True) -> bool:
+        """Bring the scope connection up, single-flight.
+
+        One thread at a time (the leader) disconnects, opens a new socket and runs
+        the firmware handshake. A caller that finds a reconnect already in flight
+        waits for it (bounded) when ``wait`` is set, and otherwise returns False
+        at once. The receive thread passes wait=False: it must keep draining the
+        socket so the leader's handshake reply can arrive.
+        """
+        me = threading.current_thread()
+        with self._conn_cond:
+            leader = self._reconnect_leader
+            if leader is me:
+                return self.is_connected
+            if leader is None:
+                if self.is_connected:
+                    return True
+                self._reconnect_leader = me
+        if leader is not None:
+            if not wait:
+                return False
+            return self._wait_for_reconnect() and self.is_connected
+        try:
+            return self._connect_and_authenticate()
+        finally:
+            with self._conn_cond:
+                self._reconnect_leader = None
+                self._conn_cond.notify_all()
+
+    def _connect_and_authenticate(self) -> bool:
+        """Leader-only body of reconnect(). Runs with no lock held: the receive
+        thread keeps reading while the handshake waits for its reply."""
         try:
             self.logger.info(f"RECONNECTING {self.device_name}")
-
             self.disconnect()
 
             # send a udp message to satisfy seestar's guest mode to gain control properly
             self.send_udp_intro()
 
-            # note: the below isn't thread safe!  (Reconnect can be called from different threads.)
-            self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.s.settimeout(Config.timeout)
-            self.s.connect((self.host, self.port))
-            # self.s.settimeout(None)
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                sock.settimeout(Config.timeout)
+                sock.connect((self.host, self.port))
+            except Exception:
+                sock.close()
+                raise
+            # Published only once connected. Ordinary senders are held back until
+            # the handshake below finishes, so no command reaches the scope early.
+            with self._socket_write_lock:
+                self.s = sock
             self.is_connected = True
             # If an interop PEM key is configured, attempt firmware 7.18+ auth
             # inline so a fresh connection is authenticated before
@@ -600,7 +763,8 @@ class Seestar:
             try:
                 if getattr(Config, "seestar_interop_pem", ""):
                     if self.authenticate():
-                        self.is_authenticated = True
+                        # Only if this socket survived the handshake.
+                        self._publish_authenticated(sock)
                     else:
                         # Scope is likely busy; throttle the heartbeat retry so
                         # we don't immediately stall on another handshake.
@@ -613,12 +777,7 @@ class Seestar:
                 self.logger.warning(
                     f"Authentication raised after connect (staying connected, will retry): {e}"
                 )
-            return True
-        except socket.error:
-            self.socket_force_close()
-            self.is_connected = False
-            sleep(1)
-            return False
+            return self.is_connected
         except Exception:
             self.socket_force_close()
             self.is_connected = False
@@ -626,23 +785,28 @@ class Seestar:
             return False
 
     def get_socket_msg(self) -> str | None:
+        with self._socket_write_lock:
+            sock = self.s
         try:
-            if self.s is None:
+            if sock is None:
+                if self._reconnect_leader is not None:
+                    # A reconnect is installing the socket; the reader loops back.
+                    return None
                 self.logger.warning("socket not initialized!")
                 time.sleep(3)
                 return None
-            data = self.s.recv(1024 * 60)  # comet data is >50kb
+            data = sock.recv(1024 * 60)  # comet data is >50kb
         except socket.timeout:
             self.logger.warning("Socket timeout")
             return None
         except socket.error as e:
-            # todo : if general socket error, close socket, and kick off reconnect?
             # todo : no route to host...
             self.logger.debug(f"Read socket error: {e}")
-            # todo : handle message failure
-            self.disconnect()
-            if self.is_watch_events and self.reconnect():
-                return self.get_socket_msg()
+            self._drop_socket(sock)
+            # Returns at once if another thread is already reconnecting; the
+            # reader then picks up the new socket on its next loop.
+            if self.is_watch_events:
+                self.reconnect(wait=False)
             return None
 
         data = data.decode("utf-8")
@@ -722,6 +886,12 @@ class Seestar:
                             self.logger.debug(f"{parsed_data}")
                         if parsed_data["method"] == "get_view_state":
                             self.update_view_state(parsed_data)
+                        # Refresh the cached mount mode from EVERY get_device_state
+                        # reply (sync, async, reauth wait, late after a sync
+                        # timeout), before publishing it below so a sync waiter
+                        # that wakes on response_dict already sees the update.
+                        if parsed_data["method"] == "get_device_state":
+                            self._update_eq_mode_from_device_state(parsed_data)
                         # keep a running queue of last 100 responses for sync call results
                         self.response_dict[parsed_data["id"]] = parsed_data
 
@@ -787,19 +957,44 @@ class Seestar:
                     first_index = msg_remainder.find("\r\n")
             time.sleep(0.1)
 
+    # Auto-allocated command ids start here. The ids callers pin themselves
+    # (the heartbeat's 420, an explicit 0) sit below it.
+    _FIRST_AUTO_CMDID = 10000
+
+    def _claim_cmdid(self, requested: Any) -> Any:
+        """Return the command id to send.
+
+        ``requested`` None gets the next auto id, skipping any id a caller has
+        pinned. Otherwise the caller's own id is used as-is (0 included); one
+        inside the auto range is reserved so the counter never hands it out.
+        """
+        with self._cmdid_lock:
+            if requested is None:
+                cmdid = next(self._cmdids)
+                while cmdid in self._reserved_cmdids:
+                    cmdid = next(self._cmdids)
+                return cmdid
+            if isinstance(requested, int) and requested >= self._FIRST_AUTO_CMDID:
+                self._reserved_cmdids.add(requested)
+        # A reply already stored under a pinned id answers an earlier message
+        # (the heartbeat re-sends 420 every few seconds). Drop it, so a sync
+        # caller waits for the reply to this message instead of returning that.
+        self.response_dict.pop(requested, None)
+        return requested
+
+    def _send_json(self, data: dict[str, Any]) -> tuple[int, bool]:
+        """Stamp a command id into ``data`` (see _claim_cmdid) and write it to
+        the scope. Returns (id, sent)."""
+        data["id"] = self._claim_cmdid(data.get("id"))
+        sent = self.send_message(json.dumps(data) + "\r\n")
+        return data["id"], sent
+
     def json_message(self, instruction: str, **kwargs):
-        data = {"id": self.cmdid, "method": instruction, **kwargs}
-        self.cmdid += 1
-        json_data = json.dumps(data)
-        self.send_message(json_data + "\r\n")
+        self._send_json({"id": None, "method": instruction, **kwargs})
 
     def send_message_param(self, data: MessageParams) -> int:
         data = self.transform_message_for_verify(data)
-        cur_cmdid = data.get("id") or self.cmdid
-        data["id"] = cur_cmdid
-        self.cmdid += 1  # can this overflow?  not in JSON...
-        json_data = json.dumps(data)
-        self.send_message(json_data + "\r\n")
+        cur_cmdid, _sent = self._send_json(data)
         return cur_cmdid
 
     def should_inject_verify(self) -> bool:
@@ -897,6 +1092,27 @@ class Seestar:
         self._note_sync_reply()
         return self.response_dict[cur_cmdid]
 
+    def _update_eq_mode_from_device_state(self, response) -> bool:
+        """Cache mount mode from a get_device_state reply.
+
+        Confirms only when the reply actually carries a bool/int
+        ``mount.equ_mode``; an absent, empty, partial or malformed mount block
+        (e.g. ``null`` or the string ``"false"``, which is truthy) leaves the
+        mode unconfirmed, so get_event_state never exposes it as real. Returns
+        True if updated.
+        """
+        result = response.get("result") if isinstance(response, dict) else None
+        mount = result.get("mount") if isinstance(result, dict) else None
+        equ_mode = mount.get("equ_mode") if isinstance(mount, dict) else None
+        if not isinstance(equ_mode, int):  # bool is an int subclass
+            return False
+        # Under the lock get_event_state reads these with, so a poller never
+        # sees confirmed=True next to the previous mode.
+        with self.event_state_lock:
+            self.is_EQ_mode = bool(equ_mode)
+            self.is_EQ_mode_confirmed = True
+        return True
+
     # No-reply sync timeouts on a fresh connection before we log the auth-gap
     # diagnostic. This is 1, not several: a cold-start-busy scope and an
     # unauthenticated one look identical no matter how many timeouts you
@@ -963,13 +1179,19 @@ class Seestar:
             )
 
             # Mount mode is not carried by any firmware event, but we cache it from
-            # get_device_state during the startup sequence (is_EQ_mode). Inject it
-            # here, like the scheduler block, so pollers get it without a blocking
-            # RPC to the scope (get_device_state times out during imaging).
+            # get_device_state (is_EQ_mode). Inject it here, like the scheduler
+            # block, so pollers get it without a blocking RPC to the scope
+            # (get_device_state times out during imaging). The block and its
+            # equ_mode key are always present for existing pollers, but equ_mode
+            # is None until actually read from the device (equ_mode_confirmed):
+            # never expose the unconfirmed default as a real mode.
             if "mount" not in self.event_state:
                 self.event_state["mount"] = {}
             self.event_state["mount"]["Event"] = "Mount"
-            self.event_state["mount"]["equ_mode"] = self.is_EQ_mode
+            self.event_state["mount"]["equ_mode"] = (
+                self.is_EQ_mode if self.is_EQ_mode_confirmed else None
+            )
+            self.event_state["mount"]["equ_mode_confirmed"] = self.is_EQ_mode_confirmed
 
             if "EqModePA" in self.event_state:
                 self.event_state["3PPA"] = dict(self.event_state["EqModePA"])
@@ -1744,11 +1966,9 @@ class Seestar:
             self.firmware_ver_int = response["result"]["device"]["firmware_ver_int"]
             self.logger.info(f"Firmware version: {self.firmware_ver_int}")
 
-            # Update EQ mode from actual device state; config value may not reflect the mount
-            if "mount" in response.get("result", {}):
-                self.is_EQ_mode = response["result"]["mount"].get(
-                    "equ_mode", self.is_EQ_mode
-                )
+            # EQ mode from actual device state; config value may not reflect the
+            # mount. The receive thread already cached it from this reply.
+            if self.is_EQ_mode_confirmed:
                 self.logger.info(f"EQ mode from device state: {self.is_EQ_mode}")
 
             if do_3PPA and not self.is_EQ_mode:
@@ -3411,7 +3631,7 @@ class Seestar:
             self.is_watch_events = False
             self.get_msg_thread.join(timeout=7)
             self.heartbeat_msg_thread.join(timeout=7)
-            self.s.close()
+            self.disconnect()
             self.is_connected = False
 
     def get_events(self):

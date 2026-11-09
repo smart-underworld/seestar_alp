@@ -3023,6 +3023,29 @@ def test_horizon_card_explains_how_to_set_a_profile():
     assert "Horizon file" in html
 
 
+def test_cached_context_is_not_rewritten_by_a_request_prefix(monkeypatch):
+    # Isolate from a local config.toml [webui_settings] root_path.
+    monkeypatch.setattr(Config, "root_path", "")
+    # get_context() returns one cached dict per telescope for ~1s, shared by
+    # every request. Each request must get its own prefix applied to a copy,
+    # so a prefix from one proxy never leaks into another request's HTML.
+    cached = {"root": "/1", "action": "/1/live", "imager_root": "/1/imaging"}
+    snapshot = dict(cached)
+    behind_a = DummyHTMXReq(headers={"X-Forwarded-Prefix": "/a"})
+    behind_b = DummyHTMXReq(headers={"X-Forwarded-Prefix": "/b"})
+    plain = DummyHTMXReq()
+
+    out_a = front_app._template_context(behind_a, cached)
+    out_b = front_app._template_context(behind_b, cached)
+    out_plain = front_app._template_context(plain, cached)
+
+    assert cached == snapshot
+    assert out_a["root"] == "/a/1" and out_a["action"] == "/a/1/live"
+    assert out_b["root"] == "/b/1" and out_b["action"] == "/b/1/live"
+    assert out_plain["root"] == "/1" and out_plain["action"] == "/1/live"
+    assert out_a["root_path"] == "/a" and out_plain["root_path"] == ""
+
+
 def test_nav_links_to_the_horizon_page():
     html = _render_nav("planning")
     assert 'href="/1/horizon">Horizon (MMhorizon)</a>' in html

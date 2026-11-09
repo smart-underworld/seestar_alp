@@ -2,11 +2,11 @@
 
 {% block header %}
     <meta http-equiv="Cache-Control" content="no-cache">
-    <script src="/public/seestar_models.js"></script>
+    <script src="{{ root_path }}/public/seestar_models.js"></script>
     <script>
         async function card_enable_toggle(card_name){
             console.log("Enable toggle planning card: " + card_name);
-            await fetch("/toggleplanningcard", {
+            await fetch("{{ root_path }}/toggleplanningcard", {
                 method: "POST",
                 headers: {
                     'Content-Type': 'application/json'
@@ -23,7 +23,7 @@
 
         function card_collapse_toggle(card_name){
             console.log("Collapse toggle planning card: " + card_name);
-            fetch("/collapseplanningcard", {
+            fetch("{{ root_path }}/collapseplanningcard", {
                 method: "POST",
                 headers: {
                     'Content-Type': 'application/json'

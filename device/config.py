@@ -212,6 +212,28 @@ class _Config:
         # WebUI Section
         # --------------
         self.uiport: int = self.get_toml("webui_settings", "uiport", 5432)
+        # URL prefix when served under a reverse-proxy sub-path, e.g. "/ssc".
+        # A valid X-Forwarded-Prefix request header takes precedence.
+        root_path = self.get_toml("webui_settings", "root_path", "")
+        # Same shape front/app.py accepts: "" or "/seg[/seg...]" with plain segments.
+        value = root_path.strip().rstrip("/") if isinstance(root_path, str) else None
+        allowed = set(
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._~-"
+        )
+        if value and (
+            not value.startswith("/")
+            or any(
+                not s or s in (".", "..") or not set(s) <= allowed
+                for s in value.split("/")[1:]
+            )
+        ):
+            value = None
+        if value is None:
+            logging.getLogger(__name__).warning(
+                f"Ignoring invalid [webui_settings] root_path: {root_path!r}"
+            )
+            value = ""
+        self.root_path: str = value
         self.uitheme: str = self.get_toml("webui_settings", "uitheme", "dark")
         self.experimental: bool = self.get_toml("webui_settings", "experimental", False)
         self.confirm: bool = self.get_toml("webui_settings", "confirm", True)

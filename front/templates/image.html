@@ -37,7 +37,7 @@
 		<div class="container mt-3">
 			<!-- <p class="h3 mb-2">Enter a new image</p> -->
 
-			<p>Creates and immediately runs an image. For scheduling an image, see <a href="/schedule">scheduler</a>.</p>
+			<p>Creates and immediately runs an image. For scheduling an image, see <a href="{{ root_path }}/schedule">scheduler</a>.</p>
       <form id="scheduleForm" action="{{ root }}/image" method="post" enctype="application/x-www-form-urlencoded">
 			  {% include 'image_create.html' with context %}
         <button type="submit" class="btn btn-primary">Submit</button>
@@ -60,5 +60,5 @@
 {% endblock %}
 
 {% block scripts %}
-	<script src="/public/command.js"></script>
+	<script src="{{ root_path }}/public/command.js"></script>
 {% endblock %}
