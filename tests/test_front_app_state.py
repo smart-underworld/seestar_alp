@@ -3084,3 +3084,17 @@ def test_horizon_page_current_card_is_always_replaceable(
     assert current is not None
     assert shown in current.group(0)
     assert 'id="hz-page" data-lat="44.06" data-lon="0.65"' in html
+
+
+def test_horizon_page_script_follows_the_root_path():
+    html = front_app.fetch_template("horizon.html").render(
+        **_minimal_context("horizon"),
+        root_path="/ingress",
+        config_lat=44.06,
+        config_long=0.65,
+        horizon_file="",
+        horizon_error=None,
+        horizon_point_count=0,
+    )
+    assert 'src="/ingress/public/horizon_panorama.js"' in html
+    assert 'data-root-path="/ingress"' in html

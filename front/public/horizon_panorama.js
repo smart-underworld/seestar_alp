@@ -17,6 +17,8 @@ import {
 
 const page = document.getElementById("hz-page");
 const $ = (id) => document.getElementById(id);
+// Behind a sub-path proxy, base.html gives the prefix of every route URL.
+const rootPath = document.documentElement.dataset.rootPath || "";
 const configLat = Number(page.dataset.lat);
 const configLon = Number(page.dataset.lon);
 
@@ -33,7 +35,7 @@ const HINTS = {
 
 // --- Worker ---------------------------------------------------------------
 
-const worker = new Worker("/public/horizon_worker.js", { type: "module" });
+const worker = new Worker(`${rootPath}/public/horizon_worker.js`, { type: "module" });
 const pending = new Map();
 let lastId = 0;
 
@@ -319,7 +321,7 @@ async function orientOnSun(column, row, prefix = "") {
   // an unset one.
   const fromPhoto = exif.latitude != null && exif.longitude != null;
   const place = fromPhoto ? `&lat=${exif.latitude}&lon=${exif.longitude}` : "";
-  const response = await fetch(`/horizon/sun?when=${encodeURIComponent(when)}${place}`);
+  const response = await fetch(`${rootPath}/horizon/sun?when=${encodeURIComponent(when)}${place}`);
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(`Sun position: ${error.description || error.title || response.status}`);
@@ -388,7 +390,7 @@ function stem() {
 async function save() {
   $("hz-save").disabled = true;
   try {
-    const response = await fetch("/horizon", {
+    const response = await fetch(`${rootPath}/horizon`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ hrz: files.hrz, horizon_json: files.horizonJson }),
