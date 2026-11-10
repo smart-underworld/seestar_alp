@@ -191,6 +191,24 @@ def test_handle_stack_happy_path_and_failure(monkeypatch):
     assert proto.raw_img_size == [None, None]
 
 
+def test_only_decoded_stack_replies_reach_on_stack_image(monkeypatch):
+    proto = make_protocol(monkeypatch)
+    seen = []
+    proto.on_stack_image = seen.append
+    monkeypatch.setattr(proto, "convert_star_image", lambda raw, _w, _h: raw)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("raw_data", b"\x01\x02")
+
+    proto.handle_preview_frame(10, 20, b"preview")
+    proto.handle_stack(30, 40, buf.getvalue())
+    monkeypatch.setattr(proto, "convert_star_image", lambda _raw, _w, _h: None)
+    proto.handle_stack(30, 40, buf.getvalue())
+    proto.handle_stack(30, 40, b"not-a-zip")
+
+    assert seen == [b"\x01\x02"]
+
+
 def test_convert_star_image_rgb_and_bayer_and_invalid(monkeypatch):
     proto = make_protocol(monkeypatch)
 

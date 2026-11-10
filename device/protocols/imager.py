@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from io import BytesIO
 from time import monotonic, sleep
-from typing import Optional, Tuple, List
+from typing import Callable, Optional, Tuple, List
 
 import cv2
 import numpy as np
@@ -34,6 +34,9 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
         self.raw_img_size: Tuple[Optional[int], Optional[int]] = [None, None]
         self.latest_image = None
         self.StarProcessors: List[ImageProcessor] = [GraxpertStretch()]
+        # Called with each successfully decoded stacked-image reply (receive
+        # thread), so consumers can tell a stack reply from a preview frame.
+        self.on_stack_image: Optional[Callable[[np.ndarray], None]] = None
         self.imaging_listener = SeestarImagerProtocol.ImagingListener(self)
         self.add_listener(self.imaging_listener)
 
@@ -312,6 +315,8 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
                 if self.latest_image is None:
                     self.raw_img = None
                     self.raw_img_size = [None, None]
+                elif self.on_stack_image is not None:
+                    self.on_stack_image(self.latest_image)
 
             # xxx Temp hack: just disconnect for now...
             # xxx Ideally we listen for an event that stack count has increased, or we track the stack

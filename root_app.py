@@ -1,7 +1,7 @@
 #
 # Start frontend and pass in ALP for it to manage
 #
-from flask import Flask, Response
+from flask import Flask, Response, request
 from flask_cors import CORS, cross_origin
 import threading
 import time
@@ -138,6 +138,23 @@ if __name__ == "__main__":
             telescope.get_seestar_imager(int(dev_num)).get_frame(),
             mimetype="multipart/x-mixed-replace; boundary=frame",
         )
+
+    @cross_origin()
+    @app.route("/<dev_num>/snapshot.jpg")
+    def snapshot(dev_num):
+        # The latest STACKED image (stacking only) as one JPEG: a cheap
+        # alternative to /vid for clients that poll for a still.
+        snap = telescope.get_seestar_imager(int(dev_num)).get_snapshot()
+        headers = {"Cache-Control": "no-cache"}
+        if snap is None:
+            headers["Retry-After"] = "10"
+            return Response(status=503, headers=headers)
+        headers["ETag"] = f'"{snap.etag}"'
+        if snap.stack_frame is not None:
+            headers["X-Seestar-Stack-Frame"] = str(snap.stack_frame)
+        if request.if_none_match.contains_weak(snap.etag):
+            return Response(status=304, headers=headers)
+        return Response(snap.jpeg, mimetype="image/jpeg", headers=headers)
 
     n.notify("READY=1")
     print(f"Startup Complete (seestar_alp {Version.app_version()})")
