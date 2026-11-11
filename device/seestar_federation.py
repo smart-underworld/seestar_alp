@@ -106,7 +106,8 @@ class Seestar_Federation:
                 result[key] = self.seestar_devices[key].stop_slew()
         return result
 
-    # {"method":"scope_speed_move","params":{"speed":4000,"angle":270,"dur_sec":10}}
+    # {"method":"scope_speed_move","params":{"speed":1440,"angle":270,"dur_sec":10}}
+    # angle: direction in degrees; speed: native units, firmware clamps at 1440.
     def move_scope(self, in_angle, in_speed, in_dur=3):
         result = {}
         for key in self.seestar_devices:

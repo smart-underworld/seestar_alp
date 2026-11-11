@@ -1600,7 +1600,8 @@ class Seestar:
         }
         return self.send_message_param_sync(data)
 
-    # {"method":"scope_speed_move","params":{"speed":4000,"angle":270,"dur_sec":10}}
+    # {"method":"scope_speed_move","params":{"speed":1440,"angle":270,"dur_sec":10}}
+    # angle: direction in degrees; speed: native units, firmware clamps at 1440.
     def move_scope(self, in_angle: int, in_speed: int, in_dur=3):
         self.logger.debug(
             "%s: moving slew angle: %s, speed: %s, dur: %s",
