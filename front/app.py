@@ -4769,6 +4769,10 @@ class HorizonSunResource:
     from Settings. 0, 0 stands for an unknown site, as in check_target: the
     request is refused rather than answered for 0 N 0 E, which would turn
     the panorama's north by tens of degrees.
+
+    A ``when`` without UTC offset (EXIF often has none) is read in the site's
+    time zone, the planner's, and the answer names it in ``time_zone``: the
+    browser's zone is not the site's when the page is opened from elsewhere.
     """
 
     @staticmethod
@@ -4788,11 +4792,18 @@ class HorizonSunResource:
             when = datetime.fromisoformat(req.get_param("when", required=True))
         except ValueError:
             raise falcon.HTTPBadRequest(description="when: expected an ISO 8601 date")
+        time_zone = None
         if when.tzinfo is None:
-            raise falcon.HTTPBadRequest(description="when: give the UTC offset")
+            zone = site_timezone()
+            if hasattr(zone, "localize"):  # pytz
+                when = zone.localize(when)
+            else:
+                when = when.replace(tzinfo=zone)
+            time_zone = str(zone)
         observer = ephem.Observer()
-        observer.lat = str(lat)  # ephem reads a str as degrees
-        observer.lon = str(lon)
+        # As angles: nothing rests on how ephem parses a str such as "1e-05".
+        observer.lat = ephem.degrees(math.radians(lat))
+        observer.lon = ephem.degrees(math.radians(lon))
         observer.elevation = 0
         observer.date = ephem.Date(when.astimezone(pytz.utc).replace(tzinfo=None))
         # Apparent position, refraction included (ephem's default 1010 mbar,
@@ -4803,6 +4814,7 @@ class HorizonSunResource:
             "azimuth": round(math.degrees(sun.az), 3),
             "latitude": lat,
             "longitude": lon,
+            "time_zone": time_zone,
         }
 
 

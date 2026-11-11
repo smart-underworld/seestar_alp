@@ -24,17 +24,25 @@ export function horizonLineFromSun(sunRow, rowOfSunAltitude, currentHorizon) {
 }
 
 /*
- * Photo date (ISO 8601, or EXIF's own "2026:10:23 15:59:17") as a UTC ISO
- * string for /horizon/sun; null when it cannot be read. A date without UTC
- * offset is read as this browser's local time.
+ * Photo date (ISO 8601, or EXIF's own "2026:10:23 15:59:17") as the `when` of
+ * /horizon/sun; null when it cannot be read. A date with its UTC offset
+ * (MMhorizon adds EXIF's OffsetTimeOriginal when the photo has one) goes as
+ * UTC. One without goes as written, a local time that the server reads in
+ * the site's time zone: this browser's may be another.
  */
-export function photoTimeUtc(exifDate) {
+export function photoTime(exifDate) {
   if (!exifDate) {
     return null;
   }
   const iso = String(exifDate).replace(/^(\d{4}):(\d\d):(\d\d)[ T]/, "$1-$2-$3T");
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  if (hasUtcOffset(iso)) {
+    return date.toISOString();
+  }
+  return /^\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d(\.\d+)?)?$/.test(iso) ? iso : null;
 }
 
 /*
@@ -43,11 +51,11 @@ export function photoTimeUtc(exifDate) {
  * else the ALP's Latitude and Longitude, where 0, 0 stands for "not set".
  */
 export function sunUnavailable(exif, siteLat, siteLon) {
-  if (photoTimeUtc(exif.date) === null) {
+  if (photoTime(exif.date) === null) {
     return exif.date ? `the photo's date (${exif.date}) cannot be read` : "the photo has no date";
   }
   const photoPlace = exif.latitude != null && exif.longitude != null;
-  const sitePlace = Number.isFinite(siteLat) && Number.isFinite(siteLon) && !(siteLat === 0 && siteLon === 0);
+  const sitePlace = knownPlace(siteLat, siteLon);
   if (!photoPlace && !sitePlace) {
     return "the photo has no GPS position and this ALP's Latitude and Longitude are not set (Settings)";
   }
@@ -56,6 +64,48 @@ export function sunUnavailable(exif, siteLat, siteLon) {
 
 export function hasUtcOffset(exifDate) {
   return /([+-]\d\d:?\d\d|Z)$/.test(exifDate || "");
+}
+
+/* Whether lat, lon are a place: in Settings, 0, 0 stands for "not set". */
+function knownPlace(lat, lon) {
+  return Number.isFinite(lat) && Number.isFinite(lon) && !(lat === 0 && lon === 0);
+}
+
+/*
+ * Site of the saved .horizon.json record, as the JSON MMhorizon's files()
+ * takes: the photo's GPS position, else the ALP's Latitude and Longitude.
+ * null when neither is known, rather than 0 N 0 E: MMhorizon then leaves the
+ * place blank.
+ */
+export function siteOfRecord(exif, siteLat, siteLon) {
+  if (exif.latitude != null && exif.longitude != null) {
+    return JSON.stringify({ latitude: exif.latitude, longitude: exif.longitude });
+  }
+  if (knownPlace(siteLat, siteLon)) {
+    return JSON.stringify({ latitude: siteLat, longitude: siteLon });
+  }
+  return null;
+}
+
+// More than the turns a photo can hold: MMhorizon keeps a turn between half
+// and all of the photo width.
+const MAX_TURNS = 8;
+
+/*
+ * Columns where a mark at `column`, in the first turn, shows on a panorama
+ * `width` px wide: once on every turn the photo covers. A turn that is not a
+ * positive number gives the mark once, and the count is bounded whatever the
+ * turn, so a degenerate one cannot hang the page.
+ */
+export function columnsEveryTurn(column, turn, width) {
+  if (!(turn > 0)) {
+    return column < width ? [column] : [];
+  }
+  const columns = [];
+  for (let x = column; x < width && columns.length < MAX_TURNS; x += turn) {
+    columns.push(x);
+  }
+  return columns;
 }
 
 /*

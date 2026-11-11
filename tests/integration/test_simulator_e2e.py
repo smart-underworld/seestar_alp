@@ -634,6 +634,17 @@ def test_06d_horizon_page_profile_reaches_the_planner(
     )
     assert sun.status_code == 200
     assert sun.json["azimuth"] == pytest.approx(218.0, abs=0.1)
+    # A photo time without UTC offset: read in the site's time zone.
+    monkeypatch.setattr(
+        front_app.Config, "init_timezone", "Europe/Paris", raising=False
+    )
+    local = client.simulate_get(
+        "/horizon/sun",
+        params={"when": "2026-10-23T15:59:04", "lat": "44.06", "lon": "0.65"},
+    )
+    assert local.status_code == 200
+    assert local.json["time_zone"] == "Europe/Paris"
+    assert local.json["azimuth"] == sun.json["azimuth"]
 
     # What the page posts once the panorama is measured.
     saved = client.simulate_post(

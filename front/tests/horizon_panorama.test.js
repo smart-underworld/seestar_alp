@@ -1,11 +1,13 @@
 import {
   MARK_COLORS,
+  columnsEveryTurn,
   extent,
   hasUtcOffset,
   horizonLineFromSun,
   photoPoint,
-  photoTimeUtc,
+  photoTime,
   profilePoints,
+  siteOfRecord,
   summary,
   sunUnavailable,
   turnBetween,
@@ -18,19 +20,20 @@ describe("horizon_panorama_core.js", () => {
     expect(horizonLineFromSun(433, 404, 1400)).toBe(1429);
   });
 
-  it("reads the photo date as UTC, with or without offset", () => {
-    expect(photoTimeUtc("2026-10-23T15:59:17+02:00")).toBe("2026-10-23T13:59:17.000Z");
-    expect(photoTimeUtc("2026-10-23T15:59:17")).toBe(new Date(2026, 9, 23, 15, 59, 17).toISOString());
-    expect(photoTimeUtc(null)).toBeNull();
-    expect(photoTimeUtc("not a date")).toBeNull();
+  it("sends a photo date with offset as UTC, and one without as written", () => {
+    expect(photoTime("2026-10-23T15:59:17+02:00")).toBe("2026-10-23T13:59:17.000Z");
+    // Local time of the site, read by the server: not this browser's zone.
+    expect(photoTime("2026-10-23T15:59:17")).toBe("2026-10-23T15:59:17");
+    expect(photoTime(null)).toBeNull();
+    expect(photoTime("not a date")).toBeNull();
     expect(hasUtcOffset("2026-10-23T15:59:17+02:00")).toBe(true);
     expect(hasUtcOffset("2026-10-23T15:59:17Z")).toBe(true);
     expect(hasUtcOffset("2026-10-23T15:59:17")).toBe(false);
   });
 
   it("reads EXIF's own date form, which Date does not", () => {
-    expect(photoTimeUtc("2026:10:23 15:59:17")).toBe(new Date(2026, 9, 23, 15, 59, 17).toISOString());
-    expect(photoTimeUtc("2026:10:23 15:59:17+02:00")).toBe("2026-10-23T13:59:17.000Z");
+    expect(photoTime("2026:10:23 15:59:17")).toBe("2026-10-23T15:59:17");
+    expect(photoTime("2026:10:23 15:59:17+02:00")).toBe("2026-10-23T13:59:17.000Z");
     expect(hasUtcOffset("2026:10:23 15:59:17")).toBe(false);
   });
 
@@ -45,6 +48,24 @@ describe("horizon_panorama_core.js", () => {
     // A date the browser cannot read, or none.
     expect(sunUnavailable({ ...located, date: "23/10/2026 15h59" }, 44.06, 0.65)).toMatch(/cannot be read/);
     expect(sunUnavailable({ ...located, date: null }, 44.06, 0.65)).toBe("the photo has no date");
+  });
+
+  it("records the photo's place, else the ALP's, and no place rather than 0 N 0 E", () => {
+    const located = { latitude: 44.06, longitude: 0.65 };
+    const unplaced = { latitude: null, longitude: null };
+    expect(JSON.parse(siteOfRecord(located, 45, 1))).toEqual({ latitude: 44.06, longitude: 0.65 });
+    expect(JSON.parse(siteOfRecord(unplaced, 45, 1))).toEqual({ latitude: 45, longitude: 1 });
+    expect(siteOfRecord(unplaced, 0, 0)).toBeNull();
+    expect(siteOfRecord({}, NaN, NaN)).toBeNull();
+  });
+
+  it("repeats a cardinal mark on every turn, and stops whatever the turn", () => {
+    expect(columnsEveryTurn(1000, 10467, 12672)).toEqual([1000, 11467]);
+    expect(columnsEveryTurn(3000, 10467, 12672)).toEqual([3000]);
+    // A turn of 0, or not a number: the mark once, never an endless loop.
+    expect(columnsEveryTurn(1000, 0, 12672)).toEqual([1000]);
+    expect(columnsEveryTurn(1000, NaN, 12672)).toEqual([1000]);
+    expect(columnsEveryTurn(1000, 1e-9, 12672).length).toBe(8);
   });
 
   it("maps a click on the scaled canvas to photo pixels", () => {

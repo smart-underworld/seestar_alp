@@ -5,11 +5,12 @@
 
 import {
   MARK_COLORS,
+  columnsEveryTurn,
   extent,
-  hasUtcOffset,
   photoPoint,
-  photoTimeUtc,
+  photoTime,
   profilePoints,
+  siteOfRecord,
   summary,
   sunUnavailable,
   turnBetween,
@@ -81,12 +82,9 @@ function mode() {
 }
 
 function site() {
-  const exif = current.infos.photo;
-  // The photo's own location first; the ALP's when the photo has none.
-  return JSON.stringify({
-    latitude: exif.latitude ?? configLat,
-    longitude: exif.longitude ?? configLon,
-  });
+  // The photo's own location first, the ALP's when the photo has none, and no
+  // place at all rather than 0 N 0 E when neither is known.
+  return siteOfRecord(current.infos.photo, configLat, configLon);
 }
 
 // --- Drawing --------------------------------------------------------------
@@ -127,7 +125,7 @@ function draw() {
     ctx.textAlign = "center";
     ["N", "E", "S", "W"].forEach((name, i) => {
       // Repeat the mark on every turn the photo shows.
-      for (let x = current.cardinals[i]; x < photo.width; x += current.turn) {
+      for (const x of columnsEveryTurn(current.cardinals[i], current.turn, photo.width)) {
         ctx.strokeStyle = ctx.fillStyle = MARK_COLORS.north;
         ctx.globalAlpha = i === 0 ? 1 : 0.6;
         ctx.lineWidth = (i === 0 ? 2 : 1) * px;
@@ -189,6 +187,10 @@ async function apply(state) {
 
 async function openPhoto(file) {
   setStatus(`Analysing ${file.name}… a few seconds, longer on a phone.`);
+  // Nothing to point at until this photo is open: the worker lets the former
+  // one go first, and keeps none when this one cannot be read.
+  photo = null;
+  files = null;
   $("hz-work").hidden = true;
   $("hz-result").textContent = "";
   try {
@@ -243,11 +245,14 @@ async function onClick(event) {
     photo.height,
   );
   try {
+    // Set by hand: the Sun no longer orients the photo, nor shows on it.
     if (mode() === "north") {
       lastSun = null;
+      sunMarks = [];
       await apply(await call("setNorth", { column }));
     } else if (mode() === "horizon") {
       lastSun = null;
+      sunMarks = [];
       await apply(await call("setHorizon", { row }));
     } else if (mode() === "turn") {
       await markTurn(column, row);
@@ -316,7 +321,7 @@ async function orientOnSun(column, row, prefix = "") {
   if (noSun) {
     throw new Error(`The Sun cannot orient this photo: ${noSun}.`);
   }
-  const when = photoTimeUtc(exif.date);
+  const when = photoTime(exif.date);
   // Without the photo's own position the server uses the ALP's, and refuses
   // an unset one.
   const fromPhoto = exif.latitude != null && exif.longitude != null;
@@ -329,11 +334,15 @@ async function orientOnSun(column, row, prefix = "") {
   const sun = await response.json();
   await apply(await call("orientOnSun", { column, row, altitude: sun.altitude, azimuth: sun.azimuth }));
   const where = fromPhoto ? "the photo's location" : "the ALP's location";
-  const zone = hasUtcOffset(exif.date) ? "" : ", photo time taken as this browser's local time";
+  // A time without UTC offset was read in the site's time zone: say which, as
+  // a warning, since a wrong zone turns north by tens of degrees.
+  const zone = sun.time_zone
+    ? ` The photo's time has no UTC offset: read in the site's time zone, ${sun.time_zone} (Settings).`
+    : "";
   setStatus(
     `${prefix}Sun at azimuth ${sun.azimuth.toFixed(1)}°, altitude ${sun.altitude.toFixed(1)}° on ${exif.date} ` +
-      `(${where}${zone}).`,
-    "success",
+      `(${where}).${zone}`,
+    sun.time_zone ? "warning" : "success",
   );
 }
 
@@ -344,6 +353,9 @@ function onMove(event) {
   }
   pointerFrame = requestAnimationFrame(async () => {
     pointerFrame = 0;
+    if (!photo) {
+      return;
+    }
     const canvas = $("hz-canvas");
     const point = photoPoint(
       event.clientX,
@@ -354,9 +366,14 @@ function onMove(event) {
       photo.width,
       photo.height,
     );
-    const { azimuth, altitude } = await call("direction", point);
-    const relative = current.north === null ? " (relative)" : "";
-    $("hz-pointer").textContent = `Azimuth ${azimuth.toFixed(1)}°${relative} · altitude ${altitude.toFixed(1)}°`;
+    try {
+      const { azimuth, altitude } = await call("direction", point);
+      const relative = current.north === null ? " (relative)" : "";
+      $("hz-pointer").textContent = `Azimuth ${azimuth.toFixed(1)}°${relative} · altitude ${altitude.toFixed(1)}°`;
+    } catch {
+      // No photo open in the worker: no reading, and nothing to report.
+      $("hz-pointer").textContent = "";
+    }
   });
 }
 

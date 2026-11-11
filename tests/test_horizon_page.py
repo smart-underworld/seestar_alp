@@ -207,7 +207,6 @@ def test_sun_position_refuses_an_unknown_site(client, monkeypatch, params):
 @pytest.mark.parametrize(
     "params",
     [
-        {"when": "2026-10-23T15:59:04", "lat": "44", "lon": "0.6"},  # no offset
         {"when": "yesterday", "lat": "44", "lon": "0.6"},
         {"when": "2026-10-23T15:59:04+02:00", "lon": "0.6"},
         {"when": "2026-10-23T15:59:04+02:00", "lat": "95", "lon": "0.6"},
@@ -215,6 +214,38 @@ def test_sun_position_refuses_an_unknown_site(client, monkeypatch, params):
 )
 def test_sun_position_rejects_bad_parameters(client, params):
     assert client.simulate_get("/horizon/sun", params=params).status_code == 400
+
+
+def test_sun_position_reads_a_time_without_offset_in_the_site_time_zone(
+    client, monkeypatch
+):
+    # EXIF without OffsetTimeOriginal: the site's clock, not the browser's.
+    monkeypatch.setattr(
+        front_app.Config, "init_timezone", "Europe/Paris", raising=False
+    )
+    place = {"lat": "44.06", "lon": "0.65"}
+    local = client.simulate_get(
+        "/horizon/sun", params={"when": "2026-10-23T15:59:04", **place}
+    )
+    assert local.status_code == 200
+    assert local.json["time_zone"] == "Europe/Paris"
+    offset = client.simulate_get(
+        "/horizon/sun", params={"when": "2026-10-23T15:59:04+02:00", **place}
+    )
+    assert offset.json["time_zone"] is None
+    assert local.json["azimuth"] == offset.json["azimuth"]
+    assert local.json["altitude"] == offset.json["altitude"]
+
+
+def test_sun_position_near_the_equator_and_the_prime_meridian(client):
+    # str(1e-05) is "1e-05": the place goes to ephem as an angle, not a str.
+    resp = client.simulate_get(
+        "/horizon/sun",
+        params={"when": "2026-03-20T12:00:00Z", "lat": "0.00001", "lon": "-0.00002"},
+    )
+    assert resp.status_code == 200
+    # Close to the equinox, near noon: the Sun is almost overhead.
+    assert resp.json["altitude"] > 87
 
 
 def test_bundled_mmhorizon_module_matches_its_readme():
