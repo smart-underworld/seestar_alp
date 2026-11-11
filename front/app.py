@@ -887,9 +887,16 @@ def get_client_master(telescope_id):
     return client_master
 
 
+# An unfiltered get_device_state opens and closes the focuser, runs shell
+# queries and can wait ~30 s on the mount (seestar-spec, READ), so callers ask
+# for the sections they read. Firmware that ignores "keys" returns them all.
+def _device_state_sections(telescope_id, *keys):
+    return method_sync("get_device_state", telescope_id, params={"keys": list(keys)})
+
+
 def get_firmware_ver_int(telescope_id):
     if check_api_state(telescope_id):
-        state = method_sync("get_device_state", telescope_id)
+        state = _device_state_sections(telescope_id, "device")
         return pydash.get(state, "device.firmware_ver_int", 0)
     return 0
 
@@ -1011,7 +1018,7 @@ def planner_model_key(model):
 
 def get_device_model(telescope_id):
     if check_api_state(telescope_id):
-        state = method_sync("get_device_state", telescope_id)
+        state = _device_state_sections(telescope_id, "device")
         return pydash.get(state, "device.product_model", 0)
     return 0
 
@@ -1025,7 +1032,7 @@ def get_guestmode_state(telescope_id):
         client_list = []
         fw = 0
 
-        result = method_sync("get_device_state", telescope_id)
+        result = _device_state_sections(telescope_id, "device", "setting", "client")
         if result is not None:
             device = result.get("device", {})
             fw = device.get("firmware_ver_int", 0)
@@ -1061,7 +1068,18 @@ def get_guestmode_state(telescope_id):
 
 def get_device_state(telescope_id):
     if check_api_state(telescope_id):
-        result = method_sync("get_device_state", telescope_id)
+        result = _device_state_sections(
+            telescope_id,
+            "device",
+            "setting",
+            "focuser",
+            "storage",
+            "balance_sensor",
+            "compass_sensor",
+            "mount",
+            "pi_status",
+            "client",
+        )
         status = method_sync("get_view_state", telescope_id)
         wifi_status = method_sync("pi_station_state", telescope_id)
 
@@ -5407,7 +5425,7 @@ class GetBalanceSensorResource:
         referer = req.get_header("Referer")
         referersplit = referer.split("/")[-2:]
         telescope_id = int(referersplit[0])
-        result = method_sync("get_device_state", telescope_id)
+        result = _device_state_sections(telescope_id, "balance_sensor")
         if result is not None:
             balance_sensor = {
                 "x": result["balance_sensor"]["data"]["x"],
