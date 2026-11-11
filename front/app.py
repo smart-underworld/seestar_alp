@@ -4702,6 +4702,122 @@ class PlanningResource:
         )
 
 
+class HorizonResource:
+    """Horizon page: the local horizon from a 360-degree panorama.
+
+    The photo is analysed in the browser by the MMhorizon core, compiled to
+    WebAssembly (front/public/mmhorizon); only the resulting profile is posted.
+    """
+
+    # A .hrz has one line per degree or so: a few kilobytes.
+    MAX_UPLOAD = 1024 * 1024
+
+    @staticmethod
+    def on_get(req, resp, telescope_id=0):
+        context = get_context(telescope_id, req)
+        profile, error = horizon.configured_profile()
+        render_template(
+            req,
+            resp,
+            "horizon.html",
+            config_lat=Config.init_lat,
+            config_long=Config.init_long,
+            horizon_file=Config.horizon_file,
+            horizon_error=error,
+            horizon_point_count=len(profile.points) if profile else 0,
+            **context,
+        )
+
+    @staticmethod
+    def on_post(req, resp, telescope_id=0):
+        if (req.content_length or 0) > HorizonResource.MAX_UPLOAD:
+            # HTTPPayloadTooLarge before Falcon 4.
+            too_large = (
+                getattr(falcon, "HTTPContentTooLarge", None)
+                or falcon.HTTPPayloadTooLarge
+            )
+            raise too_large(description="A horizon profile is a few kilobytes")
+        body = req.get_media(default_when_empty=None)
+        if not isinstance(body, dict) or not isinstance(body.get("hrz"), str):
+            raise falcon.HTTPBadRequest(description='Expected {"hrz": "<.hrz text>"}')
+        horizon_json = body.get("horizon_json")
+        if horizon_json is not None and not isinstance(horizon_json, str):
+            raise falcon.HTTPBadRequest(description="horizon_json must be a string")
+        try:
+            path, previous, profile = horizon.save_panorama_profile(
+                body["hrz"], horizon_json
+            )
+        except horizon.HorizonError as e:
+            raise falcon.HTTPBadRequest(description=str(e))
+        except horizon.HorizonSaveError as e:
+            logger.error(str(e))
+            raise falcon.HTTPInternalServerError(
+                description=f"{e}. The previous horizon is still in use."
+            )
+        logger.info(f"Horizon profile saved to {path} ({len(profile.points)} points)")
+        resp.media = {
+            "file": path,
+            "previous_file": previous,
+            "points": len(profile.points),
+        }
+
+
+class HorizonSunResource:
+    """Apparent position of the Sun, to orient a panorama: ?when=ISO&lat=&lon=.
+
+    ``lat`` and ``lon`` are the photo's location; without them, the site's
+    from Settings. 0, 0 stands for an unknown site, as in check_target: the
+    request is refused rather than answered for 0 N 0 E, which would turn
+    the panorama's north by tens of degrees.
+
+    A ``when`` without UTC offset (EXIF often has none) is read in the site's
+    time zone, the planner's, and the answer names it in ``time_zone``: the
+    browser's zone is not the site's when the page is opened from elsewhere.
+    """
+
+    @staticmethod
+    def on_get(req, resp):
+        lat = req.get_param_as_float("lat", min_value=-90, max_value=90)
+        lon = req.get_param_as_float("lon", min_value=-180, max_value=360)
+        if (lat is None) != (lon is None):
+            raise falcon.HTTPBadRequest(description="give both lat and lon, or neither")
+        if lat is None:
+            lat, lon = horizon.site_location() or (0.0, 0.0)
+        if lat == 0 and lon == 0:
+            raise falcon.HTTPBadRequest(
+                description="Site location unknown: set Latitude and Longitude in "
+                "Settings, or use a photo that records where it was taken"
+            )
+        try:
+            when = datetime.fromisoformat(req.get_param("when", required=True))
+        except ValueError:
+            raise falcon.HTTPBadRequest(description="when: expected an ISO 8601 date")
+        time_zone = None
+        if when.tzinfo is None:
+            zone = site_timezone()
+            if hasattr(zone, "localize"):  # pytz
+                when = zone.localize(when)
+            else:
+                when = when.replace(tzinfo=zone)
+            time_zone = str(zone)
+        observer = ephem.Observer()
+        # As angles: nothing rests on how ephem parses a str such as "1e-05".
+        observer.lat = ephem.degrees(math.radians(lat))
+        observer.lon = ephem.degrees(math.radians(lon))
+        observer.elevation = 0
+        observer.date = ephem.Date(when.astimezone(pytz.utc).replace(tzinfo=None))
+        # Apparent position, refraction included (ephem's default 1010 mbar,
+        # 15 degrees C): where the photo shows the Sun.
+        sun = ephem.Sun(observer)
+        resp.media = {
+            "altitude": round(math.degrees(sun.alt), 3),
+            "azimuth": round(math.degrees(sun.az), 3),
+            "latitude": lat,
+            "longitude": lon,
+            "time_zone": time_zone,
+        }
+
+
 class StatsResource:
     @staticmethod
     def on_get(req, resp, telescope_id=1):
@@ -5944,6 +6060,9 @@ class FrontMain:
         app.add_route("/{telescope_id:int}/mosaic", MosaicResource())
         app.add_route("/{telescope_id:int}/framed_mosaic", FramedMosaicResource())
         app.add_route("/{telescope_id:int}/planning", PlanningResource())
+        app.add_route("/horizon", HorizonResource())
+        app.add_route("/{telescope_id:int}/horizon", HorizonResource())
+        app.add_route("/horizon/sun", HorizonSunResource())
         app.add_route("/{telescope_id:int}/position", TelescopePositionResource())
         app.add_route("/{telescope_id:int}/search", SearchObjectResource())
         app.add_route("/{telescope_id:int}/settings", SettingsResource())

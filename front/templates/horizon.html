@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+
+{% block header %}
+    <div class="container mt-3">
+        <span class="fs-1">{% block title %}Horizon{% endblock %}</span>
+    </div>
+{% endblock %}
+
+{% block content %}
+<div id="hz-page" data-lat="{{ config_lat }}" data-lon="{{ config_long }}">
+    <div class="card border-primary mb-3">
+        <div class="card-header"><h3>Current horizon</h3></div>
+        {# Replaced by the saved profile once the page saves one (horizon_panorama.js). #}
+        <div class="card-body" id="hz-current">
+            {% if horizon_error %}
+                <div class="alert alert-warning mb-0" role="alert">Horizon file not used: {{ horizon_error }}</div>
+            {% elif horizon_file %}
+                <p class="mb-0">{{ horizon_file }} &middot; {{ horizon_point_count }} points</p>
+            {% else %}
+                <p class="mb-0">None: the planner assumes a flat horizon at 30&deg;.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card border-primary mb-3">
+        <div class="card-header"><h3>From a 360&deg; panorama</h3></div>
+        <div class="card-body">
+            <p>
+                Take a full-turn panorama from where the telescope stands, phone on a tripod at
+                the height of the scope. The photo is analysed in this browser by
+                <a href="https://github.com/mmedia-fr/mmhorizon">MMhorizon</a> and is not uploaded:
+                only the horizon profile is saved, as a N.I.N.A. <code>.hrz</code> file.
+            </p>
+            <label for="hz-photo" class="form-label">Panorama (JPEG or PNG)</label>
+            <input type="file" id="hz-photo" class="form-control" accept="image/jpeg,image/png">
+            <div id="hz-status" class="mt-2 small" role="status"></div>
+
+            <div id="hz-work" class="mt-3" hidden>
+                <p id="hz-summary" class="small text-body-secondary"></p>
+                <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+                    {# Plain .btn: each takes the colour of its marks (horizon_panorama.js). #}
+                    <div class="btn-group" role="group" aria-label="What a click on the panorama sets">
+                        {# In the order of the steps: one turn, then the Sun or north, then the horizon line. #}
+                        <input type="radio" class="btn-check" name="hz-mode" id="hz-mode-turn" value="turn">
+                        <label class="btn" for="hz-mode-turn">One turn</label>
+                        <input type="radio" class="btn-check" name="hz-mode" id="hz-mode-sun" value="sun">
+                        <label class="btn" for="hz-mode-sun">Sun</label>
+                        <input type="radio" class="btn-check" name="hz-mode" id="hz-mode-north" value="north" checked>
+                        <label class="btn" for="hz-mode-north">North</label>
+                        <input type="radio" class="btn-check" name="hz-mode" id="hz-mode-horizon" value="horizon">
+                        <label class="btn" for="hz-mode-horizon">Horizon line</label>
+                    </div>
+                    <div>
+                        <label for="hz-zoom" class="form-label me-1 mb-0">Zoom</label>
+                        <select id="hz-zoom" class="form-select form-select-sm d-inline-block w-auto">
+                            <option value="1">Fit</option>
+                            <option value="2">2&times;</option>
+                            <option value="4">4&times;</option>
+                        </select>
+                    </div>
+                </div>
+                <p id="hz-hint" class="small mb-2"></p>
+                <div style="overflow-x: auto;">
+                    <canvas id="hz-canvas" style="width: 100%; cursor: crosshair; display: block;"></canvas>
+                </div>
+                <p class="small mt-1 mb-1"><span id="hz-pointer">&nbsp;</span></p>
+                <p class="small text-body-secondary">
+                    <span style="color: rgb(255, 40, 40);">&#9632;</span> detected limit of the sky &middot;
+                    <span data-mark="turn">&#9632;</span> same point at both ends (one turn) &middot;
+                    <span data-mark="sun">&#9632;</span> Sun clicked &middot;
+                    <span data-mark="north">&#9632;</span> north, then east, south, west &middot;
+                    <span data-mark="horizon">&#9632;</span> horizon line (0&deg;).
+                    <span id="hz-north"></span>
+                </p>
+
+                {# Same layout as the Horizon card of the Planning page. #}
+                <svg id="hz-profile" viewBox="-14 -4 384 104" width="100%" role="img"
+                     aria-label="Horizon profile: altitude of the obstructions by azimuth" hidden>
+                    {% for altitude in [30, 60] %}
+                        <line x1="0" y1="{{ 90 - altitude }}" x2="360" y2="{{ 90 - altitude }}"
+                              stroke="currentColor" stroke-opacity="0.25" stroke-width="0.3"/>
+                        <text x="-1" y="{{ 91 - altitude }}" font-size="4" text-anchor="end" fill="currentColor">{{ altitude }}&deg;</text>
+                    {% endfor %}
+                    <polygon id="hz-profile-shape" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-width="0.6" points=""/>
+                    <line x1="0" y1="90" x2="360" y2="90" stroke="currentColor" stroke-width="0.4"/>
+                    {% for azimuth, name in [(0, "N"), (90, "E"), (180, "S"), (270, "W"), (360, "N")] %}
+                        <text x="{{ azimuth }}" y="98" font-size="5" text-anchor="middle" fill="currentColor">{{ name }}</text>
+                    {% endfor %}
+                </svg>
+
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    <button type="button" id="hz-save" class="btn btn-primary" disabled>Use as the horizon of this ALP</button>
+                    <button type="button" id="hz-download-hrz" class="btn btn-outline-secondary" disabled>Download .hrz</button>
+                    <button type="button" id="hz-download-json" class="btn btn-outline-secondary" disabled>Download .horizon.json</button>
+                </div>
+                <div id="hz-result" role="status"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<script type="module" src="{{ root_path }}/public/horizon_panorama.js"></script>
+{% endblock %}

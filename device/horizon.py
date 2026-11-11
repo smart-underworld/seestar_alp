@@ -7,10 +7,12 @@ panorama of the site. Between two points the horizon is interpolated
 linearly, wrapping at 360 degrees.
 
 The planner draws the profile in AstroMosaic's day chart, and the scheduler
-can skip a target hidden behind it (``horizon_skip_hidden_targets``).
+can skip a target hidden behind it (``horizon_skip_hidden_targets``). The
+Horizon page makes one from a 360-degree panorama, in the browser.
 """
 
 import bisect
+import json
 import logging
 import math
 import os
@@ -19,7 +21,7 @@ import threading
 from astropy.coordinates import FK5, SkyCoord
 from astropy.time import Time
 
-from device.config import Config
+from device.config import Config, stage_file, write_file_atomic
 from device.seestar_util import Util
 
 
@@ -29,6 +31,10 @@ logger = logging.getLogger()
 
 class HorizonError(ValueError):
     """Raised when a horizon file cannot be read."""
+
+
+class HorizonSaveError(Exception):
+    """Raised when a valid profile cannot be written; the former one stays in use."""
 
 
 class SiteLocationUnknown(LookupError):
@@ -148,9 +154,11 @@ def configured_profile():
     """``(profile, error)`` for the configured ``horizon_file``.
 
     ``(None, None)`` when no file is configured. The file is parsed again
-    only when its path, modification time or size changes, so the planner
-    and the scheduler can call this freely: it costs one ``stat``. An
-    unusable file is logged once, when it is read, not on every call.
+    only when its path, inode, modification time or size changes, so the
+    planner and the scheduler can call this freely: it costs one ``stat``.
+    The inode catches a file replaced within one tick of a coarse clock (an
+    atomic save gives it a new one); ``forget_cached_profile`` covers the
+    rest. An unusable file is logged once, when it is read, not on every call.
     """
     path = (Config.horizon_file or "").strip()
     if not path:
@@ -161,7 +169,7 @@ def configured_profile():
         error = f"{path}: {e.strerror}"
         _log_once(("missing", path, e.errno), error)
         return None, error
-    key = (path, stat.st_mtime_ns, stat.st_size)
+    key = (path, stat.st_ino, stat.st_mtime_ns, stat.st_size)
     with _lock:
         if _cache["key"] != key:
             try:
@@ -172,6 +180,12 @@ def configured_profile():
                 logger.warning(f"Horizon file not used, flat horizon instead: {error}")
             _cache.update(key=key, profile=profile, error=error)
         return _cache["profile"], _cache["error"]
+
+
+def forget_cached_profile():
+    """Make the next ``configured_profile`` call read the file again."""
+    with _lock:
+        _cache.update(key=None, profile=None, error=None)
 
 
 _logged = set()
@@ -285,3 +299,157 @@ def check_target(params):
         raise SiteLocationUnknown("site location not set: latitude and longitude are 0")
     result["horizon_error"] = error
     return result
+
+
+# Profile made from a panorama on the Horizon page, saved next to config.toml.
+PANORAMA_HRZ = "horizon.hrz"
+PANORAMA_JSON = "horizon.horizon.json"
+
+# One save at a time. The front's WSGI server is threaded: two overlapping
+# POST /horizon would otherwise interleave their replaces and roll-backs.
+_save_lock = threading.Lock()
+
+
+def save_panorama_profile(hrz_text, horizon_json=None):
+    """Save a profile made from a panorama, and make it the configured horizon.
+
+    ``hrz_text`` is the ``.hrz`` the page exported; ``horizon_json``, when
+    given, the MMhorizon ``.horizon.json`` it came from, kept beside it as a
+    record of the photo and of how north was set. Both go next to
+    config.toml, and ``horizon_file`` then points to the ``.hrz``; a file
+    configured before is left in place. A save without ``horizon_json``
+    removes the record an earlier save left, which described another photo.
+    The planner and the scheduler use the new profile from their next call.
+    Returns ``(path, previous_file, profile)``.
+
+    Saves run one at a time. Both files are written in full, to temporary
+    files of their own, before anything is replaced; config.toml is saved
+    next, then the record takes its place, and the profile last. Any error on
+    the way (folder not writable by the service, disk full, a config.toml
+    without its ``[seestar_initialization]`` table) removes the temporary
+    files, puts back the former record and ``horizon_file``, and raises
+    ``HorizonSaveError``: the former profile stays in use. Removing the record
+    of an earlier photo comes once the new profile is in place: when it
+    fails, the save stands and a warning is logged.
+
+    Raises ``HorizonError`` on an invalid profile, before anything is written.
+    """
+    profile = HorizonProfile.parse_hrz(hrz_text, "uploaded profile")
+    if horizon_json is not None:
+        try:
+            record = json.loads(horizon_json)
+        except ValueError as e:
+            raise HorizonError(f"uploaded .horizon.json: {e}") from None
+        if not isinstance(record, dict) or record.get("format") != "horizon":
+            raise HorizonError("uploaded .horizon.json: not an MMhorizon file")
+    with _save_lock:
+        path, previous = _save_panorama_files(hrz_text, horizon_json)
+    return path, previous, profile
+
+
+def _save_panorama_files(hrz_text, horizon_json):
+    """The file side of ``save_panorama_profile``, under ``_save_lock``."""
+    folder = os.path.dirname(Config.path_to_dat)
+    path = os.path.join(folder, PANORAMA_HRZ)
+    record_path = os.path.join(folder, PANORAMA_JSON)
+    previous = Config.horizon_file
+    config_changes = previous != path
+    config_set = config_saved = record_replaced = False
+    former_record = None
+    staged = []
+    try:
+        hrz_tmp = stage_file(path, hrz_text, "utf-8")
+        staged.append(hrz_tmp)
+        if horizon_json is not None:
+            record_tmp = stage_file(record_path, horizon_json, "utf-8")
+            staged.append(record_tmp)
+            former_record = _read_if_present(record_path)
+        if config_changes:
+            Config.set_toml("seestar_initialization", "horizon_file", path)
+            config_set = True
+            Config.save_toml()
+            config_saved = True
+        if horizon_json is not None:
+            os.replace(record_tmp, record_path)
+            record_replaced = True
+        # The profile last: until this replace succeeds the former one is in
+        # use, and everything done above is undone below.
+        os.replace(hrz_tmp, path)
+    except Exception as e:
+        for tmp in staged:
+            _remove_quietly(tmp)
+        if record_replaced:
+            _put_back_record(record_path, former_record)
+        if config_set:
+            _put_back_horizon_file(previous, config_saved)
+        if isinstance(e, OSError):
+            detail = str(e)
+        else:
+            logger.exception("Unexpected error while saving the horizon profile")
+            detail = f"{type(e).__name__}: {e}"
+        raise HorizonSaveError(f"horizon profile not saved: {detail}") from e
+    finally:
+        forget_cached_profile()
+    if horizon_json is None:
+        _remove_stale_record(record_path)
+    if config_changes:
+        Config.load_toml()
+    return path, previous
+
+
+def _read_if_present(path):
+    """The bytes of ``path``, or None when there is no such file."""
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+
+
+def _put_back_record(record_path, former):
+    """The record as it was before the save: ``former`` bytes, or no file."""
+    try:
+        if former is None:
+            os.remove(record_path)
+        else:
+            write_file_atomic(record_path, former)
+    except OSError as e:
+        logger.warning(f"Could not put the former {record_path} back: {e}")
+
+
+def _remove_stale_record(record_path):
+    """Remove the record of an earlier photo, once the new profile is in use.
+
+    A failure leaves the save in place: the profile is the new one, and only
+    the record, kept for reference, still describes the former photo.
+    """
+    try:
+        os.remove(record_path)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.warning(
+            f"Horizon profile saved, but {record_path} could not be removed "
+            f"and still describes the former photo: {e}"
+        )
+
+
+def _remove_quietly(path):
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.warning(f"Could not remove {path}: {e}")
+
+
+def _put_back_horizon_file(previous, saved):
+    """``horizon_file`` as it was in memory, and in config.toml if ``saved``."""
+    Config.set_toml("seestar_initialization", "horizon_file", previous)
+    if not saved:
+        return
+    try:
+        Config.save_toml()
+        Config.load_toml()
+    except Exception as e:
+        logger.warning(f"Could not put horizon_file back to {previous!r}: {e}")

@@ -14,7 +14,8 @@ from falcon import testing
 import pytest
 
 import front.app as front_app
-from device.config import Config
+from device import horizon
+from device.config import Config, _Config
 
 
 SIMULATOR_SRC = Path(__file__).resolve().parents[2] / "simulator" / "src"
@@ -92,6 +93,9 @@ def _build_front_test_app():
     app.add_route(
         "/api/{telescope_id:int}/force_stop_goto", front_app.ForceStopGotoResource()
     )
+    app.add_route("/{telescope_id:int}/horizon", front_app.HorizonResource())
+    app.add_route("/horizon", front_app.HorizonResource())
+    app.add_route("/horizon/sun", front_app.HorizonSunResource())
     return app
 
 
@@ -589,6 +593,76 @@ def test_06c_planning_page_uses_horizon_profile(
     assert limits[54] == pytest.approx(5.76, abs=0.01)
     assert 'id="horizon-profile"' in resp.text
     assert "5 points" in resp.text
+
+
+def test_06d_horizon_page_profile_reaches_the_planner(
+    front_sim_bridge, monkeypatch, tmp_path
+):
+    # A config of its own, so the saved profile lands in tmp_path.
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[seestar_initialization]\nlat = 44.06\nlong = 0.65\nhorizon_file = ""\n'
+    )
+    config = _Config.__new__(_Config)
+    config.path_to_dat = str(path)
+    config.load_toml()
+    monkeypatch.setattr(horizon, "Config", config)
+    monkeypatch.setattr(
+        front_app,
+        "get_planning_cards",
+        lambda: [
+            {
+                "card_name": name,
+                "card_friendly_name": name,
+                "template": f"partials/{name}.html",
+                "planning_page_enable": True,
+                "planning_page_collapsed": False,
+            }
+            for name in ("astro_mosaic", "horizon")
+        ],
+    )
+    client = front_sim_bridge["client"]
+
+    page = client.simulate_get("/1/horizon")
+    assert page.status_code == 200
+    assert 'type="file" id="hz-photo"' in page.text
+    assert 'href="/1/horizon">Horizon (MMhorizon)</a>' in page.text
+
+    sun = client.simulate_get(
+        "/horizon/sun",
+        params={"when": "2026-10-23T13:59:04Z", "lat": "44.06", "lon": "0.65"},
+    )
+    assert sun.status_code == 200
+    assert sun.json["azimuth"] == pytest.approx(218.0, abs=0.1)
+    # A photo time without UTC offset: read in the site's time zone.
+    monkeypatch.setattr(
+        front_app.Config, "init_timezone", "Europe/Paris", raising=False
+    )
+    local = client.simulate_get(
+        "/horizon/sun",
+        params={"when": "2026-10-23T15:59:04", "lat": "44.06", "lon": "0.65"},
+    )
+    assert local.status_code == 200
+    assert local.json["time_zone"] == "Europe/Paris"
+    assert local.json["azimuth"] == sun.json["azimuth"]
+
+    # What the page posts once the panorama is measured.
+    saved = client.simulate_post(
+        "/horizon", json={"hrz": "0 12\n60 24.5\n90 18\n180 15\n270 5.5\n"}
+    )
+    assert saved.status_code == 200
+    assert saved.json["points"] == 5
+    assert config.horizon_file == str(tmp_path / "horizon.hrz")
+
+    # The planner uses it at once, without a restart.
+    resp = client.simulate_get("/1/planning")
+    assert resp.status_code == 200
+    limits = json.loads(re.search(r"horizonHard: (\[[^\]]*\]),", resp.text).group(1))
+    assert limits[12] == 24.5
+    assert "5 points" in resp.text
+    assert 'href="/1/horizon">Make the horizon from a 360&deg; panorama</a>' in (
+        resp.text
+    )
 
 
 def test_07_schedule_lifecycle(front_sim_bridge):

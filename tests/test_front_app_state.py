@@ -3044,3 +3044,57 @@ def test_cached_context_is_not_rewritten_by_a_request_prefix(monkeypatch):
     assert out_b["root"] == "/b/1" and out_b["action"] == "/b/1/live"
     assert out_plain["root"] == "/1" and out_plain["action"] == "/1/live"
     assert out_a["root_path"] == "/a" and out_plain["root_path"] == ""
+
+
+def test_nav_links_to_the_horizon_page():
+    html = _render_nav("planning")
+    assert 'href="/1/horizon">Horizon (MMhorizon)</a>' in html
+
+
+def test_horizon_card_links_to_the_panorama_page():
+    for curve in (None, [(azimuth, 10) for azimuth in range(361)]):
+        html = _render_partial("partials/horizon.html", horizon_curve=curve, root="/1")
+        assert 'href="/1/horizon">Make the horizon from a 360&deg; panorama</a>' in html
+
+
+@pytest.mark.parametrize(
+    "horizon_file, horizon_error, shown",
+    [
+        ("", None, "flat horizon at 30"),
+        ("/etc/seestar/site.hrz", None, "/etc/seestar/site.hrz &middot; 4 points"),
+        ("/etc/seestar/gone.hrz", "No such file or directory", "Horizon file not used"),
+    ],
+)
+def test_horizon_page_current_card_is_always_replaceable(
+    horizon_file, horizon_error, shown
+):
+    # The page replaces #hz-current after a save, whatever it showed before,
+    # a warning about an unusable file included.
+    html = front_app.fetch_template("horizon.html").render(
+        **_minimal_context("horizon"),
+        config_lat=44.06,
+        config_long=0.65,
+        horizon_file=horizon_file,
+        horizon_error=horizon_error,
+        horizon_point_count=4,
+    )
+    current = re.search(
+        r'<div class="card-body" id="hz-current">(.*?)</div>', html, re.S
+    )
+    assert current is not None
+    assert shown in current.group(0)
+    assert 'id="hz-page" data-lat="44.06" data-lon="0.65"' in html
+
+
+def test_horizon_page_script_follows_the_root_path():
+    html = front_app.fetch_template("horizon.html").render(
+        **_minimal_context("horizon"),
+        root_path="/ingress",
+        config_lat=44.06,
+        config_long=0.65,
+        horizon_file="",
+        horizon_error=None,
+        horizon_point_count=0,
+    )
+    assert 'src="/ingress/public/horizon_panorama.js"' in html
+    assert 'data-root-path="/ingress"' in html

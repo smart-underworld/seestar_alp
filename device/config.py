@@ -41,6 +41,7 @@ import sys
 import math
 import tomlkit
 import logging
+import secrets
 import shutil
 
 ### rwr
@@ -58,6 +59,47 @@ class ConfigError(Exception):
     the common Windows-backslash fix) so the app can report it cleanly instead
     of dying with a raw tomlkit traceback.
     """
+
+
+def stage_file(path: str, text: str | bytes, encoding=None) -> str:
+    """Write ``text`` in full to a new temporary file next to ``path``, flushed
+    and fsynced; ``bytes`` are written as they are.
+
+    Returns its name, for ``os.replace`` onto ``path``. The name is
+    ``<path>.<random>.tmp``, created exclusively, so two writers of one file
+    never share a temporary file. When the write fails the temporary file is
+    removed and the error is raised again.
+    """
+    tmp_name = f"{path}.{secrets.token_hex(6)}.tmp"
+    binary = isinstance(text, bytes)
+    # Outside the try: a name that already exists is not ours to remove.
+    f = open(tmp_name, "xb" if binary else "x", encoding=None if binary else encoding)
+    try:
+        with f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+    except Exception:
+        if os.path.exists(tmp_name):
+            os.remove(tmp_name)
+        raise
+    return tmp_name
+
+
+def write_file_atomic(path: str, text: str | bytes, encoding=None):
+    """Replace ``path`` with ``text`` in one step.
+
+    After a crash or a power loss the file holds either its former content or
+    the new one, never a truncated mix (see ``stage_file``). The temporary
+    file is removed when anything fails, and the error is raised again.
+    """
+    tmp_name = stage_file(path, text, encoding)
+    try:
+        os.replace(tmp_name, path)
+    except Exception:
+        if os.path.exists(tmp_name):
+            os.remove(tmp_name)
+        raise
 
 
 def _parse_toml(text: str, toml_path: str):
@@ -553,18 +595,7 @@ class _Config:
         if save_name is None:
             save_name = self.path_to_dat
         print(f"save_toml: writing toml to {save_name}")
-
-        tmp_name = save_name + ".tmp"
-        try:
-            with open(tmp_name, "w") as toml_file:
-                toml_file.write(tomlkit.dumps(self._dict))
-                toml_file.flush()
-                os.fsync(toml_file.fileno())
-            os.replace(tmp_name, save_name)
-        except Exception:
-            if os.path.exists(tmp_name):
-                os.remove(tmp_name)
-            raise
+        write_file_atomic(save_name, tomlkit.dumps(self._dict))
 
     #
     # HTML config rendering
