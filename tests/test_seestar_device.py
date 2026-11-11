@@ -1829,6 +1829,235 @@ def test_receive_error_during_another_reconnect_does_not_block_reader(monkeypatc
     assert len(auth_calls) == 1
 
 
+def test_get_socket_msg_without_socket_reconnects_when_nobody_else_is(
+    monkeypatch, seestar
+):
+    sleeps = []
+    monkeypatch.setattr("device.seestar_device.time.sleep", sleeps.append)
+    new_sock = _DummySocket(recv_value=b"x")
+
+    def reconnect(wait=True):
+        assert wait is False
+        seestar.s = new_sock
+        seestar.is_connected = True
+        return True
+
+    monkeypatch.setattr(seestar, "reconnect", reconnect)
+    seestar.s = None
+    seestar.is_watch_events = True
+    assert seestar.get_socket_msg() is None
+    assert seestar.s is new_sock
+    assert sleeps == []  # reconnected: read the new socket straight away
+
+
+def test_get_socket_msg_without_socket_paces_failed_reconnects(monkeypatch, seestar):
+    # Scope really off: each failed attempt still backs off, so the reader
+    # never spins reconnect + UDP intro + connect in a tight loop.
+    sleeps = []
+    monkeypatch.setattr("device.seestar_device.time.sleep", sleeps.append)
+    reconnects = []
+    monkeypatch.setattr(
+        seestar, "reconnect", lambda wait=True: reconnects.append(wait) or False
+    )
+    seestar.s = None
+    seestar.is_watch_events = True
+    assert seestar.get_socket_msg() is None
+    assert reconnects == [False]
+    assert sleeps == [3]
+
+    # A stale is_connected with no socket must not turn into a hot loop either.
+    monkeypatch.setattr(seestar, "reconnect", lambda wait=True: True)
+    assert seestar.get_socket_msg() is None
+    assert sleeps == [3, 3]
+
+
+def test_get_socket_msg_without_socket_never_reconnects_once_watch_ends(
+    monkeypatch, seestar
+):
+    sleeps = []
+    monkeypatch.setattr("device.seestar_device.time.sleep", sleeps.append)
+    monkeypatch.setattr(
+        seestar, "reconnect", lambda wait=True: pytest.fail("reconnected")
+    )
+    seestar.s = None
+    seestar.is_watch_events = False
+    assert seestar.get_socket_msg() is None
+    assert sleeps == [3]
+
+
+def test_get_socket_msg_without_socket_leaves_reconnect_to_running_heartbeat(
+    monkeypatch, seestar
+):
+    # Once the heartbeat runs it retries every 5 s itself; the reader must not
+    # add a second retry loop in offline mode.
+    sleeps = []
+    monkeypatch.setattr("device.seestar_device.time.sleep", sleeps.append)
+    monkeypatch.setattr(
+        seestar, "reconnect", lambda wait=True: pytest.fail("reconnected")
+    )
+    seestar.heartbeat_msg_thread = SimpleNamespace(is_alive=lambda: True)
+    seestar.s = None
+    seestar.is_watch_events = True
+    assert seestar.get_socket_msg() is None
+    assert sleeps == [3]
+
+
+def test_reset_during_another_reconnect_is_recovered_by_the_reader(monkeypatch):
+    # Issue #798: Docker's port proxy resets the connection a reconnect (here
+    # the start-up one, mid-handshake) just opened. The reader drops the
+    # socket and, finding a reconnect in flight, does not start another. That
+    # reconnect then fails, since its socket is gone. Before the fix the reader
+    # then only logged "socket not initialized!" until the heartbeat started,
+    # after the initial sync call's timeout. Now its next read reconnects.
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: None)
+    monkeypatch.setattr(Config, "seestar_interop_pem", "/some/key.pem", raising=False)
+    server = _ScopeServer()
+    scope = Seestar(DummyLogger(), "127.0.0.1", server.port, "TestScope", 1, True)
+    monkeypatch.setattr(scope, "send_udp_intro", lambda: None)
+    auth_started = threading.Event()
+    finish_auth = threading.Event()
+    auth_calls = []
+
+    def authenticate():
+        auth_calls.append(threading.current_thread().name)
+        auth_started.set()
+        if len(auth_calls) == 1:
+            finish_auth.wait(timeout=5)
+        return True
+
+    monkeypatch.setattr(scope, "authenticate", authenticate)
+    scope.is_watch_events = True
+    results = {}
+    starting = threading.Thread(
+        target=lambda: results.setdefault("startup", scope.reconnect())
+    )
+    reader = threading.Thread(target=lambda: None)
+    scope.get_msg_thread = reader
+    try:
+        starting.start()
+        assert auth_started.wait(timeout=5)
+        assert server.wait_for_conns(1)
+        conn = server.conns[0]
+        conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+        conn.close()
+        assert scope.get_socket_msg() is None  # reset seen; reconnect in flight
+        finish_auth.set()
+        _assert_threads_finished([starting])
+        assert results["startup"] is False
+        assert scope.s is None
+
+        # The reader's next pass reconnects on its own.
+        assert scope.get_socket_msg() is None
+        assert server.wait_for_conns(2)
+        assert scope.s is not None
+        assert scope.is_connected
+        assert scope.is_authenticated
+        assert len(auth_calls) == 2
+    finally:
+        finish_auth.set()
+        scope.is_watch_events = False
+        scope.socket_force_close()
+        server.close()
+
+
+@pytest.mark.parametrize("close_with", ["fin", "rst"])
+def test_receive_thread_rides_out_a_port_proxy_until_the_scope_listens(
+    monkeypatch, close_with
+):
+    # End to end: the "scope" port accepts and immediately closes the first
+    # few connections (Docker's proxy before the firmware binds), with FIN or
+    # RST. The receive thread alone must end up on a live connection and
+    # deliver the scope's first message.
+    real_sleep = time.sleep
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: real_sleep(0.01))
+    monkeypatch.setattr("device.seestar_device.sleep", lambda _s: real_sleep(0.01))
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
+    listener = socket.create_server(("127.0.0.1", 0))
+    listener.settimeout(0.05)
+    port = listener.getsockname()[1]
+    stop = threading.Event()
+    held = []
+
+    def serve():
+        dropped = 0
+        while not stop.is_set():
+            try:
+                conn, _ = listener.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                return
+            if dropped < 3:
+                dropped += 1
+                if close_with == "rst":
+                    conn.setsockopt(
+                        socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0)
+                    )
+                conn.close()
+                continue
+            conn.sendall(b'{"Event":"PiStatus","temp":42}\r\n')
+            held.append(conn)
+
+    server = threading.Thread(target=serve, daemon=True)
+    server.start()
+    scope = Seestar(DummyLogger(), "127.0.0.1", port, "TestScope", 1, True)
+    monkeypatch.setattr(scope, "send_udp_intro", lambda: None)
+    scope.is_watch_events = True
+    scope.reconnect()
+    reader = threading.Thread(target=scope.receive_message_thread_fn, daemon=True)
+    scope.get_msg_thread = reader
+    try:
+        reader.start()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and "PiStatus" not in scope.event_state:
+            real_sleep(0.02)
+        assert scope.event_state.get("PiStatus", {}).get("temp") == 42
+        assert scope.is_connected
+        assert len(held) == 1
+    finally:
+        scope.is_watch_events = False
+        stop.set()
+        server.join(timeout=5)
+        # Closing the scope side ends the reader's blocking recv() at once.
+        for c in held:
+            c.close()
+        reader.join(timeout=5)
+        assert not reader.is_alive()
+        scope.socket_force_close()
+        listener.close()
+
+
+def test_receive_loop_processes_leftover_from_its_own_reconnect(monkeypatch, seestar):
+    # When the receive thread itself reconnects, the handshake reads the new
+    # socket directly and parks unrelated lines in _auth_leftover. The loop
+    # must pick them up then, not only at thread start, and must drop any
+    # partial line still held from the old socket.
+    calls = []
+
+    def fake_get_socket_msg():
+        calls.append(1)
+        if len(calls) == 1:
+            return '{"Event": "Old", "n": 1}\r\n{"partial-from-old-sock'
+        if len(calls) == 2:
+            # Reconnected on this thread; the handshake parked these.
+            seestar._auth_leftover = (
+                '{"Event": "PiStatus", "temp": 42}\r\n{"Event": "Spl'
+            )
+            return None
+        seestar.is_watch_events = False
+        return 'it", "x": 1}\r\n'
+
+    monkeypatch.setattr(seestar, "get_socket_msg", fake_get_socket_msg)
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    seestar.is_watch_events = True
+    seestar.receive_message_thread_fn()
+
+    assert seestar._auth_leftover == ""
+    assert seestar.event_state.get("PiStatus", {}).get("temp") == 42
+    assert seestar.event_state.get("Split", {}).get("x") == 1
+
+
 def test_pinned_command_ids_are_sent_unchanged_and_never_reallocated(seestar):
     ours, peer = socket.socketpair()
     seestar.s = ours
