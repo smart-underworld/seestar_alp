@@ -714,6 +714,22 @@ def test_update_equ_coord_and_view_state(seestar):
     assert seestar.view_state == {"a": 1}
 
 
+def test_view_state_timestamp_marks_replies_that_carry_a_view(monkeypatch, seestar):
+    monkeypatch.setattr("device.seestar_device.time.monotonic", lambda: 123.0)
+    assert seestar.view_state_ts is None
+
+    seestar.update_view_state(
+        {"method": "get_view_state", "result": {"View": {"stage": "Stack"}}}
+    )
+    assert seestar.view_state_ts == 123.0
+
+    # A reply without a View leaves the view, and when it arrived, unchanged.
+    monkeypatch.setattr("device.seestar_device.time.monotonic", lambda: 456.0)
+    seestar.update_view_state({"method": "get_view_state", "result": {}})
+    assert seestar.view_state == {"stage": "Stack"}
+    assert seestar.view_state_ts == 123.0
+
+
 def test_json_message_stamps_unique_auto_ids(monkeypatch, seestar):
     sent = []
     monkeypatch.setattr(seestar, "send_message", lambda payload: sent.append(payload))

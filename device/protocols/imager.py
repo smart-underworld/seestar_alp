@@ -305,6 +305,7 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
 
     def handle_stack(self, width, height, data):
         # for stacking, we have to extract zipfile
+        stacked = None
         try:
             zip_file = BytesIO(data)
             with zipfile.ZipFile(zip_file) as zip:
@@ -315,8 +316,8 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
                 if self.latest_image is None:
                     self.raw_img = None
                     self.raw_img_size = [None, None]
-                elif self.on_stack_image is not None:
-                    self.on_stack_image(self.latest_image)
+                else:
+                    stacked = self.latest_image
 
             # xxx Temp hack: just disconnect for now...
             # xxx Ideally we listen for an event that stack count has increased, or we track the stack
@@ -328,6 +329,13 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
             self.logger.error(f"Exception handling zip stack: {e}")
             self.raw_img = None
             self.raw_img_size = [None, None]
+
+        # A consumer's error is not a decode failure.
+        if stacked is not None and self.on_stack_image is not None:
+            try:
+                self.on_stack_image(stacked)
+            except Exception as e:
+                self.logger.error(f"Exception in stack image consumer: {e}")
 
     def convert_star_image(
         self, raw_image: np.array, width: int, height: int

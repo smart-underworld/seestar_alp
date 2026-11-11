@@ -1,6 +1,8 @@
 import threading
 
+import flask
 import numpy as np
+import pytest
 
 from device import seestar_imaging
 
@@ -19,11 +21,32 @@ class DummyLogger:
         self.records.append(("error", msg))
 
 
+STACKING = {"state": "working", "stage": "Stack"}
+RTSP = {"state": "working", "stage": "RTSP"}
+PREVIEW = {"state": "working", "stage": "ContinuousExposure"}
+
+
 class DummyDevice:
     def __init__(self):
-        self.view_state = {"state": "working", "stage": "RTSP"}
+        self.view_state = dict(RTSP)
+        self.view_state_ts = None
         self.ra = 10.123
         self.dec = 20.456
+        self.is_connected = True
+        #: The View the scope reports to the next get_view_state request; None
+        #: for a reply without a View (view_state is then left as it was).
+        self.reply_view = STACKING
+        self.requests = []
+
+    def json_message(self, method, **kwargs):
+        self.requests.append((method, kwargs.get("id")))
+        if method == "get_view_state" and self.reply_view is not None:
+            # The reply replaces view_state (SeestarDevice.update_view_state).
+            self.view_state = dict(self.reply_view)
+            self.view_state_ts = seestar_imaging.monotonic()
+
+
+VIEW_REQUEST = ("get_view_state", seestar_imaging.SNAPSHOT_VIEW_CMDID)
 
 
 class FakeComm:
@@ -159,10 +182,24 @@ def _stack_reply(imager, value):
 
 
 def _reader(monkeypatch):
-    """An imager with a snapshot reader polling (replies are held for it)."""
+    """An imager with a snapshot reader polling, while the scope reports the
+    Stack stage (replies are held for it)."""
     imager = make_imager(monkeypatch)
-    imager.get_snapshot()
+    imager.get_snapshot()  # requests the view, which arrives as STACKING
     return imager
+
+
+def _scope_reports(imager, view):
+    """A get_view_state reply showing ``view`` arrives (and keeps arriving)."""
+    imager.device.reply_view = view
+    imager.device.view_state = dict(view)
+    imager.device.view_state_ts = seestar_imaging.monotonic()
+
+
+def _clock(monkeypatch):
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(seestar_imaging, "monotonic", lambda: clock["now"])
+    return clock
 
 
 def test_stack_replies_are_not_held_without_a_snapshot_reader(monkeypatch):
@@ -203,11 +240,11 @@ def test_snapshot_interest_expires(monkeypatch):
 
 
 def test_snapshot_requests_current_stack_once_per_interval(monkeypatch):
-    clock = {"now": 1000.0}
-    monkeypatch.setattr(seestar_imaging, "monotonic", lambda: clock["now"])
+    clock = _clock(monkeypatch)
     imager = make_imager(monkeypatch)
     # A stack was already running before anyone asked for an image.
     _stack_event(imager, 7)
+    imager.get_snapshot()  # first poll: asks the scope for its view
     called = _count_stack_requests(monkeypatch, imager)
 
     imager.get_snapshot()
@@ -254,7 +291,7 @@ def test_snapshot_is_downscaled_to_the_size_cap(monkeypatch):
 
 
 def test_snapshot_does_not_fetch_without_a_stack(monkeypatch):
-    imager = make_imager(monkeypatch)
+    imager = _reader(monkeypatch)
     called = _count_stack_requests(monkeypatch, imager)
 
     imager.get_snapshot()
@@ -266,7 +303,7 @@ def test_snapshot_never_serves_a_non_stack_image(monkeypatch):
     # The imager holds a frame (preview/stream, or anything from before), but
     # no stacked-image reply has arrived: nothing is served, even though a
     # fetch for the current stack was just requested.
-    imager = make_imager(monkeypatch)
+    imager = _reader(monkeypatch)
     called = _count_stack_requests(monkeypatch, imager)
     _stack_event(imager, 5)
 
@@ -385,6 +422,350 @@ def test_new_stack_during_encode_is_not_served_the_old_image(monkeypatch):
 
     assert imager.get_snapshot() is None
     assert event_done == [True]
+
+
+def test_newer_reply_for_the_same_stack_during_encode_is_still_served(
+    monkeypatch,
+):
+    imager = _reader(monkeypatch)
+    _count_stack_requests(monkeypatch, imager)
+    _stack_event(imager, 5)
+    _stack_reply(imager, 50)
+
+    class NewerReplyMidEncode:
+        def process(self, image):
+            _stack_reply(imager, 60)
+            return image
+
+    imager.comm.StarProcessors = [NewerReplyMidEncode()]
+
+    snap = imager.get_snapshot()
+    assert snap is not None
+    assert snap.stack_frame == 5
+
+
+def test_finished_stack_is_not_served_once_the_scope_leaves_stacking(monkeypatch):
+    # After stacking, the scope goes back to preview or a video mode: the last
+    # stack must not keep being served as if it were live.
+    imager = _reader(monkeypatch)
+    called = _count_stack_requests(monkeypatch, imager)
+    _stack_event(imager, 5)
+    _stack_reply(imager, 50)
+    assert imager.get_snapshot() is not None
+
+    for view in (RTSP, PREVIEW, {"state": "idle", "stage": "Stack"}):
+        _scope_reports(imager, view)
+        assert imager.get_snapshot() is None
+        assert imager._stack_image is None
+    assert called["stack"] == 1  # only the Stack event's own fetch
+
+
+def test_snapshot_never_requests_stacked_images_outside_stacking(monkeypatch):
+    clock = _clock(monkeypatch)
+    imager = make_imager(monkeypatch)
+    _stack_event(imager, 5)  # a stack ran; nobody was reading
+    imager.device.reply_view = RTSP  # the scope has moved on
+    called = _count_stack_requests(monkeypatch, imager)
+
+    for _ in range(3):
+        assert imager.get_snapshot() is None
+        clock["now"] += seestar_imaging.SNAPSHOT_FETCH_MIN_INTERVAL_SEC + 1
+
+    assert called["stack"] == 0
+
+
+def test_view_state_from_before_the_reader_is_not_trusted(monkeypatch):
+    # The web UI left view_state saying Stack hours ago: a new reader asks the
+    # scope again instead of fetching or serving on that word.
+    imager = make_imager(monkeypatch)
+    imager.device.view_state = dict(STACKING)
+    imager.device.reply_view = RTSP
+    _stack_event(imager, 5)
+    called = _count_stack_requests(monkeypatch, imager)
+
+    assert imager.get_snapshot() is None
+    assert imager.get_snapshot() is None
+    assert called["stack"] == 0
+    assert imager.device.requests == [VIEW_REQUEST]
+
+
+def test_view_state_is_refreshed_at_most_once_per_interval(monkeypatch):
+    clock = _clock(monkeypatch)
+    imager = _reader(monkeypatch)
+    imager.get_snapshot()
+    imager.get_snapshot()
+    assert imager.device.requests == [VIEW_REQUEST]
+
+    clock["now"] += seestar_imaging.SNAPSHOT_VIEW_REFRESH_SEC
+    imager.get_snapshot()
+    assert imager.device.requests == [VIEW_REQUEST] * 2
+
+
+def test_disconnected_scope_serves_nothing_until_the_view_is_confirmed_again(
+    monkeypatch,
+):
+    imager = _reader(monkeypatch)
+    _count_stack_requests(monkeypatch, imager)
+    _stack_event(imager, 5)
+    _stack_reply(imager, 50)
+    served = imager.get_snapshot()
+    requests_before = list(imager.device.requests)
+
+    imager.device.is_connected = False
+    assert imager.get_snapshot() is None
+    assert imager.device.requests == requests_before  # nothing sent
+
+    imager.device.is_connected = True
+    assert imager.get_snapshot() is None  # its view_state predates the drop
+    again = imager.get_snapshot()  # the refresh requested above has arrived
+    assert again is served
+
+
+def test_new_stack_with_an_equal_count_is_not_served_the_old_image(monkeypatch):
+    # The previous stack ended at frame 1 and the next one starts at frame 1:
+    # the count never drops, but the view left the Stack stage in between.
+    clock = _clock(monkeypatch)
+    imager = _reader(monkeypatch)
+    called = _count_stack_requests(monkeypatch, imager)
+    _stack_event(imager, 1)
+    _stack_reply(imager, 50)
+    old = imager.get_snapshot()
+
+    _scope_reports(imager, PREVIEW)
+    assert imager.get_snapshot() is None
+    _scope_reports(imager, STACKING)
+    _stack_event(imager, 1)
+    clock["now"] += seestar_imaging.SNAPSHOT_FETCH_MIN_INTERVAL_SEC
+
+    assert imager.get_snapshot() is None
+    assert called["stack"] == 2  # the reader fetches the new stack's image
+    _stack_reply(imager, 60)
+    new = imager.get_snapshot()
+    assert new.stack_frame == 1 and new.frame != old.frame
+
+
+@pytest.mark.parametrize(
+    "restarted",
+    [
+        # Stopped and restarted on the same target between two polls: the view
+        # never left Stack, but the stack's elapsed time started over.
+        {**STACKING, "target_name": "M 31", "Stack": {"lapse_ms": 2_000}},
+        # Moved straight on to another target.
+        {**STACKING, "target_name": "M 45", "Stack": {"lapse_ms": 900_000}},
+    ],
+)
+def test_new_stack_seen_only_in_the_view_drops_the_old_image(monkeypatch, restarted):
+    imager = _reader(monkeypatch)
+    _count_stack_requests(monkeypatch, imager)
+    _scope_reports(
+        imager, {**STACKING, "target_name": "M 31", "Stack": {"lapse_ms": 600_000}}
+    )
+    _stack_event(imager, 1)
+    _stack_reply(imager, 50)
+    assert imager.get_snapshot() is not None
+
+    _scope_reports(imager, restarted)
+    _stack_event(imager, 1)  # same count as the old stack's last
+
+    assert imager.get_snapshot() is None
+
+
+def test_view_missing_target_or_stack_block_is_not_a_new_stack(monkeypatch):
+    # A view that omits target_name or the Stack block says nothing about a
+    # new stack: no false reset, and a later restart is still recognised.
+    imager = _reader(monkeypatch)
+    _count_stack_requests(monkeypatch, imager)
+    _scope_reports(
+        imager, {**STACKING, "target_name": "M 31", "Stack": {"lapse_ms": 600_000}}
+    )
+    _stack_event(imager, 1)
+    _stack_reply(imager, 50)
+    served = imager.get_snapshot()
+
+    _scope_reports(imager, STACKING)  # neither field
+    assert imager.get_snapshot() is served
+    _scope_reports(imager, {**STACKING, "target_name": "M 31"})
+    assert imager.get_snapshot() is served
+
+    _scope_reports(imager, {**STACKING, "Stack": {"lapse_ms": 2_000}})
+    assert imager.get_snapshot() is None
+
+
+def test_view_the_scope_stopped_reporting_is_not_trusted(monkeypatch):
+    # Replies stop carrying a View (or stop arriving): the last Stack view must
+    # not keep the finished stack on screen.
+    clock = _clock(monkeypatch)
+    imager = _reader(monkeypatch)
+    _count_stack_requests(monkeypatch, imager)
+    _stack_event(imager, 5)
+    _stack_reply(imager, 50)
+    assert imager.get_snapshot() is not None
+
+    imager.device.reply_view = None
+    served = []
+    for _ in range(3):
+        clock["now"] += seestar_imaging.SNAPSHOT_VIEW_REFRESH_SEC
+        served.append(imager.get_snapshot() is not None)
+
+    # One request may still be in flight; two unanswered ones are not.
+    assert served == [True, True, False]
+
+
+def test_new_stack_during_the_view_refresh_is_not_served_the_cached_jpeg(
+    monkeypatch,
+):
+    # The old stack's JPEG is cached. While this reader's get_view_state
+    # request is being written (no lock held), a new stack begins: the reader
+    # must not return the cached JPEG it saw before the write.
+    clock = _clock(monkeypatch)
+    imager = _reader(monkeypatch)
+    _count_stack_requests(monkeypatch, imager)
+    _stack_event(imager, 287)
+    _stack_reply(imager, 50)
+    assert imager.get_snapshot() is not None  # encoded and cached
+
+    send_view_request = imager.device.json_message
+
+    def new_stack_during_send(method, **kwargs):
+        _stack_event(imager, 1)
+        send_view_request(method, **kwargs)
+
+    monkeypatch.setattr(imager.device, "json_message", new_stack_during_send)
+    clock["now"] += seestar_imaging.SNAPSHOT_VIEW_REFRESH_SEC  # refresh is due
+
+    assert imager.get_snapshot() is None
+
+
+def test_new_stack_while_downscaling_a_reply_drops_that_reply(monkeypatch):
+    imager = _reader(monkeypatch)
+    _count_stack_requests(monkeypatch, imager)
+    _stack_event(imager, 287)
+    real_fit_within = seestar_imaging._fit_within
+
+    def new_stack_mid_resize(image, max_px):
+        _stack_event(imager, 1)  # the receive thread is still resizing
+        return real_fit_within(image, max_px)
+
+    monkeypatch.setattr(seestar_imaging, "_fit_within", new_stack_mid_resize)
+    _stack_reply(imager, 50)
+
+    assert imager._stack_image is None  # not even held for the new stack
+    assert imager.get_snapshot() is None
+
+
+def test_scope_leaving_stack_while_a_reader_encodes_is_not_served(monkeypatch):
+    # Another reader sees the view leave Stack while this one encodes. It must
+    # not wait for the encode (bounded join: a reader blocked on it fails the
+    # test instead of hanging it), and neither reader serves the old stack.
+    imager = _reader(monkeypatch)
+    _count_stack_requests(monkeypatch, imager)
+    _stack_event(imager, 5)
+    _stack_reply(imager, 50)
+    other_reader = []
+
+    class OtherReaderSeesRtsp:
+        def process(self, image):
+            _scope_reports(imager, RTSP)
+            thread = threading.Thread(
+                target=lambda: other_reader.append(imager.get_snapshot())
+            )
+            thread.start()
+            thread.join(timeout=2)
+            return image
+
+    imager.comm.StarProcessors = [OtherReaderSeesRtsp()]
+
+    assert imager.get_snapshot() is None
+    assert other_reader == [None]
+
+
+def test_poll_while_imager_disconnected_does_not_use_the_fetch_slot(monkeypatch):
+    _clock(monkeypatch)
+    imager = _reader(monkeypatch)
+    called = _count_stack_requests(monkeypatch, imager)
+    imager.comm._connected = False
+    _stack_event(imager, 5)
+    imager.get_snapshot()
+    assert called["stack"] == 0
+
+    imager.comm._connected = True
+    imager.get_snapshot()
+    assert called["stack"] == 1
+
+
+def test_stack_reply_is_held_downscaled(monkeypatch):
+    monkeypatch.setattr(seestar_imaging, "SNAPSHOT_MAX_PX", 32)
+    imager = _reader(monkeypatch)
+    _count_stack_requests(monkeypatch, imager)
+    _stack_event(imager, 5)
+    imager.comm.on_stack_image(np.full((128, 72, 3), 500, dtype=np.uint16))
+
+    assert imager._stack_image.image.shape[:2] == (32, 18)
+
+
+def test_held_stack_is_dropped_once_snapshot_interest_lapses(monkeypatch):
+    clock = _clock(monkeypatch)
+    imager = _reader(monkeypatch)
+    _count_stack_requests(monkeypatch, imager)
+    _stack_event(imager, 5)
+    _stack_reply(imager, 50)
+    assert imager.get_snapshot() is not None
+
+    clock["now"] += seestar_imaging.SNAPSHOT_INTEREST_SEC + 1
+    _stack_event(imager, 6)  # the scope keeps stacking; nobody reads
+
+    assert imager._stack_image is None
+    assert imager._snapshot is None
+
+
+_app = flask.Flask(__name__)
+
+
+def _respond(imager, **headers):
+    with _app.test_request_context("/1/snapshot.jpg", headers=headers):
+        return seestar_imaging.snapshot_response(imager, flask.request)
+
+
+def test_snapshot_response_is_503_with_retry_after_until_an_image_exists(
+    monkeypatch,
+):
+    response = _respond(_reader(monkeypatch))
+
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == "10"
+    assert response.headers["Cache-Control"] == "no-cache"
+
+
+def test_snapshot_response_serves_jpeg_with_etag_and_stack_frame(monkeypatch):
+    imager = _reader(monkeypatch)
+    _count_stack_requests(monkeypatch, imager)
+    _stack_event(imager, 5)
+    _stack_reply(imager, 50)
+    etag = imager.get_snapshot().etag
+
+    response = _respond(imager)
+
+    assert response.status_code == 200
+    assert response.mimetype == "image/jpeg"
+    assert response.get_data()[:2] == b"\xff\xd8"
+    assert response.headers["ETag"] == f'"{etag}"'
+    assert response.headers["X-Seestar-Stack-Frame"] == "5"
+    assert response.headers["Cache-Control"] == "no-cache"
+
+
+def test_snapshot_response_revalidates_with_if_none_match(monkeypatch):
+    imager = _reader(monkeypatch)
+    _count_stack_requests(monkeypatch, imager)
+    _stack_event(imager, 5)
+    _stack_reply(imager, 50)
+    etag = imager.get_snapshot().etag
+
+    for header in (f'"{etag}"', f'W/"{etag}"'):
+        response = _respond(imager, If_None_Match=header)
+        assert response.status_code == 304, header
+        assert response.get_data() == b""
+        assert response.headers["ETag"] == f'"{etag}"'
+    assert _respond(imager, If_None_Match='"stale-1"').status_code == 200
 
 
 def test_blank_frame_and_build_frame_bytes(monkeypatch):

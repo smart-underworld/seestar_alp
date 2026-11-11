@@ -16,6 +16,7 @@ from device.app import DeviceMain  # type: ignore
 from device.config import Config, ConfigError  # type: ignore
 from device import log  # type: ignore
 from device import telescope  # type: ignore
+from device.seestar_imaging import snapshot_response  # type: ignore
 from device.version import Version  # type: ignore
 
 
@@ -144,17 +145,7 @@ if __name__ == "__main__":
     def snapshot(dev_num):
         # The latest STACKED image (stacking only) as one JPEG: a cheap
         # alternative to /vid for clients that poll for a still.
-        snap = telescope.get_seestar_imager(int(dev_num)).get_snapshot()
-        headers = {"Cache-Control": "no-cache"}
-        if snap is None:
-            headers["Retry-After"] = "10"
-            return Response(status=503, headers=headers)
-        headers["ETag"] = f'"{snap.etag}"'
-        if snap.stack_frame is not None:
-            headers["X-Seestar-Stack-Frame"] = str(snap.stack_frame)
-        if request.if_none_match.contains_weak(snap.etag):
-            return Response(status=304, headers=headers)
-        return Response(snap.jpeg, mimetype="image/jpeg", headers=headers)
+        return snapshot_response(telescope.get_seestar_imager(int(dev_num)), request)
 
     n.notify("READY=1")
     print(f"Startup Complete (seestar_alp {Version.app_version()})")
