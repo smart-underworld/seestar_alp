@@ -4246,12 +4246,16 @@ class SettingsResource(BaseResource):
                     return out, True
             return last_output, False
 
+        def _dither_member(form_key, low, high):
+            # Out of range gives 204 and stops the rest of the set_setting;
+            # a missing member is ignored (seestar-spec, READ).
+            value = _safe_int(PostedSettings.get(form_key), None)
+            return value if value is not None and low <= value <= high else None
+
         # Convert the form names back into the required format
         FormattedNewSettings = {
             "stack_lenhance": str2bool(PostedSettings["stack_lenhance"]),
             "stack_dither": {
-                "pix": _safe_int(PostedSettings["stack_dither_pix"], 0),
-                "interval": _safe_int(PostedSettings["stack_dither_interval"], 0),
                 "enable": str2bool(PostedSettings["stack_dither_enable"]),
             },
             "exp_ms": {
@@ -4263,6 +4267,13 @@ class SettingsResource(BaseResource):
             "auto_3ppa_calib": str2bool(PostedSettings["auto_3ppa_calib"]),
             "frame_calib": str2bool(PostedSettings["frame_calib"]),
         }
+        for member, form_key, low, high in (
+            ("pix", "stack_dither_pix", 0, 200),
+            ("interval", "stack_dither_interval", 1, 100),
+        ):
+            value = _dither_member(form_key, low, high)
+            if value is not None:
+                FormattedNewSettings["stack_dither"][member] = value
 
         if fw >= 2670:
             FormattedNewSettings |= {
