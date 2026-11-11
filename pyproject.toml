@@ -68,6 +68,7 @@ markers = [
     "system: manual-only system tests against a real Seestar or the QEMU emulator; never auto-selected, requires --target",
     "smoke: tests/system subset requiring no plate-solving (startup w/o 3PPA, live-view) — used by the always-on CI emulator-smoke lane",
     "full: tests/system subset requiring plate-solving (3PPA, goto, schedule) — used by the label/nightly-gated CI emulator-full lane",
+    "allow_nonconforming_requests(*problems): integration test sends requests that are not in seestar-spec on purpose (compat fallbacks, error paths); each argument is a substring of an expected spec-conformance problem",
 ]
 filterwarnings = [
     "ignore:datetime\\.datetime\\.utcfromtimestamp\\(\\) is deprecated.*:DeprecationWarning",

@@ -2244,9 +2244,10 @@ class Seestar:
 
     # {"method":"set_sequence_setting","params":[{"group_name":"Kai_goto_target_name"}]}
     def set_target_name(self, name):
-        req: MessageParams = {"method": "set_sequence_setting"}
-        params = {"group_name": name}
-        req["params"] = [params]
+        req: MessageParams = {
+            "method": "set_sequence_setting",
+            "params": [{"group_name": name}],
+        }
         return self.send_message_param_sync(req)
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
