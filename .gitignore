@@ -38,3 +38,4 @@ emulator/sim/shared/*
 .venv-mcp/
 device/horizon.hrz
 device/horizon.horizon.json
+device/*.tmp

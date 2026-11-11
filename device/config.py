@@ -41,6 +41,7 @@ import sys
 import math
 import tomlkit
 import logging
+import secrets
 import shutil
 
 ### rwr
@@ -60,15 +61,21 @@ class ConfigError(Exception):
     """
 
 
-def stage_file(path: str, text: str, encoding=None) -> str:
-    """Write ``text`` in full to ``path + ".tmp"``, flushed and fsynced.
+def stage_file(path: str, text: str | bytes, encoding=None) -> str:
+    """Write ``text`` in full to a new temporary file next to ``path``, flushed
+    and fsynced; ``bytes`` are written as they are.
 
-    Returns that name, for ``os.replace`` onto ``path``. When the write fails
-    the temporary file is removed and the error is raised again.
+    Returns its name, for ``os.replace`` onto ``path``. The name is
+    ``<path>.<random>.tmp``, created exclusively, so two writers of one file
+    never share a temporary file. When the write fails the temporary file is
+    removed and the error is raised again.
     """
-    tmp_name = path + ".tmp"
+    tmp_name = f"{path}.{secrets.token_hex(6)}.tmp"
+    binary = isinstance(text, bytes)
+    # Outside the try: a name that already exists is not ours to remove.
+    f = open(tmp_name, "xb" if binary else "x", encoding=None if binary else encoding)
     try:
-        with open(tmp_name, "w", encoding=encoding) as f:
+        with f:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
@@ -79,7 +86,7 @@ def stage_file(path: str, text: str, encoding=None) -> str:
     return tmp_name
 
 
-def write_file_atomic(path: str, text: str, encoding=None):
+def write_file_atomic(path: str, text: str | bytes, encoding=None):
     """Replace ``path`` with ``text`` in one step.
 
     After a crash or a power loss the file holds either its former content or

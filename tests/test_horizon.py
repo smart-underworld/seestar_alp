@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import threading
 
 import pytest
 import tomlkit
@@ -442,3 +443,114 @@ def test_a_failure_after_the_config_save_puts_it_back(
     assert config_file.horizon_file == "/etc/seestar/old.hrz"
     saved = tomlkit.parse((tmp_path / "config.toml").read_text())
     assert saved["seestar_initialization"]["horizon_file"] == "/etc/seestar/old.hrz"
+
+
+def test_overlapping_saves_run_one_after_the_other(config_file, tmp_path, monkeypatch):
+    real_stage = horizon.stage_file
+    first_staged = threading.Event()
+    go_on = threading.Event()
+    staged = []
+
+    def slow_first_save(path, text, encoding=None):
+        name = real_stage(path, text, encoding)
+        staged.append(text)
+        if text == "0 10\n":
+            first_staged.set()
+            go_on.wait(5)
+        return name
+
+    monkeypatch.setattr(horizon, "stage_file", slow_first_save)
+    errors = []
+
+    def save(hrz):
+        try:
+            horizon.save_panorama_profile(hrz)
+        except Exception as e:  # checked below, in the test's own thread
+            errors.append(e)
+
+    first = threading.Thread(target=save, args=("0 10\n",), daemon=True)
+    second = threading.Thread(target=save, args=("0 20\n",), daemon=True)
+    try:
+        first.start()
+        assert first_staged.wait(5)
+        second.start()
+        second.join(0.3)
+        # The second save waits for the first: nothing of it is written yet.
+        assert staged == ["0 10\n"]
+    finally:
+        go_on.set()
+        first.join(5)
+        second.join(5)
+    assert not errors
+    assert staged == ["0 10\n", "0 20\n"]
+    path = str(tmp_path / "horizon.hrz")
+    assert (tmp_path / "horizon.hrz").read_text() == "0 20\n"
+    assert config_file.horizon_file == path
+    saved = tomlkit.parse((tmp_path / "config.toml").read_text())
+    assert saved["seestar_initialization"]["horizon_file"] == path
+    assert _no_temporary_file_left(tmp_path)
+
+
+def test_an_unexpected_error_is_cleaned_up_and_reported(
+    config_file, tmp_path, monkeypatch
+):
+    def no_table(section, key, value):
+        # Config.set_toml on a config.toml without [seestar_initialization].
+        raise KeyError(section)
+
+    monkeypatch.setattr(config_file, "set_toml", no_table)
+    record = json.dumps({"format": "horizon", "version": 1})
+    with pytest.raises(HorizonSaveError, match="KeyError"):
+        horizon.save_panorama_profile("0 10\n", record)
+    assert not (tmp_path / "horizon.hrz").exists()
+    assert not (tmp_path / "horizon.horizon.json").exists()
+    assert _no_temporary_file_left(tmp_path)
+    assert config_file.horizon_file == "/etc/seestar/old.hrz"
+
+
+@pytest.mark.parametrize("had_record", [True, False])
+def test_a_failed_profile_replace_puts_the_former_record_back(
+    config_file, tmp_path, monkeypatch, had_record
+):
+    old = json.dumps({"format": "horizon", "version": 1, "photo": "old.jpg"})
+    horizon.save_panorama_profile("0 5\n", old if had_record else None)
+    real_replace = os.replace
+
+    def locked(source, target):
+        if str(target).endswith("horizon.hrz"):
+            raise PermissionError(13, "Permission denied")
+        return real_replace(source, target)
+
+    monkeypatch.setattr(horizon.os, "replace", locked)
+    new = json.dumps({"format": "horizon", "version": 1, "photo": "new.jpg"})
+    with pytest.raises(HorizonSaveError, match="Permission denied"):
+        horizon.save_panorama_profile("0 10\n", new)
+    assert (tmp_path / "horizon.hrz").read_text() == "0 5\n"
+    record = tmp_path / "horizon.horizon.json"
+    if had_record:
+        assert record.read_text() == old
+    else:
+        assert not record.exists()
+    assert _no_temporary_file_left(tmp_path)
+
+
+def test_a_record_that_cannot_be_removed_leaves_the_save_in_place(
+    config_file, tmp_path, monkeypatch, caplog
+):
+    record = json.dumps({"format": "horizon", "version": 1})
+    horizon.save_panorama_profile("0 5\n", record)
+    real_remove = os.remove
+
+    def busy(target):
+        if str(target).endswith("horizon.horizon.json"):
+            raise PermissionError(13, "Permission denied")
+        return real_remove(target)
+
+    monkeypatch.setattr(horizon.os, "remove", busy)
+    with caplog.at_level("WARNING"):
+        path, _, profile = horizon.save_panorama_profile("0 10\n")
+    assert (tmp_path / "horizon.hrz").read_text() == "0 10\n"
+    assert config_file.horizon_file == path
+    assert horizon.configured_profile()[0].points == profile.points
+    assert any("still describes the former photo" in r.message for r in caplog.records)
+    assert _no_temporary_file_left(tmp_path)

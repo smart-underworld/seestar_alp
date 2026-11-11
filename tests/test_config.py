@@ -5,7 +5,7 @@ import sys
 import pytest
 import tomlkit
 
-from device.config import ConfigError, _Config, _resolve_config_path
+from device.config import ConfigError, _Config, _resolve_config_path, stage_file
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 
@@ -808,3 +808,16 @@ def test_load_from_form_bad_horizon_margin_saves_the_rest(monkeypatch):
     section = cfg._dict["seestar_initialization"]
     assert section["horizon_margin"] == 1.5
     assert section["horizon_file"] == "/etc/site.hrz"
+
+
+def test_stage_file_gives_each_writer_a_temporary_file_of_its_own(tmp_path):
+    target = str(tmp_path / "config.toml")
+    first = stage_file(target, "a = 1\n")
+    second = stage_file(target, b"a = 2\n")
+    assert first != second
+    for name in (first, second):
+        assert name.startswith(target + ".") and name.endswith(".tmp")
+    with open(first) as f:
+        assert f.read() == "a = 1\n"
+    with open(second, "rb") as f:
+        assert f.read() == b"a = 2\n"
