@@ -4283,10 +4283,15 @@ class SettingsResource(BaseResource):
             for key, converter in (
                 ("wide_cam", str2bool),
                 ("wide_4k", str2bool),
-                ("wide_denoise", str2bool),
             ):
                 if key in PostedSettings:
                     FormattedNewSettings[key] = converter(PostedSettings[key])
+            # A stack member: at the top level set_setting answers 109 and
+            # skips the members after it.
+            if "wide_denoise" in PostedSettings:
+                FormattedNewSettings.setdefault("stack", {})["wide_denoise"] = str2bool(
+                    PostedSettings["wide_denoise"]
+                )
             if "wide_focal_pos" in PostedSettings:
                 FormattedNewSettings["wide_focal_pos"] = _safe_int(
                     PostedSettings["wide_focal_pos"], 0

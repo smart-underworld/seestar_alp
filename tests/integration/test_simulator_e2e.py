@@ -1399,6 +1399,10 @@ def test_35_wide_cam_settings_round_trip_via_simulator(monkeypatch, front_sim_br
     assert setting.get("wide_cam") is True
     assert setting.get("wide_4k") is False
     assert setting.get("wide_focal_pos") == 1600
+    # wide_denoise is a stack member; at the top level the firmware answers
+    # 109 and skips the rest of the request (seestar-spec, READ).
+    assert "wide_denoise" not in setting
+    assert setting.get("stack", {}).get("wide_denoise") is True
 
 
 def test_36_force_stop_goto_unwedges_device(two_device_federation):

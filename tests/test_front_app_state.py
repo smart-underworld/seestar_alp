@@ -1751,6 +1751,7 @@ def test_settings_post_wide_cam_fields_sent_for_s30(monkeypatch):
     assert output == "Successfully Updated Settings."
     # Gather the flat set_setting params that were sent
     merged = {}
+    stack_members = {}
     for action, params in calls:
         if (
             action in ("method_sync", "method_async")
@@ -1759,10 +1760,13 @@ def test_settings_post_wide_cam_fields_sent_for_s30(monkeypatch):
             p = params.get("params", {})
             if isinstance(p, dict):
                 merged.update(p)
+                stack_members.update(p.get("stack", {}))
 
     assert merged.get("wide_cam") is True
     assert merged.get("wide_4k") is False
-    assert merged.get("wide_denoise") is True
+    # A stack member; top-level wide_denoise gets 109 (seestar-spec, READ).
+    assert "wide_denoise" not in merged
+    assert stack_members.get("wide_denoise") is True
     assert merged.get("wide_focal_pos") == 1600
 
 
