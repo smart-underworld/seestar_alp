@@ -19,13 +19,14 @@ class FilterWheelMixin:
         return await self.method_sync("get_wheel_setting")
 
     async def set_wheel_position(self, position: int) -> dict:
-        """Move the filter wheel to a named position.
+        """Move the filter wheel to a slot.
 
         Args:
-            position: 1-based filter position index.
+            position: wheel slot as the firmware numbers it: 0 (dark),
+                1 (IR cut) or 2 (light-pollution filter).
         """
-        if position < 1:
-            raise ValueError(f"Filter position must be >= 1, got {position}")
+        if position not in (0, 1, 2):
+            raise ValueError(f"Filter position must be 0, 1 or 2, got {position}")
         logger.info("set_wheel_position position=%s", position)
         return await self.method_sync("set_wheel_position", [position])
 

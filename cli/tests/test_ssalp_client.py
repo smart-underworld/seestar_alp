@@ -322,9 +322,14 @@ class TestInputValidation:
         with pytest.raises(ValueError):
             await client.set_heater(True, value=101)
 
-    async def test_set_wheel_position_zero_rejected(self, client):
+    async def test_set_wheel_position_above_slot_2_rejected(self, client):
+        # Firmware accepts slots 0, 1 and 2 only (seestar-spec, READ).
         with pytest.raises(ValueError):
-            await client.set_wheel_position(0)
+            await client.set_wheel_position(3)
+
+    async def test_set_wheel_position_negative_rejected(self, client):
+        with pytest.raises(ValueError):
+            await client.set_wheel_position(-1)
 
     async def test_start_mosaic_negative_time(self, client):
         with pytest.raises(ValueError):

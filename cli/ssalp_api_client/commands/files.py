@@ -22,23 +22,20 @@ class FilesMixin:
         gain: bool = True,
         camera_name: bool = False,
     ) -> dict:
+        """Choose which fields the device puts in image file names.
+
+        ``bin`` and ``date_time`` are accepted for compatibility but not sent:
+        the firmware does not let this call change them.
+        """
         logger.info(
-            "set_img_name_field bin=%s date_time=%s temp=%s gain=%s camera_name=%s",
-            bin,
-            date_time,
+            "set_img_name_field temp=%s gain=%s camera_name=%s",
             temp,
             gain,
             camera_name,
         )
         return await self.method_sync(
             "set_img_name_field",
-            {
-                "bin": bin,
-                "date_time": date_time,
-                "temp": temp,
-                "gain": gain,
-                "camera_name": camera_name,
-            },
+            {"temp": temp, "gain": gain, "camera_name": camera_name},
         )
 
     async def get_last_image(

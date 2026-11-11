@@ -21,7 +21,7 @@ async def get_wheel_setting_tool(telescope_id: int = 1) -> Any:
 
 
 async def set_wheel_position_tool(position: int, telescope_id: int = 1) -> Any:
-    """Move the filter wheel to a position."""
+    """Move the filter wheel to a slot: 0 dark, 1 IR cut, 2 light-pollution filter."""
     return await call(telescope_id, lambda c: c.set_wheel_position(position))
 
 

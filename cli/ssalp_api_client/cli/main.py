@@ -687,7 +687,7 @@ def filter_setting(ctx: click.Context) -> None:
 @click.argument("position", type=int)
 @click.pass_context
 def filter_set(ctx: click.Context, position: int) -> None:
-    """Move filter wheel to POSITION (1-based)."""
+    """Move filter wheel to POSITION: 0 dark, 1 IR cut, 2 LP filter."""
     _run(ctx, ctx.obj["client"].set_wheel_position(position=position))
 
 
@@ -1009,8 +1009,16 @@ def files_img_name_field(ctx: click.Context) -> None:
 
 
 @files.command("set-img-name")
-@click.option("--bin/--no-bin", default=True)
-@click.option("--date-time/--no-date-time", default=True)
+@click.option(
+    "--bin/--no-bin",
+    default=True,
+    help="Ignored: the firmware does not allow changing it.",
+)
+@click.option(
+    "--date-time/--no-date-time",
+    default=True,
+    help="Ignored: the firmware does not allow changing it.",
+)
 @click.option("--temp/--no-temp", default=True)
 @click.option("--gain/--no-gain", default=True)
 @click.option("--camera-name/--no-camera-name", default=False)
@@ -1126,7 +1134,9 @@ def system_set_time(ctx: click.Context, iso_time: str) -> None:
 @system.command("set-location")
 @click.option("--lat", required=True, type=float)
 @click.option("--lon", required=True, type=float)
-@click.option("--alt", default=0.0, type=float)
+@click.option(
+    "--alt", default=0.0, type=float, help="Ignored: the firmware reads only lat/lon."
+)
 @click.pass_context
 def system_set_location(ctx: click.Context, lat: float, lon: float, alt: float) -> None:
     _run(ctx, ctx.obj["client"].set_user_location(lat=lat, lon=lon, alt=alt))
