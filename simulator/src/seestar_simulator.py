@@ -332,7 +332,14 @@ class SeestarSimulator:
             }
         elif method == "set_setting":
             params = data.get("params", {})
-            self.state["setting"].update(params)
+            setting = self.state["setting"]
+            for key, value in params.items():
+                # The firmware applies object members one by one (stack,
+                # mosaic, ...), so a partial object updates, not replaces.
+                if isinstance(value, dict) and isinstance(setting.get(key), dict):
+                    setting[key].update(value)
+                else:
+                    setting[key] = value
             if "alpaca_enable" in params:
                 if params["alpaca_enable"]:
                     self._start_alpaca_server()

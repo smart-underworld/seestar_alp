@@ -534,10 +534,15 @@ class Seestar:
         }
         self.logger.info(f"scheduler event state: {self.event_state['scheduler']}")
 
-    def heartbeat(
-        self,
-    ):  # I noticed a lot of pairs of test_connection followed by a get if nothing was going on
-        #    json_message("test_connection")
+    def heartbeat(self):
+        # The firmware closes a LAN connection after 15 s without received
+        # bytes; the spec's recommended keepalive is test_connection.
+        # scope_get_equ_coord is used instead because its reply keeps
+        # self.ra/self.dec current for the Alpaca RightAscension/Declination
+        # properties, so one request serves both purposes. Tradeoff: it is a
+        # live mount read relayed to the guider, and repeated read failures
+        # there can stop capture or mark the mount disconnected (seestar-spec,
+        # scope_get_ra_dec, READ).
         self.json_message("scope_get_equ_coord", id=420)
 
     def send_message(self, data):
@@ -1547,6 +1552,10 @@ class Seestar:
                 "lp_filter": False,
             },
         }
+        if params.get("mosaic"):
+            # The capture mosaic frame is set here, at the goto; capture setup
+            # resets it to scale 1 / angle 0 when the goto carries none.
+            data["params"]["mosaic"] = params["mosaic"]
         self.mark_op_state("goto_target", "stopped")
 
         result = self.send_message_param_sync(data)
@@ -1600,7 +1609,8 @@ class Seestar:
         }
         return self.send_message_param_sync(data)
 
-    # {"method":"scope_speed_move","params":{"speed":4000,"angle":270,"dur_sec":10}}
+    # {"method":"scope_speed_move","params":{"speed":1440,"angle":270,"dur_sec":10}}
+    # angle: direction in degrees; speed: native units, firmware clamps at 1440.
     def move_scope(self, in_angle: int, in_speed: int, in_dur=3):
         self.logger.debug(
             "%s: moving slew angle: %s, speed: %s, dur: %s",
@@ -1969,16 +1979,19 @@ class Seestar:
                 }
             )
 
-            # save frames setting
-            self.send_message_param_sync(
-                {
-                    "method": "set_stack_setting",
-                    "params": {
-                        "save_discrete_ok_frame": Config.init_save_good_frames,
-                        "save_discrete_frame": Config.init_save_all_frames,
-                    },
-                }
+            # save frames setting: set_setting {"stack": ...} is the documented
+            # path; set_stack_setting is kept as a fallback for older firmware.
+            save_frames = {
+                "save_discrete_ok_frame": Config.init_save_good_frames,
+                "save_discrete_frame": Config.init_save_all_frames,
+            }
+            response = self.send_message_param_sync(
+                {"method": "set_setting", "params": {"stack": save_frames}}
             )
+            if not isinstance(response, dict) or "error" in response:
+                self.send_message_param_sync(
+                    {"method": "set_stack_setting", "params": save_frames}
+                )
 
             # Put this here for people not running PA
             self.set_setting(
@@ -2231,9 +2244,10 @@ class Seestar:
 
     # {"method":"set_sequence_setting","params":[{"group_name":"Kai_goto_target_name"}]}
     def set_target_name(self, name):
-        req: MessageParams = {"method": "set_sequence_setting"}
-        params = {"group_name": name}
-        req["params"] = [params]
+        req: MessageParams = {
+            "method": "set_sequence_setting",
+            "params": [{"group_name": name}],
+        }
         return self.send_message_param_sync(req)
 
     # scheduler state example: {"state":"working", "schedule_id":"abcdefg",
@@ -2365,15 +2379,17 @@ class Seestar:
         save_target_name: str,
         is_use_autofocus: bool,
         is_use_LP_filter: bool,
+        mosaic: Optional[dict[str, float]] = None,
     ) -> bool:
-        result = self.goto_target(
-            {
-                "ra": cur_ra,
-                "dec": cur_dec,
-                "is_j2000": False,
-                "target_name": save_target_name,
-            }
-        )
+        goto_params: dict[str, Any] = {
+            "ra": cur_ra,
+            "dec": cur_dec,
+            "is_j2000": False,
+            "target_name": save_target_name,
+        }
+        if mosaic:
+            goto_params["mosaic"] = mosaic
+        result = self.goto_target(goto_params)
         if result:
             result = self.wait_end_op("goto_target")
 
@@ -2874,6 +2890,11 @@ class Seestar:
                     target_name,
                     is_use_autofocus,
                     is_use_LP_filter,
+                    mosaic={
+                        "scale": mosaic_scale,
+                        "angle": mosaic_angle,
+                        "star_map_angle": 0.0,
+                    },
                 )
                 if result:
                     break
@@ -2903,11 +2924,9 @@ class Seestar:
                 {
                     "method": "set_setting",
                     "params": {
-                        "mosaic": {
-                            "scale": mosaic_scale,
-                            "angle": mosaic_angle,
-                            "star_map_angle": 0.0,
-                        }
+                        # Kept for older firmware. On 9.x this call only
+                        # estimates hours; the frame itself rides on the goto.
+                        "mosaic": {"scale": mosaic_scale, "angle": mosaic_angle}
                     },
                 }
             )
@@ -2963,13 +2982,7 @@ class Seestar:
                 self.send_message_param_sync(
                     {
                         "method": "set_setting",
-                        "params": {
-                            "mosaic": {
-                                "scale": 1.0,
-                                "angle": 0.0,
-                                "star_map_angle": 0.0,
-                            }
-                        },
+                        "params": {"mosaic": {"scale": 1.0, "angle": 0.0}},
                     }
                 )
 

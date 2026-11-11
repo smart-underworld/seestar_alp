@@ -5,6 +5,8 @@ Each test verifies that the correct Alpaca action/method name is sent on the wir
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from ssalp_api_client.client import SSAlpApiClient
@@ -724,3 +726,41 @@ class TestOutput:
 
         print_result("hello", "table")
         assert "hello" in capsys.readouterr().out
+
+
+def _sent_params(httpx_mock):
+    """The firmware request params carried in the Alpaca action body."""
+    from urllib.parse import parse_qs
+
+    form = parse_qs(_body(httpx_mock))
+    return json.loads(form["Parameters"][0]).get("params")
+
+
+class TestRequestsMatchFirmwareSpec:
+    """Field names and ranges the firmware actually reads (seestar-spec, READ)."""
+
+    async def test_set_wheel_position_slot_0_is_sent(self, client, httpx_mock):
+        _stub(httpx_mock)
+        await client.set_wheel_position(0)
+        assert _sent_params(httpx_mock) == [0]
+
+    async def test_get_annotate_result_sends_img_id(self, client, httpx_mock):
+        _stub(httpx_mock)
+        await client.get_annotate_result(42)
+        assert _sent_params(httpx_mock) == {"img_id": 42}
+
+    async def test_set_user_location_sends_only_lon_and_lat(self, client, httpx_mock):
+        _stub(httpx_mock)
+        await client.set_user_location(51.5, -0.12)
+        assert _sent_params(httpx_mock) == {"lat": 51.5, "lon": -0.12}
+
+    async def test_set_img_name_field_sends_only_settable_fields(
+        self, client, httpx_mock
+    ):
+        _stub(httpx_mock)
+        await client.set_img_name_field(temp=False, gain=True, camera_name=True)
+        assert _sent_params(httpx_mock) == {
+            "temp": False,
+            "gain": True,
+            "camera_name": True,
+        }

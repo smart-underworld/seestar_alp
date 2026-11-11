@@ -3154,8 +3154,8 @@ def test_framed_mosaic_thread_fn_happy_path(monkeypatch, seestar):
     mosaic_sets = [
         p["params"]["mosaic"] for p in sent if "mosaic" in p.get("params", {})
     ]
-    assert mosaic_sets[0] == {"scale": 1.5, "angle": 45.0, "star_map_angle": 0.0}
-    assert mosaic_sets[-1] == {"scale": 1.0, "angle": 0.0, "star_map_angle": 0.0}
+    assert mosaic_sets[0] == {"scale": 1.5, "angle": 45.0}
+    assert mosaic_sets[-1] == {"scale": 1.0, "angle": 0.0}
 
 
 def test_framed_mosaic_thread_fn_skips_mosaic_setting_on_goto_failure(
@@ -3212,8 +3212,8 @@ def test_framed_mosaic_thread_fn_resets_mosaic_setting_on_stack_failure(
         p["params"]["mosaic"] for p in sent if "mosaic" in p.get("params", {})
     ]
     assert mosaic_sets == [
-        {"scale": 1.5, "angle": 45.0, "star_map_angle": 0.0},
-        {"scale": 1.0, "angle": 0.0, "star_map_angle": 0.0},
+        {"scale": 1.5, "angle": 45.0},
+        {"scale": 1.0, "angle": 0.0},
     ]
 
 
@@ -4532,3 +4532,140 @@ def test_start_mosaic_item_keeps_the_target_when_the_check_fails(
     monkeypatch.setattr("device.seestar_device.horizon.visibility", broken)
     seestar.start_mosaic_item(_mosaic_item_params())
     assert received.get("stack_type") == "DeepSky"
+
+
+def _run_framed_mosaic(monkeypatch, seestar, scale, angle):
+    """Run framed_mosaic_thread_fn up to the stack start; return all requests."""
+    sent = []
+
+    def send(payload):
+        sent.append(payload)
+        return {"result": 0}
+
+    class FakeCoord:
+        ra = SimpleNamespace(hour=10.0)
+        dec = SimpleNamespace(deg=41.0)
+
+    monkeypatch.setattr(
+        "device.seestar_device.Util.parse_coordinate", lambda *a, **k: FakeCoord
+    )
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    seestar.send_message_param_sync = send
+    seestar.is_goto = lambda: False
+    seestar.wait_end_op = lambda _op: True
+    seestar.start_stack = lambda _params: False  # end the item after the goto
+    seestar.schedule["current_item_id"] = "item-1"
+    seestar.event_state["scheduler"] = {"cur_scheduler_item": {}}
+
+    seestar.framed_mosaic_thread_fn(
+        "M31", 10.0, 41.0, False, 60, scale, angle, 80, False, 1, 0
+    )
+    return sent
+
+
+def test_framed_mosaic_goto_carries_the_mosaic_frame(monkeypatch, seestar):
+    # seestar-spec (READ): set_setting {"mosaic": ...} only estimates hours; the
+    # capture mosaic comes from iscope_start_view's mosaic object, and capture
+    # setup resets it when absent, so the goto must carry all three members.
+    sent = _run_framed_mosaic(monkeypatch, seestar, 2.0, 30.0)
+
+    views = [r for r in sent if r["method"] == "iscope_start_view"]
+    assert len(views) == 1
+    assert views[0]["params"]["mosaic"] == {
+        "scale": 2.0,
+        "angle": 30.0,
+        "star_map_angle": 0.0,
+    }
+
+
+def test_plain_goto_sends_no_mosaic_frame(monkeypatch, seestar):
+    class FakeCoord:
+        ra = SimpleNamespace(hour=1.5)
+        dec = SimpleNamespace(deg=22.25)
+
+    sent = []
+    seestar.is_goto = lambda: False
+    seestar.mark_op_state = lambda *args, **kwargs: None
+    seestar.send_message_param_sync = lambda payload: sent.append(payload) or {}
+    monkeypatch.setattr(
+        "device.seestar_device.Util.parse_coordinate", lambda *a, **k: FakeCoord
+    )
+
+    seestar.goto_target({"is_j2000": False, "ra": 1.5, "dec": 22.25})
+
+    assert "mosaic" not in sent[0]["params"]
+
+
+def _run_startup_recording(monkeypatch, seestar, reply_for=None):
+    """Run start_up_thread_fn (no AF/3PPA/darks); return every request sent."""
+    import datetime as _dt
+
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone_name", lambda: "UTC"
+    )
+    monkeypatch.setattr(
+        "device.seestar_device.tzlocal.get_localzone", lambda: _dt.timezone.utc
+    )
+    monkeypatch.setattr("device.seestar_device.EarthLocation", lambda **_k: object())
+    monkeypatch.setattr(seestar, "set_setting", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(seestar, "play_sound", lambda _sid: None)
+    monkeypatch.setattr(Config, "init_save_good_frames", True)
+    monkeypatch.setattr(Config, "init_save_all_frames", False)
+
+    sent = []
+
+    def fake_sync(payload):
+        sent.append(payload)
+        if payload["method"] == "get_device_state":
+            return {"result": {"device": {"firmware_ver_int": 2975}}}
+        if reply_for:
+            reply = reply_for(payload)
+            if reply is not None:
+                return reply
+        return {"result": 0, "code": 0}
+
+    monkeypatch.setattr(seestar, "send_message_param_sync", fake_sync)
+    seestar.start_up_thread_fn(
+        {
+            "lat": 1.1,
+            "lon": 2.2,
+            "auto_focus": False,
+            "3ppa": False,
+            "dark_frames": False,
+        }
+    )
+    return sent
+
+
+def test_startup_saves_frame_options_through_set_setting_stack(monkeypatch, seestar):
+    # set_stack_setting is in no analyzed firmware table (103 on 9.x); the
+    # documented path is set_setting {"stack": {...}} (seestar-spec, READ).
+    sent = _run_startup_recording(monkeypatch, seestar)
+
+    stack_sets = [
+        r["params"]["stack"]
+        for r in sent
+        if r["method"] == "set_setting" and "stack" in r.get("params", {})
+    ]
+    assert {"save_discrete_ok_frame": True, "save_discrete_frame": False} in stack_sets
+    assert "set_stack_setting" not in [r["method"] for r in sent]
+
+
+def test_startup_falls_back_to_set_stack_setting_when_stack_is_rejected(
+    monkeypatch, seestar
+):
+    def reject_stack(payload):
+        if payload["method"] == "set_setting" and "stack" in payload["params"]:
+            return {"error": "unexpected param", "code": 109}
+        return None
+
+    sent = _run_startup_recording(monkeypatch, seestar, reject_stack)
+
+    legacy = [r for r in sent if r["method"] == "set_stack_setting"]
+    assert legacy == [
+        {
+            "method": "set_stack_setting",
+            "params": {"save_discrete_ok_frame": True, "save_discrete_frame": False},
+        }
+    ]

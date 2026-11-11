@@ -73,10 +73,10 @@ class InfoMixin:
         return await self.method_sync("get_user_location")
 
     async def set_user_location(self, lat: float, lon: float, alt: float = 0.0) -> dict:
-        logger.info("set_user_location lat=%s lon=%s alt=%s", lat, lon, alt)
-        return await self.method_sync(
-            "set_user_location", {"lat": lat, "lon": lon, "alt": alt}
-        )
+        """Set the site location. ``alt`` is accepted but not sent: the
+        firmware reads only lon and lat."""
+        logger.info("set_user_location lat=%s lon=%s", lat, lon)
+        return await self.method_sync("set_user_location", {"lat": lat, "lon": lon})
 
     async def get_app_setting(self) -> dict:
         logger.info("get_app_setting")
@@ -108,7 +108,7 @@ class InfoMixin:
 
     async def get_annotate_result(self, image_id: int) -> dict:
         logger.info("get_annotate_result image_id=%s", image_id)
-        return await self.method_sync("get_annotate_result", {"image_id": image_id})
+        return await self.method_sync("get_annotate_result", {"img_id": image_id})
 
     async def is_stacked(self) -> dict:
         logger.info("is_stacked")

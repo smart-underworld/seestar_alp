@@ -887,9 +887,16 @@ def get_client_master(telescope_id):
     return client_master
 
 
+# An unfiltered get_device_state opens and closes the focuser, runs shell
+# queries and can wait ~30 s on the mount (seestar-spec, READ), so callers ask
+# for the sections they read. Firmware that ignores "keys" returns them all.
+def _device_state_sections(telescope_id, *keys):
+    return method_sync("get_device_state", telescope_id, params={"keys": list(keys)})
+
+
 def get_firmware_ver_int(telescope_id):
     if check_api_state(telescope_id):
-        state = method_sync("get_device_state", telescope_id)
+        state = _device_state_sections(telescope_id, "device")
         return pydash.get(state, "device.firmware_ver_int", 0)
     return 0
 
@@ -1011,7 +1018,7 @@ def planner_model_key(model):
 
 def get_device_model(telescope_id):
     if check_api_state(telescope_id):
-        state = method_sync("get_device_state", telescope_id)
+        state = _device_state_sections(telescope_id, "device")
         return pydash.get(state, "device.product_model", 0)
     return 0
 
@@ -1025,7 +1032,7 @@ def get_guestmode_state(telescope_id):
         client_list = []
         fw = 0
 
-        result = method_sync("get_device_state", telescope_id)
+        result = _device_state_sections(telescope_id, "device", "setting", "client")
         if result is not None:
             device = result.get("device", {})
             fw = device.get("firmware_ver_int", 0)
@@ -1061,7 +1068,18 @@ def get_guestmode_state(telescope_id):
 
 def get_device_state(telescope_id):
     if check_api_state(telescope_id):
-        result = method_sync("get_device_state", telescope_id)
+        result = _device_state_sections(
+            telescope_id,
+            "device",
+            "setting",
+            "focuser",
+            "storage",
+            "balance_sensor",
+            "compass_sensor",
+            "mount",
+            "pi_status",
+            "client",
+        )
         status = method_sync("get_view_state", telescope_id)
         wifi_status = method_sync("pi_station_state", telescope_id)
 
@@ -2026,7 +2044,7 @@ def do_command(req, resp, telescope_id):
             )
             return output
         case "get_remote_state":
-            output = method_sync("get_device_state, telescope_id")
+            output = method_sync("get_device_state", telescope_id)
             return output
         case _:
             logger.warning("No command found: %s", value)
@@ -4228,12 +4246,16 @@ class SettingsResource(BaseResource):
                     return out, True
             return last_output, False
 
+        def _dither_member(form_key, low, high):
+            # Out of range gives 204 and stops the rest of the set_setting;
+            # a missing member is ignored (seestar-spec, READ).
+            value = _safe_int(PostedSettings.get(form_key), None)
+            return value if value is not None and low <= value <= high else None
+
         # Convert the form names back into the required format
         FormattedNewSettings = {
             "stack_lenhance": str2bool(PostedSettings["stack_lenhance"]),
             "stack_dither": {
-                "pix": _safe_int(PostedSettings["stack_dither_pix"], 0),
-                "interval": _safe_int(PostedSettings["stack_dither_interval"], 0),
                 "enable": str2bool(PostedSettings["stack_dither_enable"]),
             },
             "exp_ms": {
@@ -4245,6 +4267,13 @@ class SettingsResource(BaseResource):
             "auto_3ppa_calib": str2bool(PostedSettings["auto_3ppa_calib"]),
             "frame_calib": str2bool(PostedSettings["frame_calib"]),
         }
+        for member, form_key, low, high in (
+            ("pix", "stack_dither_pix", 0, 200),
+            ("interval", "stack_dither_interval", 1, 100),
+        ):
+            value = _dither_member(form_key, low, high)
+            if value is not None:
+                FormattedNewSettings["stack_dither"][member] = value
 
         if fw >= 2670:
             FormattedNewSettings |= {
@@ -4265,10 +4294,15 @@ class SettingsResource(BaseResource):
             for key, converter in (
                 ("wide_cam", str2bool),
                 ("wide_4k", str2bool),
-                ("wide_denoise", str2bool),
             ):
                 if key in PostedSettings:
                     FormattedNewSettings[key] = converter(PostedSettings[key])
+            # A stack member: at the top level set_setting answers 109 and
+            # skips the members after it.
+            if "wide_denoise" in PostedSettings:
+                FormattedNewSettings.setdefault("stack", {})["wide_denoise"] = str2bool(
+                    PostedSettings["wide_denoise"]
+                )
             if "wide_focal_pos" in PostedSettings:
                 FormattedNewSettings["wide_focal_pos"] = _safe_int(
                     PostedSettings["wide_focal_pos"], 0
@@ -5407,7 +5441,7 @@ class GetBalanceSensorResource:
         referer = req.get_header("Referer")
         referersplit = referer.split("/")[-2:]
         telescope_id = int(referersplit[0])
-        result = method_sync("get_device_state", telescope_id)
+        result = _device_state_sections(telescope_id, "balance_sensor")
         if result is not None:
             balance_sensor = {
                 "x": result["balance_sensor"]["data"]["x"],

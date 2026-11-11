@@ -1,0 +1,10011 @@
+{
+ "license": "CC0-1.0",
+ "methods": {
+  "add_list": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "add_obj": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "coord": {
+        "items": {
+         "types": [
+          "number"
+         ]
+        },
+        "minItems": 2,
+        "types": [
+         "array"
+        ]
+       },
+       "list": {
+        "types": [
+         "string"
+        ]
+       },
+       "object": {
+        "types": [
+         "string"
+        ]
+       },
+       "type": {
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "properties": {
+        "coord": {
+         "items": {
+          "types": [
+           "number"
+          ]
+         },
+         "minItems": 2,
+         "types": [
+          "array"
+         ]
+        },
+        "list": {
+         "types": [
+          "string"
+         ]
+        },
+        "object": {
+         "types": [
+          "string"
+         ]
+        },
+        "type": {
+         "types": [
+          "integer"
+         ]
+        }
+       },
+       "types": [
+        "object"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "begin_recv": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "file_len": {
+        "minimum": 0,
+        "types": [
+         "integer"
+        ]
+       },
+       "file_name": {
+        "types": [
+         "string"
+        ]
+       },
+       "md5": {
+        "types": [
+         "string"
+        ]
+       },
+       "run_update": {
+        "types": [
+         "integer",
+         "boolean"
+        ]
+       }
+      },
+      "required": [
+       "file_len",
+       "file_name",
+       "md5",
+       "run_update"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "properties": {
+         "file_len": {
+          "minimum": 0,
+          "types": [
+           "integer"
+          ]
+         },
+         "file_name": {
+          "types": [
+           "string"
+          ]
+         },
+         "md5": {
+          "types": [
+           "string"
+          ]
+         },
+         "run_update": {
+          "types": [
+           "integer",
+           "boolean"
+          ]
+         }
+        },
+        "required": [
+         "file_len",
+         "file_name",
+         "md5",
+         "run_update"
+        ],
+        "types": [
+         "object"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "updater",
+   "tier": "C"
+  },
+  "begin_streaming": {
+   "params": {},
+   "params_required": false,
+   "service": "files",
+   "tier": "C"
+  },
+  "cali_user_location": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "dec": {
+        "types": [
+         "number"
+        ]
+       },
+       "ra": {
+        "types": [
+         "number"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "number"
+       ]
+      },
+      "minItems": 2,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "calibrate_wheel": {
+   "params": null,
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "can_abort_expose": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "can_goto": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "can_liveview": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "can_move": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "charge_only": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "check_ai_process": {
+   "params": {
+    "properties": {
+     "crop": {
+      "items": {
+       "types": [
+        "integer"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     },
+     "name": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "check_internet": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "timeout_sec": {
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "integer"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "check_pa_alt": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "check_photometry": {
+   "params": {
+    "properties": {
+     "magV": {
+      "types": [
+       "number"
+      ]
+     },
+     "offsetDeg": {
+      "types": [
+       "number"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "clear_app_state": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     },
+     {
+      "properties": {
+       "name": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "types": [
+       "object"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "clear_autosave_err": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "plan_last": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      },
+      "required": [
+       "plan_last"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {}
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "clear_az_state": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "clear_batch_stack": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "clear_calibration": {
+   "params": {
+    "anyOf": [
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     },
+     {
+      "open": true,
+      "types": [
+       "object"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "clear_downgrade": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "clear_plan": {
+   "params": {
+    "items": {
+     "properties": {
+      "plan_id": {
+       "maximum": 2147483647,
+       "minimum": -2147483648,
+       "types": [
+        "integer"
+       ]
+      },
+      "seq_id": {
+       "maximum": 2147483647,
+       "minimum": -2147483648,
+       "types": [
+        "integer"
+       ]
+      },
+      "target_id": {
+       "maximum": 2147483647,
+       "minimum": -2147483648,
+       "types": [
+        "integer"
+       ]
+      }
+     },
+     "types": [
+      "object"
+     ]
+    },
+    "minItems": 1,
+    "types": [
+     "array"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "clear_planet_stack": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "clear_polar_align": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "clear_ra_dec_history": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "B"
+  },
+  "clear_sequence": {
+   "params": null,
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "clear_stack": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "clear_view_plan": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "close_camera": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "close_focuser": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "close_wheel": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "del_batch_stack_file": {
+   "params": {
+    "properties": {
+     "frame_type": {
+      "enum": [
+       "light",
+       "dark",
+       "bias",
+       "flat"
+      ],
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "del_list": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "del_obj": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "list": {
+        "types": [
+         "string"
+        ]
+       },
+       "obj": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "list",
+       "obj"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 2,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "delete_image": {
+   "params": {
+    "properties": {
+     "name": {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "string",
+       "array"
+      ]
+     },
+     "storage": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "types": [
+     "object",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "delete_plan": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "plan_id": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "types": [
+         "integer"
+        ]
+       },
+       "seq_id": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "types": [
+         "integer"
+        ]
+       },
+       "target_id": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "properties": {
+        "plan_id": {
+         "maximum": 2147483647,
+         "minimum": -2147483648,
+         "types": [
+          "integer"
+         ]
+        },
+        "seq_id": {
+         "maximum": 2147483647,
+         "minimum": -2147483648,
+         "types": [
+          "integer"
+         ]
+        },
+        "target_id": {
+         "maximum": 2147483647,
+         "minimum": -2147483648,
+         "types": [
+          "integer"
+         ]
+        }
+       },
+       "types": [
+        "object"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "delete_sequence": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "integer"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "integer"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "deselect_star": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "disconnect": {
+   "params": {},
+   "params_required": false,
+   "service": "serial-bridge",
+   "tier": "C"
+  },
+  "dither": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "amount": {
+        "types": [
+         "number"
+        ]
+       },
+       "settle": {
+        "properties": {
+         "pixels": {
+          "types": [
+           "number"
+          ]
+         },
+         "time": {
+          "types": [
+           "number"
+          ]
+         },
+         "timeout": {
+          "types": [
+           "number"
+          ]
+         }
+        },
+        "required": [
+         "pixels",
+         "time",
+         "timeout"
+        ],
+        "types": [
+         "object"
+        ]
+       }
+      },
+      "required": [
+       "amount",
+       "settle"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "number"
+        ]
+       },
+       {
+        "properties": {
+         "pixels": {
+          "types": [
+           "number"
+          ]
+         },
+         "time": {
+          "types": [
+           "number"
+          ]
+         },
+         "timeout": {
+          "types": [
+           "number"
+          ]
+         }
+        },
+        "required": [
+         "pixels",
+         "time",
+         "timeout"
+        ],
+        "types": [
+         "object"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "eject_disk": {
+   "params": {
+    "types": [
+     "string"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "factory_test_control": {
+   "params": {
+    "properties": {
+     "appVersion": {
+      "types": [
+       "string"
+      ]
+     },
+     "operation": {
+      "enum": [
+       "scopePark",
+       "delUserImages",
+       "delLicense",
+       "setLangEn",
+       "enterShippingMode"
+      ],
+      "types": [
+       "string"
+      ]
+     },
+     "osVersion": {
+      "types": [
+       "string"
+      ]
+     },
+     "platform": {
+      "types": [
+       "string"
+      ]
+     },
+     "timestamp": {
+      "types": [
+       "integer"
+      ]
+     },
+     "userId": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "operation"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "file_rename": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "dst": {
+        "types": [
+         "string"
+        ]
+       },
+       "src": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "dst",
+       "src"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "string"
+        ]
+       },
+       {
+        "types": [
+         "string"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "find_star": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "fits_to_jpg": {
+   "params": {
+    "properties": {
+     "name": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "flip_calibration": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "format_emmc": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "get_3p_pa_setting": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_3p_pa_state": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_albums": {
+   "params": {
+    "properties": {
+     "filter": {
+      "types": [
+       "string"
+      ]
+     },
+     "name": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_algo_param": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "axis": {
+        "types": [
+         "string"
+        ]
+       },
+       "name": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "axis",
+       "name"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "string"
+        ]
+       },
+       {
+        "types": [
+         "string"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "D"
+  },
+  "get_algo_param_names": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "axis": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "axis"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "types": [
+         "string"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "D"
+  },
+  "get_annotate_result": {
+   "params": {
+    "anyOf": [
+     {
+      "maximum": 65534,
+      "minimum": 0,
+      "types": [
+       "integer"
+      ]
+     },
+     {
+      "items": {
+       "maximum": 65534,
+       "minimum": 0,
+       "types": [
+        "integer"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     },
+     {
+      "properties": {
+       "file_path": {
+        "types": [
+         "string"
+        ]
+       },
+       "img_id": {
+        "maximum": 65534,
+        "minimum": 0,
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_app_setting": {
+   "params": {
+    "items": {
+     "types": [
+      "string"
+     ]
+    },
+    "types": [
+     "array",
+     "object",
+     "null"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_app_state": {
+   "params": {
+    "types": [
+     "string"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "get_auto_focus_img": {
+   "params": {},
+   "params_required": false,
+   "service": "files",
+   "tier": "D"
+  },
+  "get_auto_load_calibration": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_batch_stack_setting": {
+   "params": {
+    "properties": {
+     "type": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "get_batch_stack_thumbnail": {
+   "params": {
+    "properties": {
+     "frame_type": {
+      "enum": [
+       "light",
+       "dark",
+       "bias",
+       "flat"
+      ],
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "frame_type"
+    ],
+    "types": [
+     "object",
+     "null"
+    ]
+   },
+   "params_required": false,
+   "service": "files",
+   "tier": "D"
+  },
+  "get_calib_frame": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_calib_param": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_calibrated": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_camera_16bit": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_camera_bin": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_camera_binning": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_camera_exp_and_bin": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_camera_img": {
+   "params": {},
+   "params_required": false,
+   "service": "files",
+   "tier": "D"
+  },
+  "get_camera_info": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "integer"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "integer"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_camera_state": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_comet_position": {
+   "params": {
+    "types": [
+     "string"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "get_compass_state": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_connected": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "D"
+  },
+  "get_connected_cameras": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_connected_focuser": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_connected_wheels": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_constellations": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "D"
+  },
+  "get_control_value": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "items": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "name": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string",
+        "boolean",
+        "integer"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "get_controls": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_current_img": {
+   "params": {
+    "properties": {
+     "compress": {
+      "types": [
+       "boolean"
+      ]
+     },
+     "img_type": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "files",
+   "tier": "B"
+  },
+  "get_dark_files": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "null"
+      ]
+     },
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "properties": {
+       "name": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_dark_info": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "D"
+  },
+  "get_dec_guide_mode": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_device_state": {
+   "params": {
+    "properties": {
+     "keys": {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "get_disk_volume": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string",
+        "boolean",
+        "integer"
+       ]
+      },
+      "minItems": 0,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_dither": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_enabled_plan": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_exposure": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_factory_test_state": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "get_find_star_result": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_fits_file": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "compress": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "name": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "types": [
+         "string"
+        ]
+       },
+       {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "files",
+   "tier": "D"
+  },
+  "get_flip_calibration": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_focal_length": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_focuser_caps": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_focuser_position": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "ret_obj": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_focuser_setting": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_focuser_state": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_focuser_value": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_fov": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_func_state": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_gain": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_gain_segment": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_go_cmd": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "get_goto_solve_result": {
+   "params": null,
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_image_save_path": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_img_file": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "name": {
+        "types": [
+         "string"
+        ]
+       },
+       "offset": {
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "types": [
+         "string"
+        ]
+       },
+       {
+        "types": [
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "files",
+   "tier": "D"
+  },
+  "get_img_file_in_jpg": {
+   "params": {
+    "properties": {
+     "name": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "files",
+   "tier": "B"
+  },
+  "get_img_file_info": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     },
+     {
+      "properties": {
+       "name": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "types": [
+       "object"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "D"
+  },
+  "get_img_file_page_name": {
+   "params": {
+    "anyOf": [
+     {
+      "minimum": 0,
+      "types": [
+       "integer"
+      ]
+     },
+     {
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "minimum": 0,
+        "types": [
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     },
+     {
+      "properties": {
+       "page": {
+        "minimum": 0,
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "required": [
+       "page"
+      ],
+      "types": [
+       "object"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_img_file_page_number": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "date": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "dir": {
+        "types": [
+         "string"
+        ]
+       },
+       "page_num": {
+        "types": [
+         "integer"
+        ]
+       },
+       "size": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "skip_avi": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_img_name_field": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_img_page_thumbnail": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "page": {
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "required": [
+       "page"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "types": [
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "files",
+   "tier": "D"
+  },
+  "get_img_thumbnail": {
+   "params": {
+    "properties": {
+     "name": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "files",
+   "tier": "B"
+  },
+  "get_last_solve_result": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_list": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_lock_position": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_merid_delta": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_merid_setting": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_mount_index": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_mount_list": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "B"
+  },
+  "get_obj": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_paused": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_pcdid": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_phone_list": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_photometry_img": {
+   "params": {},
+   "params_required": false,
+   "service": "files",
+   "tier": "B"
+  },
+  "get_photometry_plot": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "id": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "id"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_photometry_result": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_photometry_result_json": {
+   "params": {
+    "properties": {
+     "name": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_photometry_stars": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "image_id": {
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_photometry_wcs": {
+   "params": null,
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_pixel_scale": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_plan": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "plan_id": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "types": [
+         "integer"
+        ]
+       },
+       "seq_id": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "types": [
+         "integer"
+        ]
+       },
+       "target_id": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "properties": {
+        "plan_id": {
+         "maximum": 2147483647,
+         "minimum": -2147483648,
+         "types": [
+          "integer"
+         ]
+        },
+        "seq_id": {
+         "maximum": 2147483647,
+         "minimum": -2147483648,
+         "types": [
+          "integer"
+         ]
+        },
+        "target_id": {
+         "maximum": 2147483647,
+         "minimum": -2147483648,
+         "types": [
+          "integer"
+         ]
+        }
+       },
+       "types": [
+        "object"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_planet_position": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_polar_align_image": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_polar_axis": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_power_supply": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_ra_dec_angle": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_ra_dec_history": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_saved_photometry_stars": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_search_region": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "get_sensor_calibration": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_sensor_temperature": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "get_sequence": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "integer"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "integer"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_sequence_number": {
+   "params": null,
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_sequence_setting": {
+   "params": null,
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "get_server_log": {
+   "params": {},
+   "params_required": false,
+   "service": "files",
+   "tier": "B"
+  },
+  "get_setting": {
+   "params": {
+    "properties": {
+     "include_sensitive": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "get_solve_obj": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "D"
+  },
+  "get_solve_result": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_stack_info": {
+   "params": {
+    "properties": {
+     "info_type": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "get_stacked_img": {
+   "params": {},
+   "params_required": false,
+   "service": "files",
+   "tier": "B"
+  },
+  "get_subframe": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_target_sequences": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_test_setting": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_user_location": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "D"
+  },
+  "get_user_log": {
+   "params": {},
+   "params_required": false,
+   "service": "files",
+   "tier": "D"
+  },
+  "get_verify_str": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "get_view_plan_stack_result": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_view_state": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_wheel_position": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_wheel_setting": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_wheel_slot_name": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "get_wheel_state": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "guide": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "recalibrate": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "settle": {
+        "properties": {
+         "pixels": {
+          "types": [
+           "number"
+          ]
+         },
+         "time": {
+          "types": [
+           "number"
+          ]
+         },
+         "timeout": {
+          "types": [
+           "number"
+          ]
+         }
+        },
+        "required": [
+         "pixels",
+         "time",
+         "timeout"
+        ],
+        "types": [
+         "object"
+        ]
+       }
+      },
+      "required": [
+       "settle"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       {
+        "properties": {
+         "pixels": {
+          "types": [
+           "number"
+          ]
+         },
+         "time": {
+          "types": [
+           "number"
+          ]
+         },
+         "timeout": {
+          "types": [
+           "number"
+          ]
+         }
+        },
+        "required": [
+         "pixels",
+         "time",
+         "timeout"
+        ],
+        "types": [
+         "object"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "guide_pulse": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "amount": {
+        "types": [
+         "integer"
+        ]
+       },
+       "direction": {
+        "types": [
+         "string"
+        ]
+       },
+       "which": {}
+      },
+      "required": [
+       "amount",
+       "direction"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "maxItems": 3,
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "string"
+        ]
+       },
+       {
+        "types": [
+         "integer"
+        ]
+       },
+       {}
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "import_plan": {
+   "params": {
+    "items": {
+     "properties": {
+      "close_cooler": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "enable": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "end_time": {
+       "properties": {
+        "hour": {
+         "types": [
+          "number"
+         ]
+        },
+        "type": {
+         "types": [
+          "string"
+         ]
+        }
+       },
+       "types": [
+        "object"
+       ]
+      },
+      "focuser_go_home": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "id": {
+       "maximum": 2147483647,
+       "minimum": -2147483647,
+       "types": [
+        "integer"
+       ]
+      },
+      "merid_flip": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "mount_go_home": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "plan_name": {
+       "types": [
+        "string"
+       ]
+      },
+      "shutdown_pi": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "start_guide": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "start_time": {
+       "properties": {
+        "hour": {
+         "types": [
+          "number"
+         ]
+        },
+        "type": {
+         "types": [
+          "string"
+         ]
+        }
+       },
+       "types": [
+        "object"
+       ]
+      },
+      "targets": {
+       "items": {
+        "properties": {
+         "capture_index": {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "types": [
+           "integer"
+          ]
+         },
+         "code": {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "types": [
+           "integer"
+          ]
+         },
+         "delay_between_frame": {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "types": [
+           "integer"
+          ]
+         },
+         "delay_first": {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "types": [
+           "integer"
+          ]
+         },
+         "enable": {
+          "types": [
+           "boolean",
+           "integer"
+          ]
+         },
+         "extra_sec_per_target": {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "types": [
+           "integer"
+          ]
+         },
+         "group_by_slot": {
+          "types": [
+           "boolean",
+           "integer"
+          ]
+         },
+         "id": {
+          "maximum": 2147483647,
+          "minimum": -2147483647,
+          "types": [
+           "integer"
+          ]
+         },
+         "obj_type": {
+          "types": [
+           "string"
+          ]
+         },
+         "real_end_date": {
+          "types": [
+           "string"
+          ]
+         },
+         "real_start_date": {
+          "types": [
+           "string"
+          ]
+         },
+         "seqs": {
+          "items": {
+           "properties": {
+            "autoexp": {
+             "types": [
+              "boolean"
+             ]
+            },
+            "bin": {
+             "maximum": 2147483647,
+             "minimum": -2147483648,
+             "types": [
+              "integer"
+             ]
+            },
+            "capture_index": {
+             "maximum": 2147483647,
+             "minimum": -2147483648,
+             "types": [
+              "integer"
+             ]
+            },
+            "enable": {
+             "types": [
+              "boolean"
+             ]
+            },
+            "exp": {
+             "types": [
+              "number"
+             ]
+            },
+            "filter": {
+             "maximum": 2147483647,
+             "minimum": -2147483648,
+             "types": [
+              "integer"
+             ]
+            },
+            "gain": {
+             "maximum": 2147483647,
+             "minimum": -2147483648,
+             "types": [
+              "integer"
+             ]
+            },
+            "id": {
+             "maximum": 2147483647,
+             "minimum": -2147483647,
+             "types": [
+              "integer"
+             ]
+            },
+            "lapsed": {
+             "maximum": 2147483647,
+             "minimum": -2147483648,
+             "types": [
+              "integer"
+             ]
+            },
+            "repeat": {
+             "maximum": 2147483647,
+             "minimum": -2147483648,
+             "types": [
+              "integer"
+             ]
+            },
+            "suffix": {
+             "types": [
+              "string"
+             ]
+            },
+            "type": {
+             "types": [
+              "string"
+             ]
+            }
+           },
+           "required": [
+            "id"
+           ],
+           "types": [
+            "object"
+           ]
+          },
+          "types": [
+           "array"
+          ]
+         },
+         "target_coord": {
+          "items": {
+           "types": [
+            "number"
+           ]
+          },
+          "properties": {
+           "dec": {
+            "types": [
+             "number"
+            ]
+           },
+           "ra": {
+            "types": [
+             "number"
+            ]
+           }
+          },
+          "types": [
+           "array",
+           "object"
+          ]
+         },
+         "target_name": {
+          "types": [
+           "string"
+          ]
+         },
+         "target_original_img": {
+          "types": [
+           "string"
+          ]
+         },
+         "target_original_name": {
+          "types": [
+           "string"
+          ]
+         }
+        },
+        "required": [
+         "id"
+        ],
+        "types": [
+         "object"
+        ]
+       },
+       "types": [
+        "array"
+       ]
+      },
+      "wait_cooling": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "types": [
+      "object"
+     ]
+    },
+    "types": [
+     "array"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "is_downgraded": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "is_func_occupy_mount": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "is_func_work": {
+   "params": {
+    "properties": {
+     "keys": {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    },
+    "required": [
+     "keys"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "B"
+  },
+  "is_img_file_annotated": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "B"
+  },
+  "is_stacked": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "iscope_accept_target_name": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "iscope_get_app_state": {
+   "params": null,
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "iscope_match_target_name": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "iscope_start_stack": {
+   "params": {
+    "properties": {
+     "main_stack_exp_us": {
+      "types": [
+       "integer"
+      ]
+     },
+     "restart": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "iscope_start_view": {
+   "params": {
+    "properties": {
+     "goto_capt_type": {
+      "types": [
+       "string"
+      ]
+     },
+     "goto_capture_settings": {
+      "properties": {
+       "stack_exp_ms": {
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     "lp_filter": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "main_stack_exp_us": {
+      "types": [
+       "integer"
+      ]
+     },
+     "mode": {
+      "types": [
+       "string"
+      ]
+     },
+     "mosaic": {
+      "properties": {
+       "angle": {
+        "types": [
+         "number"
+        ]
+       },
+       "scale": {
+        "types": [
+         "number"
+        ]
+       },
+       "star_map_angle": {
+        "types": [
+         "number"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     "selected_cam": {
+      "types": [
+       "string"
+      ]
+     },
+     "star_type": {
+      "types": [
+       "integer"
+      ]
+     },
+     "target_name": {
+      "types": [
+       "string"
+      ]
+     },
+     "target_ra_dec": {
+      "items": {
+       "types": [
+        "number"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     },
+     "target_type": {
+      "types": [
+       "string"
+      ]
+     },
+     "wide_mosaic_angle": {
+      "types": [
+       "number"
+      ]
+     }
+    },
+    "required": [
+     "mode"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "iscope_stop_view": {
+   "params": {
+    "properties": {
+     "stage": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "list_mass_storage": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "list_plan": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "loop": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "mount_repower": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "mount_scan_port": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "B"
+  },
+  "move_focuser": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "ret_step": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "step": {
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "required": [
+       "step"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "need_reboot": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "not_move": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "open_camera": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "integer"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "integer"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "open_focuser": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "open_wheel": {
+   "params": {
+    "items": {
+     "types": [
+      "integer"
+     ]
+    },
+    "types": [
+     "integer",
+     "array"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "ota_abort": {
+   "params": {},
+   "params_required": false,
+   "service": "updater",
+   "tier": "C"
+  },
+  "ota_begin": {
+   "params": {
+    "properties": {
+     "send_modules": {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     },
+     "target_manifest": {
+      "properties": {
+       "main_version": {
+        "types": [
+         "string"
+        ]
+       },
+       "modules": {
+        "items": {
+         "properties": {
+          "name": {
+           "types": [
+            "string"
+           ]
+          },
+          "sha256": {
+           "types": [
+            "string"
+           ]
+          },
+          "size": {
+           "minimum": 1,
+           "types": [
+            "integer"
+           ]
+          },
+          "version": {
+           "types": [
+            "string"
+           ]
+          }
+         },
+         "required": [
+          "name",
+          "sha256",
+          "size",
+          "version"
+         ],
+         "types": [
+          "object"
+         ]
+        },
+        "types": [
+         "array"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     }
+    },
+    "required": [
+     "send_modules",
+     "target_manifest"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "updater",
+   "tier": "C"
+  },
+  "ota_get_current_manifest": {
+   "params": {},
+   "params_required": false,
+   "service": "updater",
+   "tier": "B"
+  },
+  "ota_get_session": {
+   "params": {},
+   "params_required": false,
+   "service": "updater",
+   "tier": "B"
+  },
+  "ota_prepare_module": {
+   "params": {
+    "properties": {
+     "name": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "updater",
+   "tier": "C"
+  },
+  "ota_retry_upgrade": {
+   "params": {},
+   "params_required": false,
+   "service": "updater",
+   "tier": "C"
+  },
+  "pause_polar_align": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_encrypt": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "auth_code": {
+        "types": [
+         "string"
+        ]
+       },
+       "cpuId": {
+        "types": [
+         "string"
+        ]
+       },
+       "digest": {
+        "types": [
+         "string"
+        ]
+       },
+       "license": {
+        "types": [
+         "string"
+        ]
+       },
+       "passwd": {
+        "types": [
+         "string"
+        ]
+       },
+       "sign": {
+        "types": [
+         "string"
+        ]
+       },
+       "sn": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "properties": {
+         "auth_code": {
+          "types": [
+           "string"
+          ]
+         },
+         "cpuId": {
+          "types": [
+           "string"
+          ]
+         },
+         "digest": {
+          "types": [
+           "string"
+          ]
+         },
+         "license": {
+          "types": [
+           "string"
+          ]
+         },
+         "passwd": {
+          "types": [
+           "string"
+          ]
+         },
+         "sign": {
+          "types": [
+           "string"
+          ]
+         },
+         "sn": {
+          "types": [
+           "string"
+          ]
+         }
+        },
+        "types": [
+         "object"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_get_ap": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "pi_get_ap_channel": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "pi_get_info": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "pi_get_time": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "pi_is_verified": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "pi_output_get": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "pi_output_get2": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "pi_output_set": {
+   "params": {
+    "anyOf": [
+     {
+      "open": true,
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "open": true,
+       "types": [
+        "object"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_output_set2": {
+   "params": {
+    "open": true,
+    "properties": {
+     "beep": {
+      "properties": {
+       "freq": {
+        "types": [
+         "integer"
+        ]
+       },
+       "is_pwm": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "state": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "type": {
+        "types": [
+         "string"
+        ]
+       },
+       "value": {
+        "types": [
+         "number"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     "dslr": {
+      "properties": {
+       "freq": {
+        "types": [
+         "integer"
+        ]
+       },
+       "is_pwm": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "state": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "type": {
+        "types": [
+         "string"
+        ]
+       },
+       "value": {
+        "types": [
+         "number"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     "heater": {
+      "properties": {
+       "freq": {
+        "types": [
+         "integer"
+        ]
+       },
+       "is_pwm": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "state": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "type": {
+        "types": [
+         "string"
+        ]
+       },
+       "value": {
+        "types": [
+         "number"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     "wide_heater": {
+      "properties": {
+       "freq": {
+        "types": [
+         "integer"
+        ]
+       },
+       "is_pwm": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "state": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "type": {
+        "types": [
+         "string"
+        ]
+       },
+       "value": {
+        "types": [
+         "number"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_reboot": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_set_5g": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "boolean"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "boolean"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     },
+     {
+      "properties": {
+       "is5g": {
+        "types": [
+         "boolean"
+        ]
+       }
+      },
+      "required": [
+       "is5g"
+      ],
+      "types": [
+       "object"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_set_ap": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "key": {
+        "types": [
+         "string"
+        ]
+       },
+       "ssid": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "properties": {
+       "key": {
+        "types": [
+         "string"
+        ]
+       },
+       "ssid": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "maxItems": 2,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_set_time": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "day": {
+        "types": [
+         "integer"
+        ]
+       },
+       "hour": {
+        "types": [
+         "integer"
+        ]
+       },
+       "min": {
+        "types": [
+         "integer"
+        ]
+       },
+       "mon": {
+        "types": [
+         "integer"
+        ]
+       },
+       "sec": {
+        "types": [
+         "integer"
+        ]
+       },
+       "time_zone": {
+        "types": [
+         "string"
+        ]
+       },
+       "year": {
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "properties": {
+         "day": {
+          "types": [
+           "integer"
+          ]
+         },
+         "hour": {
+          "types": [
+           "integer"
+          ]
+         },
+         "min": {
+          "types": [
+           "integer"
+          ]
+         },
+         "mon": {
+          "types": [
+           "integer"
+          ]
+         },
+         "sec": {
+          "types": [
+           "integer"
+          ]
+         },
+         "time_zone": {
+          "types": [
+           "string"
+          ]
+         },
+         "year": {
+          "types": [
+           "integer"
+          ]
+         }
+        },
+        "types": [
+         "object"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "pi_shutdown": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_station_auto_connect": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_station_close": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_station_list": {
+   "params": {
+    "properties": {
+     "ret_obj": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object",
+     "array",
+     "boolean",
+     "integer"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_station_open": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_station_remove": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "ssid": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "ssid"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     },
+     {
+      "types": [
+       "string"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_station_scan": {
+   "params": {
+    "properties": {
+     "ret_obj": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object",
+     "array",
+     "boolean",
+     "integer",
+     "null"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_station_select": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     },
+     {
+      "properties": {
+       "ssid": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "ssid"
+      ],
+      "types": [
+       "object"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_station_set": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "hidden": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "psk": {
+        "types": [
+         "string"
+        ]
+       },
+       "ssid": {
+        "types": [
+         "string"
+        ]
+       },
+       "timeout_sec": {
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "required": [
+       "ssid"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "properties": {
+       "para": {
+        "properties": {
+         "hidden": {
+          "types": [
+           "boolean",
+           "integer"
+          ]
+         },
+         "psk": {
+          "types": [
+           "string"
+          ]
+         },
+         "ssid": {
+          "types": [
+           "string"
+          ]
+         },
+         "timeout_sec": {
+          "types": [
+           "integer"
+          ]
+         }
+        },
+        "required": [
+         "ssid"
+        ],
+        "types": [
+         "object"
+        ]
+       }
+      },
+      "required": [
+       "para"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "properties": {
+        "hidden": {
+         "types": [
+          "boolean",
+          "integer"
+         ]
+        },
+        "psk": {
+         "types": [
+          "string"
+         ]
+        },
+        "ssid": {
+         "types": [
+          "string"
+         ]
+        },
+        "timeout_sec": {
+         "types": [
+          "integer"
+         ]
+        }
+       },
+       "required": [
+        "ssid"
+       ],
+       "types": [
+        "object"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "pi_station_state": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "pi_vl805_version": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "play_sound": {
+   "params": {
+    "properties": {
+     "num": {
+      "types": [
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "popen": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "cmd": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "cmd"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "remote_disconnect": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "remote_disjoin": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "remote_join": {
+   "params": {
+    "properties": {
+     "deviceName": {
+      "types": [
+       "string"
+      ]
+     },
+     "deviceSecret": {
+      "types": [
+       "string"
+      ]
+     },
+     "host": {
+      "types": [
+       "string"
+      ]
+     },
+     "port": {
+      "types": [
+       "string"
+      ]
+     },
+     "productKey": {
+      "types": [
+       "string"
+      ]
+     },
+     "timeout_sec": {
+      "types": [
+       "integer"
+      ]
+     }
+    },
+    "required": [
+     "deviceName",
+     "deviceSecret",
+     "host",
+     "port",
+     "productKey"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "remote_rebind_device_user": {
+   "params": {
+    "properties": {
+     "userId": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "userId"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "remove_file": {
+   "params": {
+    "properties": {
+     "name": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "rename_list": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "new": {
+        "types": [
+         "string"
+        ]
+       },
+       "old": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "new",
+       "old"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 2,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "reset_factory_focal_pos": {
+   "params": {
+    "properties": {
+     "wide_cam": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "reset_plan": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "plan_id": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "types": [
+         "integer"
+        ]
+       },
+       "seq_id": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "types": [
+         "integer"
+        ]
+       },
+       "target_id": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "properties": {
+        "plan_id": {
+         "maximum": 2147483647,
+         "minimum": -2147483648,
+         "types": [
+          "integer"
+         ]
+        },
+        "seq_id": {
+         "maximum": 2147483647,
+         "minimum": -2147483648,
+         "types": [
+          "integer"
+         ]
+        },
+        "target_id": {
+         "maximum": 2147483647,
+         "minimum": -2147483648,
+         "types": [
+          "integer"
+         ]
+        }
+       },
+       "types": [
+        "object"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "reset_sequence_progress": {
+   "params": null,
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "reset_setting": {
+   "params": {
+    "properties": {
+     "items": {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    },
+    "required": [
+     "items"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "reset_setting_commit": {
+   "params": {
+    "properties": {
+     "transaction_id": {
+      "types": [
+       "integer"
+      ]
+     }
+    },
+    "required": [
+     "transaction_id"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "reset_setting_prepare": {
+   "params": {
+    "properties": {
+     "keys": {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     },
+     "transaction_id": {
+      "minimum": 1,
+      "types": [
+       "integer"
+      ]
+     }
+    },
+    "required": [
+     "keys",
+     "transaction_id"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "B"
+  },
+  "reset_setting_rollback": {
+   "params": {
+    "properties": {
+     "transaction_id": {
+      "types": [
+       "integer"
+      ]
+     }
+    },
+    "required": [
+     "transaction_id"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "B"
+  },
+  "restore_factory_calib_frame": {
+   "params": {
+    "properties": {
+     "wide_cam": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "restore_view_plan_wide_setting": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "rm_polar_align_image": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "save_image": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "save_stack": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "scan_iscope": {
+   "params": {},
+   "params_required": false,
+   "service": "discovery",
+   "tier": "B"
+  },
+  "scope_abort_slew": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_fine_move": {
+   "params": {
+    "properties": {
+     "backlash_comp": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "dur_sec": {
+      "types": [
+       "integer"
+      ]
+     },
+     "limit": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "speed": {
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "number"
+        ]
+       },
+       {
+        "types": [
+         "number"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    },
+    "required": [
+     "speed"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_get_axle_coord": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_get_beep_volume": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_get_cap": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "D"
+  },
+  "scope_get_connection_mode": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "B"
+  },
+  "scope_get_connection_para": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "B"
+  },
+  "scope_get_equ_coord": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_get_guide_rate": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "scope_get_horiz_coord": {
+   "params": {
+    "properties": {
+     "ret_obj": {
+      "types": [
+       "boolean"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_get_location": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_get_mode": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_get_pierside": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_get_ra_dec": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_get_slew_rate": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "scope_get_state": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_get_target_pierside": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "A"
+  },
+  "scope_get_test_date": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_get_time": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_get_track_mode": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_get_track_state": {
+   "params": {
+    "properties": {
+     "ret_obj": {
+      "types": [
+       "boolean"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_goto": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "dec": {
+        "types": [
+         "number"
+        ]
+       },
+       "ra": {
+        "types": [
+         "number"
+        ]
+       }
+      },
+      "required": [
+       "dec",
+       "ra"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "number"
+        ]
+       },
+       {
+        "types": [
+         "number"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_is_moving": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_move": {
+   "params": {
+    "anyOf": [
+     {
+      "maxItems": 2,
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "enum": [
+         "north",
+         "south",
+         "east",
+         "west",
+         "none"
+        ],
+        "types": [
+         "string"
+        ]
+       },
+       {
+        "maximum": 9,
+        "minimum": 1,
+        "types": [
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     },
+     {
+      "properties": {
+       "direction": {
+        "enum": [
+         "north",
+         "south",
+         "east",
+         "west",
+         "none"
+        ],
+        "types": [
+         "string"
+        ]
+       },
+       "duration_sec": {
+        "maximum": 9,
+        "minimum": 1,
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "required": [
+       "direction"
+      ],
+      "types": [
+       "object"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_move_left_by_angle": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "degree": {
+        "types": [
+         "integer"
+        ]
+       },
+       "manual": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "prefixItems": [
+       {
+        "types": [
+         "integer",
+         "string"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_move_to_horizon": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_park": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "equ_mode": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_send_cmd": {
+   "params": {
+    "anyOf": [
+     {
+      "maxItems": 2,
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "types": [
+         "string"
+        ]
+       },
+       {
+        "types": [
+         "string",
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     },
+     {
+      "properties": {
+       "cmd": {
+        "types": [
+         "string"
+        ]
+       },
+       "resp": {
+        "types": [
+         "string",
+         "integer"
+        ]
+       },
+       "ret_obj": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      },
+      "required": [
+       "cmd"
+      ],
+      "types": [
+       "object"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_set_beep_volume": {
+   "params": {
+    "types": [
+     "integer"
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_set_connection_mode": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "integer"
+      ]
+     },
+     {
+      "prefixItems": [
+       {
+        "types": [
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_set_connection_para": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "address": {
+        "types": [
+         "string"
+        ]
+       },
+       "baud_rate": {
+        "types": [
+         "integer"
+        ]
+       },
+       "index": {
+        "types": [
+         "integer"
+        ]
+       },
+       "port": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "properties": {
+         "address": {
+          "types": [
+           "string"
+          ]
+         },
+         "baud_rate": {
+          "types": [
+           "integer"
+          ]
+         },
+         "index": {
+          "types": [
+           "integer"
+          ]
+         },
+         "port": {
+          "types": [
+           "string"
+          ]
+         }
+        },
+        "types": [
+         "object"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_set_eq_mode": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "equ_mode": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      },
+      "required": [
+       "equ_mode"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_set_guide_rate": {
+   "params": {
+    "items": {
+     "types": [
+      "number"
+     ]
+    },
+    "types": [
+     "number",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "A"
+  },
+  "scope_set_location": {
+   "params": {
+    "properties": {
+     "latitude": {
+      "types": [
+       "number"
+      ]
+     },
+     "longitude": {
+      "types": [
+       "number"
+      ]
+     }
+    },
+    "required": [
+     "latitude",
+     "longitude"
+    ],
+    "types": [
+     "object",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_set_slew_rate": {
+   "params": {
+    "items": {
+     "types": [
+      "integer"
+     ]
+    },
+    "types": [
+     "integer",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_set_target_pierside": {
+   "params": {
+    "items": {
+     "types": [
+      "string"
+     ]
+    },
+    "types": [
+     "string",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "A"
+  },
+  "scope_set_time": {
+   "params": {
+    "properties": {
+     "offset": {
+      "types": [
+       "string"
+      ]
+     },
+     "utc": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "offset",
+     "utc"
+    ],
+    "types": [
+     "object",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_set_track_mode": {
+   "params": {
+    "items": {
+     "types": [
+      "string"
+     ]
+    },
+    "types": [
+     "string",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_set_track_state": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     {
+      "properties": {
+       "tracking": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      },
+      "required": [
+       "tracking"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_speed_move": {
+   "params": {
+    "properties": {
+     "angle": {
+      "types": [
+       "integer"
+      ]
+     },
+     "dur_sec": {
+      "types": [
+       "integer"
+      ]
+     },
+     "level": {
+      "types": [
+       "integer"
+      ]
+     },
+     "percent": {
+      "types": [
+       "number"
+      ]
+     },
+     "speed": {
+      "types": [
+       "number"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_sync": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "dec": {
+        "types": [
+         "number"
+        ]
+       },
+       "ra": {
+        "types": [
+         "number"
+        ]
+       }
+      },
+      "required": [
+       "dec",
+       "ra"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "number"
+        ]
+       },
+       {
+        "types": [
+         "number"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "scope_sync_planet": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "select_mount_list_index": {
+   "params": {
+    "properties": {
+     "aux": {
+      "types": [
+       "string"
+      ]
+     },
+     "index": {
+      "types": [
+       "integer",
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "index"
+    ],
+    "types": [
+     "object",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "select_serial_dev": {
+   "params": {
+    "types": [
+     "string",
+     "integer"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "set_3p_pa_setting": {
+   "params": {
+    "properties": {
+     "is_pa_3p": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "rotate_angle": {
+      "types": [
+       "number"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_algo_param": {
+   "params": {
+    "properties": {
+     "axis": {
+      "types": [
+       "string"
+      ]
+     },
+     "name": {
+      "types": [
+       "string"
+      ]
+     },
+     "value": {
+      "types": [
+       "number"
+      ]
+     }
+    },
+    "required": [
+     "axis",
+     "name",
+     "value"
+    ],
+    "types": [
+     "object",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "set_all_connected": {
+   "params": {
+    "items": {
+     "types": [
+      "boolean"
+     ]
+    },
+    "types": [
+     "boolean",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "set_app_setting": {
+   "params": {
+    "anyOf": [
+     {
+      "open": true,
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "open": true,
+       "types": [
+        "object"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_auto_load_calibration": {
+   "params": {
+    "items": {
+     "types": [
+      "boolean",
+      "integer"
+     ]
+    },
+    "types": [
+     "boolean",
+     "integer",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "set_batch_stack_setting": {
+   "params": {
+    "properties": {
+     "batch_startrails_mode": {
+      "maximum": 2,
+      "minimum": 0,
+      "types": [
+       "integer"
+      ]
+     },
+     "files": {
+      "items": {
+       "properties": {
+        "name": {
+         "types": [
+          "string"
+         ]
+        }
+       },
+       "required": [
+        "name"
+       ],
+       "types": [
+        "object"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     },
+     "key_frame": {
+      "types": [
+       "string"
+      ]
+     },
+     "type": {
+      "enum": [
+       "deepsky",
+       "startrail",
+       "comet"
+      ],
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "files"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_calib_frame": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "enable": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "name": {
+        "types": [
+         "string"
+        ]
+       },
+       "type": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "enable",
+       "name",
+       "type"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 3,
+      "prefixItems": [
+       {
+        "types": [
+         "string"
+        ]
+       },
+       {
+        "types": [
+         "string"
+        ]
+       },
+       {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_calib_param": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "number": {
+        "types": [
+         "integer"
+        ]
+       },
+       "type": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "number",
+       "type"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "string"
+        ]
+       },
+       {
+        "types": [
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_camera_16bit": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "boolean"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "boolean"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_camera_bin": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "integer"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "integer"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_camera_binning": {
+   "params": {
+    "items": {
+     "minimum": 1,
+     "types": [
+      "integer"
+     ]
+    },
+    "minimum": 1,
+    "types": [
+     "integer",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "set_camera_exp_and_bin": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "bin": {
+        "types": [
+         "integer"
+        ]
+       },
+       "exposure": {
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "object"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_camera_idx": {
+   "params": {
+    "items": {
+     "types": [
+      "integer"
+     ]
+    },
+    "types": [
+     "integer",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "set_connected": {
+   "params": {
+    "properties": {
+     "aux": {
+      "types": [
+       "boolean"
+      ]
+     },
+     "camera": {
+      "types": [
+       "boolean"
+      ]
+     },
+     "mount": {
+      "types": [
+       "boolean"
+      ]
+     }
+    },
+    "types": [
+     "object",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "set_control_value": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "name": {
+        "types": [
+         "string"
+        ]
+       },
+       "val": {
+        "types": [
+         "integer",
+         "number",
+         "boolean",
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string",
+        "integer",
+        "number",
+        "boolean"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_dec_guide_mode": {
+   "params": {
+    "anyOf": [
+     {
+      "enum": [
+       "Off",
+       "Auto",
+       "North",
+       "South"
+      ],
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "enum": [
+        "Off",
+        "Auto",
+        "North",
+        "South"
+       ],
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "set_dither": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "amount": {
+        "maximum": 30,
+        "minimum": 1,
+        "types": [
+         "integer"
+        ]
+       },
+       "enable": {
+        "types": [
+         "boolean"
+        ]
+       },
+       "interval": {
+        "maximum": 30,
+        "minimum": 0,
+        "types": [
+         "integer"
+        ]
+       },
+       "ra_only": {
+        "types": [
+         "boolean"
+        ]
+       },
+       "settle_arcsec": {
+        "maximum": 16,
+        "types": [
+         "number"
+        ]
+       },
+       "settle_time_sec": {
+        "maximum": 30,
+        "minimum": 1,
+        "types": [
+         "integer"
+        ]
+       },
+       "settle_timeout_sec": {
+        "types": [
+         "integer"
+        ]
+       },
+       "timeout_stop": {
+        "types": [
+         "boolean"
+        ]
+       },
+       "wait_guide_settle": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_exposure": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "integer"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "integer"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "set_focal_length": {
+   "params": {
+    "items": {
+     "types": [
+      "number"
+     ]
+    },
+    "types": [
+     "number",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_focuser_setting": {
+   "params": {
+    "properties": {
+     "af_before_capture": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "af_bin": {
+      "types": [
+       "integer"
+      ]
+     },
+     "af_exp_sec": {
+      "maximum": 30,
+      "minimum": 0,
+      "types": [
+       "number"
+      ]
+     },
+     "af_init_step": {
+      "maximum": 500,
+      "minimum": 0,
+      "types": [
+       "integer"
+      ]
+     },
+     "af_merid_flip": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "af_only_one": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "af_temp_change_on": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "af_temp_span": {
+      "maximum": 50,
+      "minimum": 0,
+      "types": [
+       "integer"
+      ]
+     },
+     "af_time_change_on": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "af_time_span_hour": {
+      "maximum": 24,
+      "minimum": 0,
+      "types": [
+       "number"
+      ]
+     },
+     "af_track_on": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "af_wheel_change": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "coarse_step": {
+      "maximum": 5000,
+      "minimum": 0,
+      "types": [
+       "integer"
+      ]
+     },
+     "fine_step": {
+      "maximum": 5000,
+      "minimum": 0,
+      "types": [
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_focuser_value": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "name": {
+        "types": [
+         "string"
+        ]
+       },
+       "val": {
+        "types": [
+         "integer",
+         "boolean"
+        ]
+       }
+      },
+      "required": [
+       "name",
+       "val"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 2,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_gain": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "integer"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "integer"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "set_image_save_path": {
+   "params": {
+    "types": [
+     "string"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_img_file_info": {
+   "params": {
+    "properties": {
+     "file_name": {
+      "types": [
+       "string"
+      ]
+     },
+     "planet_stack_sharpen": {
+      "items": {
+       "types": [
+        "integer"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    },
+    "required": [
+     "file_name",
+     "planet_stack_sharpen"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_img_name_field": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "camera_name": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "gain": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "temp": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "properties": {
+        "camera_name": {
+         "types": [
+          "boolean",
+          "integer"
+         ]
+        },
+        "gain": {
+         "types": [
+          "boolean",
+          "integer"
+         ]
+        },
+        "temp": {
+         "types": [
+          "boolean",
+          "integer"
+         ]
+        }
+       },
+       "types": [
+        "object"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_is_favorite": {
+   "params": {
+    "properties": {
+     "is_favorite": {
+      "types": [
+       "boolean"
+      ]
+     },
+     "name": {
+      "anyOf": [
+       {
+        "types": [
+         "string"
+        ]
+       },
+       {
+        "items": {
+         "types": [
+          "string"
+         ]
+        },
+        "types": [
+         "array"
+        ]
+       }
+      ]
+     },
+     "storage": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "is_favorite",
+     "name"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_isp_fps": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "integer"
+      ]
+     },
+     {
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "types": [
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_local_storage_info": {
+   "params": {
+    "properties": {
+     "disk_gb": {
+      "types": [
+       "number"
+      ]
+     },
+     "path": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "disk_gb",
+     "path"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_lock_position": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "exact": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "x": {
+        "types": [
+         "number"
+        ]
+       },
+       "y": {
+        "types": [
+         "number"
+        ]
+       }
+      },
+      "required": [
+       "x",
+       "y"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "number",
+        "boolean"
+       ]
+      },
+      "minItems": 2,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "set_merid_setting": {
+   "params": {
+    "properties": {
+     "merid_before_min": {
+      "types": [
+       "integer"
+      ]
+     },
+     "merid_over_min": {
+      "minimum": 0,
+      "types": [
+       "integer"
+      ]
+     },
+     "merid_recalibrate": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_motion_detection": {
+   "params": {
+    "properties": {
+     "enable": {
+      "types": [
+       "boolean"
+      ]
+     },
+     "wide_cam": {
+      "types": [
+       "boolean"
+      ]
+     }
+    },
+    "required": [
+     "enable"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_page": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_paused": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "paused": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "type": {}
+      },
+      "required": [
+       "paused"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {},
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "set_photometry": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "id": {
+        "types": [
+         "string"
+        ]
+       },
+       "name": {
+        "types": [
+         "string"
+        ]
+       },
+       "save": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      },
+      "required": [
+       "id",
+       "save"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_plan": {
+   "params": {
+    "items": {
+     "properties": {
+      "close_cooler": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "enable": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "end_time": {
+       "properties": {
+        "hour": {
+         "types": [
+          "number"
+         ]
+        },
+        "type": {
+         "types": [
+          "string"
+         ]
+        }
+       },
+       "types": [
+        "object"
+       ]
+      },
+      "focuser_go_home": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "id": {
+       "maximum": 2147483647,
+       "minimum": -2147483647,
+       "types": [
+        "integer"
+       ]
+      },
+      "merid_flip": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "mount_go_home": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "plan_name": {
+       "types": [
+        "string"
+       ]
+      },
+      "shutdown_pi": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "start_guide": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "start_time": {
+       "properties": {
+        "hour": {
+         "types": [
+          "number"
+         ]
+        },
+        "type": {
+         "types": [
+          "string"
+         ]
+        }
+       },
+       "types": [
+        "object"
+       ]
+      },
+      "targets": {
+       "items": {
+        "properties": {
+         "capture_index": {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "types": [
+           "integer"
+          ]
+         },
+         "code": {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "types": [
+           "integer"
+          ]
+         },
+         "delay_between_frame": {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "types": [
+           "integer"
+          ]
+         },
+         "delay_first": {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "types": [
+           "integer"
+          ]
+         },
+         "enable": {
+          "types": [
+           "boolean",
+           "integer"
+          ]
+         },
+         "extra_sec_per_target": {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "types": [
+           "integer"
+          ]
+         },
+         "group_by_slot": {
+          "types": [
+           "boolean",
+           "integer"
+          ]
+         },
+         "id": {
+          "maximum": 2147483647,
+          "minimum": -2147483647,
+          "types": [
+           "integer"
+          ]
+         },
+         "obj_type": {
+          "types": [
+           "string"
+          ]
+         },
+         "real_end_date": {
+          "types": [
+           "string"
+          ]
+         },
+         "real_start_date": {
+          "types": [
+           "string"
+          ]
+         },
+         "seqs": {
+          "items": {
+           "properties": {
+            "autoexp": {
+             "types": [
+              "boolean"
+             ]
+            },
+            "bin": {
+             "maximum": 2147483647,
+             "minimum": -2147483648,
+             "types": [
+              "integer"
+             ]
+            },
+            "capture_index": {
+             "maximum": 2147483647,
+             "minimum": -2147483648,
+             "types": [
+              "integer"
+             ]
+            },
+            "enable": {
+             "types": [
+              "boolean"
+             ]
+            },
+            "exp": {
+             "types": [
+              "number"
+             ]
+            },
+            "filter": {
+             "maximum": 2147483647,
+             "minimum": -2147483648,
+             "types": [
+              "integer"
+             ]
+            },
+            "gain": {
+             "maximum": 2147483647,
+             "minimum": -2147483648,
+             "types": [
+              "integer"
+             ]
+            },
+            "id": {
+             "maximum": 2147483647,
+             "minimum": -2147483647,
+             "types": [
+              "integer"
+             ]
+            },
+            "lapsed": {
+             "maximum": 2147483647,
+             "minimum": -2147483648,
+             "types": [
+              "integer"
+             ]
+            },
+            "repeat": {
+             "maximum": 2147483647,
+             "minimum": -2147483648,
+             "types": [
+              "integer"
+             ]
+            },
+            "suffix": {
+             "types": [
+              "string"
+             ]
+            },
+            "type": {
+             "types": [
+              "string"
+             ]
+            }
+           },
+           "required": [
+            "id"
+           ],
+           "types": [
+            "object"
+           ]
+          },
+          "types": [
+           "array"
+          ]
+         },
+         "target_coord": {
+          "items": {
+           "types": [
+            "number"
+           ]
+          },
+          "properties": {
+           "dec": {
+            "types": [
+             "number"
+            ]
+           },
+           "ra": {
+            "types": [
+             "number"
+            ]
+           }
+          },
+          "types": [
+           "array",
+           "object"
+          ]
+         },
+         "target_name": {
+          "types": [
+           "string"
+          ]
+         },
+         "target_original_img": {
+          "types": [
+           "string"
+          ]
+         },
+         "target_original_name": {
+          "types": [
+           "string"
+          ]
+         }
+        },
+        "required": [
+         "id"
+        ],
+        "types": [
+         "object"
+        ]
+       },
+       "types": [
+        "array"
+       ]
+      },
+      "wait_cooling": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "types": [
+      "object"
+     ]
+    },
+    "types": [
+     "array"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_polar_align_image": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_power_led_mode": {
+   "params": {
+    "types": [
+     "integer"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_search_region": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "integer"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "integer"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "set_sensor_calibration": {
+   "params": {
+    "properties": {
+     "balanceSensor": {
+      "properties": {
+       "x": {
+        "types": [
+         "number"
+        ]
+       },
+       "y": {
+        "types": [
+         "number"
+        ]
+       },
+       "z": {
+        "types": [
+         "number"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     "compassSensor": {
+      "properties": {
+       "x": {
+        "types": [
+         "number"
+        ]
+       },
+       "x11": {
+        "types": [
+         "number"
+        ]
+       },
+       "x12": {
+        "types": [
+         "number"
+        ]
+       },
+       "y": {
+        "types": [
+         "number"
+        ]
+       },
+       "y11": {
+        "types": [
+         "number"
+        ]
+       },
+       "y12": {
+        "types": [
+         "number"
+        ]
+       },
+       "z": {
+        "types": [
+         "number"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_sequence": {
+   "params": {
+    "items": {
+     "properties": {
+      "autoexp": {
+       "types": [
+        "boolean"
+       ]
+      },
+      "bin": {
+       "types": [
+        "integer"
+       ]
+      },
+      "capture_index": {
+       "types": [
+        "integer"
+       ]
+      },
+      "enable": {
+       "types": [
+        "boolean"
+       ]
+      },
+      "exp": {
+       "types": [
+        "number"
+       ]
+      },
+      "filter": {
+       "types": [
+        "integer"
+       ]
+      },
+      "gain": {
+       "types": [
+        "integer"
+       ]
+      },
+      "id": {
+       "types": [
+        "integer"
+       ]
+      },
+      "repeat": {
+       "types": [
+        "integer"
+       ]
+      },
+      "suffix": {
+       "types": [
+        "string"
+       ]
+      },
+      "type": {
+       "types": [
+        "string"
+       ]
+      }
+     },
+     "required": [
+      "id"
+     ],
+     "types": [
+      "object"
+     ]
+    },
+    "types": [
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_sequence_setting": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "close_cooler": {
+        "types": [
+         "boolean"
+        ]
+       },
+       "delay_between_frame": {
+        "types": [
+         "integer"
+        ]
+       },
+       "delay_first": {
+        "types": [
+         "integer"
+        ]
+       },
+       "group_by_slot": {
+        "types": [
+         "boolean"
+        ]
+       },
+       "group_name": {
+        "types": [
+         "string"
+        ]
+       },
+       "merid_flip": {
+        "types": [
+         "boolean"
+        ]
+       },
+       "park_mount": {
+        "types": [
+         "boolean"
+        ]
+       },
+       "shutdown_pi": {
+        "types": [
+         "boolean"
+        ]
+       },
+       "target_coord": {
+        "items": {
+         "types": [
+          "number"
+         ]
+        },
+        "types": [
+         "array"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "properties": {
+        "close_cooler": {
+         "types": [
+          "boolean"
+         ]
+        },
+        "delay_between_frame": {
+         "types": [
+          "integer"
+         ]
+        },
+        "delay_first": {
+         "types": [
+          "integer"
+         ]
+        },
+        "group_by_slot": {
+         "types": [
+          "boolean"
+         ]
+        },
+        "group_name": {
+         "types": [
+          "string"
+         ]
+        },
+        "merid_flip": {
+         "types": [
+          "boolean"
+         ]
+        },
+        "park_mount": {
+         "types": [
+          "boolean"
+         ]
+        },
+        "shutdown_pi": {
+         "types": [
+          "boolean"
+         ]
+        },
+        "target_coord": {
+         "items": {
+          "types": [
+           "number"
+          ]
+         },
+         "types": [
+          "array"
+         ]
+        }
+       },
+       "types": [
+        "object"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_setting": {
+   "params": {
+    "properties": {
+     "ae_bri_percent": {
+      "maximum": 100,
+      "minimum": 0,
+      "types": [
+       "integer",
+       "number"
+      ]
+     },
+     "alpaca_enable": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "annotation": {
+      "properties": {
+       "milkyway_background": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "milkyway_lines": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "stargazing_deepsky": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "stargazing_supernovae": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     "ap_changed": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "auto_3ppa_calib": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "auto_af": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "auto_master_dark": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "auto_power_off": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "beep_sec": {
+      "types": [
+       "integer"
+      ]
+     },
+     "beep_volume": {
+      "types": [
+       "string"
+      ]
+     },
+     "can_encrypt": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "center_xy": {
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "integer"
+        ]
+       },
+       {
+        "types": [
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     },
+     "cli_name": {
+      "types": [
+       "string"
+      ]
+     },
+     "cli_uuid": {
+      "types": [
+       "string"
+      ]
+     },
+     "connect_lock": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "dark_mode": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "enable_dark_library": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "exp_ms": {
+      "properties": {
+       "continuous": {
+        "types": [
+         "integer"
+        ]
+       },
+       "more_exposure": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "stack_l": {
+        "types": [
+         "integer"
+        ]
+       },
+       "stack_l_auto": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     "expert_mode": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "expt_set_heater_enable": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "factory_focal_pos": {
+      "types": [
+       "integer"
+      ]
+     },
+     "focal_pos": {
+      "types": [
+       "integer"
+      ]
+     },
+     "frame_calib": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "guest_mode": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "hdr": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "isp_exp_ms": {
+      "types": [
+       "integer",
+       "number"
+      ]
+     },
+     "isp_gain": {
+      "types": [
+       "integer",
+       "number"
+      ]
+     },
+     "lang": {
+      "enum": [
+       "zh",
+       "en",
+       "fr",
+       "ja",
+       "ko"
+      ],
+      "types": [
+       "string"
+      ]
+     },
+     "light_brightness": {
+      "enum": [
+       0,
+       50,
+       100
+      ],
+      "types": [
+       "integer"
+      ]
+     },
+     "main_8k": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "manual_exp": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "master_cli": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "mosaic": {
+      "properties": {
+       "angle": {
+        "types": [
+         "integer",
+         "number"
+        ]
+       },
+       "scale": {
+        "types": [
+         "integer",
+         "number"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     "motion_monitor": {
+      "types": [
+       "object"
+      ]
+     },
+     "offset_deg_3ppa": {
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "number"
+        ]
+       },
+       {
+        "types": [
+         "number"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     },
+     "password": {
+      "types": [
+       "string"
+      ]
+     },
+     "plan_target_af": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "planet_correction": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "preview": {
+      "properties": {
+       "image_transfer_mode": {
+        "enum": [
+         "Jpg",
+         "Raw"
+        ],
+        "types": [
+         "string"
+        ]
+       },
+       "raw_bin2": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "rtsp_quality": {
+        "enum": [
+         "Smooth",
+         "HighQuality"
+        ],
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     "rec_res_index": {
+      "types": [
+       "integer"
+      ]
+     },
+     "rtsp_roi_index": {
+      "enum": [
+       0,
+       1,
+       2
+      ],
+      "types": [
+       "integer"
+      ]
+     },
+     "rtsp_roi_scale": {
+      "types": [
+       "integer",
+       "number"
+      ]
+     },
+     "scan_planet_tip": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "selected_cam": {
+      "enum": [
+       "View",
+       "SecondView"
+      ],
+      "types": [
+       "string"
+      ]
+     },
+     "sky_replay": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "socks5": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "stack": {
+      "properties": {
+       "airplane_line_removal": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "auto_lenhance": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "brightness": {
+        "types": [
+         "integer",
+         "number"
+        ]
+       },
+       "capt_num": {
+        "types": [
+         "integer"
+        ]
+       },
+       "capt_type": {
+        "types": [
+         "string"
+        ]
+       },
+       "cont_capt": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "contrast": {
+        "types": [
+         "integer",
+         "number"
+        ]
+       },
+       "dbe": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "dbe_enable": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "drizzle2x": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "goto": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "light_duration_min": {
+        "types": [
+         "integer"
+        ]
+       },
+       "move_sleep_sec": {
+        "types": [
+         "integer"
+        ]
+       },
+       "saturation": {
+        "types": [
+         "integer",
+         "number"
+        ]
+       },
+       "save_discrete_frame": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "save_discrete_ok_frame": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "save_meteor_frame": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "save_video": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "scene_separate": {
+        "types": [
+         "integer"
+        ]
+       },
+       "scene_shooting_duration_min": {
+        "types": [
+         "integer"
+        ]
+       },
+       "star_correction": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "startrail_mode": {
+        "maximum": 2,
+        "minimum": 0,
+        "types": [
+         "integer"
+        ]
+       },
+       "startrails_duration_min": {
+        "types": [
+         "integer"
+        ]
+       },
+       "wide_denoise": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "wide_size_index": {
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     "stack_after_goto": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "stack_dither": {
+      "properties": {
+       "enable": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "interval": {
+        "maximum": 100,
+        "minimum": 1,
+        "types": [
+         "integer"
+        ]
+       },
+       "pix": {
+        "maximum": 200,
+        "minimum": 0,
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     "stack_lenhance": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "support_socks5": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "temp_unit": {
+      "enum": [
+       "C",
+       "F"
+      ],
+      "types": [
+       "string"
+      ]
+     },
+     "timelapse": {
+      "properties": {
+       "delay_sec": {
+        "types": [
+         "integer",
+         "number"
+        ]
+       },
+       "src_dura_min": {
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     "typec_mode": {
+      "enum": [
+       "file",
+       "net"
+      ],
+      "types": [
+       "string"
+      ]
+     },
+     "usb_en_eth": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "user_stack_sim": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "viewplan_gohome": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "wide_4k": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "wide_cam": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "wide_cross_offset": {
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "integer"
+        ]
+       },
+       {
+        "types": [
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     },
+     "wide_cross_offset_show": {
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "integer"
+        ]
+       },
+       {
+        "types": [
+         "integer"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     },
+     "wide_factory_focal_pos": {
+      "types": [
+       "integer"
+      ]
+     },
+     "wide_focal_pos": {
+      "types": [
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_settings": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "setting": {
+        "properties": {
+         "baudrate": {
+          "types": [
+           "integer"
+          ]
+         },
+         "parity": {
+          "types": [
+           "integer"
+          ]
+         },
+         "stop_bits": {
+          "types": [
+           "integer"
+          ]
+         },
+         "word_size": {
+          "types": [
+           "integer"
+          ]
+         }
+        },
+        "types": [
+         "object"
+        ]
+       }
+      },
+      "required": [
+       "setting"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "properties": {
+        "baudrate": {
+         "types": [
+          "integer"
+         ]
+        },
+        "parity": {
+         "types": [
+          "integer"
+         ]
+        },
+        "stop_bits": {
+         "types": [
+          "integer"
+         ]
+        },
+        "word_size": {
+         "types": [
+          "integer"
+         ]
+        }
+       },
+       "types": [
+        "object"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "serial-bridge",
+   "tier": "C"
+  },
+  "set_stack_type": {
+   "params": {
+    "properties": {
+     "autoexp": {
+      "types": [
+       "boolean"
+      ]
+     },
+     "type": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "type"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_subframe": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "height": {
+        "minimum": 1,
+        "types": [
+         "integer"
+        ]
+       },
+       "width": {
+        "minimum": 1,
+        "types": [
+         "integer"
+        ]
+       },
+       "x": {
+        "types": [
+         "integer"
+        ]
+       },
+       "y": {
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "required": [
+       "height",
+       "width"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "object"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_test_setting": {
+   "params": {
+    "properties": {
+     "auto_open_cooler": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "auto_open_heater": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "autogoto_threshold": {
+      "types": [
+       "number"
+      ]
+     },
+     "goto_simulate": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "new_solve_exec": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "station_5g": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_user_location": {
+   "params": {
+    "minItems": 2,
+    "prefixItems": [
+     {
+      "types": [
+       "number"
+      ]
+     },
+     {
+      "types": [
+       "number"
+      ]
+     },
+     {
+      "types": [
+       "boolean"
+      ]
+     }
+    ],
+    "properties": {
+     "force": {
+      "types": [
+       "boolean"
+      ]
+     },
+     "lat": {
+      "types": [
+       "number"
+      ]
+     },
+     "lon": {
+      "types": [
+       "number"
+      ]
+     }
+    },
+    "required": [
+     "lat",
+     "lon"
+    ],
+    "types": [
+     "object",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "guider",
+   "tier": "C"
+  },
+  "set_view_plan": {
+   "params": {
+    "properties": {
+     "list": {
+      "items": {
+       "properties": {
+        "alias_name": {
+         "types": [
+          "string"
+         ]
+        },
+        "camera_mode": {
+         "enum": [
+          "tele",
+          "wide",
+          "dual"
+         ],
+         "types": [
+          "string"
+         ]
+        },
+        "duration_min": {
+         "maximum": 2147483647,
+         "minimum": -2147483648,
+         "types": [
+          "integer"
+         ]
+        },
+        "lp_filter": {
+         "types": [
+          "boolean",
+          "integer"
+         ]
+        },
+        "mosaic": {
+         "properties": {
+          "angle": {
+           "types": [
+            "number"
+           ]
+          },
+          "scale": {
+           "types": [
+            "number"
+           ]
+          },
+          "star_map_angle": {
+           "types": [
+            "number"
+           ]
+          }
+         },
+         "types": [
+          "object"
+         ]
+        },
+        "mount": {
+         "properties": {
+          "tracking": {
+           "types": [
+            "boolean",
+            "integer"
+           ]
+          }
+         },
+         "required": [
+          "tracking"
+         ],
+         "types": [
+          "object"
+         ]
+        },
+        "second_camera": {
+         "properties": {
+          "stack": {
+           "properties": {
+            "capt_type": {
+             "enum": [
+              "stack",
+              "startrails",
+              "timelapse"
+             ],
+             "types": [
+              "string"
+             ]
+            },
+            "wide_size_index": {
+             "maximum": 3,
+             "minimum": 0,
+             "types": [
+              "integer"
+             ]
+            }
+           },
+           "required": [
+            "capt_type",
+            "wide_size_index"
+           ],
+           "types": [
+            "object"
+           ]
+          }
+         },
+         "required": [
+          "stack"
+         ],
+         "types": [
+          "object"
+         ]
+        },
+        "skip": {
+         "types": [
+          "boolean",
+          "integer"
+         ]
+        },
+        "star_type": {
+         "types": [
+          "integer"
+         ]
+        },
+        "start_min": {
+         "maximum": 2147483647,
+         "minimum": -2147483648,
+         "types": [
+          "integer"
+         ]
+        },
+        "target_id": {
+         "maximum": 2147483647,
+         "minimum": -2147483648,
+         "types": [
+          "integer"
+         ]
+        },
+        "target_name": {
+         "types": [
+          "string"
+         ]
+        },
+        "target_ra_dec": {
+         "items": {
+          "types": [
+           "number"
+          ]
+         },
+         "minItems": 2,
+         "types": [
+          "array"
+         ]
+        }
+       },
+       "required": [
+        "camera_mode",
+        "duration_min",
+        "start_min",
+        "target_id"
+       ],
+       "types": [
+        "object"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     },
+     "plan_name": {
+      "types": [
+       "string"
+      ]
+     },
+     "plan_target_af": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "update_time_seestar": {
+      "types": [
+       "string"
+      ]
+     },
+     "viewplan_gohome": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_view_plan_target_name": {
+   "params": {
+    "properties": {
+     "target_name": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "target_name"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_view_plan_wide_setting": {
+   "params": {
+    "properties": {
+     "auto_exp_enable": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "capt_type": {
+      "enum": [
+       0,
+       4,
+       5
+      ],
+      "types": [
+       "integer"
+      ]
+     },
+     "exp_ms": {
+      "minimum": 1,
+      "types": [
+       "integer"
+      ]
+     },
+     "scene_separate": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "scene_shooting_duration_min": {
+      "minimum": 1,
+      "types": [
+       "integer"
+      ]
+     },
+     "wide_size_index": {
+      "maximum": 3,
+      "minimum": 0,
+      "types": [
+       "integer"
+      ]
+     }
+    },
+    "required": [
+     "capt_type",
+     "wide_size_index"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_wheel_position": {
+   "params": {
+    "items": {
+     "maximum": 2,
+     "minimum": 0,
+     "types": [
+      "integer"
+     ]
+    },
+    "types": [
+     "integer",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_wheel_setting": {
+   "params": {
+    "properties": {
+     "exp_sec": {
+      "items": {
+       "types": [
+        "number"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     },
+     "names": {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_wheel_slot_name": {
+   "params": {
+    "items": {
+     "types": [
+      "string"
+     ]
+    },
+    "types": [
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "set_wheel_unidirection": {
+   "params": {
+    "items": {
+     "types": [
+      "boolean",
+      "integer"
+     ]
+    },
+    "types": [
+     "boolean",
+     "integer",
+     "array"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "A"
+  },
+  "set_wifi_country": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     },
+     {
+      "properties": {
+       "country": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "country"
+      ],
+      "types": [
+       "object"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "shutdown": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "speed_move_ratio": {
+   "params": {
+    "properties": {
+     "cam_id": {
+      "maximum": 1,
+      "minimum": 0,
+      "types": [
+       "integer"
+      ]
+     },
+     "pix_scale": {
+      "types": [
+       "number"
+      ]
+     },
+     "sel_wide_cam": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     }
+    },
+    "required": [
+     "cam_id",
+     "pix_scale",
+     "sel_wide_cam"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "start_ai_process": {
+   "params": {
+    "properties": {
+     "brightness": {
+      "types": [
+       "number"
+      ]
+     },
+     "contrast": {
+      "types": [
+       "number"
+      ]
+     },
+     "crop": {
+      "items": {
+       "types": [
+        "integer"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     },
+     "dbe": {
+      "items": {
+       "types": [
+        "integer"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     },
+     "name": {
+      "types": [
+       "string"
+      ]
+     },
+     "saturation": {
+      "types": [
+       "number"
+      ]
+     }
+    },
+    "required": [
+     "brightness",
+     "contrast",
+     "saturation"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_annotate": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_auto_focuse": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_auto_goto": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "dec": {
+        "types": [
+         "number"
+        ]
+       },
+       "ra": {
+        "types": [
+         "number"
+        ]
+       }
+      },
+      "required": [
+       "dec",
+       "ra"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "number"
+        ]
+       },
+       {
+        "types": [
+         "number"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_auto_goto_pixel": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "x": {
+        "types": [
+         "number"
+        ]
+       },
+       "y": {
+        "types": [
+         "number"
+        ]
+       }
+      },
+      "required": [
+       "x",
+       "y"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 2,
+      "prefixItems": [
+       {
+        "types": [
+         "number"
+        ]
+       },
+       {
+        "types": [
+         "number"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_avi_rtmp": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "types": [
+         "string"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     },
+     {
+      "properties": {
+       "name": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "name"
+      ],
+      "types": [
+       "object"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_batch_stack": {
+   "params": {
+    "anyOf": [
+     {
+      "required": [
+       "task_type"
+      ]
+     },
+     {
+      "required": [
+       "frame_type"
+      ]
+     }
+    ],
+    "properties": {
+     "frame_type": {
+      "types": [
+       "string"
+      ]
+     },
+     "task_type": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_compass_auto_calibration": {
+   "params": null,
+   "params_required": false,
+   "service": "control",
+   "tier": "D"
+  },
+  "start_compass_calibration": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_create_calib_frame": {
+   "params": {
+    "properties": {
+     "adu_max": {
+      "types": [
+       "integer"
+      ]
+     },
+     "adu_min": {
+      "types": [
+       "integer"
+      ]
+     },
+     "customer_library": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "exp_us": {
+      "types": [
+       "integer"
+      ]
+     },
+     "type": {
+      "types": [
+       "string"
+      ]
+     },
+     "wide_cam": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_create_dark": {
+   "params": {
+    "properties": {
+     "wide_cam": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_create_hpc": {
+   "params": {
+    "properties": {
+     "wide_cam": {
+      "anyOf": [
+       {
+        "types": [
+         "boolean"
+        ]
+       },
+       {
+        "types": [
+         "integer"
+        ]
+       }
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_demonstrate": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_export_image": {
+   "params": {
+    "properties": {
+     "dst": {
+      "types": [
+       "string"
+      ]
+     },
+     "files": {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     },
+     "keep": {
+      "types": [
+       "boolean"
+      ]
+     },
+     "src": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_exposure": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "keep_autosave_dev": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       },
+       "type": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_find_star": {
+   "params": {
+    "anyOf": [
+     {
+      "types": [
+       "string"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "minItems": 1,
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_func": {
+   "params": {
+    "properties": {
+     "name": {
+      "enum": [
+       "GoPixel"
+      ],
+      "types": [
+       "string"
+      ]
+     },
+     "x": {
+      "types": [
+       "integer"
+      ]
+     },
+     "y": {
+      "types": [
+       "integer"
+      ]
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_gsensor_calibration": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_motion_monitor": {
+   "params": {
+    "properties": {
+     "duration_min": {
+      "types": [
+       "integer"
+      ]
+     },
+     "mode": {
+      "enum": [
+       "auto_track",
+       "auto_capture"
+      ],
+      "types": [
+       "string"
+      ]
+     },
+     "return_to_origin": {
+      "types": [
+       "boolean"
+      ]
+     },
+     "sensitivity": {
+      "enum": [
+       "low",
+       "middle",
+       "high"
+      ],
+      "types": [
+       "string"
+      ]
+     },
+     "waiting_time": {
+      "types": [
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "D"
+  },
+  "start_planet_stack": {
+   "params": {
+    "properties": {
+     "file": {
+      "types": [
+       "string"
+      ]
+     },
+     "mode": {
+      "types": [
+       "string"
+      ]
+     },
+     "rect": {
+      "items": {
+       "types": [
+        "integer"
+       ]
+      },
+      "minItems": 4,
+      "types": [
+       "array"
+      ]
+     }
+    },
+    "required": [
+     "file"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_polar_align": {
+   "params": {
+    "properties": {
+     "dec_pos_index": {
+      "maximum": 5,
+      "minimum": 1,
+      "types": [
+       "integer"
+      ]
+     },
+     "is_one_star": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     },
+     "restart": {
+      "types": [
+       "boolean",
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_record_avi": {
+   "params": {
+    "properties": {
+     "raw": {
+      "anyOf": [
+       {
+        "types": [
+         "boolean"
+        ]
+       },
+       {
+        "types": [
+         "integer"
+        ]
+       }
+      ]
+     },
+     "timelapse": {
+      "properties": {
+       "delay_sec": {
+        "types": [
+         "number"
+        ]
+       },
+       "enable": {
+        "anyOf": [
+         {
+          "types": [
+           "boolean"
+          ]
+         },
+         {
+          "types": [
+           "integer"
+          ]
+         }
+        ]
+       },
+       "src_dura_min": {
+        "types": [
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_scan_planet": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_scope_move_round": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_single_expose": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_smart_follow": {
+   "params": null,
+   "params_required": false,
+   "service": "control",
+   "tier": "D"
+  },
+  "start_solve": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "ra": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "string"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_stack": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_track_object": {
+   "params": {
+    "properties": {
+     "height": {
+      "types": [
+       "integer"
+      ]
+     },
+     "is_manual_selection": {
+      "types": [
+       "boolean"
+      ]
+     },
+     "width": {
+      "types": [
+       "integer"
+      ]
+     },
+     "x": {
+      "types": [
+       "integer"
+      ]
+     },
+     "y": {
+      "types": [
+       "integer"
+      ]
+     }
+    },
+    "required": [
+     "height",
+     "width",
+     "x",
+     "y"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "start_view_star_sleep": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_annotate": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_auto_focuse": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_auto_goto": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_avi_rtmp": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_batch_stack": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_capture": {
+   "params": {},
+   "params_required": false,
+   "service": "guider",
+   "tier": "C"
+  },
+  "stop_compass_calibration": {
+   "params": {
+    "properties": {
+     "force": {
+      "types": [
+       "integer"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_create_dark": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_demonstrate": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_export_image": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_exposure": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "wait": {
+        "types": [
+         "boolean",
+         "integer"
+        ]
+       }
+      },
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "items": {
+       "types": [
+        "boolean",
+        "integer"
+       ]
+      },
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_find_star": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_focuser": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_func": {
+   "params": {
+    "properties": {
+     "name": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_gsensor_calibration": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_lock_sun": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_motion_monitor": {
+   "params": null,
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_planet_stack": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_polar_align": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_record_avi": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_recv": {
+   "params": {},
+   "params_required": false,
+   "service": "updater",
+   "tier": "C"
+  },
+  "stop_send": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_smart_follow": {
+   "params": {
+    "properties": {
+     "wide_cam": {
+      "types": [
+       "boolean"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_solve": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_stack": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "stop_streaming": {
+   "params": {},
+   "params_required": false,
+   "service": "files",
+   "tier": "B"
+  },
+  "stop_track_object": {
+   "params": {
+    "properties": {
+     "wide_cam": {
+      "types": [
+       "boolean"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "test": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "B"
+  },
+  "test_connection": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "A"
+  },
+  "trigger_test_crash": {
+   "params": {},
+   "params_required": false,
+   "service": "control",
+   "tier": "C"
+  },
+  "update_comet_txt": {
+   "params": {
+    "properties": {
+     "md5": {
+      "types": [
+       "string"
+      ]
+     }
+    },
+    "required": [
+     "md5"
+    ],
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "upload_refstar_info": {
+   "params": {
+    "anyOf": [
+     {
+      "required": [
+       "refData"
+      ]
+     },
+     {
+      "required": [
+       "refData:"
+      ]
+     }
+    ],
+    "properties": {
+     "refData": {
+      "items": {},
+      "types": [
+       "array"
+      ]
+     },
+     "refData:": {
+      "items": {},
+      "types": [
+       "array"
+      ]
+     }
+    },
+    "types": [
+     "object"
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  },
+  "verify_client": {
+   "params": {
+    "anyOf": [
+     {
+      "properties": {
+       "data": {
+        "types": [
+         "string"
+        ]
+       },
+       "sign": {
+        "types": [
+         "string"
+        ]
+       }
+      },
+      "required": [
+       "sign"
+      ],
+      "types": [
+       "object"
+      ]
+     },
+     {
+      "minItems": 1,
+      "prefixItems": [
+       {
+        "types": [
+         "string"
+        ]
+       },
+       {
+        "types": [
+         "string"
+        ]
+       }
+      ],
+      "types": [
+       "array"
+      ]
+     }
+    ]
+   },
+   "params_required": true,
+   "service": "control",
+   "tier": "C"
+  }
+ },
+ "revision": "ce85deeda749f855288010b20fe9ba67e910d52d",
+ "source": "https://github.com/zmerlynn/seestar-spec"
+}

@@ -1751,6 +1751,7 @@ def test_settings_post_wide_cam_fields_sent_for_s30(monkeypatch):
     assert output == "Successfully Updated Settings."
     # Gather the flat set_setting params that were sent
     merged = {}
+    stack_members = {}
     for action, params in calls:
         if (
             action in ("method_sync", "method_async")
@@ -1759,10 +1760,13 @@ def test_settings_post_wide_cam_fields_sent_for_s30(monkeypatch):
             p = params.get("params", {})
             if isinstance(p, dict):
                 merged.update(p)
+                stack_members.update(p.get("stack", {}))
 
     assert merged.get("wide_cam") is True
     assert merged.get("wide_4k") is False
-    assert merged.get("wide_denoise") is True
+    # A stack member; top-level wide_denoise gets 109 (seestar-spec, READ).
+    assert "wide_denoise" not in merged
+    assert stack_members.get("wide_denoise") is True
     assert merged.get("wide_focal_pos") == 1600
 
 
@@ -3098,3 +3102,124 @@ def test_horizon_page_script_follows_the_root_path():
     )
     assert 'src="/ingress/public/horizon_panorama.js"' in html
     assert 'data-root-path="/ingress"' in html
+
+
+def _record_device_actions(monkeypatch, reply=None):
+    """Capture (action, telescope_id, parameters) for every device call."""
+    calls = []
+
+    def fake(action, telescope_id, parameters, is_schedule=False):
+        calls.append((action, telescope_id, parameters))
+        return reply
+
+    monkeypatch.setattr(front_app, "do_action_device", fake)
+    return calls
+
+
+def test_get_remote_state_command_queries_the_selected_telescope(monkeypatch):
+    calls = _record_device_actions(monkeypatch)
+    req = type("Req", (), {"media": {"command": "get_remote_state"}})()
+
+    front_app.do_command(req, None, 2)
+
+    assert calls == [("method_sync", 2, {"method": "get_device_state"})]
+
+
+@pytest.mark.parametrize(
+    "helper, keys",
+    [
+        # An unfiltered get_device_state opens and closes the focuser, runs
+        # shell queries and can wait ~30 s on the mount (seestar-spec, READ);
+        # each helper asks only for the sections it reads.
+        (front_app.get_firmware_ver_int, ["device"]),
+        (front_app.get_device_model, ["device"]),
+        (front_app.get_guestmode_state, ["device", "setting", "client"]),
+        (
+            front_app.get_device_state,
+            [
+                "device",
+                "setting",
+                "focuser",
+                "storage",
+                "balance_sensor",
+                "compass_sensor",
+                "mount",
+                "pi_status",
+                "client",
+            ],
+        ),
+    ],
+)
+def test_device_state_helpers_request_only_the_sections_they_read(
+    monkeypatch, helper, keys
+):
+    monkeypatch.setattr(front_app, "check_api_state", lambda _tid: True)
+    calls = _record_device_actions(monkeypatch)
+
+    helper(3)
+
+    state_requests = [
+        params
+        for action, tid, params in calls
+        if params.get("method") == "get_device_state"
+    ]
+    assert state_requests == [{"method": "get_device_state", "params": {"keys": keys}}]
+    assert all(tid == 3 for _a, tid, _p in calls)
+
+
+def test_balance_sensor_endpoint_requests_only_balance_sensor(monkeypatch):
+    reply = {
+        "ErrorNumber": 0,
+        "Value": {"result": {"balance_sensor": {"data": {"x": 0.5, "y": -0.25}}}},
+    }
+    calls = _record_device_actions(monkeypatch, reply=reply)
+    req = type("Req", (), {"get_header": lambda self, _n: "http://h/2/live"})()
+    resp = type("Resp", (), {})()
+
+    front_app.GetBalanceSensorResource.on_get(req, resp)
+
+    assert calls == [
+        (
+            "method_sync",
+            2,
+            {"method": "get_device_state", "params": {"keys": ["balance_sensor"]}},
+        )
+    ]
+    assert json.loads(resp.text) == {"x": 0.5, "y": -0.25}
+
+
+def _sent_stack_dither(calls):
+    for action, params in calls:
+        if params.get("method") == "set_setting":
+            dither = (params.get("params") or {}).get("stack_dither")
+            if dither is not None:
+                return dither
+    return None
+
+
+@pytest.mark.parametrize(
+    "pix, interval, expected",
+    [
+        ("5", "3", {"pix": 5, "interval": 3}),
+        # Blank or out-of-range values are left out: the firmware ignores a
+        # missing member but answers 204 to an out-of-range one, which also
+        # stops the rest of that set_setting (seestar-spec, READ).
+        ("NaN", "", {}),
+        ("201", "0", {}),
+        ("-1", "101", {}),
+    ],
+)
+def test_settings_post_sends_only_valid_dither_values(
+    monkeypatch, pix, interval, expected
+):
+    _output, calls = _run_settings_post(
+        monkeypatch,
+        model="Seestar S50",
+        form_extra={
+            "stack_dither_pix": pix,
+            "stack_dither_interval": interval,
+            "stack_dither_enable": "true",
+        },
+    )
+
+    assert _sent_stack_dither(calls) == {"enable": True, **expected}

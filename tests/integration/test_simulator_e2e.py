@@ -447,6 +447,9 @@ def test_01_simulator_tcp_get_device_state(simulator_server):
     assert "device" in resp.get("result", {})
 
 
+# set_setting's stack.cont_capt is rejected here on purpose, so the front's
+# fallbacks send the legacy top-level cont_capt keys (kept per AGENTS.md).
+@pytest.mark.allow_nonconforming_requests("set_setting: stack_cont_capt")
 def test_02_set_stack_settings_alias_compatibility(front_sim_bridge):
     front_sim_bridge["set_stack_settings_only"]["enabled"] = True
     payload = _settings_payload()
@@ -698,6 +701,9 @@ def test_09_wrapped_value_shape_compat(front_sim_bridge):
     front_sim_bridge["wrapped_method_sync"]["enabled"] = False
 
 
+# set_setting's stack.cont_capt is rejected here on purpose, so the front's
+# fallbacks send the legacy top-level cont_capt keys (kept per AGENTS.md).
+@pytest.mark.allow_nonconforming_requests("set_setting: stack_cont_capt")
 def test_10_error_path_fallback_succeeds(front_sim_bridge):
     front_sim_bridge["forced_stack_set_error"]["enabled"] = True
     client = front_sim_bridge["client"]
@@ -787,6 +793,9 @@ def test_16_fault_injection_eventstatus_none(front_sim_bridge):
     front_sim_bridge["inject_eventstatus_none"]["enabled"] = False
 
 
+# set_setting's stack.cont_capt is rejected here on purpose, so the front's
+# fallbacks send the legacy top-level cont_capt keys (kept per AGENTS.md).
+@pytest.mark.allow_nonconforming_requests("set_setting: stack_cont_capt")
 @pytest.mark.parametrize(
     "wrapped,set_stack_settings_only",
     [
@@ -1192,7 +1201,7 @@ def test_38_simulator_mosaic_setting_round_trips(simulator_server):
         {
             "id": 3100,
             "method": "set_setting",
-            "params": {"mosaic": {"scale": 1.5, "angle": 45.0, "star_map_angle": 0.0}},
+            "params": {"mosaic": {"scale": 1.5, "angle": 45.0}},
         },
     )
     state = _send_tcp_command(host, port, {"id": 3101, "method": "get_setting"})
@@ -1205,7 +1214,7 @@ def test_38_simulator_mosaic_setting_round_trips(simulator_server):
         {
             "id": 3102,
             "method": "set_setting",
-            "params": {"mosaic": {"scale": 1.0, "angle": 0.0, "star_map_angle": 0.0}},
+            "params": {"mosaic": {"scale": 1.0, "angle": 0.0}},
         },
     )
     reset_state = _send_tcp_command(host, port, {"id": 3103, "method": "get_setting"})
@@ -1399,6 +1408,10 @@ def test_35_wide_cam_settings_round_trip_via_simulator(monkeypatch, front_sim_br
     assert setting.get("wide_cam") is True
     assert setting.get("wide_4k") is False
     assert setting.get("wide_focal_pos") == 1600
+    # wide_denoise is a stack member; at the top level the firmware answers
+    # 109 and skips the rest of the request (seestar-spec, READ).
+    assert "wide_denoise" not in setting
+    assert setting.get("stack", {}).get("wide_denoise") is True
 
 
 def test_36_force_stop_goto_unwedges_device(two_device_federation):
@@ -1476,6 +1489,10 @@ def test_42_auto_af_round_trip_via_simulator(front_sim_bridge):
     assert setting.get("auto_af") is True
 
 
+# Sends the double-nested params the firmware rejects, on purpose.
+@pytest.mark.allow_nonconforming_requests(
+    "scope_goto: params[", "scope_sync: params[", "pi_set_time: params["
+)
 def test_43_scope_goto_and_pi_set_time_reject_double_nested_params(simulator_server):
     """Regression test for issues #748/#758. Decompiled firmware confirms
     scope_goto/scope_sync's Params::Params and pi_set_time's json_array2obj

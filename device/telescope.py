@@ -47,6 +47,25 @@ seestar_logcollector: dict[int, SeestarLogging] = {}
 #
 maxdev = 10  # Single instance
 
+# Alpaca MoveAxis maps onto the firmware's scope_speed_move, which takes a
+# direction in degrees and a speed in the mount's native units, clamped at
+# 1440 (seestar-spec, READ). The physical unit of that speed is not
+# established, so Rate is passed through as the native speed and AxisRates
+# advertises the native range. Axis 0 (RA/azimuth) moves along 0/180 degrees
+# and axis 1 (Dec/altitude) along 90/270, the same convention the web
+# joystick uses; the tertiary axis is not supported.
+MOVE_AXIS_ANGLE = {0: 0, 1: 90}
+MOVE_AXIS_MAX_SPEED = 1440.0
+
+
+def _parse_axis(axisstr):
+    """Return the axis as an int 0..2, or None when it is not one."""
+    try:
+        axis = int(axisstr)
+    except (TypeError, ValueError):
+        return None
+    return axis if axis in (0, 1, 2) else None
+
 
 # -----------
 # DEVICE INFO
@@ -1834,9 +1853,19 @@ class axisrates:
                 None, req, NotConnectedException("Not Connected.")
             ).json
             return
+        axis = _parse_axis(get_request_field("Axis", req))
+        if axis is None:
+            resp.text = PropertyResponse(
+                None, req, InvalidValueException("Axis must be 0, 1 or 2.")
+            ).json
+            return
         try:
             # ----------------------
-            val = {0}
+            val = (
+                [{"Minimum": 0.0, "Maximum": MOVE_AXIS_MAX_SPEED}]
+                if axis in MOVE_AXIS_ANGLE
+                else []
+            )
             # ----------------------
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
@@ -1853,9 +1882,15 @@ class canmoveaxis:
                 None, req, NotConnectedException("Not Connected.")
             ).json
             return
+        axis = _parse_axis(get_request_field("Axis", req))
+        if axis is None:
+            resp.text = PropertyResponse(
+                None, req, InvalidValueException("Axis must be 0, 1 or 2.")
+            ).json
+            return
         try:
             # ----------------------
-            val = True
+            val = axis in MOVE_AXIS_ANGLE
             # ----------------------
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
@@ -1929,10 +1964,18 @@ class moveaxis:
                 req, InvalidValueException('Rate " + ratestr + " not a valid number.')
             ).json
             return
-        ### RANGE CHECK AS NEEDED ###         # Raise Alpaca InvalidValueException with details!
+        if axis not in MOVE_AXIS_ANGLE or abs(rate) > MOVE_AXIS_MAX_SPEED:
+            resp.text = MethodResponse(
+                req,
+                InvalidValueException(
+                    f"Axis must be 0 or 1 and |Rate| at most {MOVE_AXIS_MAX_SPEED:g}."
+                ),
+            ).json
+            return
+        angle = MOVE_AXIS_ANGLE[axis] + (180 if rate < 0 else 0)
         try:
             # -----------------------------
-            seestar_dev[devnum].move_scope(axis, rate)
+            seestar_dev[devnum].move_scope(angle, abs(rate))
             # -----------------------------
             resp.text = MethodResponse(req).json
         except Exception as ex:
