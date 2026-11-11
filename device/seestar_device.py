@@ -1547,6 +1547,10 @@ class Seestar:
                 "lp_filter": False,
             },
         }
+        if params.get("mosaic"):
+            # The capture mosaic frame is set here, at the goto; capture setup
+            # resets it to scale 1 / angle 0 when the goto carries none.
+            data["params"]["mosaic"] = params["mosaic"]
         self.mark_op_state("goto_target", "stopped")
 
         result = self.send_message_param_sync(data)
@@ -2369,15 +2373,17 @@ class Seestar:
         save_target_name: str,
         is_use_autofocus: bool,
         is_use_LP_filter: bool,
+        mosaic: Optional[dict[str, float]] = None,
     ) -> bool:
-        result = self.goto_target(
-            {
-                "ra": cur_ra,
-                "dec": cur_dec,
-                "is_j2000": False,
-                "target_name": save_target_name,
-            }
-        )
+        goto_params: dict[str, Any] = {
+            "ra": cur_ra,
+            "dec": cur_dec,
+            "is_j2000": False,
+            "target_name": save_target_name,
+        }
+        if mosaic:
+            goto_params["mosaic"] = mosaic
+        result = self.goto_target(goto_params)
         if result:
             result = self.wait_end_op("goto_target")
 
@@ -2878,6 +2884,11 @@ class Seestar:
                     target_name,
                     is_use_autofocus,
                     is_use_LP_filter,
+                    mosaic={
+                        "scale": mosaic_scale,
+                        "angle": mosaic_angle,
+                        "star_map_angle": 0.0,
+                    },
                 )
                 if result:
                     break
@@ -2907,11 +2918,9 @@ class Seestar:
                 {
                     "method": "set_setting",
                     "params": {
-                        "mosaic": {
-                            "scale": mosaic_scale,
-                            "angle": mosaic_angle,
-                            "star_map_angle": 0.0,
-                        }
+                        # Kept for older firmware. On 9.x this call only
+                        # estimates hours; the frame itself rides on the goto.
+                        "mosaic": {"scale": mosaic_scale, "angle": mosaic_angle}
                     },
                 }
             )
@@ -2967,13 +2976,7 @@ class Seestar:
                 self.send_message_param_sync(
                     {
                         "method": "set_setting",
-                        "params": {
-                            "mosaic": {
-                                "scale": 1.0,
-                                "angle": 0.0,
-                                "star_map_angle": 0.0,
-                            }
-                        },
+                        "params": {"mosaic": {"scale": 1.0, "angle": 0.0}},
                     }
                 )
 

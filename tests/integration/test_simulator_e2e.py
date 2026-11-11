@@ -1192,7 +1192,7 @@ def test_38_simulator_mosaic_setting_round_trips(simulator_server):
         {
             "id": 3100,
             "method": "set_setting",
-            "params": {"mosaic": {"scale": 1.5, "angle": 45.0, "star_map_angle": 0.0}},
+            "params": {"mosaic": {"scale": 1.5, "angle": 45.0}},
         },
     )
     state = _send_tcp_command(host, port, {"id": 3101, "method": "get_setting"})
@@ -1205,7 +1205,7 @@ def test_38_simulator_mosaic_setting_round_trips(simulator_server):
         {
             "id": 3102,
             "method": "set_setting",
-            "params": {"mosaic": {"scale": 1.0, "angle": 0.0, "star_map_angle": 0.0}},
+            "params": {"mosaic": {"scale": 1.0, "angle": 0.0}},
         },
     )
     reset_state = _send_tcp_command(host, port, {"id": 3103, "method": "get_setting"})
