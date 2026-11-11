@@ -1970,16 +1970,19 @@ class Seestar:
                 }
             )
 
-            # save frames setting
-            self.send_message_param_sync(
-                {
-                    "method": "set_stack_setting",
-                    "params": {
-                        "save_discrete_ok_frame": Config.init_save_good_frames,
-                        "save_discrete_frame": Config.init_save_all_frames,
-                    },
-                }
+            # save frames setting: set_setting {"stack": ...} is the documented
+            # path; set_stack_setting is kept as a fallback for older firmware.
+            save_frames = {
+                "save_discrete_ok_frame": Config.init_save_good_frames,
+                "save_discrete_frame": Config.init_save_all_frames,
+            }
+            response = self.send_message_param_sync(
+                {"method": "set_setting", "params": {"stack": save_frames}}
             )
+            if not isinstance(response, dict) or "error" in response:
+                self.send_message_param_sync(
+                    {"method": "set_stack_setting", "params": save_frames}
+                )
 
             # Put this here for people not running PA
             self.set_setting(
