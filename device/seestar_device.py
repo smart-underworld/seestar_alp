@@ -792,9 +792,21 @@ class Seestar:
                 if self._reconnect_leader is not None:
                     # A reconnect is installing the socket; the reader loops back.
                     return None
-                # No socket yet (or the reconnect retired it): wait
-                # quietly for the heartbeat thread's backed-off
-                # reconnect instead of warning every loop.
+                # No socket and nobody reconnecting. Once the heartbeat thread
+                # runs, wait quietly for its backed-off reconnect. Before that
+                # (it starts only after the initial sync call returns or times
+                # out), nothing else retries: a drop that hit during another
+                # thread's reconnect, which then gave up, would sit unrecovered
+                # (issue #798). So reconnect from here until the heartbeat
+                # takes over; the sleep below still paces failed attempts.
+                heartbeat = self.heartbeat_msg_thread
+                if (
+                    self.is_watch_events
+                    and (heartbeat is None or not heartbeat.is_alive())
+                    and self.reconnect(wait=False)
+                    and self.s is not None
+                ):
+                    return None
                 self.logger.debug("socket not initialized!")
                 time.sleep(3)
                 return None
@@ -873,8 +885,16 @@ class Seestar:
             threading.current_thread().last_run = datetime.now()
             # print("checking for msg")
             data = self.get_socket_msg()
-            if data:
-                msg_remainder += data
+            # get_socket_msg() may have reconnected on this thread, in which case
+            # the handshake read the new socket itself and parked whatever else
+            # arrived in _auth_leftover. Only this thread reads the socket now,
+            # so nobody else touches it. Those bytes come from the new socket, so
+            # any partial line still held from the old one is dropped.
+            leftover, self._auth_leftover = self._auth_leftover, ""
+            if leftover:
+                msg_remainder = leftover
+            if data or leftover:
+                msg_remainder += data or ""
                 first_index = msg_remainder.find("\r\n")
 
                 while first_index >= 0:

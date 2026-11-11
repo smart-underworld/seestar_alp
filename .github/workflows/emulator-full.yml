@@ -103,7 +103,9 @@ jobs:
 
       - name: Wait for emulator ports
         run: |
-          timeout 120 bash -c 'until nc -z 127.0.0.1 4700 && nc -z 127.0.0.1 4800; do sleep 2; done'
+          # nc -z is answered by Docker's port proxy ~20 s before the firmware
+          # binds (issue #798); wait for a connection that actually stays up.
+          python3 -m emulator.firmware.wait_ready --timeout 120 4700 4800
 
       - name: Launch synthetic-sky renderer
         run: |
