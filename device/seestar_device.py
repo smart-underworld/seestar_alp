@@ -534,10 +534,15 @@ class Seestar:
         }
         self.logger.info(f"scheduler event state: {self.event_state['scheduler']}")
 
-    def heartbeat(
-        self,
-    ):  # I noticed a lot of pairs of test_connection followed by a get if nothing was going on
-        #    json_message("test_connection")
+    def heartbeat(self):
+        # The firmware closes a LAN connection after 15 s without received
+        # bytes; the spec's recommended keepalive is test_connection.
+        # scope_get_equ_coord is used instead because its reply keeps
+        # self.ra/self.dec current for the Alpaca RightAscension/Declination
+        # properties, so one request serves both purposes. Tradeoff: it is a
+        # live mount read relayed to the guider, and repeated read failures
+        # there can stop capture or mark the mount disconnected (seestar-spec,
+        # scope_get_ra_dec, READ).
         self.json_message("scope_get_equ_coord", id=420)
 
     def send_message(self, data):
