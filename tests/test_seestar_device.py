@@ -699,6 +699,42 @@ def test_get_socket_msg_paths(monkeypatch, seestar):
     assert seestar.get_socket_msg() == "hello"
 
 
+def test_get_socket_msg_logs_socket_none_at_debug_not_warning(monkeypatch, seestar):
+    # A dead device's receive thread used to warn "socket not
+    # initialized!" every loop (~20/min); it now waits quietly at
+    # DEBUG for the heartbeat thread's backed-off reconnect.
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    debugs = []
+    warnings = []
+    monkeypatch.setattr(
+        seestar.logger, "debug", lambda msg, *a, **k: debugs.append(msg)
+    )
+    monkeypatch.setattr(
+        seestar.logger, "warning", lambda msg, *a, **k: warnings.append(msg)
+    )
+    seestar.s = None
+    assert seestar.get_socket_msg() is None
+    assert any("socket not initialized!" in msg for msg in debugs)
+    assert not any("socket not initialized!" in msg for msg in warnings)
+
+
+def test_get_socket_msg_treats_peer_close_as_disconnect(monkeypatch, seestar):
+    # recv() returning b"" (peer closed) used to spin the receive
+    # thread on a dead socket; it now drops the socket and reconnects.
+    monkeypatch.setattr("device.seestar_device.time.sleep", lambda _s: None)
+    reconnects = []
+    monkeypatch.setattr(
+        seestar, "reconnect", lambda wait=True: reconnects.append(wait) or False
+    )
+    seestar.is_watch_events = True
+    sock = _DummySocket(recv_value=b"")
+    seestar.s = sock
+    assert seestar.get_socket_msg() is None
+    assert seestar.s is None
+    assert sock.closed is True
+    assert reconnects == [False]
+
+
 def test_update_equ_coord_and_view_state(seestar):
     assert seestar.has_equ_coord is False
     seestar.update_equ_coord(
