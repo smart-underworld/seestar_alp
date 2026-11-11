@@ -2026,7 +2026,7 @@ def do_command(req, resp, telescope_id):
             )
             return output
         case "get_remote_state":
-            output = method_sync("get_device_state, telescope_id")
+            output = method_sync("get_device_state", telescope_id)
             return output
         case _:
             logger.warning("No command found: %s", value)

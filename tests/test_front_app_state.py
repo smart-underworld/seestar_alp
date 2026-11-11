@@ -3098,3 +3098,24 @@ def test_horizon_page_script_follows_the_root_path():
     )
     assert 'src="/ingress/public/horizon_panorama.js"' in html
     assert 'data-root-path="/ingress"' in html
+
+
+def _record_device_actions(monkeypatch, reply=None):
+    """Capture (action, telescope_id, parameters) for every device call."""
+    calls = []
+
+    def fake(action, telescope_id, parameters, is_schedule=False):
+        calls.append((action, telescope_id, parameters))
+        return reply
+
+    monkeypatch.setattr(front_app, "do_action_device", fake)
+    return calls
+
+
+def test_get_remote_state_command_queries_the_selected_telescope(monkeypatch):
+    calls = _record_device_actions(monkeypatch)
+    req = type("Req", (), {"media": {"command": "get_remote_state"}})()
+
+    front_app.do_command(req, None, 2)
+
+    assert calls == [("method_sync", 2, {"method": "get_device_state"})]
