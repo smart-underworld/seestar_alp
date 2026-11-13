@@ -114,7 +114,36 @@ def get_platform():
 
 
 base_url = "http://" + get_listening_ip() + ":" + str(Config.port)
-simbad_url = "https://simbad.cds.unistra.fr/simbad/sim-id?output.format=ASCII&obj.bibsel=off&Ident="
+# SIMBAD hosts, tried in order. The CfA and IDIA mirrors serve the same sim-id
+# ASCII output and keep lookups working when CDS (Strasbourg) is unavailable,
+# as during its Nov 2026 outage.
+SIMBAD_HOSTS = (
+    "https://simbad.cds.unistra.fr",
+    "https://simbad.cfa.harvard.edu",
+    "https://simbad.idia.ac.za",
+)
+SIMBAD_QUERY_PATH = "/simbad/sim-id?output.format=ASCII&obj.bibsel=off&Ident="
+
+
+def fetch_simbad(obj_name):
+    """Return the first HTTP 200 SIMBAD response, or None if every host failed.
+
+    A 200 is final even when the object is unknown (SIMBAD reports that in the
+    body); only errors and non-200 replies (e.g. an outage page) move on to the
+    next mirror.
+    """
+    for host in SIMBAD_HOSTS:
+        try:
+            r = requests.get(host + SIMBAD_QUERY_PATH + obj_name, timeout=10)
+        except requests.RequestException as e:
+            logger.warning(f"SIMBAD lookup via {host} failed: {e}")
+            continue
+        if r.status_code == 200:
+            return r
+        logger.warning(f"SIMBAD lookup via {host} returned HTTP {r.status_code}")
+    return None
+
+
 messages: list[str] = []
 online = None
 client_master = True
@@ -5089,9 +5118,8 @@ class SimbadResource:
         objName = urllib.parse.quote_plus(
             req.get_param("name")
         )  # get the name to lookup from the request
-        try:
-            r = requests.get(simbad_url + objName, timeout=10)
-        except Exception:
+        r = fetch_simbad(objName)
+        if r is None:
             resp.status = falcon.HTTP_500
             resp.content_type = "application/text"
             resp.text = "Request had communications error."
@@ -5819,15 +5847,38 @@ def searchMinorPlanet(name):
     return json.dumps(data, indent=4)
 
 
+def local_db_path():
+    """Absolute path to the bundled local object catalog (alp.dat).
+
+    Resolved from the bundle/repo location rather than the working directory:
+    frozen (PyInstaller) builds unpack it under sys._MEIPASS, and the exe is
+    usually launched from its own folder, where data/ only holds skyfield
+    downloads.
+    """
+    if getattr(sys, "frozen", False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, "data", "alp.dat")
+
+
 def searchLocal(object):
+    db_path = local_db_path()
     try:
-        con = sqlite3.connect("data/alp.dat")
-    except Exception:
-        return
+        # Read-only URI: a plain connect() silently creates an empty database
+        # when the file is missing, which hides the real problem.
+        con = sqlite3.connect(Path(db_path).as_uri() + "?mode=ro", uri=True)
+    except Exception as e:
+        logger.error(f"Local object database unavailable at {db_path}: {e}")
+        return ""
 
     cursor = con.cursor()
-    search = f"SELECT ra, dec, objectType, commonNames, identifiers FROM objects where identifiers like '%{object}%' or commonNames like '%{object}%' COLLATE NOCASE"
-    result = cursor.execute(search)
+    # Identifiers are stored as space-separated tokens without inner spaces
+    # ("NGC224 M31"), so "M 31" must be compacted to match; common names keep
+    # their spaces ("Eagle Nebula"). Bound parameters, not string formatting.
+    search = "SELECT ra, dec, objectType, commonNames, identifiers FROM objects where identifiers like ? or commonNames like ? COLLATE NOCASE"
+    compact = "".join(object.split())
+    result = cursor.execute(search, (f"%{compact}%", f"%{object.strip()}%"))
     sqlReturn = result.fetchall()
 
     if len(sqlReturn) > 0:
@@ -5891,8 +5942,8 @@ class GetMinorPlanetCoordinates:
 class GetLocalSearch:
     @staticmethod
     def on_get(req, resp):
-        searchText = urllib.parse.quote_plus(req.get_param("target"))
-        rtn = searchLocal(searchText)
+        searchText = (req.get_param("target") or "").strip()
+        rtn = searchLocal(searchText) if searchText else ""
         if len(rtn) == 0:
             resp.status = falcon.HTTP_404
             resp.content_type = "application/text"

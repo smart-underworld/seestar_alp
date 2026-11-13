@@ -3223,3 +3223,165 @@ def test_settings_post_sends_only_valid_dither_values(
     )
 
     assert _sent_stack_dither(calls) == {"enable": True, **expected}
+
+
+def test_local_db_path_uses_bundle_dir_when_frozen(monkeypatch, tmp_path):
+    # PyInstaller builds unpack data files under sys._MEIPASS (_internal/),
+    # not the working directory, so the frozen app must look there.
+    monkeypatch.setattr(front_app.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(front_app.sys, "_MEIPASS", str(tmp_path), raising=False)
+    assert front_app.local_db_path() == os.path.join(str(tmp_path), "data", "alp.dat")
+
+
+def test_local_db_path_uses_repo_data_dir_from_source(monkeypatch):
+    monkeypatch.delattr(front_app.sys, "frozen", raising=False)
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(front_app.__file__)))
+    assert front_app.local_db_path() == os.path.join(repo_root, "data", "alp.dat")
+
+
+def test_search_local_finds_object_in_bundled_db(monkeypatch, tmp_path):
+    # The real catalog shipped in data/alp.dat must be found regardless of cwd.
+    monkeypatch.chdir(tmp_path)
+    rtn = front_app.searchLocal("M31")
+    assert rtn
+    first = json.loads(rtn)[0]
+    assert first["objectName"] == "Andromeda Galaxy"
+    assert first["ra"] == "00h42m44.35s"
+    assert not (tmp_path / "data").exists()
+
+
+def test_search_local_missing_db_does_not_create_empty_file(monkeypatch, tmp_path):
+    missing = tmp_path / "data" / "alp.dat"
+    (tmp_path / "data").mkdir()
+    monkeypatch.setattr(front_app, "local_db_path", lambda: str(missing))
+    assert front_app.searchLocal("M31") == ""
+    assert not missing.exists()
+
+
+def test_build_workflow_bundles_alp_dat_into_data_dir():
+    # --add-data DEST is a directory: "data/alp.dat:data/alp.dat" would land
+    # the file at _internal/data/alp.dat/alp.dat, where the app never looks.
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(
+        os.path.join(root, ".github", "workflows", "build_seestar_alp.yaml")
+    ) as f:
+        workflow = f.read()
+    entries = re.findall(r'--add-data="data/alp\.dat([;:])([^"]*)"', workflow)
+    assert len(entries) == 3, entries
+    assert all(dest == "data" for _sep, dest in entries), entries
+
+
+_SIMBAD_M31 = (
+    "Object M 31  ---  AGN  ---  OID=@1575544\n"
+    "Coordinates(ICRS,ep=J2000,eq=2000): 00 42 44.330  +41 16 07.50 (IR  ) C\n"
+)
+
+
+class _FakeSimbadResp:
+    def __init__(self, status_code, text):
+        self.status_code = status_code
+        self.text = text
+
+
+def _simbad_get(monkeypatch, replies):
+    """Patch requests.get; replies maps host substring -> response or exception."""
+    calls = []
+
+    def fake_get(url, timeout=None):
+        calls.append(url)
+        for host, reply in replies.items():
+            if host in url:
+                if isinstance(reply, Exception):
+                    raise reply
+                return reply
+        raise AssertionError(f"unexpected url {url}")
+
+    monkeypatch.setattr(front_app.requests, "get", fake_get)
+    client = testing.TestClient(falcon.App())
+    client.app.add_route("/simbad", front_app.SimbadResource())
+    return client, calls
+
+
+def test_simbad_uses_primary_when_available(monkeypatch):
+    client, calls = _simbad_get(
+        monkeypatch, {"cds.unistra.fr": _FakeSimbadResp(200, _SIMBAD_M31)}
+    )
+    r = client.simulate_get("/simbad", params={"name": "M31"})
+    assert r.status_code == 200
+    assert r.text == "00h42m44.3s +41d16m7.5s off"
+    assert len(calls) == 1
+
+
+def test_simbad_falls_back_to_mirror_when_primary_is_down(monkeypatch):
+    # Nov 2026: CDS answered every sim-id query with a 404 "Page unavailable"
+    # HTML page during an outage, which surfaced as "Target Not Found".
+    client, calls = _simbad_get(
+        monkeypatch,
+        {
+            "cds.unistra.fr": _FakeSimbadResp(404, "<html>Page unavailable</html>"),
+            "cfa.harvard.edu": _FakeSimbadResp(200, _SIMBAD_M31),
+        },
+    )
+    r = client.simulate_get("/simbad", params={"name": "M31"})
+    assert r.status_code == 200
+    assert r.text.startswith("00h42m44.3s +41d16m7.5s")
+    assert "cfa.harvard.edu" in calls[1]
+
+
+def test_simbad_falls_back_on_connection_error(monkeypatch):
+    client, _calls = _simbad_get(
+        monkeypatch,
+        {
+            "cds.unistra.fr": front_app.requests.ConnectionError("down"),
+            "cfa.harvard.edu": front_app.requests.Timeout("slow"),
+            "idia.ac.za": _FakeSimbadResp(200, _SIMBAD_M31),
+        },
+    )
+    r = client.simulate_get("/simbad", params={"name": "M31"})
+    assert r.status_code == 200
+
+
+def test_simbad_unknown_object_does_not_try_mirrors(monkeypatch):
+    client, calls = _simbad_get(
+        monkeypatch,
+        {"cds.unistra.fr": _FakeSimbadResp(200, "!! 'xyz' incorrect format\n")},
+    )
+    r = client.simulate_get("/simbad", params={"name": "xyz"})
+    assert r.status_code == 404
+    assert len(calls) == 1
+
+
+def test_simbad_all_mirrors_down_reports_comms_error(monkeypatch):
+    down = _FakeSimbadResp(503, "unavailable")
+    client, calls = _simbad_get(
+        monkeypatch,
+        {"cds.unistra.fr": down, "cfa.harvard.edu": down, "idia.ac.za": down},
+    )
+    r = client.simulate_get("/simbad", params={"name": "M31"})
+    assert r.status_code == 500
+    assert len(calls) == 3
+
+
+@pytest.mark.parametrize(
+    "target, expected",
+    [
+        ("M31", "Andromeda Galaxy"),
+        ("M 31", "Andromeda Galaxy"),  # catalog stores identifiers without spaces
+        ("NGC 7000", "North America Nebula"),
+        ("Eagle Nebula", "Eagle Nebula,Star Queen"),  # common names keep spaces
+        ("Barnard's Merope", "Barnard's Merope Nebula"),
+    ],
+)
+def test_local_search_endpoint_matches_spaced_names(target, expected):
+    client = testing.TestClient(falcon.App())
+    client.app.add_route("/localsearch", front_app.GetLocalSearch())
+    r = client.simulate_get("/localsearch", params={"target": target})
+    assert r.status_code == 200, r.text
+    assert expected in [o["objectName"] for o in json.loads(r.text)]
+
+
+def test_local_search_endpoint_unknown_object_is_404():
+    client = testing.TestClient(falcon.App())
+    client.app.add_route("/localsearch", front_app.GetLocalSearch())
+    r = client.simulate_get("/localsearch", params={"target": "NoSuchThing12345"})
+    assert r.status_code == 404

@@ -42,7 +42,7 @@ jobs:
           python scripts/make_win_version_file.py "$git_version" ./file_version_info.txt
           pyinstaller --name="seestar_alp" --version-file=./file_version_info.txt `
           --add-data="device/config.toml.example;." --add-data="./version.txt;." --add-data="front/citation;astroquery" --add-data="front/templates;front/templates" --add-data="front/public;front/public" `
-          --add-data="front/planning.json.example;." --add-data="front/csc_sites.json;." --add-data="data/de440s.bsp;data/de440s.bsp" --add-data="data/alp.dat:data/alp.dat" `
+          --add-data="front/planning.json.example;." --add-data="front/csc_sites.json;." --add-data="data/de440s.bsp;data/de440s.bsp" --add-data="data/alp.dat;data" `
           --add-data="downloaded_data/astroquery/simbad/data/query_criteria_fields.json;astroquery/simbad/data" `
           --paths=./front --paths=./device `
           --collect-all=geomag `
@@ -103,7 +103,7 @@ jobs:
           echo $git_version > ./version.txt
           pyinstaller --name="seestar_alp" --target-arch arm64 --onedir \
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
-          --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat:data/alp.dat" \
+          --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat:data" \
           --add-data="downloaded_data/astroquery/simbad/data/query_criteria_fields.json:astroquery/simbad/data" \
           --paths=./front --paths=./device \
           --collect-all=geomag \
@@ -199,7 +199,7 @@ jobs:
           echo $git_version > ./version.txt
           pyinstaller --name="seestar_alp" --target-arch x86_64 --onedir \
           --add-data="device/config.toml.example:." --add-data="./version.txt:." --add-data="front/CITATION:astroquery" --add-data="front/templates:front/templates" --add-data="front/public:front/public" \
-          --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat:data/alp.dat" \
+          --add-data="front/planning.json.example:." --add-data="front/csc_sites.json:." --add-data="data/de440s.bsp:data/de440s.bsp"  --add-data="data/alp.dat:data" \
           --add-data="downloaded_data/astroquery/simbad/data/query_criteria_fields.json:astroquery/simbad/data" \
           --paths=./front --paths=./device \
           --collect-all=geomag \
