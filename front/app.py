@@ -5819,11 +5819,30 @@ def searchMinorPlanet(name):
     return json.dumps(data, indent=4)
 
 
+def local_db_path():
+    """Absolute path to the bundled local object catalog (alp.dat).
+
+    Resolved from the bundle/repo location rather than the working directory:
+    frozen (PyInstaller) builds unpack it under sys._MEIPASS, and the exe is
+    usually launched from its own folder, where data/ only holds skyfield
+    downloads.
+    """
+    if getattr(sys, "frozen", False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, "data", "alp.dat")
+
+
 def searchLocal(object):
+    db_path = local_db_path()
     try:
-        con = sqlite3.connect("data/alp.dat")
-    except Exception:
-        return
+        # Read-only URI: a plain connect() silently creates an empty database
+        # when the file is missing, which hides the real problem.
+        con = sqlite3.connect(Path(db_path).as_uri() + "?mode=ro", uri=True)
+    except Exception as e:
+        logger.error(f"Local object database unavailable at {db_path}: {e}")
+        return ""
 
     cursor = con.cursor()
     search = f"SELECT ra, dec, objectType, commonNames, identifiers FROM objects where identifiers like '%{object}%' or commonNames like '%{object}%' COLLATE NOCASE"
