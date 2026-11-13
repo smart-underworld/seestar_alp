@@ -5873,8 +5873,12 @@ def searchLocal(object):
         return ""
 
     cursor = con.cursor()
-    search = f"SELECT ra, dec, objectType, commonNames, identifiers FROM objects where identifiers like '%{object}%' or commonNames like '%{object}%' COLLATE NOCASE"
-    result = cursor.execute(search)
+    # Identifiers are stored as space-separated tokens without inner spaces
+    # ("NGC224 M31"), so "M 31" must be compacted to match; common names keep
+    # their spaces ("Eagle Nebula"). Bound parameters, not string formatting.
+    search = "SELECT ra, dec, objectType, commonNames, identifiers FROM objects where identifiers like ? or commonNames like ? COLLATE NOCASE"
+    compact = "".join(object.split())
+    result = cursor.execute(search, (f"%{compact}%", f"%{object.strip()}%"))
     sqlReturn = result.fetchall()
 
     if len(sqlReturn) > 0:
@@ -5938,8 +5942,8 @@ class GetMinorPlanetCoordinates:
 class GetLocalSearch:
     @staticmethod
     def on_get(req, resp):
-        searchText = urllib.parse.quote_plus(req.get_param("target"))
-        rtn = searchLocal(searchText)
+        searchText = (req.get_param("target") or "").strip()
+        rtn = searchLocal(searchText) if searchText else ""
         if len(rtn) == 0:
             resp.status = falcon.HTTP_404
             resp.content_type = "application/text"
