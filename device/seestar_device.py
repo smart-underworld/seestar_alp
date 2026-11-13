@@ -203,6 +203,8 @@ class Seestar:
 
         self.connect_count: int = 0
         self.view_state: dict = {}
+        #: Lets readers tell a fresh view from one an earlier request left.
+        self.view_state_ts: Optional[float] = None
 
         # self.event_queue = queue.Queue()
         self.event_queue = collections.deque(maxlen=20)
@@ -855,7 +857,7 @@ class Seestar:
             if view:
                 with self.lock:
                     self.view_state = view
-                # also todo : also update view_state_timestamp
+                    self.view_state_ts = time.monotonic()
             # else:
             #    self.view_state = {}
 

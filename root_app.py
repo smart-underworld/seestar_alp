@@ -1,7 +1,7 @@
 #
 # Start frontend and pass in ALP for it to manage
 #
-from flask import Flask, Response
+from flask import Flask, Response, request
 from flask_cors import CORS, cross_origin
 import threading
 import time
@@ -16,6 +16,7 @@ from device.app import DeviceMain  # type: ignore
 from device.config import Config, ConfigError  # type: ignore
 from device import log  # type: ignore
 from device import telescope  # type: ignore
+from device.seestar_imaging import snapshot_response  # type: ignore
 from device.version import Version  # type: ignore
 
 
@@ -138,6 +139,13 @@ if __name__ == "__main__":
             telescope.get_seestar_imager(int(dev_num)).get_frame(),
             mimetype="multipart/x-mixed-replace; boundary=frame",
         )
+
+    @cross_origin()
+    @app.route("/<dev_num>/snapshot.jpg")
+    def snapshot(dev_num):
+        # The latest STACKED image (stacking only) as one JPEG: a cheap
+        # alternative to /vid for clients that poll for a still.
+        return snapshot_response(telescope.get_seestar_imager(int(dev_num)), request)
 
     n.notify("READY=1")
     print(f"Startup Complete (seestar_alp {Version.app_version()})")

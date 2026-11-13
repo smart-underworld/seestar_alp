@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from io import BytesIO
 from time import monotonic, sleep
-from typing import Optional, Tuple, List
+from typing import Callable, Optional, Tuple, List
 
 import cv2
 import numpy as np
@@ -34,6 +34,9 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
         self.raw_img_size: Tuple[Optional[int], Optional[int]] = [None, None]
         self.latest_image = None
         self.StarProcessors: List[ImageProcessor] = [GraxpertStretch()]
+        # Called with each successfully decoded stacked-image reply (receive
+        # thread), so consumers can tell a stack reply from a preview frame.
+        self.on_stack_image: Optional[Callable[[np.ndarray], None]] = None
         self.imaging_listener = SeestarImagerProtocol.ImagingListener(self)
         self.add_listener(self.imaging_listener)
 
@@ -302,6 +305,7 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
 
     def handle_stack(self, width, height, data):
         # for stacking, we have to extract zipfile
+        stacked = None
         try:
             zip_file = BytesIO(data)
             with zipfile.ZipFile(zip_file) as zip:
@@ -312,6 +316,8 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
                 if self.latest_image is None:
                     self.raw_img = None
                     self.raw_img_size = [None, None]
+                else:
+                    stacked = self.latest_image
 
             # xxx Temp hack: just disconnect for now...
             # xxx Ideally we listen for an event that stack count has increased, or we track the stack
@@ -323,6 +329,13 @@ class SeestarImagerProtocol(SeestarBinaryProtocol):
             self.logger.error(f"Exception handling zip stack: {e}")
             self.raw_img = None
             self.raw_img_size = [None, None]
+
+        # A consumer's error is not a decode failure.
+        if stacked is not None and self.on_stack_image is not None:
+            try:
+                self.on_stack_image(stacked)
+            except Exception as e:
+                self.logger.error(f"Exception in stack image consumer: {e}")
 
     def convert_star_image(
         self, raw_image: np.array, width: int, height: int
