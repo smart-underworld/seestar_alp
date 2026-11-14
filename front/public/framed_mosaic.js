@@ -81,15 +81,24 @@
     overlay.add(A.polygon(corners, { color: "#f59e0b", lineWidth: 2 }));
   };
 
+  let surveyListenerAdded = false;
+
   window.init_framed_mosaic_aladin = function init_framed_mosaic_aladin() {
     aladin = A.aladin("#framed-mosaic-aladin-div", {
-      survey: "P/DSS2/color",
+      // dss_survey.js picks CDS or its ESA mirror (see that file).
+      survey: window.SSCDssSurvey ? window.SSCDssSurvey.current() : "P/DSS2/color",
       fov: 2,
       target: document.getElementById("framed_mosaic_search_text").value,
     });
     aladinDiv = document.getElementById("framed-mosaic-aladin-div");
     overlay = A.graphicOverlay({ color: "#f59e0b", lineWidth: 2 });
     aladin.addOverlay(overlay);
+    if (window.SSCDssSurvey && !surveyListenerAdded) {
+      surveyListenerAdded = true;
+      window.SSCDssSurvey.onChange((survey) => {
+        if (aladin) aladin.setBaseImageLayer(survey);
+      });
+    }
     update_framed_mosaic();
     setUpFrameDrag();
   };

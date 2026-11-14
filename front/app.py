@@ -5901,7 +5901,17 @@ def searchLocal(object):
             else:
                 name = row[4]
 
-            data.append({"ra": row[0], "dec": row[1], "lp": lp, "objectName": name})
+            data.append(
+                {
+                    "ra": row[0],
+                    "dec": row[1],
+                    "lp": lp,
+                    "objectName": name,
+                    # catalogue ids (e.g. "M33"), so a caller can tell an exact
+                    # match from a substring hit such as M3 -> M30..M39
+                    "identifiers": row[4],
+                }
+            )
         con.close()
         return json.dumps(data, indent=4)
     return ""

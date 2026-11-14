@@ -67,12 +67,11 @@
  * 
  * Requirements:
  *
- *      Aladin Lite needs the following CSS to be loaded::
- *      <link rel="stylesheet" href="https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.css" / >
- *
- *      Aladin Lite needs the following scripts to be loaded:
+ *      Aladin Lite v3 needs the following scripts to be loaded, in this order
+ *      (no separate CSS file is needed; aladin.js is the vendored copy):
  *      <script type="text/javascript" src="https://code.jquery.com/jquery-1.12.1.min.js" charset="utf-8">< /script>
- *      <script type="text/javascript" src="https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.js" charset="utf-8">< /script>
+ *      <script type="text/javascript" src="public/vendor/aladin-lite/aladin.js" charset="utf-8">< /script>
+ *      <script type="text/javascript" src="public/dss_survey.js">< /script>
  *
  *      Google Charts needs the following script to be loaded:
  *      <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js">< /script>
@@ -227,6 +226,13 @@ function filterImageTargetList(image_target_list)
     return { image_target_list: new_image_target_list, marker_list: marker_list };
 }
 
+// Sky background for the Aladin views. dss_survey.js (loaded before this file
+// by the planner page) picks CDS or its ESA mirror; without it use the CDS id.
+function dssSurvey()
+{
+    return window.SSCDssSurvey ? window.SSCDssSurvey.current() : "P/DSS2/color";
+}
+
 // orbital elements of planets
 var planets = [
     {
@@ -350,6 +356,22 @@ function StartAstroMosaicViewerEngine(
 
     var catalogSimbad = null;
     var catalogNED = null;
+
+    // If the survey source changes after the views exist (CDS unreachable at
+    // page load, ESA mirror chosen), switch the live views over to it.
+    if (window.SSCDssSurvey) {
+        window.SSCDssSurvey.onChange(function(survey) {
+            [engine_data.aladin].concat(engine_data.aladinarr).forEach(function(view) {
+                try {
+                    if (view && view.setBaseImageLayer) {
+                        view.setBaseImageLayer(survey);
+                    }
+                } catch (e) {
+                    console.warn("Unable to switch sky survey", e);
+                }
+            });
+        });
+    }
 
     console.log('StartAstroMosaicViewerEngine', engine_view_type, target);
 
@@ -1563,25 +1585,33 @@ function StartAstroMosaicViewerEngine(
     {
         console.log("resolveNameFromCatalogs " + name);
 
+        if (!engine_catalogs || engine_catalogs.length == 0) {
+            // the planner page passes no catalogs; findCatalogName() would
+            // also pop an alert for names it does not recognise
+            console.log("resolveNameFromCatalogs no catalogs loaded");
+            return false;
+        }
+
         var catinfo = findCatalogName(name);
         var target_info = null;
 
-        for (var i = 0; i < engine_catalogs.length; i++) {
+        var catalogs = engine_catalogs;
+        for (var i = 0; i < catalogs.length; i++) {
             if (catinfo.catalog_name != null) {
                 // we check specific catalog
-                if (catinfo.catalog_name != engine_catalogs[i].name) {
+                if (catinfo.catalog_name != catalogs[i].name) {
                     // not the catalog we want to check
-                    console.log("resolveNameFromCatalogs skip catalog " + engine_catalogs[i].name);
+                    console.log("resolveNameFromCatalogs skip catalog " + catalogs[i].name);
                     continue;
                 }
             }
-            console.log("resolveNameFromCatalogs check catalog " + engine_catalogs[i].name + " for name " + catinfo.name);
+            console.log("resolveNameFromCatalogs check catalog " + catalogs[i].name + " for name " + catinfo.name);
             if (catinfo.target_is_catalog_name) {
-                target_info = findTargetFromCatalog(engine_catalogs[i].targets, catinfo.name);
+                target_info = findTargetFromCatalog(catalogs[i].targets, catinfo.name);
             } else if (catinfo.is_exact_match) {
-                target_info = findExactMatch(engine_catalogs[i].targets, catinfo.name);
+                target_info = findExactMatch(catalogs[i].targets, catinfo.name);
             } else {
-                target_info = findFromCatalog(engine_catalogs[i].targets, catinfo.name);
+                target_info = findFromCatalog(catalogs[i].targets, catinfo.name);
             }
             if (target_info != null) {
                 // found
@@ -1598,6 +1628,90 @@ function StartAstroMosaicViewerEngine(
             console.log("resolveNameFromCatalogs not found");
             return false;
         }
+    }
+
+    // "01h33m50.89s" -> "01:33:50.89", "+30d39m36.8s" -> "+30:39:36.8"
+    function localSearchCoordinate(v)
+    {
+        return String(v).trim().replace(/[hd]/i, ":").replace(/m/i, ":").replace(/s$/i, "");
+    }
+
+    // Pick the entry of an /localsearch answer that is the named object.
+    // The server matches substrings (M3 also finds M30..M39), so prefer an
+    // exact catalogue id and only then fall back to the first hit.
+    function pickLocalSearchHit(hits, name)
+    {
+        var want = name.replace(/\s+/g, "").toUpperCase();
+        function tokens(h) {
+            var list = (h.identifiers || "").toUpperCase().split(/[\s,]+/).filter(Boolean);
+            (h.objectName || "").split(",").forEach(function(n) {
+                n = n.replace(/\s+/g, "").toUpperCase();
+                if (n) {
+                    list.push(n);
+                }
+            });
+            return list;
+        }
+        for (var i = 0; i < hits.length; i++) {
+            if (tokens(hits[i]).indexOf(want) != -1) {
+                return hits[i];
+            }
+        }
+        return hits.length == 1 ? hits[0] : null;
+    }
+
+    // Last resort when neither Sesame (CDS) nor the loaded catalogs know the
+    // name: ask this server's own object database (alp.dat), which needs no
+    // internet. Calls done(true) after setting the target, else done(false).
+    function resolveNameFromLocalSearch(name, done)
+    {
+        var root = (document.documentElement.dataset && document.documentElement.dataset.rootPath) || "";
+        var url = root + "/localsearch?target=" + encodeURIComponent(name);
+        console.log("resolveNameFromLocalSearch " + url);
+        fetch(url)
+            .then(function(response) {
+                if (!response.ok) {
+                    return null;
+                }
+                return response.text().then(function(text) { return text ? JSON.parse(text) : null; });
+            })
+            .then(function(hits) {
+                var hit = hits && hits.length ? pickLocalSearchHit(hits, name) : null;
+                if (hit == null) {
+                    console.log("resolveNameFromLocalSearch not found");
+                    done(false);
+                    return;
+                }
+                image_target = localSearchCoordinate(hit.ra) + " " + localSearchCoordinate(hit.dec);
+                console.log("resolveNameFromLocalSearch found " + hit.objectName + " at " + image_target);
+                target_name_found();
+                done(true);
+            })
+            .catch(function(err) {
+                console.log("resolveNameFromLocalSearch failed: " + err);
+                done(false);
+            });
+    }
+
+    // Sesame did not answer (or did not know the name): try the loaded catalogs,
+    // then this server's local database, then show the error.
+    function resolveNameFallback(name)
+    {
+        if (resolveNameFromCatalogs(name)) {
+            EngineViewImageByType();
+            return;
+        }
+        resolveNameFromLocalSearch(name, function(found) {
+            if (found) {
+                EngineViewImageByType();
+                return;
+            }
+            engine_error_text = "Failed to resolve name " + name;
+            console.log(engine_error_text);
+            if (engine_panels.error_text) {
+                document.getElementById(engine_panels.error_text).innerHTML = build_error_text(engine_error_text);
+            }
+        });
     }
 
     // Resolve image coordinates from Sesame database using name
@@ -1622,61 +1736,59 @@ function StartAstroMosaicViewerEngine(
         // var resolver_url = "http://simbad.cfa.harvard.edu/simbad/sim-id?output.format=ASCII&Ident=";
 
         // Sesame uses Simbad, NED and Vizier for resolving. Best documented interface.
-        var resolver_url = "https://cdsweb.u-strasbg.fr/cgi-bin/nph-sesame/-oxp/SNV?";
-
-        resolver_url = resolver_url + image_target.replace(/ /g, "+");
+        // Tried in order; the second is the CfA Harvard mirror (the one astropy
+        // falls back to), used when the CDS Strasbourg host is down.
+        var resolver_urls = [
+            "https://cdsweb.u-strasbg.fr/cgi-bin/nph-sesame/-oxp/SNV?",
+            "https://vizier.cfa.harvard.edu/cgi-bin/nph-sesame/-oxp/SNV?"
+        ];
+        var name_to_resolve = image_target;
+        var encoded_name = image_target.replace(/ /g, "+");
 
         if (engine_panels.error_text) {
             var waitingTimeout = setTimeout(function() {
-                                    document.getElementById(engine_panels.error_text).innerHTML = "Resolving name..."; 
+                                    document.getElementById(engine_panels.error_text).innerHTML = "Resolving name...";
                                 }, 1000);
         }
 
-        fetch(resolver_url)
-            .then(
-                function(response) {
-                    if (response.status !== 200) {
-                        clearTimeout(waitingTimeout);
-                        console.log('Problem accessing Sesame name resolver. Status Code: ' + response.status);
-                        if (resolveNameFromCatalogs(image_target)) {
-                            EngineViewImageByType();
-                        } else {
-                            engine_error_text = 'Sesame and local name resolve failed';
-                            if (engine_panels.error_text) {
-                                document.getElementById(engine_panels.error_text).innerHTML = build_error_text(engine_error_text);
-                            }
-                            return;
-                        }
-                    }
-                    response.text().then(function(text) {
-                        clearTimeout(waitingTimeout);
-                        if (find_coordinates(text)) {
-                            EngineViewImageByType();
-                        } else if (resolveNameFromCatalogs(image_target)) {
-                            EngineViewImageByType();
-                        } else {
-                            engine_error_text = "Failed to resolve name " + image_target;
-                            console.log(engine_error_text);
-                            if (engine_panels.error_text) {
-                                document.getElementById(engine_panels.error_text).innerHTML = build_error_text(engine_error_text);
-                            }
-                        }
-                    })
-                }
-            )
-            .catch(function(err) {
-                console.log('Problem accessing Sesame name resolver. Fetch Error :' + err);
+        // Ask resolver n. A refused connection, a timeout, an HTTP error or an
+        // answer without coordinates moves on to the next one; after the last,
+        // fall back to the loaded catalogs and this server's local database.
+        function trySesame(n)
+        {
+            if (n >= resolver_urls.length) {
                 clearTimeout(waitingTimeout);
-                if (resolveNameFromCatalogs(image_target)) {
-                    EngineViewImageByType();
-                } else {
-                    engine_error_text = 'Sesame and local name resolve failed';
-                    if (engine_panels.error_text) {
-                        document.getElementById(engine_panels.error_text).innerHTML = build_error_text(engine_error_text);
-                    }
-                }
+                resolveNameFallback(name_to_resolve);
+                return;
             }
-        );
+            var controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
+            var abortTimer = controller ? setTimeout(function() { controller.abort(); }, 6000) : null;
+            fetch(resolver_urls[n] + encoded_name, controller ? { signal: controller.signal } : undefined)
+                .then(function(response) {
+                    if (response.status !== 200) {
+                        throw new Error("status " + response.status);
+                    }
+                    return response.text();
+                })
+                .then(function(text) {
+                    clearTimeout(abortTimer);
+                    if (find_coordinates(text)) {
+                        clearTimeout(waitingTimeout);
+                        EngineViewImageByType();
+                    } else {
+                        // find_coordinates() may have changed image_target
+                        image_target = name_to_resolve;
+                        trySesame(n + 1);
+                    }
+                })
+                .catch(function(err) {
+                    clearTimeout(abortTimer);
+                    console.log('Problem accessing Sesame name resolver ' + resolver_urls[n] + ' :' + err);
+                    image_target = name_to_resolve;
+                    trySesame(n + 1);
+                });
+        }
+        trySesame(0);
     }
 
     // Remove leading, trailing and duplicate spaces
@@ -2002,7 +2114,7 @@ function StartAstroMosaicViewerEngine(
         }
         if (A) {
             document.getElementById(engine_panels.aladin_panel).innerHTML = "";
-            aladin = A.aladin('#'+engine_panels.aladin_panel, {survey: "P/DSS2/color", fov:aladin_fov, target:aladin_target,
+            aladin = A.aladin('#'+engine_panels.aladin_panel, {survey: dssSurvey(), fov:aladin_fov, target:aladin_target,
                             showReticle:false, showZoomControl:false, showFullscreenControl:fullscreen, 
                             showLayersControl:layers, showGotoControl:false, 
                             showControl: false, cooFrame: "J2000", showFrame: false,
@@ -2671,7 +2783,7 @@ function StartAstroMosaicViewerEngine(
                     document.getElementById(panel_id).style.height = "300px";
                 }
                 if (A) {
-                    engine_data.aladinarr[i] = A.aladin('#'+panel_id, {survey: "P/DSS2/color", fov:engine_params.am_fov_x, target: aladin_target_str,
+                    engine_data.aladinarr[i] = A.aladin('#'+panel_id, {survey: dssSurvey(), fov:engine_params.am_fov_x, target: aladin_target_str,
                                                 showReticle:false, showZoomControl:false, showFullscreenControl:false, 
                                                 showLayersControl:false, showGotoControl:false,
                                                 showControl: false, cooFrame: "J2000", showFrame: false});
@@ -2726,7 +2838,7 @@ function StartAstroMosaicViewerEngine(
                 document.getElementById(panel_id).style.height = "300px";
             }
             if (A) {
-                engine_data.aladinarr[i] = A.aladin('#'+panel_id, {survey: "P/DSS2/color", fov:engine_params.am_fov_x, target: radec,
+                engine_data.aladinarr[i] = A.aladin('#'+panel_id, {survey: dssSurvey(), fov:engine_params.am_fov_x, target: radec,
                                             showReticle:false, showZoomControl:false, showFullscreenControl:false, 
                                             showLayersControl:false, showGotoControl:false,
                                             showControl: false, cooFrame: "J2000", showFrame: false});
