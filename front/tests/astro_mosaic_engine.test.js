@@ -179,3 +179,91 @@ describe("AstroMosaicEngine.js horizon", () => {
     expect(visible.every((row) => row.visible > 30)).toBe(true);
   });
 });
+
+describe("AstroMosaicEngine.js name resolution without CDS", () => {
+  const ids = ["aladin-div", "radec-div", "day-div", "dayvisibility-panel-text", "year-div", "yearvisibility-panel-text", "status-text", "error-text"];
+  const panels = {
+    aladin_panel: "aladin-div", aladin_panel_text: "radec-div",
+    dayvisibility_panel: "day-div", dayvisibility_panel_text: "dayvisibility-panel-text",
+    yearvisibility_panel: "year-div", yearvisibility_panel_text: "yearvisibility-panel-text",
+    status_text: "status-text", error_text: "error-text",
+    panel_view_x: null, panel_view_y: null, panel_view_div: null, panel_view_text: null,
+  };
+  const params = {
+    fov_x: 43.8, fov_y: 77.4, am_fov_x: 0.73, am_fov_y: 1.29, grid_type: "fov",
+    grid_size_x: 1, grid_size_y: 1, grid_overlap: 100, location_lat: 44.06, location_lng: 0.65,
+    horizonSoft: null, horizonHard: [0], meridian_transit: null,
+    UTCdate_ms: Date.UTC(2026, 9, 24), timezoneOffset: 2, isCustomMode: true,
+    isRepositionModeFunc: () => false, repositionTargetFunc: () => {},
+  };
+
+  // Sesame (CDS) refuses; /localsearch answers with `hits`. Returns the day
+  // charts built, so a test can tell the engine got as far as drawing.
+  async function run(target, hits, localOk = true) {
+    const tables = [];
+    stubGoogleCharts(tables);
+    window.A = stub;
+    window.alert = vi.fn();
+    document.body.innerHTML = ids.map((id) => `<div id="${id}"></div>`).join("");
+    const urls = [];
+    window.fetch = vi.fn((url) => {
+      urls.push(url);
+      if (url.includes("nph-sesame")) return Promise.reject(new TypeError("NetworkError"));
+      if (!localOk) return Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve("") });
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(hits)) });
+    });
+    window.StartAstroMosaicViewerEngine("all", target, params, panels, null, 100, {});
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return { tables, urls, error: document.getElementById("error-text").innerHTML };
+  }
+
+  beforeAll(() => {
+    window.console.log = () => {};
+    loadScript("public/AstroMosaicEngine.js");
+  });
+
+  it("uses the local object database when Sesame is unreachable and no catalogs are loaded", async () => {
+    const m33 = { ra: "01h33m50.89s", dec: "+30d39m36.8s", lp: "false", objectName: "Triangulum Galaxy", identifiers: "M33" };
+    const m30 = { ra: "21h40m22.02s", dec: "-23d10m44.7s", lp: "false", objectName: "M30", identifiers: "M30" };
+    const out = await run("M33", [m30, m33]);
+    expect(out.urls.some((u) => u.endsWith("/localsearch?target=M33"))).toBe(true);
+    expect(out.error).toBe("");
+    expect(out.tables.some((t) => t.columns.includes("Not visible"))).toBe(true);
+    expect(window.alert).not.toHaveBeenCalled();
+  });
+
+  it("asks the Harvard Sesame mirror before the local database when CDS is down", async () => {
+    const tables = [];
+    stubGoogleCharts(tables);
+    window.A = stub;
+    document.body.innerHTML = ids.map((id) => `<div id="${id}"></div>`).join("");
+    const urls = [];
+    window.fetch = vi.fn((url) => {
+      urls.push(url);
+      if (url.includes("u-strasbg")) return Promise.reject(new TypeError("NetworkError"));
+      const xml = "<Sesame><jpos>01:33:50.9 +30:39:37</jpos></Sesame>";
+      return Promise.resolve({ status: 200, ok: true, text: () => Promise.resolve(xml) });
+    });
+    window.StartAstroMosaicViewerEngine("all", "M33", params, panels, null, 100, {});
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(urls).toHaveLength(2);
+    expect(urls[1]).toContain("vizier.cfa.harvard.edu");
+    expect(urls.some((u) => u.includes("localsearch"))).toBe(false);
+    expect(tables.some((t) => t.columns.includes("Not visible"))).toBe(true);
+  });
+
+  it("does not take a substring hit for another object", async () => {
+    const m30 = { ra: "21h40m22.02s", dec: "-23d10m44.7s", lp: "false", objectName: "M30", identifiers: "M30" };
+    const m35 = { ra: "06h09m05.06s", dec: "+24d20m19.1s", lp: "false", objectName: "M35", identifiers: "M35" };
+    const out = await run("M3", [m30, m35]);
+    expect(out.tables).toHaveLength(0);
+    expect(out.error).toContain("Failed to resolve name M3");
+  });
+
+  it("shows an error, not an exception, when the local search finds nothing", async () => {
+    const out = await run("Nosuchthing", [], false);
+    expect(out.tables).toHaveLength(0);
+    expect(out.error).toContain("Failed to resolve name Nosuchthing");
+    expect(window.alert).not.toHaveBeenCalled();
+  });
+});
