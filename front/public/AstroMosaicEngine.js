@@ -1643,8 +1643,14 @@ function StartAstroMosaicViewerEngine(
     {
         var want = name.replace(/\s+/g, "").toUpperCase();
         function tokens(h) {
-            return ((h.identifiers || "") + "," + (h.objectName || ""))
-                .split(",").map(function(t) { return t.replace(/\s+/g, "").toUpperCase(); });
+            var list = (h.identifiers || "").toUpperCase().split(/[\s,]+/).filter(Boolean);
+            (h.objectName || "").split(",").forEach(function(n) {
+                n = n.replace(/\s+/g, "").toUpperCase();
+                if (n) {
+                    list.push(n);
+                }
+            });
+            return list;
         }
         for (var i = 0; i < hits.length; i++) {
             if (tokens(hits[i]).indexOf(want) != -1) {
