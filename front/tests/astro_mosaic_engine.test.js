@@ -252,6 +252,28 @@ describe("AstroMosaicEngine.js name resolution without CDS", () => {
     expect(tables.some((t) => t.columns.includes("Not visible"))).toBe(true);
   });
 
+  it("finds an object that has several catalogue ids among substring hits", async () => {
+    // alp.dat stores "IC11 NGC281"; NGC2810.. also match a LIKE '%NGC281%'
+    const hits = [
+      { ra: "00h52m59.3s", dec: "+56d37m19s", lp: "true", objectName: "IC11 NGC281", identifiers: "IC11 NGC281" },
+      { ra: "09h13m00s", dec: "-23d00m00s", lp: "false", objectName: "NGC2810", identifiers: "NGC2810" },
+      { ra: "09h14m00s", dec: "-24d00m00s", lp: "false", objectName: "NGC2811", identifiers: "NGC2811" },
+    ];
+    const out = await run("NGC281", hits);
+    expect(out.error).toBe("");
+    expect(out.tables.some((t) => t.columns.includes("Not visible"))).toBe(true);
+  });
+
+  it("matches a full common name with spaces", async () => {
+    const hits = [
+      { ra: "00h42m44.35s", dec: "+41d16m08.6s", lp: "false", objectName: "Andromeda Galaxy", identifiers: "NGC224 M31" },
+      { ra: "00h40m00s", dec: "+41d00m00s", lp: "false", objectName: "Andromeda II", identifiers: "A2" },
+    ];
+    const out = await run("Andromeda Galaxy", hits);
+    expect(out.error).toBe("");
+    expect(out.tables.some((t) => t.columns.includes("Not visible"))).toBe(true);
+  });
+
   it("does not take a substring hit for another object", async () => {
     const m30 = { ra: "21h40m22.02s", dec: "-23d10m44.7s", lp: "false", objectName: "M30", identifiers: "M30" };
     const m35 = { ra: "06h09m05.06s", dec: "+24d20m19.1s", lp: "false", objectName: "M35", identifiers: "M35" };
