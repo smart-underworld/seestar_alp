@@ -4,11 +4,18 @@ import pytest
 
 from seestar_mcp.tools.scheduling import (
     add_schedule_item_tool,
+    continue_scheduler_tool,
     create_schedule_tool,
     export_schedule_tool,
     get_schedule_tool,
     import_schedule_tool,
+    insert_schedule_item_before_tool,
+    pause_scheduler_tool,
+    remove_schedule_item_tool,
+    replace_schedule_item_tool,
+    reset_scheduler_cur_item_tool,
     schedule_mosaic_tool,
+    skip_scheduler_cur_item_tool,
     start_mosaic_tool,
     start_scheduler_tool,
     stop_scheduler_tool,
@@ -109,3 +116,59 @@ async def test_import_export(make_client_spy, mock_client):
 async def test_no_arg_tools(make_client_spy, mock_client, tool, method):
     await tool()
     getattr(mock_client, method).assert_awaited_once_with()
+
+
+# ── scheduler operation tools ────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "tool,method",
+    [
+        (pause_scheduler_tool, "pause_scheduler"),
+        (continue_scheduler_tool, "continue_scheduler"),
+        (skip_scheduler_cur_item_tool, "skip_scheduler_cur_item"),
+        (reset_scheduler_cur_item_tool, "reset_scheduler_cur_item"),
+    ],
+)
+async def test_scheduler_operation_tools(make_client_spy, mock_client, tool, method):
+    await tool()
+    getattr(mock_client, method).assert_awaited_once_with()
+
+
+# ── schedule editing tools ───────────────────────────────────────────────
+
+
+async def test_remove_schedule_item(make_client_spy, mock_client):
+    await remove_schedule_item_tool("abc123")
+    mock_client.remove_schedule_item.assert_awaited_once_with("abc123")
+
+
+async def test_replace_schedule_item(make_client_spy, mock_client):
+    await replace_schedule_item_tool("id1", "start_mosaic", {"gain": 80})
+    mock_client.replace_schedule_item.assert_awaited_once_with(
+        "id1", "start_mosaic", {"gain": 80}
+    )
+
+
+async def test_insert_schedule_item_before(make_client_spy, mock_client):
+    await insert_schedule_item_before_tool("id1", "wait_for", {"timer_sec": 5})
+    mock_client.insert_schedule_item_before.assert_awaited_once_with(
+        "id1", "wait_for", {"timer_sec": 5}
+    )
+
+
+@pytest.mark.parametrize(
+    "action", ["shutdown", "reboot", "scope_park", "scope_move_to_horizon"]
+)
+async def test_replace_physical_requires_confirm(make_client_spy, mock_client, action):
+    out = await replace_schedule_item_tool("id1", action)
+    assert out["ok"] is False and out["requires_confirmation"] is True
+    make_client_spy.assert_not_called()
+    mock_client.replace_schedule_item.assert_not_awaited()
+
+
+async def test_insert_physical_with_confirm(make_client_spy, mock_client):
+    await insert_schedule_item_before_tool("id1", "shutdown", confirm=True)
+    mock_client.insert_schedule_item_before.assert_awaited_once_with(
+        "id1", "shutdown", None
+    )
