@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from seestar_mcp.safety import gate
+from seestar_mcp.safety import gate, require_confirm
 from seestar_mcp.tools._util import call
 
 
@@ -40,9 +40,19 @@ async def shutdown_tool(confirm: bool = False, telescope_id: int = 1) -> Any:
     return await call(telescope_id, lambda c: c.pi_shutdown())
 
 
-async def startup_sequence_tool(lat: float, lon: float, telescope_id: int = 1) -> Any:
+async def startup_sequence_tool(
+    lat: float, lon: float, telescope_id: int = 1, confirm: bool = False
+) -> Any:
     """Run the Seestar startup/initialization sequence for a location
-    (lat/lon in degrees). Moves the mount; run only when the user is setting up."""
+    (lat/lon in degrees). Moves the mount, so it requires confirm=true after
+    the user confirms; run only when the user is setting up."""
+    refusal = require_confirm(
+        "startup_sequence",
+        confirm,
+        "startup_sequence moves the mount; pass confirm=true after the user confirms",
+    )
+    if refusal is not None:
+        return refusal
     return await call(telescope_id, lambda c: c.startup_sequence(lat, lon))
 
 

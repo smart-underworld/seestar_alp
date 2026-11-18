@@ -75,8 +75,17 @@ async def test_schedule_mosaic(make_client_spy, mock_client):
     )
 
 
+async def test_start_mosaic_requires_confirm(make_client_spy, mock_client):
+    out = await start_mosaic_tool("M31", 10.5, 41.2, 300)
+    assert out["ok"] is False and out["requires_confirmation"] is True
+    make_client_spy.assert_not_called()
+    mock_client.start_mosaic.assert_not_awaited()
+
+
 async def test_start_mosaic(make_client_spy, mock_client):
-    await start_mosaic_tool("M31", 10.5, 41.2, 300, gain=90, is_j2000=True)
+    await start_mosaic_tool(
+        "M31", 10.5, 41.2, 300, gain=90, is_j2000=True, confirm=True
+    )
     mock_client.start_mosaic.assert_awaited_once_with(
         "M31", 10.5, 41.2, 300, 1, 1, 20, 90, False, False, True
     )

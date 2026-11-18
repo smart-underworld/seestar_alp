@@ -32,9 +32,16 @@ CASES = [
 ]
 
 
-async def test_startup_sequence_not_gated(make_client_spy, mock_client):
-    # startup_sequence is user-initiated setup; it is not behind the confirm gate.
-    await startup_sequence_tool(37.12, -123.45)
+async def test_startup_sequence_requires_confirm(make_client_spy, mock_client):
+    # startup_sequence moves the mount, so it is behind the confirm gate.
+    out = await startup_sequence_tool(37.12, -123.45)
+    assert out["ok"] is False and out["requires_confirmation"] is True
+    mock_client.startup_sequence.assert_not_awaited()
+    make_client_spy.assert_not_called()
+
+
+async def test_startup_sequence_with_confirm(make_client_spy, mock_client):
+    await startup_sequence_tool(37.12, -123.45, confirm=True)
     mock_client.startup_sequence.assert_awaited_once_with(37.12, -123.45)
 
 

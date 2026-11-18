@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from seestar_mcp.safety import PHYSICAL_ACTIONS, gate
+from seestar_mcp.safety import PHYSICAL_ACTIONS, gate, require_confirm
 from seestar_mcp.tools._util import call
 
 
@@ -79,8 +79,20 @@ async def start_mosaic_tool(
     is_use_autofocus: bool = False,
     is_j2000: bool = False,
     telescope_id: int = 1,
+    confirm: bool = False,
 ) -> Any:
-    """Start a mosaic capture immediately (outside the scheduler)."""
+    """Start a mosaic capture immediately (outside the scheduler).
+
+    Begins an unattended capture that moves the mount, so it requires
+    confirm=true after the user confirms (like start_scheduler)."""
+    refusal = require_confirm(
+        "start_mosaic",
+        confirm,
+        "start_mosaic begins an unattended capture that moves the mount; "
+        "pass confirm=true after the user confirms",
+    )
+    if refusal is not None:
+        return refusal
     return await call(
         telescope_id,
         lambda c: c.start_mosaic(
@@ -101,12 +113,13 @@ async def start_mosaic_tool(
 
 async def start_scheduler_tool(telescope_id: int = 1, confirm: bool = False) -> Any:
     """Start the scheduler (an unattended run; requires confirm=true after the user confirms)."""
-    if not confirm:
-        return {
-            "ok": False,
-            "error": "start_scheduler launches an unattended run; pass confirm=true after the user confirms",
-            "requires_confirmation": True,
-        }
+    refusal = require_confirm(
+        "start_scheduler",
+        confirm,
+        "start_scheduler launches an unattended run; pass confirm=true after the user confirms",
+    )
+    if refusal is not None:
+        return refusal
     return await call(telescope_id, lambda c: c.start_scheduler())
 
 
