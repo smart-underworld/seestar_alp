@@ -340,22 +340,40 @@ class action:
                 except horizon.SiteLocationUnknown as e:
                     result = f"check_target_visibility: {e}"
                     resp.text = MethodResponse(req, ValueNotSetException(result)).json
+            else:
+                # Unknown/misspelled action: ASCOM expects ActionNotImplemented,
+                # not an empty 200 body with no Alpaca JSON for the client.
+                result = f"Action '{action_name}' is not implemented."
+                resp.text = MethodResponse(
+                    req, ActionNotImplementedException(result)
+                ).json
+
             if log_debug:
                 cur_dev.logger.debug(f"response: {result}")
             else:
                 cur_dev.logger.info(f"response: {result}")
 
-            if hasattr(cur_dev, "event_callbacks"):
+            # Post-success event-callback dispatch must NOT clobber the response
+            # already built above: a raising callback (or a non-dict `params`
+            # expanded via **params) previously turned a real success into a
+            # DriverException. Guard the payload type and isolate each callback.
+            if hasattr(cur_dev, "event_callbacks") and isinstance(params, dict):
                 event_name = f"action_{action_name}"
                 for cb in cur_dev.event_callbacks:
-                    if (
-                        event_name in cb.fireOnEvents()
-                        or "action_*" in cb.fireOnEvents()
-                    ):
-                        cb.eventFired(cur_dev, {"Event": event_name, **params})
+                    try:
+                        if (
+                            event_name in cb.fireOnEvents()
+                            or "action_*" in cb.fireOnEvents()
+                        ):
+                            cb.eventFired(cur_dev, {"Event": event_name, **params})
+                    except Exception as cb_ex:
+                        cur_dev.logger.warn(
+                            f"event callback {cb} failed for {event_name}: {cb_ex}"
+                        )
         except Exception as ex:
             resp.text = MethodResponse(
-                req, DevDriverException(0x500, "\n".join(ex.args), ex)
+                req,
+                DevDriverException(0x500, "\n".join(str(a) for a in ex.args), ex),
             ).json
             cur_dev.logger.warn(f"Error making request: {ex}")
 
@@ -1320,9 +1338,15 @@ class siderealtime:
             ).json
             return
         try:
-            # ----------------------
-            val = DriveRates.driveSidereal
-            # ----------------------
+            # Local Apparent Sidereal Time in hours at the site longitude.
+            # Previously returned DriveRates.driveSidereal (enum == 0), so
+            # SiderealTime was always 0 and clients computing hour angle broke.
+            from astropy.time import Time
+            import astropy.units as u
+
+            lon = seestar_dev[devnum].site_longitude or 0.0
+            lst = Time.now().sidereal_time("apparent", longitude=lon * u.deg)
+            val = float(lst.hour)
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(
@@ -1774,10 +1798,9 @@ class trackingrates:
             ).json
             return
         try:
-            # ----------------------
-            # val = {0}
-            val = 0  # above caused error, this works
-            # ----------------------
+            # ASCOM TrackingRates must be an ARRAY of supported DriveRates, not
+            # a bare int. The Seestar tracks at the sidereal rate only.
+            val = [DriveRates.driveSidereal]
             resp.text = PropertyResponse(val, req).json
         except Exception as ex:
             resp.text = PropertyResponse(

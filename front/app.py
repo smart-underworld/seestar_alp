@@ -4547,8 +4547,22 @@ class SettingsResource(BaseResource):
                 method_variants
             )
 
+        # The MAIN settings bundle (focal_pos, exp_ms, ...) must be judged with
+        # the inner-code-aware helper, not just ErrorNumber: the firmware returns
+        # an out-of-range rejection as Value.code == 204 while the outer call
+        # still reports ErrorNumber 0, which previously showed success even
+        # though the value did not take.
+        #
+        # drizzle / star_trails are single best-effort set_setting({"stack":...})
+        # calls with NO fallback variant: some firmware legitimately rejects the
+        # stack-nested form, and the UI tolerates that (unlike cont_capt and the
+        # stack-settings bundle, which DO have fallbacks judged via their own
+        # *_success flags). So they keep the lenient ErrorNumber-only check.
+        # dark_mode is fire-and-forget via method_async, also ErrorNumber-only.
+        settings_success = _did_set_setting_succeed(settings_output)
+
         if (
-            settings_output["ErrorNumber"]
+            not settings_success
             or stack_settings_output["ErrorNumber"]
             or not stack_settings_success
             or live_mode_output["ErrorNumber"]

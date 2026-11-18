@@ -789,8 +789,13 @@ def test_settings_post_falls_back_to_set_stack_setting_for_discrete_flags(monkey
         params = parameters.get("params", {})
         if method == "set_setting" and params == {"stack": {"cont_capt": False}}:
             return {"ErrorNumber": 0, "Value": {"code": 0}}
+        if method == "set_setting" and params == {"stack": {"drizzle2x": False}}:
+            # Drizzle via set_setting succeeds here; this test targets the
+            # discrete-stack-settings fallback, not drizzle.
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
         if method == "set_setting" and isinstance(params, dict) and "stack" in params:
-            # Simulate firmware that rejects stack payload via set_setting.
+            # Simulate firmware that rejects the stack-settings payload via
+            # set_setting (forcing the set_stack_setting fallback below).
             return {"ErrorNumber": 0, "Value": {"code": -1, "error": "unsupported"}}
         if method == "set_stack_setting":
             captured["stack_fallback_called"] = True
@@ -3501,3 +3506,67 @@ def test_import_csv_schedule_tolerates_malformed_rows(monkeypatch):
     actions = [a for a, _ in calls]
     assert actions.count("start_mosaic") == 2
     assert "wait_for" in actions
+
+
+def test_settings_post_reports_error_on_inner_code_rejection(monkeypatch):
+    # Regression: an out-of-range value rejected by firmware as Value.code 204
+    # (while the outer call still reports ErrorNumber 0) was shown as
+    # "Successfully Updated Settings." The main set_setting result is now judged
+    # with the inner-code-aware helper.
+    class DummyReq:
+        def __init__(self):
+            self.media = {
+                "stack_lenhance": "false",
+                "stack_dither_pix": "10",
+                "stack_dither_interval": "2",
+                "stack_dither_enable": "true",
+                "exp_ms_stack_l": "10000",
+                "exp_ms_continuous": "500",
+                "focal_pos": "1500",
+                "auto_power_off": "false",
+                "auto_3ppa_calib": "true",
+                "frame_calib": "true",
+                "plan_target_af": "true",
+                "viewplan_gohome": "true",
+                "expert_mode": "false",
+                "save_discrete_frame": "false",
+                "save_discrete_ok_frame": "true",
+                "light_duration_min": "10",
+                "stack_capt_type": "stack",
+                "stack_capt_num": "1",
+                "stack_brightness": "0",
+                "stack_contrast": "0",
+                "stack_saturation": "0",
+                "stack_dbe_enable": "false",
+                "heater_enable": "false",
+                "dark_mode": "false",
+                "stack_cont_capt": "true",
+                "stack_drizzle2x": "false",
+            }
+
+    captured = {"output": None}
+
+    def fake_do_action_device(action, dev_num, parameters, is_schedule=False):
+        if action == "method_async":
+            return {"ErrorNumber": 0, "Value": {"code": 0}}
+        params = parameters.get("params", {})
+        # The main FormattedNewSettings payload carries stack_lenhance; simulate
+        # the firmware rejecting an out-of-range value inside it (code 204).
+        if isinstance(params, dict) and "stack_lenhance" in params:
+            return {"ErrorNumber": 0, "Value": {"code": 204}}
+        return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2670)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+    monkeypatch.setattr(
+        front_app.SettingsResource,
+        "render_settings",
+        staticmethod(
+            lambda _req, _resp, _tid, output: captured.__setitem__("output", output)
+        ),
+    )
+
+    front_app.SettingsResource().on_post(DummyReq(), object(), 1)
+
+    assert captured["output"] == "Error Updating Settings."

@@ -490,3 +490,65 @@ def test_action_check_target_visibility_invalid_target(horizon_file, params, det
     number, message = _put_action_error("check_target_visibility", params)
     assert number == 0x401  # InvalidValue
     assert detail in message
+
+
+class _RaisingCallback:
+    def fireOnEvents(self):
+        return ["action_*"]
+
+    def eventFired(self, cur_dev, payload):
+        raise RuntimeError("callback boom")
+
+
+def test_action_unknown_action_returns_not_implemented():
+    # Regression: the if/elif action chain had no else, so an unknown action
+    # left resp.text unset and returned an empty 200 instead of ASCOM
+    # ActionNotImplemented.
+    set_shr_logger(logging.getLogger("test-telescope"))
+    device_exceptions.logger = DummyLogger()
+    telescope.seestar_dev.clear()
+    telescope.seestar_dev[1] = FakeDevice(connected=True)
+
+    req = DummyReq("totally_unknown_action", {})
+    resp = DummyResp()
+    telescope.action().on_put(req, resp, devnum=1)
+
+    assert resp.text  # non-empty body (was empty 200)
+    payload = json.loads(resp.text)
+    assert payload["ErrorNumber"] != 0
+
+
+def test_action_callback_failure_does_not_clobber_success():
+    # Regression: a raising event-callback ran inside the success try and
+    # overwrote the success response with a DriverException.
+    set_shr_logger(logging.getLogger("test-telescope"))
+    device_exceptions.logger = DummyLogger()
+    telescope.seestar_dev.clear()
+    fake = FakeDevice(connected=True)
+    fake.event_callbacks = [_RaisingCallback()]
+    telescope.seestar_dev[1] = fake
+
+    req = DummyReq("get_event_state", {"event_name": "scheduler"})
+    resp = DummyResp()
+    telescope.action().on_put(req, resp, devnum=1)
+
+    payload = json.loads(resp.text)
+    assert payload["ErrorNumber"] == 0  # success preserved
+
+
+def test_action_non_dict_params_skip_callbacks_without_error():
+    # Regression: Parameters that parse to a non-dict (a JSON list) crashed the
+    # callback dispatch via **params and masked the success as a 0x500 error.
+    set_shr_logger(logging.getLogger("test-telescope"))
+    device_exceptions.logger = DummyLogger()
+    telescope.seestar_dev.clear()
+    fake = FakeDevice(connected=True)
+    fake.event_callbacks = [_RaisingCallback()]
+    telescope.seestar_dev[1] = fake
+
+    req = DummyReq("get_event_state", [1, 2, 3])
+    resp = DummyResp()
+    telescope.action().on_put(req, resp, devnum=1)
+
+    payload = json.loads(resp.text)
+    assert payload["ErrorNumber"] == 0

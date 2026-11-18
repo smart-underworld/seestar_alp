@@ -94,7 +94,16 @@ class configureddevices:
                 "DeviceName": dev["name"],
                 "DeviceType": TelescopeMetadata.DeviceType,
                 "DeviceNumber": dev["device_num"],
-                "UniqueID": str(uuid.uuid4()),
+                # UniqueID must be STABLE per device. uuid4() returned a fresh
+                # GUID every request, so clients keying stored profiles/config
+                # on it never matched across polls. Derive a deterministic id
+                # from the device identity instead.
+                "UniqueID": str(
+                    uuid.uuid5(
+                        uuid.NAMESPACE_DNS,
+                        f"seestar_alp-{dev['name']}-{dev['device_num']}",
+                    )
+                ),
             }
             for dev in Config.seestars
         ]

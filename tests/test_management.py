@@ -65,3 +65,28 @@ def test_configureddevices_matches_seestars(monkeypatch):
     assert len(payload["Value"]) == 2
     assert payload["Value"][0]["DeviceName"] == "Alpha"
     assert payload["Value"][1]["DeviceNumber"] == 2
+
+
+def test_configureddevices_uniqueid_is_stable_across_requests(monkeypatch):
+    # Regression: UniqueID was str(uuid.uuid4()), a fresh GUID every request, so
+    # ASCOM clients keying stored profiles on it never matched across polls. It
+    # must be stable per device.
+    set_shr_logger(logging.getLogger("test-management"))
+    monkeypatch.setattr(
+        Config,
+        "seestars",
+        [
+            {"name": "Alpha", "device_num": 1},
+            {"name": "Beta", "device_num": 2},
+        ],
+    )
+
+    def ids():
+        resp = DummyResp()
+        configureddevices().on_get(DummyReq(), resp)
+        return [d["UniqueID"] for d in json.loads(resp.text)["Value"]]
+
+    first = ids()
+    second = ids()
+    assert first == second  # stable across requests
+    assert first[0] != first[1]  # distinct per device
