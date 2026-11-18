@@ -2438,7 +2438,7 @@ def import_csv_schedule(input, telescope_id):
                 do_schedule_action_device(
                     "start_up_sequence", startup_params, telescope_id
                 )
-            case "_":
+            case _:
                 logger.warning(f"Unknown action '{action}' encountered; skipping.")
 
 
@@ -5960,7 +5960,7 @@ def searchLocal(object):
 class GetCometCoordinates:
     @staticmethod
     def on_get(req, resp):
-        cometName = urllib.parse.quote_plus(req.get_param("cometname"))
+        cometName = urllib.parse.quote_plus(req.get_param("cometname") or "")
         rtn = searchComet(cometName)
         if len(rtn) == 0:
             resp.status = falcon.HTTP_404
@@ -5976,7 +5976,7 @@ class GetCometCoordinates:
 class GetMinorPlanetCoordinates:
     @staticmethod
     def on_get(req, resp):
-        minorname = urllib.parse.quote_plus(req.get_param("minorname"))
+        minorname = urllib.parse.quote_plus(req.get_param("minorname") or "")
         rtn = searchMinorPlanet(minorname)
         if len(rtn) == 0:
             resp.status = falcon.HTTP_404
@@ -6067,7 +6067,7 @@ class ImagingProxyResource:
 class GetAAVSOSearch:
     @staticmethod
     def on_get(req: falcon.Request, resp: falcon.Response) -> None:
-        objName = urllib.parse.quote_plus(req.get_param("target"))
+        objName = urllib.parse.quote_plus(req.get_param("target") or "")
         aavso_URL = (
             "https://www.aavso.org/vsx/index.php?view=api.object&format=json&ident="
         )

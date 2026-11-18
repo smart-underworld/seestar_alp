@@ -3570,3 +3570,42 @@ def test_settings_post_reports_error_on_inner_code_rejection(monkeypatch):
     front_app.SettingsResource().on_post(DummyReq(), object(), 1)
 
     assert captured["output"] == "Error Updating Settings."
+
+
+def test_import_csv_schedule_warns_on_unknown_action(monkeypatch):
+    # Regression: `case "_"` matched only the literal string "_", so the
+    # intended catch-all warning for unknown actions never fired. `case _` is
+    # the real wildcard.
+    warnings = []
+
+    class _CapLogger:
+        def warning(self, msg, *a, **k):
+            warnings.append(msg)
+
+        def info(self, *a, **k):
+            pass
+
+        def error(self, *a, **k):
+            pass
+
+        def debug(self, *a, **k):
+            pass
+
+    monkeypatch.setattr(front_app, "logger", _CapLogger())
+    monkeypatch.setattr(front_app, "do_schedule_action_device", lambda *a, **k: None)
+
+    front_app.import_csv_schedule(["action,x", "bogus_action,1"], 1)
+
+    assert any("Unknown action" in w for w in warnings)
+
+
+def test_comet_search_missing_param_is_404_not_500(monkeypatch):
+    # Regression: quote_plus(req.get_param("cometname")) crashed with TypeError
+    # (HTTP 500) when the param was absent; now it 404s gracefully.
+    monkeypatch.setattr(front_app, "searchComet", lambda name: "")
+    client = testing.TestClient(falcon.App())
+    client.app.add_route("/getcomet", front_app.GetCometCoordinates())
+
+    r = client.simulate_get("/getcomet")  # no cometname param
+
+    assert r.status_code == 404
