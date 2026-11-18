@@ -55,10 +55,11 @@ class Schedule2(BaseModel):
                 mosaic_params["ra"] = Util.trim_seconds(mosaic_params["ra"])
                 mosaic_params["dec"] = Util.trim_seconds(mosaic_params["dec"])
             elif isinstance(mosaic_params["ra"], float):
-                if mosaic_params["ra"] < 0:
-                    mosaic_params["ra"] = self.ra
-                    mosaic_params["dec"] = self.dec
-                    mosaic_params["is_j2000"] = False
+                # Schedule2 is a pure schedule model with no live scope position,
+                # so (unlike the device-side Seestar) it cannot substitute a
+                # sentinel negative RA with the current pointing -- self.ra /
+                # self.dec do not exist here and raised AttributeError. Round the
+                # supplied coordinates as given.
                 mosaic_params["ra"] = round(mosaic_params["ra"], 4)
                 mosaic_params["dec"] = round(mosaic_params["dec"], 4)
         item["schedule_item_id"] = str(uuid.uuid4())
