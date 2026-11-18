@@ -96,7 +96,7 @@ connection/API error.
 | **Filter wheel** | `get_wheel_position`, `get_wheel_state`, `get_wheel_setting`, `set_wheel_position`, `set_lp_filter` |
 | **Imaging** | `start_stack`, `stop_view`, `set_gain`, `set_exposure`, `get_last_image`, `create_dark` |
 | **Settings** | `read_settings`, `write_setting` |
-| **Scheduling** | `get_schedule`, `create_schedule`, `add_schedule_item`, `schedule_mosaic`, `start_mosaic`, `start_scheduler`, `stop_scheduler`, `export_schedule`, `import_schedule` |
+| **Scheduling** | `get_schedule`, `create_schedule`, `add_schedule_item`, `schedule_mosaic`, `start_mosaic`, `start_scheduler`, `stop_scheduler`, `pause_scheduler`, `continue_scheduler`, `skip_scheduler_cur_item`, `reset_scheduler_cur_item`, `remove_schedule_item`, `replace_schedule_item`, `insert_schedule_item_before`, `export_schedule`, `import_schedule` |
 | **Startup / system** | `startup_sequence`, `set_heater` |
 | **System (physical, gated)** | `scope_park`, `scope_move_to_horizon`, `reboot`, `shutdown` |
 
@@ -117,8 +117,11 @@ There is no raw command passthrough — only curated tools. Physical and
 destructive actions require explicit confirmation: `scope_park`,
 `scope_move_to_horizon`, `reboot`, and `shutdown` each refuse unless called with
 `confirm=true`, and making no device call when refused. Because the scheduler
-can execute physical actions too, `add_schedule_item` (for a physical action)
-and `start_scheduler` likewise require `confirm=true`.
+can execute physical actions too, `add_schedule_item`,
+`replace_schedule_item`, and `insert_schedule_item_before` (for a physical
+action) require `confirm=true`. Actions that begin an unattended run or move
+the mount on their own — `start_scheduler`, `start_mosaic`, and
+`startup_sequence` — likewise require `confirm=true`.
 
 ## Development
 
