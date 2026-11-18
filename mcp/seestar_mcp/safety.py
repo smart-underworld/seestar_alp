@@ -1,7 +1,19 @@
 """Confirmation gate for physical or destructive telescope actions."""
 
 PHYSICAL_ACTIONS: frozenset[str] = frozenset(
-    {"scope_park", "scope_move_to_horizon", "reboot", "shutdown"}
+    {
+        "scope_park",
+        "scope_move_to_horizon",
+        "reboot",
+        "shutdown",
+        # Real device RPC method names. A schedule item can forward an arbitrary
+        # action straight to the firmware (add_schedule_item does not whitelist
+        # actions, and the scheduler's else-branch sends {"method": action}), so
+        # the pi_* reboot/shutdown methods must be gated as schedule items too --
+        # the bare "reboot"/"shutdown" labels above only match the direct tools.
+        "pi_reboot",
+        "pi_shutdown",
+    }
 )
 
 

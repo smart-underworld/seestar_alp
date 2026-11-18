@@ -62,3 +62,15 @@ def test_dev_not_connected_number_does_not_recurse():
     err = ex.DevNotConnectedException("device not connected.")
     assert err.Number == 0x407
     assert err.number == 0x407
+
+
+def test_dev_driver_exception_substitutes_out_of_range_number(monkeypatch):
+    # Regression: the guard `number <= 0x500 and number >= 0xFFF` was impossible
+    # (always False), so out-of-range Alpaca error numbers were never corrected.
+    monkeypatch.setattr(ex, "Config", SimpleNamespace(verbose_driver_exceptions=False))
+    ex.logger = DummyLogger()
+
+    assert ex.DevDriverException(0x50, "too low").number == 0x500
+    assert ex.DevDriverException(0x2000, "too high").number == 0x500
+    # In-range numbers are preserved.
+    assert ex.DevDriverException(0x600, "fine").number == 0x600

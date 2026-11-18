@@ -342,3 +342,12 @@ class TestInputValidation:
     async def test_start_exposure_invalid_type(self, client):
         with pytest.raises(ValueError):
             await client.start_exposure(exp_type="unknown")
+
+
+async def test_action_raises_clean_error_on_empty_body(client, httpx_mock):
+    # Regression: an empty / non-JSON 200 body (e.g. from an action the server
+    # does not implement) raised a raw JSONDecodeError traceback instead of a
+    # clean SSAlpError.
+    httpx_mock.add_response(method="PUT", url=ACTION_URL, status_code=200, text="")
+    with pytest.raises(SSAlpError):
+        await client.action("set_below_horizon_dec_offset", {"offset": 1.0})

@@ -43,6 +43,7 @@
 #
 import os
 import socket  # for discovery responder
+import time
 from threading import Thread  # Same here
 from logging import Logger
 
@@ -107,8 +108,16 @@ class DiscoveryResponder(Thread):
     def run(self):
         """Discovery responder forever loop"""
         while True:
-            data, addr = self.rsock.recvfrom(1024)
-            datascii = str(data, "ascii")
-            logger.info(f"Disc rcv {datascii} from {str(addr)}")
-            if "alpacadiscovery1" in datascii:
-                self.tsock.sendto(self.alpaca_response.encode(), addr)
+            # A single malformed datagram (e.g. non-ASCII bytes -> previously a
+            # fatal UnicodeDecodeError) must not kill discovery for good. Decode
+            # defensively and isolate each iteration so the responder keeps
+            # answering.
+            try:
+                data, addr = self.rsock.recvfrom(1024)
+                datascii = str(data, "ascii", errors="replace")
+                logger.info(f"Disc rcv {datascii} from {str(addr)}")
+                if "alpacadiscovery1" in datascii:
+                    self.tsock.sendto(self.alpaca_response.encode(), addr)
+            except Exception as ex:
+                logger.warning(f"Discovery responder: ignoring bad datagram: {ex}")
+                time.sleep(0.05)  # avoid a tight loop on a persistent socket error

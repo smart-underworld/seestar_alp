@@ -19,6 +19,9 @@ class DummyLogger:
     def warn(self, *args, **kwargs):
         return None
 
+    def warning(self, *args, **kwargs):
+        return None
+
     def error(self, *args, **kwargs):
         return None
 
@@ -457,13 +460,16 @@ def test_get_schedule_with_mismatched_schedule_id_and_missing_state():
     assert out["available_device_list"] == []
 
 
-def test_import_schedule_active_state_raises_attribute_error(tmp_path):
+def test_import_schedule_active_state_returns_graceful_refusal(tmp_path):
+    # Previously raised AttributeError (self.json_result did not exist on
+    # Seestar_Federation); now returns the intended graceful refusal result.
     federation = Seestar_Federation(DummyLogger(), {})
     federation.schedule["state"] = "working"
-    with pytest.raises(AttributeError):
-        federation.import_schedule(
-            {"filepath": str(tmp_path / "x.json"), "is_retain_state": True}
-        )
+    result = federation.import_schedule(
+        {"filepath": str(tmp_path / "x.json"), "is_retain_state": True}
+    )
+    assert result["code"] == -1
+    assert "existing scheduler" in result["result"].lower()
 
 
 def test_start_scheduler_by_time(monkeypatch):

@@ -1,4 +1,5 @@
 import threading
+import time
 import uuid
 from typing import Any
 
@@ -40,6 +41,28 @@ class Seestar_Federation:
 
     def reconnect(self) -> bool:
         return True
+
+    def json_result(self, command_name, code, result):
+        # Mirror Seestar.json_result; Seestar_Federation has no base class that
+        # provides it, so import_schedule's error path used to raise
+        # AttributeError instead of returning the intended result.
+        if code != 0:
+            self.logger.warning(
+                f"Returning not normal result for command {command_name}, "
+                f"code: {code}, result: {result}."
+            )
+        else:
+            self.logger.debug(
+                f"Returning result for command {command_name}, "
+                f"code: {code}, result: {result}."
+            )
+        return {
+            "jsonrpc": "2.0",
+            "TimeStamp": time.time(),
+            "command": command_name,
+            "code": code,
+            "result": result,
+        }
 
     def get_event_state(self, params: dict | None = None):
         result = {}
