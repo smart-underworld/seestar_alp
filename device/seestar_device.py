@@ -111,7 +111,7 @@ class Seestar:
         self.get_msg_thread: Optional[threading.Thread] = None
         self.heartbeat_msg_thread: Optional[threading.Thread] = None
         self.is_debug: bool = is_debug
-        self.response_dict: OrderedDict[int, dict] = FixedSizeOrderedDict(max=100)
+        self.response_dict: OrderedDict[int, dict] = FixedSizeOrderedDict(maxsize=100)
         self.logger = logger
         self.is_connected: bool = False
         # PEM key bytes (lazy loaded)

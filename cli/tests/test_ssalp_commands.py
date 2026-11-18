@@ -599,6 +599,24 @@ class TestScheduleMixinCoverage:
             httpx_mock, client.start_mosaic("M42", 1.0, 2.0, 3600), "start_mosaic"
         )
 
+    async def test_start_mosaic_sends_panel_time_sec(self, client, httpx_mock):
+        # Regression: start_mosaic sent the raw session_time_sec (TOTAL), which
+        # the device consumed as per-panel time, so a multi-panel mosaic ran far
+        # longer than schedule_mosaic for the same arguments. It must convert to
+        # panel_time_sec = total / panels, matching schedule_mosaic.
+        import json
+        from urllib.parse import parse_qs
+
+        _stub(httpx_mock)
+        await client.start_mosaic(
+            "M42", 1.0, 2.0, session_time_sec=3600, ra_num=2, dec_num=2
+        )
+        form = parse_qs(httpx_mock.get_request().content.decode())
+        assert form["Action"] == ["start_mosaic"]
+        params = json.loads(form["Parameters"][0])
+        assert "session_time_sec" not in params
+        assert params["panel_time_sec"] == 900  # 3600 / (2 * 2)
+
     async def test_start_spectra(self, client, httpx_mock):
         await _check_action(
             httpx_mock, client.start_spectra("Algol", 1.0, 2.0, 600), "start_spectra"

@@ -221,6 +221,13 @@ class ScheduleMixin:
             raise ValueError("session_time_sec must be positive")
         if gain < 0:
             raise ValueError("gain must be non-negative")
+        # session_time_sec is the TOTAL across all panels. Convert to per-panel
+        # panel_time_sec, matching schedule_mosaic and the front-end. Previously
+        # start_mosaic sent the raw total, which the device consumed as the
+        # per-panel time (seestar_device.start_mosaic_item), so a 2x2 mosaic ran
+        # 4x longer than schedule_mosaic for the same arguments.
+        panels = max(1, ra_num * dec_num)
+        panel_time_sec = round(session_time_sec / panels)
         logger.info("start_mosaic target=%s ra=%s dec=%s", target_name, ra, dec)
         return await self.action(
             "start_mosaic",
@@ -231,7 +238,7 @@ class ScheduleMixin:
                 "is_j2000": is_j2000,
                 "is_use_lp_filter": is_use_lp_filter,
                 "is_use_autofocus": is_use_autofocus,
-                "session_time_sec": session_time_sec,
+                "panel_time_sec": panel_time_sec,
                 "ra_num": ra_num,
                 "dec_num": dec_num,
                 "panel_overlap_percent": panel_overlap_percent,
