@@ -255,6 +255,47 @@ def test_schedule_create_and_add_item(seestar):
     assert "schedule_item_id" in seestar.schedule["list"][0]
 
 
+def test_replace_schedule_item_terminates_when_active_item_mid_list(seestar):
+    # Regression: replace_schedule_item's first loop lacked `index += 1`, so
+    # when the scheduler was "working" and the active item was not the first
+    # entry, the scan spun forever (100% CPU, hung worker thread). Build a
+    # 3-item schedule, mark the middle one active, replace the last, and assert
+    # the call completes and swaps the right item.
+    seestar.create_schedule({})
+    for t in (1, 2, 3):
+        seestar.add_schedule_item({"action": "wait_for", "params": {"timer_sec": t}})
+    ids = [it["schedule_item_id"] for it in seestar.schedule["list"]]
+
+    seestar.schedule["state"] = "working"
+    seestar.schedule["current_item_id"] = ids[1]  # active = middle item
+
+    result = seestar.replace_schedule_item(
+        {"item_id": ids[2], "action": "wait_for", "params": {"timer_sec": 99}}
+    )
+
+    assert len(result["list"]) == 3
+    assert result["list"][2]["params"]["timer_sec"] == 99
+
+
+def test_replace_schedule_item_refuses_already_executed_item(seestar):
+    # When the targeted item is before the active item it has already run and
+    # must not be replaced; the loop must still terminate.
+    seestar.create_schedule({})
+    for t in (1, 2, 3):
+        seestar.add_schedule_item({"action": "wait_for", "params": {"timer_sec": t}})
+    ids = [it["schedule_item_id"] for it in seestar.schedule["list"]]
+
+    seestar.schedule["state"] = "working"
+    seestar.schedule["current_item_id"] = ids[2]  # active = last item
+
+    result = seestar.replace_schedule_item(
+        {"item_id": ids[0], "action": "wait_for", "params": {"timer_sec": 99}}
+    )
+
+    # Unchanged: the first item already executed.
+    assert result["list"][0]["params"]["timer_sec"] == 1
+
+
 def test_start_scheduler_rejects_when_not_master(monkeypatch, seestar):
     seestar.is_client_master = lambda: False
     seestar.schedule["state"] = "stopped"

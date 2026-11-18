@@ -391,7 +391,15 @@ class connected:
             if conn:
                 seestar_dev[devnum].start_watch_thread()
             else:
-                seestar_dev[devnum].end_watch_thread()
+                # The underlying Seestar connection is a single shared resource
+                # owned by the app lifecycle (started at app.py startup, torn
+                # down at app shutdown). It is used concurrently by the web UI,
+                # the scheduler, and every other ASCOM client. Honouring one
+                # client's Connected=false by calling end_watch_thread() would
+                # disconnect the device for *everyone* (ConformU/NINA routinely
+                # toggle Connected during a session). Treat a client disconnect
+                # as a logical no-op instead of a physical teardown.
+                pass
             resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(
@@ -1975,9 +1983,16 @@ class moveaxis:
         angle = MOVE_AXIS_ANGLE[axis] + (180 if rate < 0 else 0)
         try:
             # -----------------------------
-            seestar_dev[devnum].move_scope(angle, abs(rate))
+            if seestar_dev[devnum].move_scope(angle, abs(rate)):
+                resp.text = MethodResponse(req).json
+            else:
+                resp.text = MethodResponse(
+                    req,
+                    InvalidOperationException(
+                        "MoveAxis failed: mount is busy (goto in progress)."
+                    ),
+                ).json
             # -----------------------------
-            resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(
                 req, DevDriverException(0x500, "Telescope.Moveaxis failed", ex)
@@ -2197,16 +2212,23 @@ class slewtocoordinates:
         ### RANGE CHECK AS NEEDED ###       # Raise Alpaca InvalidValueException with details!
         try:
             # -----------------------------
-            seestar_dev[devnum].goto_target(
+            if seestar_dev[devnum].goto_target(
                 {
                     "ra": rightascension,
                     "dec": declination,
                     "is_j2000": False,
                     "target_name": "unknown",
                 }
-            )
+            ):
+                resp.text = MethodResponse(req).json
+            else:
+                resp.text = MethodResponse(
+                    req,
+                    InvalidOperationException(
+                        "SlewToCoordinates failed: mount is busy or the device rejected the goto."
+                    ),
+                ).json
             # -----------------------------
-            resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(
                 req, DevDriverException(0x500, "Telescope.Slewtocoordinates failed", ex)
@@ -2251,16 +2273,23 @@ class slewtocoordinatesasync:
         ### RANGE CHECK AS NEEDED ###       # Raise Alpaca InvalidValueException with details!
         try:
             # -----------------------------
-            seestar_dev[devnum].goto_target(
+            if seestar_dev[devnum].goto_target(
                 {
                     "ra": rightascension,
                     "dec": declination,
                     "is_j2000": False,
                     "target_name": "unknown",
                 }
-            )
+            ):
+                resp.text = MethodResponse(req).json
+            else:
+                resp.text = MethodResponse(
+                    req,
+                    InvalidOperationException(
+                        "SlewToCoordinatesAsync failed: mount is busy or the device rejected the goto."
+                    ),
+                ).json
             # -----------------------------
-            resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(
                 req,
@@ -2280,16 +2309,23 @@ class slewtotarget:
             return
         try:
             # -----------------------------
-            seestar_dev[devnum].goto_target(
+            if seestar_dev[devnum].goto_target(
                 {
                     "ra": seestar_dev[devnum].target_ra,
                     "dec": seestar_dev[devnum].target_dec,
                     "is_j2000": False,
                     "target_name": "unknown",
                 }
-            )
+            ):
+                resp.text = MethodResponse(req).json
+            else:
+                resp.text = MethodResponse(
+                    req,
+                    InvalidOperationException(
+                        "SlewToTarget failed: mount is busy or the device rejected the goto."
+                    ),
+                ).json
             # -----------------------------
-            resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(
                 req, DevDriverException(0x500, "Telescope.Slewtotarget failed", ex)
@@ -2306,16 +2342,23 @@ class slewtotargetasync:
             return
         try:
             # -----------------------------
-            seestar_dev[devnum].goto_target(
+            if seestar_dev[devnum].goto_target(
                 {
                     "ra": seestar_dev[devnum].target_ra,
                     "dec": seestar_dev[devnum].target_dec,
                     "is_j2000": False,
                     "target_name": "unknown",
                 }
-            )
+            ):
+                resp.text = MethodResponse(req).json
+            else:
+                resp.text = MethodResponse(
+                    req,
+                    InvalidOperationException(
+                        "SlewToTargetAsync failed: mount is busy or the device rejected the goto."
+                    ),
+                ).json
             # -----------------------------
-            resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(
                 req, DevDriverException(0x500, "Telescope.Slewtotargetasync failed", ex)
@@ -2405,9 +2448,21 @@ class synctocoordinates:
         ### RANGE CHECK AS NEEDED ###       # Raise Alpaca InvalidValueException with details!
         try:
             # -----------------------------
-            seestar_dev[devnum].sync_target([rightascension, declination])
+            sync_result = seestar_dev[devnum].sync_target([rightascension, declination])
+            # sync_target returns a plain message string when the scheduler is
+            # active, or a result dict that may carry an "error" key.
+            if isinstance(sync_result, str) or (
+                isinstance(sync_result, dict) and "error" in sync_result
+            ):
+                resp.text = MethodResponse(
+                    req,
+                    InvalidOperationException(
+                        f"SyncToCoordinates failed: {sync_result}"
+                    ),
+                ).json
+            else:
+                resp.text = MethodResponse(req).json
             # -----------------------------
-            resp.text = MethodResponse(req).json
         except Exception as ex:
             resp.text = MethodResponse(
                 req, DevDriverException(0x500, "Telescope.Synctocoordinates failed", ex)

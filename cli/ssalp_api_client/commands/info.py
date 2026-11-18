@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 logger = logging.getLogger("ssalp_api_client.commands.info")
 
@@ -124,4 +125,26 @@ class InfoMixin:
 
     async def pi_set_time(self, iso_time: str) -> dict:
         logger.info("pi_set_time time=%s", iso_time)
-        return await self.method_sync("pi_set_time", [iso_time])
+        # The firmware's pi_set_time expects a date-component OBJECT, not the
+        # raw ISO string (see device/seestar_device.py startup sequence which
+        # builds exactly this shape). Sending the bare string is rejected
+        # (code 107 "expected object param").
+        dt = datetime.fromisoformat(iso_time)
+        tz_name = getattr(dt.tzinfo, "key", None) or dt.tzname()
+        if not tz_name:
+            try:
+                import tzlocal
+
+                tz_name = tzlocal.get_localzone_name()
+            except Exception:
+                tz_name = "UTC"
+        date_json = {
+            "year": dt.year,
+            "mon": dt.month,
+            "day": dt.day,
+            "hour": dt.hour,
+            "min": dt.minute,
+            "sec": dt.second,
+            "time_zone": tz_name,
+        }
+        return await self.method_sync("pi_set_time", date_json)

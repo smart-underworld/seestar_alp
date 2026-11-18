@@ -239,7 +239,7 @@ class DevNotConnectedException:
 
     @property
     def Number(self) -> int:
-        return self.Number
+        return self.number
 
     @property
     def Message(self) -> str:
