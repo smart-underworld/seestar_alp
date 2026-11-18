@@ -39,3 +39,6 @@ emulator/sim/shared/*
 device/horizon.hrz
 device/horizon.horizon.json
 device/*.tmp
+
+# superpowers SDD scratch workspace
+.superpowers/
