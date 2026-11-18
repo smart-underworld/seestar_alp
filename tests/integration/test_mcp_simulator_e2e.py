@@ -195,6 +195,24 @@ def test_schedule_flow(tools_env):
     assert not (isinstance(added, dict) and added.get("ok") is False), added
     schedule = _run(scheduling.get_schedule_tool())
     assert "wait_for" in repr(schedule)
+
+    # Edit round-trip: find the added item's id, remove it, confirm it is gone.
+    item_id = _find_key(schedule, "schedule_item_id")
+    assert isinstance(item_id, str) and item_id, schedule
+    removed = _run(scheduling.remove_schedule_item_tool(item_id))
+    assert not (isinstance(removed, dict) and removed.get("ok") is False), removed
+    after = _run(scheduling.get_schedule_tool())
+    assert item_id not in repr(after), after
+
+    # start_mosaic begins an unattended run; it must refuse without confirm.
+    refused_mosaic = _run(
+        scheduling.start_mosaic_tool("M31", "00:42:44", "+41:16:09", 60)
+    )
+    assert (
+        refused_mosaic["ok"] is False
+        and refused_mosaic["requires_confirmation"] is True
+    )
+
     refused = _run(scheduling.start_scheduler_tool())
     assert refused["ok"] is False and refused["requires_confirmation"] is True
     for fn in (

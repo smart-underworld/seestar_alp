@@ -178,7 +178,7 @@ class ScheduleMixin:
 
     async def schedule_auto_focus(self, try_count: int = 2) -> dict:
         logger.info("schedule_auto_focus tries=%s", try_count)
-        return await self.add_schedule_item("auto_focus", {"ry_count": try_count})
+        return await self.add_schedule_item("auto_focus", {"try_count": try_count})
 
     async def schedule_adjust_focus(self, steps: int) -> dict:
         logger.info("schedule_adjust_focus steps=%s", steps)

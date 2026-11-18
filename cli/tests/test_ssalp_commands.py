@@ -558,9 +558,15 @@ class TestScheduleMixinCoverage:
         )
 
     async def test_schedule_auto_focus(self, client, httpx_mock):
-        await _check_action(
-            httpx_mock, client.schedule_auto_focus(), "add_schedule_item"
-        )
+        _stub(httpx_mock)
+        await client.schedule_auto_focus(3)
+        body = _body(httpx_mock)
+        # The scheduler reads params["try_count"] (device/seestar_device.py);
+        # the legacy "ry_count" key is silently dropped and raises at run time.
+        # Keys appear URL-encoded and quoted, e.g. %22try_count%22. Match the
+        # quoted form so "ry_count" is not spuriously found inside "try_count".
+        assert "%22try_count%22" in body
+        assert "%22ry_count%22" not in body
 
     async def test_schedule_adjust_focus(self, client, httpx_mock):
         await _check_action(
