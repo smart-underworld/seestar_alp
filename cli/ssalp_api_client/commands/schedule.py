@@ -195,9 +195,15 @@ class ScheduleMixin:
         logger.info(
             "schedule_set_exposure stack_l=%s continuous=%s", stack_l_ms, continuous_ms
         )
+        # The scheduler implements exposure changes via the action_set_exposure
+        # item (device/seestar_device.py), which reads params["exp"] (the stack
+        # exposure). The old "set_setting_exposures" action had no scheduler or
+        # firmware handler, so the scheduled item was a silent no-op mid-run.
+        # (continuous is carried for forward-compat; the scheduled path applies
+        # only the stack exposure today.)
         return await self.add_schedule_item(
-            "set_setting_exposures",
-            {"exp_ms": {"stack_l": stack_l_ms, "continuous": continuous_ms}},
+            "action_set_exposure",
+            {"exp": stack_l_ms, "continuous": continuous_ms},
         )
 
     # ── direct mosaic / spectra (outside scheduler) ──────────────────────

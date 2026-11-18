@@ -288,7 +288,11 @@ class RotatorDevice:
             self._lock.release()
             raise RuntimeError("Cannot start a move while the rotator is moving")
         self._is_moving = True
-        self._tgt_mech_pos = self._mech_pos + delta_pos - self._pos_offset
+        # Move() is a RELATIVE move: a delta in user coordinates is the same
+        # delta in mechanical coordinates, so the Sync offset must NOT be
+        # subtracted (MoveAbsolute converts an absolute position via
+        # _pos_to_mech; a relative delta does not).
+        self._tgt_mech_pos = self._mech_pos + delta_pos
         if self._tgt_mech_pos >= 360.0:
             self._tgt_mech_pos -= 360.0
         if self._tgt_mech_pos < 0.0:

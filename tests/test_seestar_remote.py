@@ -208,3 +208,11 @@ def test_remote_imaging_and_events(monkeypatch):
     assert events.PORT4700_EVENTS("x") == []
     assert events.PORT4800_EVENTS("x") == []
     assert events.PORT4801_EVENTS("x") == []
+
+
+def test_remote_start_stack_returns_false_when_not_connected(monkeypatch):
+    # Regression: send_message_param_sync returns None when the remote telescope
+    # is not connected; `"error" not in None` raised TypeError.
+    remote = make_remote()
+    monkeypatch.setattr(remote, "send_message_param_sync", lambda payload: None)
+    assert remote.start_stack({"gain": 90, "restart": True}) is False
