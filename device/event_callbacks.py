@@ -109,9 +109,9 @@ class SensorTempWatch(EventCallback):
             curr_temp = event_data["temp"]
             if self.temp < 0:
                 self.temp = curr_temp
-            if abs(self.temp - curr_temp) > self.max_change and not self.eventFired:
+            if abs(self.temp - curr_temp) > self.max_change and not self.triggered:
                 self.logger.warn(
-                    "SensorTempWatch: temp changed more than {self.max_change} degrees"
+                    f"SensorTempWatch: temp changed more than {self.max_change} degrees"
                 )
                 #
                 # TODO: tell scheduler to pause, and re-take darks

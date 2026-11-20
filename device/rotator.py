@@ -70,7 +70,7 @@ from device.exceptions import (
     NotImplementedException,
     InvalidValueException,
 )  # Nothing but exception classes
-from rotatordevice import RotatorDevice
+from device.rotatordevice import RotatorDevice
 
 logger: Logger = None
 # logger = None                   # Safe on Python 3.7 but no intellisense in VSCode etc.
@@ -110,10 +110,12 @@ rot_dev = None
 
 
 # At app init not import :-)
-def start_rot_device(logger: logger):  # type: ignore
-    logger = logger
-    global rot_dev
-    rot_dev = RotatorDevice(logger)
+def start_rot_device(in_logger):
+    # Assign the module-level logger; the old `logger = logger` only rebound the
+    # local parameter, leaving the module logger stuck at None.
+    global logger, rot_dev
+    logger = in_logger
+    rot_dev = RotatorDevice(in_logger)
 
 
 # --------------------

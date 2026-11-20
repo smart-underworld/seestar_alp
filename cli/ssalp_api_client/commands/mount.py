@@ -53,7 +53,9 @@ class MountMixin:
 
     async def scope_set_track_state(self, enabled: bool) -> dict:
         logger.info("scope_set_track_state enabled=%s", enabled)
-        return await self.method_sync("scope_set_track_state", enabled)
+        # Firmware contract (device/actions.py): params { tracking: <bool> }.
+        # Sending a bare bool meant tracking was never toggled.
+        return await self.method_sync("scope_set_track_state", {"tracking": enabled})
 
     async def scope_speed_move(self, speed: int, angle: float, dur_sec: float) -> dict:
         """Move the mount at a given speed and angle for a duration.

@@ -141,7 +141,9 @@ class SeestarRemote(AbstractDevice):
             {"method": "set_control_value", "params": ["gain", stack_gain]}
         )
         self.logger.info(result)
-        return "error" not in result
+        # send_message_param_sync returns None when the remote telescope is not
+        # connected; "error" not in None raises TypeError.
+        return result is not None and "error" not in result
 
     def action_set_dew_heater(self, params):
         return self._do_action_device("action_set_dew_heater", params)

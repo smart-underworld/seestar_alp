@@ -132,3 +132,14 @@ def test_user_script_event_no_events_key_returns_empty_list():
     callback = UserScriptEvent(device, {}, {"execute": ["/bin/true"]})
 
     assert callback.fireOnEvents() == []
+
+
+def test_sensor_temp_watch_triggers_on_large_temp_change():
+    # Regression: the trigger branch guarded on `not self.eventFired` (a bound
+    # method, always truthy), so it was dead code. It now guards on
+    # `not self.triggered`.
+    device = DummyDevice()
+    watch = SensorTempWatch(device, {"pi_status": {"temp": 10.0}})
+    # max_change is 6.0; a 10-degree jump must trip the watch.
+    watch.eventFired(device, {"temp": 20.0})
+    assert watch.triggered is True

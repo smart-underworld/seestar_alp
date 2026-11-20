@@ -251,6 +251,20 @@ class TestMountMixinCoverage:
             httpx_mock, client.scope_set_track_state(True), "scope_set_track_state"
         )
 
+    async def test_scope_set_track_state_sends_tracking_object(
+        self, client, httpx_mock
+    ):
+        # Regression: a bare bool was sent; firmware expects { tracking: <bool> }.
+        import json
+        from urllib.parse import parse_qs
+
+        _stub(httpx_mock)
+        await client.scope_set_track_state(True)
+        form = parse_qs(httpx_mock.get_request().content.decode())
+        payload = json.loads(form["Parameters"][0])
+        assert payload["method"] == "scope_set_track_state"
+        assert payload["params"] == {"tracking": True}
+
     async def test_scope_speed_move(self, client, httpx_mock):
         await _check_method(
             httpx_mock, client.scope_speed_move(100, 90, 2.0), "scope_speed_move"
@@ -593,6 +607,23 @@ class TestScheduleMixinCoverage:
         await _check_action(
             httpx_mock, client.schedule_set_exposure(10000, 500), "add_schedule_item"
         )
+
+    async def test_schedule_set_exposure_uses_action_set_exposure(
+        self, client, httpx_mock
+    ):
+        # Regression: the item used action "set_setting_exposures", which has no
+        # scheduler/firmware handler (silent no-op). The implemented scheduler
+        # action is action_set_exposure, reading params["exp"].
+        import json
+        from urllib.parse import parse_qs
+
+        _stub(httpx_mock)
+        await client.schedule_set_exposure(10000, 500)
+        form = parse_qs(httpx_mock.get_request().content.decode())
+        assert form["Action"] == ["add_schedule_item"]
+        payload = json.loads(form["Parameters"][0])
+        assert payload["action"] == "action_set_exposure"
+        assert payload["params"]["exp"] == 10000
 
     async def test_start_mosaic(self, client, httpx_mock):
         await _check_action(
