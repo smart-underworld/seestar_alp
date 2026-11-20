@@ -150,7 +150,16 @@ class SSAlpApiClient(
             ) from exc
 
         elapsed_ms = (time.monotonic() - start) * 1000
-        envelope = response.json()
+        # An empty or non-JSON body (e.g. an action the device/server does not
+        # implement used to return an empty 200) must surface as a clean
+        # SSAlpError, not a raw JSONDecodeError traceback.
+        try:
+            envelope = response.json()
+        except ValueError as exc:
+            raise SSAlpError(
+                f"Device returned a non-JSON/empty response for action "
+                f"'{action}' (HTTP {response.status_code})"
+            ) from exc
         error_number: int = envelope.get("ErrorNumber", 0)
         error_message: str = envelope.get("ErrorMessage", "")
         value = envelope.get("Value")

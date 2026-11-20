@@ -26,3 +26,13 @@ def test_require_confirm_passes_with_confirm():
 def test_require_confirm_custom_reason():
     out = require_confirm("startup_sequence", confirm=False, reason="moves the mount")
     assert out["error"] == "moves the mount"
+
+
+def test_gate_blocks_scheduled_pi_reboot_and_pi_shutdown():
+    # Regression: scheduling pi_reboot / pi_shutdown (the real device RPC method
+    # names) bypassed the confirm gate because only "reboot"/"shutdown" were
+    # listed in PHYSICAL_ACTIONS.
+    for action in ("pi_reboot", "pi_shutdown"):
+        out = gate(action, confirm=False)
+        assert out is not None and out["requires_confirmation"] is True
+        assert gate(action, confirm=True) is None

@@ -14,6 +14,9 @@ class DummyLogger:
     def error(self, msg):
         self.error_lines.append(msg)
 
+    def warning(self, msg):
+        self.error_lines.append(msg)
+
 
 class FakeSocket:
     def __init__(self, recv_packets=None):
@@ -31,7 +34,9 @@ class FakeSocket:
 
     def recvfrom(self, _size):
         if not self.recv_packets:
-            raise StopIteration()
+            # Break run()'s otherwise-infinite loop with a BaseException so the
+            # responder's `except Exception` guard does not swallow it.
+            raise KeyboardInterrupt()
         return self.recv_packets.pop(0)
 
     def sendto(self, data, addr):
@@ -86,8 +91,37 @@ def test_discovery_run_replies_on_matching_probe(monkeypatch):
     discovery.set_disc_logger(logger)
 
     responder = discovery.DiscoveryResponder("127.0.0.1", 5555)
-    with pytest.raises(StopIteration):
+    with pytest.raises(KeyboardInterrupt):
         responder.run()
 
     assert tx_sock.sent == [(b'{"AlpacaPort": 5555}', ("10.0.0.9", 40000))]
     assert any("alpacadiscovery1" in line for line in logger.info_lines)
+
+
+def test_discovery_run_survives_a_non_ascii_datagram(monkeypatch):
+    # Regression: a single non-ASCII datagram raised UnicodeDecodeError and
+    # killed the responder thread for good. It must survive and keep answering.
+    recv_sock = FakeSocket(
+        recv_packets=[
+            (b"\xff\xfe\x00bad", ("10.0.0.5", 40001)),  # non-ASCII, previously fatal
+            (b"alpacadiscovery1", ("10.0.0.9", 40000)),  # good probe afterwards
+        ]
+    )
+    tx_sock = FakeSocket()
+    sockets = [recv_sock, tx_sock]
+    logger = DummyLogger()
+
+    monkeypatch.setattr(
+        discovery.socket,
+        "socket",
+        lambda *args, **kwargs: sockets.pop(0),
+    )
+    monkeypatch.setattr(discovery.Thread, "start", lambda self: None)
+    discovery.set_disc_logger(logger)
+
+    responder = discovery.DiscoveryResponder("127.0.0.1", 5555)
+    with pytest.raises(KeyboardInterrupt):
+        responder.run()
+
+    # Survived the bad datagram and still answered the good probe.
+    assert tx_sock.sent == [(b'{"AlpacaPort": 5555}', ("10.0.0.9", 40000))]
