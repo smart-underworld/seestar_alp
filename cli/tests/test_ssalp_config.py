@@ -9,6 +9,24 @@ import pytest
 from ssalp_api_client.config import Config, load_config
 
 
+@pytest.fixture(autouse=True)
+def _isolate_user_config(tmp_path, monkeypatch):
+    # Make config discovery hermetic. _find_config_file() falls back to the real
+    # ~/.config/ssalp/config.toml (and a local ./ssalp.toml), so on a developer
+    # machine that has one, the "no file / defaults" tests picked it up and
+    # failed (e.g. host 127.0.0.1 instead of localhost). Point HOME at a clean
+    # dir, clear SSALP_CONFIG, and run from a clean cwd; tests that want a config
+    # pass an explicit path or set env vars themselves.
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("SSALP_CONFIG", raising=False)
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.chdir(work)
+    yield
+
+
 # ── Config model validation ───────────────────────────────────────────────
 
 
