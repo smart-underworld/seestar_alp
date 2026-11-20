@@ -562,3 +562,25 @@ def test_connected_false_does_not_tear_down_shared_connection():
     payload = _put(telescope.connected, {"Connected": "true"})
     assert payload["ErrorNumber"] == 0
     assert dev.started == 1
+
+
+def test_siderealtime_returns_lst_hours_not_enum():
+    # Regression: siderealtime returned DriveRates.driveSidereal (enum == 0), so
+    # SiderealTime was always 0. It now returns Local Sidereal Time in hours.
+    _fresh_device()
+    payload = _get(telescope.siderealtime)
+    assert payload["ErrorNumber"] == 0
+    val = payload["Value"]
+    assert isinstance(val, float)
+    assert 0.0 <= val < 24.0
+
+
+def test_trackingrates_returns_drive_rate_array():
+    # Regression: trackingrates returned the int 0; ASCOM requires an array of
+    # DriveRates.
+    _fresh_device()
+    payload = _get(telescope.trackingrates)
+    assert payload["ErrorNumber"] == 0
+    val = payload["Value"]
+    assert isinstance(val, list)
+    assert 0 in val  # DriveRates.driveSidereal
