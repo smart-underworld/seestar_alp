@@ -3055,6 +3055,7 @@ class Seestar:
                     return self.schedule
                 if item_id == active_schedule_item_id:
                     reached_cur_item = True
+                index += 1
 
         while index < len(self.schedule["list"]):
             item = self.schedule["list"][index]
@@ -3670,8 +3671,10 @@ class Seestar:
                 )
 
     def end_watch_thread(self):
-        # I think it should be is_watch_events instead of is_connected...
-        if self.is_connected:
+        # Guard on is_watch_events, not is_connected: when startup comes up in
+        # offline mode the receive/heartbeat threads are still running with
+        # is_connected == False, and we must still be able to tear them down.
+        if self.is_watch_events:
             self.logger.info("End watch thread!")
             self.is_watch_events = False
             self.get_msg_thread.join(timeout=7)

@@ -53,3 +53,12 @@ def test_action_not_implemented_code():
     ex.logger = DummyLogger()
     err = ex.ActionNotImplementedException()
     assert err.Number == 0x40C
+
+
+def test_dev_not_connected_number_does_not_recurse():
+    # Regression: DevNotConnectedException.Number used to return self.Number,
+    # recursing forever (RecursionError) instead of the numeric error code.
+    ex.logger = DummyLogger()
+    err = ex.DevNotConnectedException("device not connected.")
+    assert err.Number == 0x407
+    assert err.number == 0x407

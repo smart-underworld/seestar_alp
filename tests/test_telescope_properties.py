@@ -487,3 +487,78 @@ def test_axisrates_reports_native_speed_range(axis, expected):
 
     assert payload["ErrorNumber"] == 0
     assert payload["Value"] == expected
+
+
+class _FailingDevice(FakeDevice):
+    """Motion ops report failure (mount busy / scheduler active)."""
+
+    def move_scope(self, angle, speed):
+        self.calls.append(("move_scope", angle, speed))
+        return False
+
+    def goto_target(self, payload):
+        self.calls.append(("goto_target", payload))
+        return False
+
+    def sync_target(self, payload):
+        self.calls.append(("sync_target", payload))
+        return "Cannot sync target while scheduler is active: working"
+
+
+@pytest.mark.parametrize(
+    "responder, media",
+    [
+        (telescope.slewtocoordinates, {"RightAscension": "1.5", "Declination": "2.5"}),
+        (
+            telescope.slewtocoordinatesasync,
+            {"RightAscension": "1.5", "Declination": "2.5"},
+        ),
+        (telescope.slewtotarget, {}),
+        (telescope.slewtotargetasync, {}),
+        (telescope.moveaxis, {"Axis": "1", "Rate": "2.5"}),
+        (telescope.synctocoordinates, {"RightAscension": "1.5", "Declination": "2.5"}),
+    ],
+)
+def test_motion_handlers_report_error_when_device_rejects(responder, media):
+    # Regression: these handlers ignored the device return value and always
+    # reported success (ErrorNumber 0), so automation slewed/synced blind.
+    set_shr_logger(logging.getLogger("test-telescope-props"))
+    device_exceptions.logger = DummyLogger()
+    telescope.seestar_dev.clear()
+    telescope.seestar_dev[1] = _FailingDevice()
+
+    payload = _put(responder, media)
+
+    assert payload["ErrorNumber"] != 0
+
+
+def test_connected_false_does_not_tear_down_shared_connection():
+    # Regression: Connected=false from one ASCOM client used to call
+    # end_watch_thread(), disconnecting the shared device for the web UI,
+    # the scheduler, and every other client.
+    set_shr_logger(logging.getLogger("test-telescope-props"))
+    device_exceptions.logger = DummyLogger()
+    telescope.seestar_dev.clear()
+
+    class _WatchRecordingDevice(FakeDevice):
+        def __init__(self):
+            super().__init__()
+            self.ended = 0
+            self.started = 0
+
+        def end_watch_thread(self):
+            self.ended += 1
+
+        def start_watch_thread(self):
+            self.started += 1
+
+    dev = _WatchRecordingDevice()
+    telescope.seestar_dev[1] = dev
+
+    payload = _put(telescope.connected, {"Connected": "false"})
+    assert payload["ErrorNumber"] == 0
+    assert dev.ended == 0  # shared connection must stay up
+
+    payload = _put(telescope.connected, {"Connected": "true"})
+    assert payload["ErrorNumber"] == 0
+    assert dev.started == 1

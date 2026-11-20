@@ -156,6 +156,19 @@ class TestInfoMixinCoverage:
             httpx_mock, client.pi_set_time("2024-01-01T00:00:00Z"), "pi_set_time"
         )
 
+    async def test_pi_set_time_sends_date_component_object(self, client, httpx_mock):
+        # Regression: the firmware's pi_set_time expects a date-component
+        # object, not the raw ISO string (which is rejected, code 107).
+        _stub(httpx_mock)
+        await client.pi_set_time("2024-01-02T03:04:05Z")
+        body = _body(httpx_mock)
+        assert "Action=method_sync" in body
+        # object keys + parsed values must be on the wire ...
+        for token in ("year", "2024", "mon", "day", "hour", "sec", "time_zone", "UTC"):
+            assert token in body, token
+        # ... and the bare ISO string must NOT be the param payload.
+        assert "2024-01-02T03" not in body
+
 
 # ── SystemMixin ───────────────────────────────────────────────────────────
 
