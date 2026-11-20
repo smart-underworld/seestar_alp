@@ -103,3 +103,11 @@ class TestLoadEnv:
         result = load_env(p)
         assert result["base_url"] == "http://192.168.1.51:5555"
         assert result["dev_num"] == "1"
+
+
+def test_env_loader_is_importable_in_source_tree():
+    # Regression: main.py imported bru_parser via a relative path that climbed
+    # above the top package and always failed, silently disabling --env.
+    from ssalp_api_client.cli import main
+
+    assert main._load_bru_env is not None

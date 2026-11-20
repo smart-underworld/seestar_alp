@@ -14,9 +14,12 @@ from ..exceptions import SSAlpConnectionError, SSAlpError
 from .output import print_result
 
 try:
-    from ...tools.bru_parser import load_env as _load_bru_env
+    # `tools` is a top-level source-tree package (a sibling of
+    # ssalp_api_client), so it must be imported absolutely -- the old relative
+    # `...tools` climbed above the top package and always raised ImportError,
+    # silently disabling --env. It is intentionally not bundled in the wheel.
+    from tools.bru_parser import load_env as _load_bru_env
 except ImportError:
-    # tools/ may not be on sys.path when installed as a wheel
     _load_bru_env = None  # type: ignore[assignment]
 
 

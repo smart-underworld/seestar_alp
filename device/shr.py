@@ -318,4 +318,6 @@ def getNextTransId() -> int:
     with _lock:
         global _stid
         _stid += 1
-    return _stid
+        # Read inside the lock: returning after release let concurrent requests
+        # (ThreadingWSGIServer) observe duplicate/non-monotonic ids.
+        return _stid

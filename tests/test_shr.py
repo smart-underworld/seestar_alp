@@ -152,3 +152,27 @@ def test_property_response_error_message_prefers_message_attr_over_args():
     rsp = shr.PropertyResponse("ignored", req, err)
     payload = json.loads(rsp.json)
     assert payload["ErrorMessage"] == "from message attr"
+
+
+def test_transaction_id_unique_under_concurrency():
+    # Regression: getNextTransId read _stid after releasing the lock, so
+    # concurrent requests could observe duplicate/non-monotonic ids.
+    import threading
+
+    shr._stid = 0
+    results = []
+    append_lock = threading.Lock()
+
+    def worker():
+        for _ in range(50):
+            tid = shr.getNextTransId()
+            with append_lock:
+                results.append(tid)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(results) == len(set(results))  # every id unique

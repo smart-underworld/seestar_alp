@@ -321,7 +321,9 @@ class DeviceMain:
         )
         falc_app.add_route("/setup", setup.svrsetup())
         falc_app.add_route(
-            f"/setup/v{API_VERSION}/rotator/{{devnum}}/setup", setup.devsetup()
+            # This is a telescope server; the device setup path must match.
+            f"/setup/v{API_VERSION}/telescope/{{devnum}}/setup",
+            setup.devsetup(),
         )
 
         #
