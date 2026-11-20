@@ -436,6 +436,15 @@ def test_fixed_size_ordered_dict_drops_oldest():
     assert list(d.keys()) == ["b", "c"]
 
 
+def test_response_dict_is_size_bounded(seestar):
+    # Regression: response_dict was built with FixedSizeOrderedDict(max=100),
+    # but the kwarg is `maxsize`. The wrong kwarg left maxsize=None (eviction
+    # disabled -> unbounded growth) and seeded a junk {'max': 100} entry.
+    assert seestar.response_dict.maxsize == 100
+    assert "max" not in seestar.response_dict
+    assert len(seestar.response_dict) == 0
+
+
 def test_deque_encoder_serializes_deque():
     from device.seestar_device import DequeEncoder
     import json

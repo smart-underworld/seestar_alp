@@ -2322,7 +2322,13 @@ def import_csv_schedule(input, telescope_id):
     reader = csv.DictReader(cleaned_input)
 
     for row in reader:
-        row = {key: value.strip() for key, value in row.items()}
+        # csv.DictReader yields None for short rows (fewer columns than the
+        # header) and a list for long rows (extra columns under a None key);
+        # normalise both to "" so .strip() below never crashes.
+        row = {
+            key: (value.strip() if isinstance(value, str) else "")
+            for key, value in row.items()
+        }
         action = row.pop("action", None)
 
         if not action:
@@ -2333,7 +2339,12 @@ def import_csv_schedule(input, telescope_id):
 
         for key, value in params.items():
             if "," in value:
-                params[key] = list(map(int, value.split(",")))
+                # Only treat a comma-separated value as an int list when every
+                # part is numeric; otherwise leave it as the original string
+                # (e.g. a target name like "M31, Andromeda" must not crash).
+                parts = [p.strip() for p in value.split(",")]
+                if parts and all(p.lstrip("-").isdigit() for p in parts):
+                    params[key] = list(map(int, parts))
             elif value.lower() in {"true", "false"}:
                 params[key] = value.lower() == "true"
             elif value.isdigit():
@@ -2377,11 +2388,14 @@ def import_csv_schedule(input, telescope_id):
                     "array_mode",
                 ]
                 if "session_time_sec" in params:
+                    # session_time_sec is the TOTAL; convert to per-panel. Guard
+                    # missing/zero panel counts so a legacy or hand-edited CSV
+                    # can't raise TypeError/ZeroDivisionError.
                     session_time_sec = params.pop("session_time_sec")
-                    ra_num = params.get("ra_num")
-                    dec_num = params.get("dec_num")
-                    panels = ra_num * dec_num
-                    panel_time_sec = session_time_sec / panels
+                    ra_num = params.get("ra_num") or 1
+                    dec_num = params.get("dec_num") or 1
+                    panels = (ra_num * dec_num) or 1
+                    panel_time_sec = int(session_time_sec) / panels
                     params["panel_time_sec"] = round(panel_time_sec)
                 mosaic_params = {
                     key: value
@@ -3455,26 +3469,32 @@ class ScheduleImportResource:
         file_path = os.path.join(directory, selected_file)
         file_type = determine_file_type(file_path)
 
-        if file_type == "csv":
-            with open(file_path, "r", encoding="utf-8") as file:
-                string_data = file.read().splitlines()
-            import_csv_schedule(string_data, telescope_id)
+        # A malformed/legacy CSV must not surface as an HTTP 500; flash the
+        # error instead (mirroring ScheduleUploadResource).
+        try:
+            if file_type == "csv":
+                with open(file_path, "r", encoding="utf-8") as file:
+                    string_data = file.read().splitlines()
+                import_csv_schedule(string_data, telescope_id)
 
-        elif file_type == "json":
-            do_action_device(
-                "import_schedule",
-                telescope_id,
-                {"filepath": file_path, "is_retain_state": False},
-            )
+            elif file_type == "json":
+                do_action_device(
+                    "import_schedule",
+                    telescope_id,
+                    {"filepath": file_path, "is_retain_state": False},
+                )
 
-        else:
-            flash(
-                resp,
-                f"Invalid file type for {selected_file}. Only .csv or .json are allowed",
-            )
-            return redirect(f"/{telescope_id}/schedule")
+            else:
+                flash(
+                    resp,
+                    f"Invalid file type for {selected_file}. Only .csv or .json are allowed",
+                )
+                return redirect(f"/{telescope_id}/schedule")
 
-        flash(resp, f"Schedule imported from {selected_file}.")
+            flash(resp, f"Schedule imported from {selected_file}.")
+        except Exception as e:
+            flash(resp, f"Failed to import schedule from {selected_file}: {str(e)}")
+
         redirect(f"/{telescope_id}/schedule")
 
 
@@ -3933,7 +3953,9 @@ class LivePhotoResource(BaseResource):
 class LiveZoomResource(BaseResource):
     def on_post(self, req, resp, telescope_id: int = 1):
         zoom = int(req.media.get("zoom", 0))
-        output = method_sync("set_setting", params={"rtsp_roi_index": zoom})
+        output = method_sync(
+            "set_setting", telescope_id, params={"rtsp_roi_index": zoom}
+        )
         method_sync(
             "get_view_state", telescope_id, id=42
         )  # don't call this if event is less than 5 seconds?
@@ -4304,7 +4326,10 @@ class SettingsResource(BaseResource):
             if value is not None:
                 FormattedNewSettings["stack_dither"][member] = value
 
-        if fw >= 2670:
+        # Match the settings READ gate (fw > 2597 in render_settings); using a
+        # higher threshold here made expert_mode render as editable but silently
+        # fail to save on firmware in the 2598..2669 band.
+        if fw > 2597:
             FormattedNewSettings |= {
                 "expert_mode": str2bool(PostedSettings["expert_mode"]),
             }
@@ -4453,7 +4478,8 @@ class SettingsResource(BaseResource):
         plan_target_af_success = True
         viewplan_gohome_output = {"ErrorNumber": 0}
         viewplan_gohome_success = True
-        if fw >= 2670:
+        # Match the settings READ gate (fw > 2597); see expert_mode note above.
+        if fw > 2597:
             plan_target_af = str2bool(PostedSettings["plan_target_af"])
             plan_target_af_output, plan_target_af_success = _try_set_setting_variants(
                 [

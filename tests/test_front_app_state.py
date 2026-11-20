@@ -549,6 +549,73 @@ def test_settings_post_tries_fallback_variants_for_firmware_specific_keys(monkey
     ) in captured["calls"]
 
 
+def test_settings_post_saves_firmware_keys_in_2598_2669_band(monkeypatch):
+    # Regression: render_settings exposes expert_mode / plan_target_af /
+    # viewplan_gohome at fw > 2597, but the SAVE gate required fw >= 2670, so on
+    # firmware in [2598, 2669] these rendered editable yet silently did not save.
+    # Both gates now use fw > 2597.
+    class DummyReq:
+        def __init__(self):
+            self.media = {
+                "stack_lenhance": "false",
+                "stack_dither_pix": "10",
+                "stack_dither_interval": "2",
+                "stack_dither_enable": "true",
+                "exp_ms_stack_l": "10000",
+                "exp_ms_continuous": "500",
+                "focal_pos": "1500",
+                "auto_power_off": "false",
+                "auto_3ppa_calib": "true",
+                "frame_calib": "true",
+                "plan_target_af": "true",
+                "viewplan_gohome": "true",
+                "expert_mode": "true",
+                "save_discrete_frame": "false",
+                "save_discrete_ok_frame": "true",
+                "light_duration_min": "10",
+                "stack_capt_type": "stack",
+                "stack_capt_num": "1",
+                "stack_brightness": "0",
+                "stack_contrast": "0",
+                "stack_saturation": "0",
+                "stack_dbe_enable": "false",
+                "heater_enable": "false",
+                "dark_mode": "false",
+                "stack_cont_capt": "true",
+                "stack_drizzle2x": "false",
+            }
+
+    calls = []
+
+    def fake_do_action_device(action, dev_num, parameters, is_schedule=False):
+        calls.append((action, parameters))
+        return {"ErrorNumber": 0, "Value": {"code": 0}}
+
+    monkeypatch.setattr(front_app, "get_firmware_ver_int", lambda _tid: 2600)
+    monkeypatch.setattr(front_app, "get_device_model", lambda _tid: "Seestar S50")
+    monkeypatch.setattr(front_app, "do_action_device", fake_do_action_device)
+    monkeypatch.setattr(
+        front_app.SettingsResource,
+        "render_settings",
+        staticmethod(lambda _req, _resp, _tid, output: None),
+    )
+
+    front_app.SettingsResource().on_post(DummyReq(), object(), 1)
+
+    sent_params = [
+        p.get("params")
+        for a, p in calls
+        if isinstance(p, dict) and isinstance(p.get("params"), dict)
+    ]
+    # plan_target_af is saved via a dedicated variant call, gated by fw > 2597.
+    assert any(
+        pp.get("plan_target_af") is True or pp.get("plan", {}).get("target_af") is True
+        for pp in sent_params
+    )
+    # expert_mode rides along in the main settings payload.
+    assert any("expert_mode" in pp for pp in sent_params)
+
+
 def test_get_device_settings_loads_discrete_save_flags_from_get_stack_setting(
     monkeypatch,
 ):
@@ -3385,3 +3452,52 @@ def test_local_search_endpoint_unknown_object_is_404():
     client.app.add_route("/localsearch", front_app.GetLocalSearch())
     r = client.simulate_get("/localsearch", params={"target": "NoSuchThing12345"})
     assert r.status_code == 404
+
+
+def test_live_zoom_forwards_telescope_id(monkeypatch):
+    # Regression: LiveZoomResource.on_post dropped telescope_id, so changing
+    # zoom always set rtsp_roi_index on device 1 regardless of targeted scope.
+    from types import SimpleNamespace
+
+    calls = []
+
+    def fake_method_sync(method, telescope_id=1, **kwargs):
+        calls.append((method, telescope_id, kwargs))
+        return {"ErrorNumber": 0}
+
+    monkeypatch.setattr(front_app, "method_sync", fake_method_sync)
+
+    req = SimpleNamespace(media={"zoom": 2})
+    resp = SimpleNamespace()
+    front_app.LiveZoomResource().on_post(req, resp, telescope_id=3)
+
+    set_setting_calls = [c for c in calls if c[0] == "set_setting"]
+    assert set_setting_calls, "set_setting was not called"
+    assert set_setting_calls[0][1] == 3  # telescope_id forwarded
+    assert set_setting_calls[0][2]["params"] == {"rtsp_roi_index": 2}
+
+
+def test_import_csv_schedule_tolerates_malformed_rows(monkeypatch):
+    # Regression: short rows (None values -> AttributeError), comma-bearing
+    # non-numeric values like "M31, Andromeda" (-> ValueError on int()), and
+    # start_mosaic rows with missing/zero panel counts (-> TypeError /
+    # ZeroDivisionError) used to crash import.
+    calls = []
+    monkeypatch.setattr(
+        front_app,
+        "do_schedule_action_device",
+        lambda action, params, tid: calls.append((action, params)),
+    )
+
+    csv_lines = [
+        "action,target_name,ra,dec,ra_num,dec_num,session_time_sec",
+        "wait_for",  # short row: missing trailing columns -> None values
+        'start_mosaic,"M31, Andromeda",1.0,2.0,,,600',  # comma in name, no panels
+        "start_mosaic,M42,1.0,2.0,0,0,600",  # zero panel counts
+    ]
+
+    front_app.import_csv_schedule(csv_lines, 1)  # must not raise
+
+    actions = [a for a, _ in calls]
+    assert actions.count("start_mosaic") == 2
+    assert "wait_for" in actions
