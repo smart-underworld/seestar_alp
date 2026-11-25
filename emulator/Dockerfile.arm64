@@ -76,11 +76,18 @@ RUN mkdir -p /opt/compat && \
     rm -rf /tmp/buster /tmp/bookworm
 
 # onnxruntime 1.14.1 (aarch64 prebuilt), pinned by checksum.
-RUN curl -fsSL -o /tmp/ort.tgz https://github.com/microsoft/onnxruntime/releases/download/v1.14.1/onnxruntime-linux-aarch64-1.14.1.tgz && \
-    echo "20965e05d2da6a0e6acedda8aca1a8f75c3f4cb1d7932403a9977b753b1b2120  /tmp/ort.tgz" | sha256sum -c - && \
-    tar xzf /tmp/ort.tgz -C /tmp && \
-    cp -a /tmp/onnxruntime-linux-aarch64-1.14.1/lib/libonnxruntime.so* /opt/compat/ && \
-    rm -rf /tmp/ort.tgz /tmp/onnxruntime-linux-aarch64-1.14.1
+# The microsoft/onnxruntime GitHub repo and its release assets have been taken
+# down (the repo itself 404s), so the library is pulled from Microsoft's own
+# NuGet package instead, on NuGet's immutable flat-container host. This is the
+# same build: SONAME libonnxruntime.so.1.14.1, symbol version VERS_1.14.1, and
+# only base-system DT_NEEDED (self-contained, no extra runtime deps). python3
+# is already installed above; unzip is not, so the member is extracted with it.
+RUN curl -fsSL -o /tmp/ort.nupkg https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.14.1/microsoft.ml.onnxruntime.1.14.1.nupkg && \
+    echo "3a277421efce94b5f91f4a5dc8efc1add99b4c01f547279d81098ffb4fafbb6d  /tmp/ort.nupkg" | sha256sum -c - && \
+    python3 -c "import zipfile; zipfile.ZipFile('/tmp/ort.nupkg').extract('runtimes/linux-arm64/native/libonnxruntime.so', '/tmp/ort')" && \
+    cp -a /tmp/ort/runtimes/linux-arm64/native/libonnxruntime.so /opt/compat/libonnxruntime.so.1.14.1 && \
+    ln -sf libonnxruntime.so.1.14.1 /opt/compat/libonnxruntime.so && \
+    rm -rf /tmp/ort.nupkg /tmp/ort
 
 # SQLiteCpp: libasisdk-adjacent code in the imager links libSQLiteCpp.so.0,
 # which Debian does not ship as a shared library.
