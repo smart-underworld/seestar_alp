@@ -208,13 +208,26 @@ def test_launcher_spawns_and_invokes_run(tmp_path, monkeypatch):
         return True
 
     monkeypatch.setattr(mod, "run_startup_schedule", fake_run)
-    args = build_arg_parser().parse_args(["--schedule", "s.json", "--device", "3"])
+    args = build_arg_parser().parse_args(
+        [
+            "--schedule",
+            "s.json",
+            "--device",
+            "3",
+            "--retain-state",
+            "--schedule-connect-timeout",
+            "42",
+        ]
+    )
     sentinel = object()
     thread = maybe_launch_startup_schedule(args, lambda n: sentinel if n == 3 else None)
     assert thread is not None
     thread.join(timeout=2)
     assert recorded["device"] is sentinel
     assert recorded["filepath"] == "s.json"
+    # The CLI flags must actually reach run_startup_schedule.
+    assert recorded["kwargs"]["retain_state"] is True
+    assert recorded["kwargs"]["connect_timeout"] == 42.0
 
 
 def test_launcher_survives_get_device_error(monkeypatch):
