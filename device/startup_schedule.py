@@ -13,7 +13,9 @@ the running server.
 
 from __future__ import annotations
 
+import argparse
 import logging
+import threading
 import time
 from pathlib import Path
 
@@ -78,3 +80,81 @@ def run_startup_schedule(
 
     log.info("Startup schedule: imported and started %s.", abspath)
     return True
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Build the root_app.py argument parser (startup-schedule options).
+
+    All options are optional, so parsing an empty argv leaves ``schedule``
+    unset and the launcher inert — the no-arg launch behaves exactly as before.
+    """
+    parser = argparse.ArgumentParser(
+        prog="root_app.py",
+        description="Start seestar_alp; optionally auto-run a schedule once the scope is ready.",
+    )
+    parser.add_argument(
+        "--schedule",
+        default=None,
+        metavar="FILE",
+        help="Path to a schedule JSON file to import and start automatically at startup.",
+    )
+    parser.add_argument(
+        "--device",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Device number to load the startup schedule onto (default: 1).",
+    )
+    parser.add_argument(
+        "--retain-state",
+        action="store_true",
+        default=False,
+        help="Keep the schedule's saved state/ids when importing (default: fresh ids).",
+    )
+    parser.add_argument(
+        "--schedule-connect-timeout",
+        type=float,
+        default=120.0,
+        metavar="SECONDS",
+        help="How long to wait for the scope to connect and grant control before giving up (default: 120).",
+    )
+    return parser
+
+
+def maybe_launch_startup_schedule(
+    args,
+    get_device,
+    *,
+    logger: logging.Logger | None = None,
+) -> threading.Thread | None:
+    """Spawn a background thread to run the startup schedule, if one was given.
+
+    Returns None (and never calls ``get_device``) when ``args.schedule`` is
+    unset. Otherwise starts a daemon thread that resolves the device via
+    ``get_device(args.device)`` and hands off to ``run_startup_schedule``,
+    and returns that thread. The thread never blocks server startup and
+    swallows its own errors.
+    """
+    log = logger or logging.getLogger(__name__)
+
+    if not args.schedule:
+        return None
+
+    def target():
+        try:
+            device = get_device(args.device)
+            run_startup_schedule(
+                device,
+                args.schedule,
+                retain_state=args.retain_state,
+                connect_timeout=args.schedule_connect_timeout,
+                logger=log,
+            )
+        except Exception:
+            log.exception(
+                "Startup schedule: launcher failed for device %s.", args.device
+            )
+
+    thread = threading.Thread(target=target, name="StartupScheduleThread", daemon=True)
+    thread.start()
+    return thread

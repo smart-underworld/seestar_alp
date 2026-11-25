@@ -2,7 +2,11 @@ import os
 
 import pytest
 
-from device.startup_schedule import run_startup_schedule
+from device.startup_schedule import (
+    build_arg_parser,
+    maybe_launch_startup_schedule,
+    run_startup_schedule,
+)
 
 
 class FakeDevice:
@@ -132,3 +136,74 @@ def test_none_device_returns_false(tmp_path):
     f = tmp_path / "sched.json"
     f.write_text("{}")
     assert run_startup_schedule(None, str(f), connect_timeout=0.05, poll_interval=0.01) is False
+
+
+def test_parser_defaults_are_inert():
+    args = build_arg_parser().parse_args([])
+    assert args.schedule is None
+    assert args.device == 1
+    assert args.retain_state is False
+    assert args.schedule_connect_timeout == 120.0
+
+
+def test_parser_reads_all_flags():
+    args = build_arg_parser().parse_args(
+        [
+            "--schedule",
+            "s.json",
+            "--device",
+            "2",
+            "--retain-state",
+            "--schedule-connect-timeout",
+            "30",
+        ]
+    )
+    assert args.schedule == "s.json"
+    assert args.device == 2
+    assert args.retain_state is True
+    assert args.schedule_connect_timeout == 30.0
+
+
+def test_launcher_noop_when_no_schedule():
+    args = build_arg_parser().parse_args([])
+    called = []
+    thread = maybe_launch_startup_schedule(args, lambda n: called.append(n))
+    assert thread is None
+    assert called == []
+
+
+def test_launcher_spawns_and_invokes_run(tmp_path, monkeypatch):
+    import device.startup_schedule as mod
+
+    recorded = {}
+
+    def fake_run(device, filepath, **kwargs):
+        recorded["device"] = device
+        recorded["filepath"] = filepath
+        recorded["kwargs"] = kwargs
+        return True
+
+    monkeypatch.setattr(mod, "run_startup_schedule", fake_run)
+    args = build_arg_parser().parse_args(["--schedule", "s.json", "--device", "3"])
+    sentinel = object()
+    thread = maybe_launch_startup_schedule(args, lambda n: sentinel if n == 3 else None)
+    assert thread is not None
+    thread.join(timeout=2)
+    assert recorded["device"] is sentinel
+    assert recorded["filepath"] == "s.json"
+
+
+def test_launcher_survives_get_device_error(monkeypatch):
+    import device.startup_schedule as mod
+
+    monkeypatch.setattr(
+        mod, "run_startup_schedule", lambda *a, **k: pytest.fail("should not run")
+    )
+
+    def boom(n):
+        raise KeyError(n)
+
+    args = build_arg_parser().parse_args(["--schedule", "s.json", "--device", "9"])
+    thread = maybe_launch_startup_schedule(args, boom)
+    thread.join(timeout=2)
+    assert not thread.is_alive()
