@@ -17,6 +17,10 @@ from device.config import Config, ConfigError  # type: ignore
 from device import log  # type: ignore
 from device import telescope  # type: ignore
 from device.seestar_imaging import snapshot_response  # type: ignore
+from device.startup_schedule import (  # type: ignore
+    build_arg_parser,
+    maybe_launch_startup_schedule,
+)
 from device.version import Version  # type: ignore
 
 
@@ -81,6 +85,10 @@ class ConfigChangeHandler(FileSystemEventHandler):
 
 
 if __name__ == "__main__":
+    # Parse CLI args first so --help and bad flags fail fast, before any
+    # server threads start.
+    args = build_arg_parser().parse_args()
+
     n = sdnotify.SystemdNotifier()
 
     if Config.rtsp_udp:
@@ -104,6 +112,12 @@ if __name__ == "__main__":
         event_handler, path=os.path.dirname(Config.path_to_dat), recursive=True
     )
     observer.start()
+
+    # If --schedule was given, wait (on a background daemon thread) for the
+    # scope to connect and grant control, then import and start that schedule.
+    # The device watch threads were started inside DeviceMain; this never
+    # blocks READY=1 or the imaging server below.
+    maybe_launch_startup_schedule(args, telescope.get_seestar_device, logger=logger)
 
     time.sleep(1)
 
