@@ -134,10 +134,46 @@ def test_event_handler_stack_requests_stacked_image(monkeypatch):
 
     imager.event_handler({"Event": "Stack", "stacked_frame": 1, "dropped_frame": 1})
     assert called["stack"] == 1
-    assert imager.last_stacking_frame == 2
+    # The dropped frame does not count toward the stacked image (#817).
+    assert imager.last_stacking_frame == 1
 
     imager.event_handler({"Event": "Unknown", "stacked_frame": 5, "dropped_frame": 0})
     assert called["stack"] == 1
+
+
+def test_dropped_frames_do_not_refetch_the_stacked_image(monkeypatch):
+    # #817: a dropped frame leaves the stacked image unchanged, so it must not
+    # trigger a new fetch; only a new stacked frame does.
+    imager = make_imager(monkeypatch)
+    imager.is_live_viewing = True
+    called = _count_stack_requests(monkeypatch, imager)
+
+    _stack_event(imager, 1, dropped=0)  # the first stacked frame
+    _stack_event(imager, 1, dropped=1)  # a drop: nothing new to fetch
+    _stack_event(imager, 1, dropped=2)  # another drop
+    assert called["stack"] == 1
+
+    _stack_event(imager, 2, dropped=2)  # a new stacked frame
+    assert called["stack"] == 2
+
+
+def test_new_stack_at_the_same_count_drops_the_old_image(monkeypatch):
+    # A new stack can begin at the same stacked count the previous one ended on
+    # (e.g. a dawn stack that dropped almost everything, #817).  The dropped
+    # count falling back reveals it, so the old image is discarded and a fresh
+    # one fetched.
+    imager = make_imager(monkeypatch)
+    imager.is_live_viewing = True
+    imager._snapshot_interest_until = seestar_imaging.monotonic() + 1000
+    called = _count_stack_requests(monkeypatch, imager)
+
+    _stack_event(imager, 1, dropped=300)  # a long, mostly-dropped stack
+    assert called["stack"] == 1
+    imager._stack_image = object()  # a held image from that stack
+
+    _stack_event(imager, 1, dropped=0)  # a new stack at the same stacked count
+    assert imager._stack_image is None  # the old stack's image is discarded
+    assert called["stack"] == 2  # and a fresh one fetched
 
 
 def test_request_stacked_image_emits_protocol_message(monkeypatch):
@@ -223,7 +259,8 @@ def test_snapshot_reader_keeps_stack_fetching_on_without_live_page(monkeypatch):
     _stack_reply(imager, 100)
 
     assert called["stack"] == 1
-    assert imager.get_snapshot().stack_frame == 4
+    # The stacked count alone, not stacked + dropped (#817).
+    assert imager.get_snapshot().stack_frame == 3
 
 
 def test_snapshot_interest_expires(monkeypatch):
@@ -256,6 +293,25 @@ def test_snapshot_requests_current_stack_once_per_interval(monkeypatch):
     clock["now"] += seestar_imaging.SNAPSHOT_FETCH_MIN_INTERVAL_SEC + 1
     imager.get_snapshot()
     assert called["stack"] == 1
+
+
+def test_dropped_frames_do_not_refetch_for_a_snapshot_reader(monkeypatch):
+    # #817's measured symptom: a snapshot reader polling through a long run of
+    # dropped frames must keep serving the same image (one ETag, a 304 on
+    # revalidation), not re-fetch it from the scope under a new ETag.
+    clock = _clock(monkeypatch)
+    imager = _reader(monkeypatch)
+    _stack_event(imager, 5)
+    _stack_reply(imager, 60)
+    first = imager.get_snapshot()
+    called = _count_stack_requests(monkeypatch, imager)
+
+    for dropped in range(1, 6):
+        _stack_event(imager, 5, dropped=dropped)
+        clock["now"] += seestar_imaging.SNAPSHOT_FETCH_MIN_INTERVAL_SEC + 1
+        assert imager.get_snapshot().etag == first.etag  # the same image
+
+    assert called["stack"] == 0  # nothing re-fetched while only frames dropped
 
 
 def test_reader_before_the_stack_reply_does_not_fetch_twice(monkeypatch):

@@ -174,6 +174,7 @@ class SeestarImaging:
         self.last_stat_frames = None
         self.last_live_view_time = None
         self.last_stacking_frame = None
+        self.last_dropped_frame = None
 
     def __repr__(self):
         return f"{type(self).__name__}(host={self.host}, port={self.port})"
@@ -182,22 +183,36 @@ class SeestarImaging:
         try:
             match event["Event"]:
                 case "Stack":
-                    stacked_frame = event["stacked_frame"] + event["dropped_frame"]
+                    # A dropped frame adds nothing to the stacked image, so the
+                    # stacked count alone decides when to re-fetch (#817).  The
+                    # dropped count is still tracked, only to notice a new stack:
+                    # both counters rise within a stack, so either dropping back
+                    # means the scope started over.
+                    stacked_frame = event.get("stacked_frame", 0)
+                    dropped_frame = event.get("dropped_frame", 0)
                     connected = self.comm.is_connected()
                     with self._snapshot_lock:
                         previous = self.last_stacking_frame
-                        if (
+                        previous_dropped = self.last_dropped_frame
+                        new_stack = (
                             previous is not None and stacked_frame < previous
-                        ) or not self._snapshot_wanted():
+                        ) or (
+                            previous_dropped is not None
+                            and dropped_frame < previous_dropped
+                        )
+                        if new_stack or not self._snapshot_wanted():
                             # Never serve the previous stack's image as the new
                             # one, or hold one nobody reads.
                             self._reset_snapshot_locked()
                         self.last_stacking_frame = stacked_frame
-                        # xxx change to just stacked frame _or_ initial request?
+                        self.last_dropped_frame = dropped_frame
+                        # Fetch when the stacked image actually changed, or a new
+                        # stack began at the same count the old one ended on; a
+                        # run of dropped frames leaves stacked_frame alone.
                         fetch = (
                             connected
-                            and stacked_frame != previous
                             and stacked_frame > 0
+                            and (stacked_frame != previous or new_stack)
                             and (self.is_live_viewing or self._snapshot_wanted())
                         )
                         if fetch:
