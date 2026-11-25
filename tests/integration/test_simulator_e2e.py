@@ -1574,3 +1574,58 @@ def test_43_scope_goto_and_pi_set_time_reject_double_nested_params(simulator_ser
     )
     assert bad_time.get("code") == 107
     assert "error" in bad_time
+
+
+def test_44_startup_schedule_connects_and_starts(tmp_path, monkeypatch):
+    """End-to-end: run_startup_schedule waits for a real simulator connection,
+    then imports and starts a schedule so the scheduler reaches 'working'."""
+    import device.telescope as tel_module
+    from device.shr import set_shr_logger
+    from device.startup_schedule import run_startup_schedule
+
+    host = "127.0.0.1"
+    tcp_port = _find_free_port()
+    udp_port = _find_free_port()
+    logger = logging.getLogger("startup-schedule-integration")
+    set_shr_logger(logger)
+
+    # Isolate from the developer's local config.toml (see two_device_federation).
+    monkeypatch.setattr(Config, "seestar_interop_pem", "", raising=False)
+
+    listener = SocketListener(logger, host=host, tcp_port=tcp_port, udp_port=udp_port)
+    lst_thread = threading.Thread(target=listener._start_socket_listener, daemon=True)
+    lst_thread.start()
+    _wait_for_tcp(host, tcp_port)
+
+    tel_module.seestar_dev.clear()
+    tel_module.start_seestar_federation(logger)
+    dev = tel_module.start_seestar_device(logger, "Seestar Alpha", host, tcp_port, 1)
+
+    try:
+        deadline = time.time() + 10.0
+        while time.time() < deadline and not dev.is_connected:
+            time.sleep(0.1)
+        assert dev.is_connected, "device did not connect to the simulator"
+
+        sched = tmp_path / "startup.json"
+        sched.write_text(
+            json.dumps({"list": [{"action": "wait_for", "params": {"timer_sec": 30}}]})
+        )
+
+        assert (
+            run_startup_schedule(dev, str(sched), connect_timeout=10, poll_interval=0.1)
+            is True
+        )
+        assert dev.schedule["state"] == "working"
+    finally:
+        try:
+            dev.stop_scheduler({})
+        finally:
+            tel_module.end_seestar_device(1)
+            tel_module.seestar_dev.clear()
+            listener.shutdown_event.set()
+            if listener.tcp_socket:
+                listener.tcp_socket.close()
+            if listener.udp_socket:
+                listener.udp_socket.close()
+            lst_thread.join(timeout=2)

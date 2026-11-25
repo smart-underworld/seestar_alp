@@ -48,7 +48,9 @@ def test_happy_path_imports_and_starts(tmp_path):
     f = tmp_path / "sched.json"
     f.write_text("{}")
     dev = FakeDevice()
-    assert run_startup_schedule(dev, str(f), connect_timeout=1, poll_interval=0.01) is True
+    assert (
+        run_startup_schedule(dev, str(f), connect_timeout=1, poll_interval=0.01) is True
+    )
     assert dev.import_params["is_retain_state"] is False
     assert dev.start_called is True
 
@@ -67,7 +69,9 @@ def test_retain_state_passed_through(tmp_path):
     f = tmp_path / "sched.json"
     f.write_text("{}")
     dev = FakeDevice()
-    run_startup_schedule(dev, str(f), retain_state=True, connect_timeout=1, poll_interval=0.01)
+    run_startup_schedule(
+        dev, str(f), retain_state=True, connect_timeout=1, poll_interval=0.01
+    )
     assert dev.import_params["is_retain_state"] is True
 
 
@@ -87,7 +91,9 @@ def test_waits_then_proceeds_when_readiness_is_late(tmp_path):
         return calls["n"] >= 3
 
     dev.is_client_master = become_master_after_two_polls
-    assert run_startup_schedule(dev, str(f), connect_timeout=1, poll_interval=0.01) is True
+    assert (
+        run_startup_schedule(dev, str(f), connect_timeout=1, poll_interval=0.01) is True
+    )
     assert dev.start_called is True
     assert calls["n"] >= 3
 
@@ -96,7 +102,10 @@ def test_times_out_when_never_connected(tmp_path):
     f = tmp_path / "sched.json"
     f.write_text("{}")
     dev = FakeDevice(connected=False)
-    assert run_startup_schedule(dev, str(f), connect_timeout=0.05, poll_interval=0.01) is False
+    assert (
+        run_startup_schedule(dev, str(f), connect_timeout=0.05, poll_interval=0.01)
+        is False
+    )
     assert dev.import_params is None
     assert dev.start_called is False
 
@@ -105,7 +114,10 @@ def test_times_out_when_connected_but_not_master(tmp_path):
     f = tmp_path / "sched.json"
     f.write_text("{}")
     dev = FakeDevice(connected=True, master=False)
-    assert run_startup_schedule(dev, str(f), connect_timeout=0.05, poll_interval=0.01) is False
+    assert (
+        run_startup_schedule(dev, str(f), connect_timeout=0.05, poll_interval=0.01)
+        is False
+    )
     assert dev.import_params is None
     assert dev.start_called is False
 
@@ -113,7 +125,10 @@ def test_times_out_when_connected_but_not_master(tmp_path):
 def test_import_exception_returns_false_without_starting(tmp_path):
     f = tmp_path / "missing.json"
     dev = FakeDevice(import_exc=FileNotFoundError("nope"))
-    assert run_startup_schedule(dev, str(f), connect_timeout=1, poll_interval=0.01) is False
+    assert (
+        run_startup_schedule(dev, str(f), connect_timeout=1, poll_interval=0.01)
+        is False
+    )
     assert dev.start_called is False
 
 
@@ -121,7 +136,10 @@ def test_import_error_code_returns_false_without_starting(tmp_path):
     f = tmp_path / "sched.json"
     f.write_text("{}")
     dev = FakeDevice(import_result={"code": -1, "result": "scheduler active"})
-    assert run_startup_schedule(dev, str(f), connect_timeout=1, poll_interval=0.01) is False
+    assert (
+        run_startup_schedule(dev, str(f), connect_timeout=1, poll_interval=0.01)
+        is False
+    )
     assert dev.start_called is False
 
 
@@ -129,13 +147,19 @@ def test_start_refusal_returns_false(tmp_path):
     f = tmp_path / "sched.json"
     f.write_text("{}")
     dev = FakeDevice(start_result={"code": -1, "result": "grab control first"})
-    assert run_startup_schedule(dev, str(f), connect_timeout=1, poll_interval=0.01) is False
+    assert (
+        run_startup_schedule(dev, str(f), connect_timeout=1, poll_interval=0.01)
+        is False
+    )
 
 
 def test_none_device_returns_false(tmp_path):
     f = tmp_path / "sched.json"
     f.write_text("{}")
-    assert run_startup_schedule(None, str(f), connect_timeout=0.05, poll_interval=0.01) is False
+    assert (
+        run_startup_schedule(None, str(f), connect_timeout=0.05, poll_interval=0.01)
+        is False
+    )
 
 
 def test_parser_defaults_are_inert():

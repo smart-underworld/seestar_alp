@@ -67,7 +67,9 @@ def run_startup_schedule(
             {"filepath": abspath, "is_retain_state": retain_state}
         )
         if _failed(import_result):
-            log.error("Startup schedule: import of %s failed: %s", abspath, import_result)
+            log.error(
+                "Startup schedule: import of %s failed: %s", abspath, import_result
+            )
             return False
 
         start_result = device.start_scheduler({})
