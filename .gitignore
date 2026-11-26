@@ -42,3 +42,7 @@ device/*.tmp
 
 # superpowers SDD scratch workspace
 .superpowers/
+
+# superpowers planning/spec docs are kept local, not checked in
+docs/superpowers/plans/
+docs/superpowers/specs/
