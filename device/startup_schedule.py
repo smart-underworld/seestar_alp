@@ -111,7 +111,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--retain-state",
         action="store_true",
         default=False,
-        help="Keep the schedule's saved state/ids when importing (default: fresh ids).",
+        help=(
+            "Preserve the schedule file's schedule_id and per-item ids instead "
+            "of generating fresh ones on import (default: generate fresh ids)."
+        ),
     )
     parser.add_argument(
         "--schedule-connect-timeout",
