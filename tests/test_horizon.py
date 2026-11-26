@@ -5,6 +5,7 @@ import threading
 
 import pytest
 import tomlkit
+from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 from astropy.utils import iers
@@ -293,6 +294,116 @@ def test_visibility_needs_no_earth_orientation_table(astaffort, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# find_crossings / transit
+# ---------------------------------------------------------------------------
+
+START = Time("2026-11-25T18:00:00", scale="utc")
+SITE = (44.06, 0.65)
+
+
+def _track(ra, dec):
+    coord = SkyCoord(ra=ra, dec=dec, frame="icrs")
+    return lambda when: horizon.altaz(coord, *SITE, when)
+
+
+def test_find_crossings_reports_one_up_and_one_down_for_an_equatorial_target(astaffort):
+    track = _track("12h00m00s", "+00d00m00s")
+    crossings = horizon.find_crossings(track, lambda az: 0.0, START)
+    assert [tag for _, tag in crossings] == ["up", "down"]
+    assert crossings[0][0] < crossings[1][0]
+    # Each reported time sits on the threshold, to within the 1 minute bracket.
+    for when, _ in crossings:
+        assert abs(track(when)[0]) < 0.25
+
+
+def test_find_crossings_empty_for_circumpolar_target(astaffort):
+    track = _track("02h31m49.09s", "+89d15m50.8s")
+    assert horizon.find_crossings(track, lambda az: 0.0, START) == []
+
+
+def test_find_crossings_empty_for_never_up_target(astaffort):
+    track = _track("03h00m00s", "-70d00m00s")
+    assert horizon.find_crossings(track, lambda az: 0.0, START) == []
+
+
+def test_find_crossings_does_not_skip_a_fast_meridian_crossing(astaffort):
+    # Dec -45.99 culminates at about 0.05 degree: up for only ~25 minutes.
+    track = _track("03h00m00s", "-45d59m24s")
+    fine = [START + (k * 0.5) * u.min for k in range(2881)]
+    above = [track(t)[0] > 0 for t in fine]
+    first_up = next(t for t, a, b in zip(fine[1:], above, above[1:]) if b and not a)
+    window = 0.5 * sum(above)
+    # The grazing window is a few default steps, and shorter than a
+    # coarse one: a step_min of 60 would sample right over it.
+    assert 5 <= window <= 8 * 4.0
+    assert horizon.find_crossings(track, lambda az: 0.0, START, step_min=60.0) == []
+    crossings = horizon.find_crossings(track, lambda az: 0.0, START)
+    assert [tag for _, tag in crossings] == ["up", "down"]
+    assert abs((crossings[0][0] - first_up).to_value("min")) < 1.0
+
+
+def test_find_crossings_follows_an_azimuth_dependent_threshold(astaffort):
+    track = _track("12h00m00s", "+00d00m00s")
+    crossings = horizon.find_crossings(track, lambda az: 20.0, START)
+    assert [tag for _, tag in crossings] == ["up", "down"]
+    for when, _ in crossings:
+        assert abs(track(when)[0] - 20.0) < 0.5
+
+
+def test_transit_finds_the_meridian_maximum(astaffort):
+    track = _track("03h00m00s", "+20d00m00s")
+    when, altitude = horizon.transit(track, START)
+    reference = max(track(START + k * u.min)[0] for k in range(1441))
+    assert altitude == pytest.approx(reference, abs=0.1)
+    assert track(when)[0] == pytest.approx(altitude, abs=1e-6)
+
+
+def test_fixed_altaz_fn_matches_altaz_within_the_precession_bound(astaffort):
+    # The cheap target sampler precesses once at the epoch; altaz precesses per
+    # sample. Over 24h the only difference is that one precession, ~0.014 deg.
+    coord = SkyCoord(ra="12h00m00s", dec="+20d00m00s", frame="icrs")
+    fn = horizon._fixed_altaz_fn(coord, *SITE, START)
+    worst = 0.0
+    for k in range(0, 24 * 4 + 1):  # every 15 minutes over 24h
+        when = START + (k * 15) * u.min
+        alt, az = fn(when)
+        ref_alt, ref_az = horizon.altaz(coord, *SITE, when)
+        worst = max(worst, abs(alt - ref_alt))
+        assert _az_gap(az, ref_az) * math.cos(math.radians(alt)) < 0.05
+    assert worst < 0.02
+
+
+@pytest.mark.parametrize(
+    "body, anchor",
+    [
+        # The Moon crosses RA 0h on the night of 2026-11-19; 2026-03-20 brackets
+        # the Sun's RA 0h. A broken RA unwrap would blow the interpolation up.
+        ("moon", Time("2026-11-19T12:00:00", scale="utc")),
+        ("sun", Time("2026-03-20T00:00:00", scale="utc")),
+    ],
+)
+def test_body_altaz_fn_interpolation_matches_exact_position(astaffort, body, anchor):
+    from astropy.coordinates import FK5, get_body, get_sun
+
+    def exact(when):
+        src = get_sun(when) if body == "sun" else get_body("moon", when)
+        of_date = horizon._direction(src).transform_to(FK5(equinox=anchor))
+        return horizon._topocentric_altaz(
+            of_date.ra.deg, of_date.dec.deg, *SITE, when.utc.jd
+        )
+
+    fn = horizon._body_altaz_fn(body, anchor, *SITE)
+    worst = 0.0
+    for k in range(0, 24 * 4 + 1):  # every 15 minutes over the window
+        when = anchor + (k * 15) * u.min
+        alt, az = fn(when)
+        ref_alt, ref_az = exact(when)
+        worst = max(worst, abs(alt - ref_alt))
+        assert _az_gap(az, ref_az) * math.cos(math.radians(alt)) < 0.05
+    assert worst < 0.01  # interpolation error only, not a wrapped RA
+
+
+# ---------------------------------------------------------------------------
 # save_panorama_profile
 # ---------------------------------------------------------------------------
 
@@ -554,3 +665,277 @@ def test_a_record_that_cannot_be_removed_leaves_the_save_in_place(
     assert horizon.configured_profile()[0].points == profile.points
     assert any("still describes the former photo" in r.message for r in caplog.records)
     assert _no_temporary_file_left(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# sun / moon
+# ---------------------------------------------------------------------------
+
+# Real lunations: new moon 2026-11-09 ~21:02 UTC, full moon 2026-11-24 ~14:53 UTC.
+NEW_MOON = Time("2026-11-09T21:02:00", scale="utc")
+FULL_MOON = Time("2026-11-24T14:53:00", scale="utc")
+
+
+def test_sun_altitude_is_negative_at_local_midnight(astaffort):
+    # Astaffort (0.65 E) is on UTC time within a few minutes: 00:00 UTC.
+    midnight = Time("2026-11-25T00:00:00", scale="utc")
+    altitude, azimuth = horizon.sun_alt_az(midnight, 44.06, 0.65)
+    assert altitude < 0
+    assert 0 <= azimuth < 360
+
+
+def _az_gap(a, b):
+    return abs((a - b + 180) % 360 - 180)
+
+
+@pytest.mark.parametrize("hour", [0, 12, 20])
+@pytest.mark.parametrize("body", ["sun", "moon"])
+def test_sun_moon_match_astropy_altaz(astaffort, body, hour):
+    from astropy.coordinates import AltAz, EarthLocation, get_body
+
+    when = Time(f"2026-11-25T{hour:02d}:00:00", scale="utc")
+    site = EarthLocation(lat=44.06 * u.deg, lon=0.65 * u.deg)
+    truth = get_body(body, when).transform_to(AltAz(obstime=when, location=site))
+    fn = horizon.sun_alt_az if body == "sun" else horizon.moon_alt_az
+    altitude, azimuth = fn(when, 44.06, 0.65)
+    # The Moon is geocentric here: parallax of up to about a degree.
+    assert altitude == pytest.approx(truth.alt.deg, abs=1.0)
+    assert _az_gap(azimuth, truth.az.deg) < 1.0
+
+
+def test_moon_illumination_near_zero_at_a_known_new_moon():
+    assert horizon.moon_illumination(NEW_MOON) < 0.05
+
+
+def test_moon_illumination_near_one_at_a_known_full_moon():
+    assert horizon.moon_illumination(FULL_MOON) > 0.95
+
+
+def test_moon_is_waxing_between_new_and_full():
+    assert horizon.moon_is_waxing(Time("2026-11-17T12:00:00", scale="utc")) is True
+    assert horizon.moon_is_waxing(Time("2026-12-01T12:00:00", scale="utc")) is False
+
+
+@pytest.mark.parametrize(
+    "illumination, waxing, name",
+    [
+        (0.01, True, "new moon"),
+        (0.01, False, "new moon"),
+        (0.25, True, "waxing crescent"),
+        (0.25, False, "waning crescent"),
+        (0.5, True, "first quarter"),
+        (0.5, False, "last quarter"),
+        (0.75, True, "waxing gibbous"),
+        (0.75, False, "waning gibbous"),
+        (0.99, True, "full moon"),
+        (0.99, False, "full moon"),
+    ],
+)
+def test_moon_phase_name_buckets(illumination, waxing, name):
+    assert horizon.moon_phase_name(illumination, waxing) == name
+
+
+def test_sun_moon_need_no_earth_orientation_table(astaffort, monkeypatch):
+    def stale(*args, **kwargs):
+        raise ValueError("interpolating from IERS_Auto using predictive values")
+
+    monkeypatch.setattr(iers.IERS_Auto, "open", stale)
+    monkeypatch.setattr(iers.IERS, "open", stale)
+    when = Time("2026-11-25T20:00:00", scale="utc")
+    for fn in (horizon.sun_alt_az, horizon.moon_alt_az):
+        altitude, azimuth = fn(when, 44.06, 0.65)
+        assert math.isfinite(altitude) and -90 <= altitude <= 90
+        assert math.isfinite(azimuth) and 0 <= azimuth < 360
+    assert 0 <= horizon.moon_illumination(when) <= 1
+    assert isinstance(horizon.moon_is_waxing(when), bool)
+
+
+def _window(ra, dec, **extra):
+    params = {"ra": ra, "dec": dec, "is_j2000": True, **extra}
+    return horizon.target_window(params, now=START)
+
+
+def test_target_window_rises_and_sets(astaffort):
+    result = _window("12:00:00", "+00:00:00")
+    assert result["state"] == "rises_and_sets"
+    assert result["rises"]["iso"] < result["sets"]["iso"]
+    assert result["rises"]["local"] != result["sets"]["local"]
+    assert result["transit"] is not None
+    assert result["rises"]["iso"] < result["transit"]["iso"] < result["sets"]["iso"]
+    assert result["max_altitude"] == pytest.approx(45.9, abs=0.5)
+    assert result["min_altitude_floor"] == 0.0
+    assert "next_rises" not in result
+
+
+def test_target_window_circumpolar(astaffort):
+    result = _window("02:31:49.09", "+89:15:50.8")
+    assert result["state"] == "circumpolar"
+    assert result["rises"] is None and result["sets"] is None
+    assert result["transit"] is not None
+    assert result["max_altitude"] > 40
+
+
+def test_target_window_never_up(astaffort):
+    result = _window("03:00:00", "-70:00:00")
+    assert result["state"] == "never_up"
+    assert result["rises"] is None and result["sets"] is None
+
+
+def test_target_window_up_now(astaffort):
+    result = _window("22:00:00", "+00:00:00")
+    assert result["state"] == "up_now"
+    assert result["rises"] is None
+    assert result["sets"] is not None
+    assert result["next_rises"] is not None
+    assert result["sets"]["iso"] < result["next_rises"]["iso"]
+
+
+def test_target_window_min_altitude_floor_raises_the_effective_horizon(astaffort):
+    low = _window("22:00:00", "+00:00:00")
+    assert low["state"] == "up_now"
+    high = _window("22:00:00", "+00:00:00", min_altitude=30)
+    assert high["min_altitude_floor"] == 30
+    assert high["state"] == "up_now"
+    assert high["sets"]["iso"] < low["sets"]["iso"]
+    too_high = _window("22:00:00", "+00:00:00", min_altitude=80)
+    assert too_high["state"] == "never_up"
+
+
+def test_target_window_without_profile_uses_flat_floor(astaffort, monkeypatch):
+    monkeypatch.setattr(Config, "horizon_file", "")
+    result = _window("12:00:00", "+00:00:00")
+    assert result["uses_horizon_profile"] is False
+
+
+def test_target_window_uses_the_horizon_profile(astaffort, monkeypatch, tmp_path):
+    path = tmp_path / "wall.hrz"
+    path.write_text("0 90\n")
+    monkeypatch.setattr(Config, "horizon_file", str(path))
+    result = _window("22:00:00", "+00:00:00")
+    assert result["uses_horizon_profile"] is True
+    assert result["state"] == "never_up"
+
+
+def test_target_window_raises_SiteLocationUnknown_at_zero_location(monkeypatch):
+    monkeypatch.setattr(Config, "init_lat", 0)
+    monkeypatch.setattr(Config, "init_long", 0)
+    with pytest.raises(horizon.SiteLocationUnknown):
+        _window("12:00:00", "+00:00:00")
+
+
+def test_target_window_raises_InvalidTarget_on_bad_coordinates(astaffort):
+    with pytest.raises(horizon.InvalidTarget):
+        _window("north", "+00:00:00")
+    with pytest.raises(horizon.InvalidTarget):
+        horizon.target_window({"dec": 1.0}, now=START)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_target_window_rejects_non_finite_min_altitude(astaffort, bad):
+    # Reachable from the CLI (--min-altitude nan) and from JSON NaN/Infinity.
+    with pytest.raises(horizon.InvalidTarget, match="min_altitude must be a finite"):
+        _window("12:00:00", "+00:00:00", min_altitude=bad)
+
+
+def test_target_window_rejects_unconvertible_min_altitude(astaffort):
+    # A huge JSON integer overflows float(); must map to InvalidTarget, not 500.
+    with pytest.raises(horizon.InvalidTarget):
+        _window("12:00:00", "+00:00:00", min_altitude=10**400)
+
+
+def test_local_times_render_in_configured_timezone(monkeypatch):
+    monkeypatch.setattr(Config, "init_timezone", "Asia/Tokyo")
+    assert horizon.local_times(START) == {
+        "local": "03:00",
+        "iso": "2026-11-26T03:00:00+09:00",
+    }
+    monkeypatch.setattr(Config, "init_timezone", "UTC")
+    assert horizon.local_times(START)["local"] == "18:00"
+
+
+def test_local_times_fall_back_to_host_timezone(monkeypatch):
+    monkeypatch.setattr(Config, "init_timezone", "")
+    result = horizon.local_times(START)
+    assert len(result["local"]) == 5
+    assert result["iso"].startswith("2026-11-2")
+
+
+# 2026-10-29 Astaffort (Europe/Paris, CET): the local noon-to-noon window
+# has a moonrise but no moonset.
+NIGHT_EVENING = Time("2026-10-29T17:00:00", scale="utc")  # 18:00 local
+NIGHT_PAST_MIDNIGHT = Time("2026-10-29T23:30:00", scale="utc")  # 00:30 on the 30th
+NIGHT_MORNING = Time(
+    "2026-10-30T09:00:00", scale="utc"
+)  # 10:00 local, still the 29th's night
+
+
+@pytest.fixture
+def paris(astaffort, monkeypatch):
+    monkeypatch.setattr(Config, "init_timezone", "Europe/Paris")
+
+
+def test_night_events_returns_ordered_twilight_times(paris):
+    result = horizon.night_events(now=NIGHT_EVENING)
+    for key in ("astronomical", "nautical", "civil"):
+        assert result[key]["dusk"] is not None
+        assert result[key]["dawn"] is not None
+    # Going into night: civil, then nautical, then astronomical dusk.
+    assert (
+        result["civil"]["dusk"]["iso"]
+        < result["nautical"]["dusk"]["iso"]
+        < result["astronomical"]["dusk"]["iso"]
+    )
+    # Mirrored towards dawn.
+    assert (
+        result["astronomical"]["dawn"]["iso"]
+        < result["nautical"]["dawn"]["iso"]
+        < result["civil"]["dawn"]["iso"]
+    )
+    assert result["astronomical"]["dusk"]["iso"] < result["astronomical"]["dawn"]["iso"]
+
+
+def test_night_events_moon_illumination_in_unit_range(paris):
+    result = horizon.night_events(now=NIGHT_EVENING)
+    assert 0.0 <= result["moon_illumination"] <= 1.0
+    assert isinstance(result["moon_phase"], str) and result["moon_phase"]
+
+
+def test_night_events_null_when_no_moonset_in_window(paris):
+    result = horizon.night_events(now=NIGHT_EVENING)
+    assert result["moonset"] is None
+    assert result["moonrise"] is not None
+
+
+def test_night_events_same_result_before_and_after_midnight(paris):
+    evening = horizon.night_events(now=NIGHT_EVENING)
+    past_midnight = horizon.night_events(now=NIGHT_PAST_MIDNIGHT)
+    morning = horizon.night_events(now=NIGHT_MORNING)
+    for other in (past_midnight, morning):
+        for key in ("astronomical", "nautical", "civil"):
+            assert other[key] == evening[key]
+        assert other["moonrise"] == evening["moonrise"]
+
+
+def test_night_events_raises_SiteLocationUnknown_at_zero_location(monkeypatch):
+    monkeypatch.setattr(Config, "init_lat", 0)
+    monkeypatch.setattr(Config, "init_long", 0)
+    with pytest.raises(horizon.SiteLocationUnknown):
+        horizon.night_events(now=NIGHT_EVENING)
+
+
+def test_tools_need_no_earth_orientation_table(paris, monkeypatch):
+    # The coarse-grid get_sun/get_body array path must also run on a srvastro-like
+    # install with stale IERS tables and no way to download fresh ones.
+    def stale(*args, **kwargs):
+        raise ValueError("interpolating from IERS_Auto using predictive values")
+
+    monkeypatch.setattr(iers.IERS_Auto, "open", stale)
+    monkeypatch.setattr(iers.IERS, "open", stale)
+    events = horizon.night_events(now=NIGHT_EVENING)
+    assert 0.0 <= events["moon_illumination"] <= 1.0
+    assert events["astronomical"]["dusk"] is not None
+    window = horizon.target_window(
+        {"ra": "12:00:00", "dec": "+20:00:00", "is_j2000": True}, now=START
+    )
+    assert window["state"] in {"rises_and_sets", "up_now", "circumpolar", "never_up"}
+    assert math.isfinite(window["max_altitude"])

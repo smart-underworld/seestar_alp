@@ -6,6 +6,7 @@ device server (served on a real TCP port) -> simulator.
 
 import asyncio
 import logging
+import re
 import socket
 import sys
 import threading
@@ -256,3 +257,40 @@ def test_horizon_tools_round_trip(tools_env, monkeypatch, tmp_path):
     _assert_ok(result)
     assert result["visible"] is False, result
     assert result["horizon"] == 90, result
+
+
+@pytest.fixture
+def known_site(monkeypatch, tmp_path):
+    """Give the device a real site so target_window/night_events don't raise
+    SiteLocationUnknown at (0, 0)."""
+    from astropy.utils import iers
+
+    from device import horizon
+
+    monkeypatch.setattr(iers.conf, "auto_download", False)
+    hrz = tmp_path / "site.hrz"
+    hrz.write_text("0 0\n")  # flat horizon
+    monkeypatch.setattr(Config, "horizon_file", str(hrz))
+    monkeypatch.setattr(Config, "init_lat", 44.06)
+    monkeypatch.setattr(Config, "init_long", 0.65)
+    horizon._cache.update(key=None, profile=None, error=None)
+
+
+def test_target_visibility_window_returns_local_times(tools_env, known_site):
+    result = _run(pointing.target_visibility_window_tool("00:42:44", "+41:16:09"))
+    _assert_ok(result)
+    assert result["state"] in {"rises_and_sets", "circumpolar", "never_up", "up_now"}
+    hhmm = re.compile(r"^\d{2}:\d{2}$")
+    for key in ("rises", "sets", "transit"):
+        event = result.get(key)
+        if event:
+            assert hhmm.match(event["local"]), (key, result)
+
+
+def test_get_night_events_returns_twilight_and_moon(tools_env, known_site):
+    result = _run(pointing.get_night_events_tool())
+    _assert_ok(result)
+    for kind in ("astronomical", "nautical", "civil"):
+        assert kind in result, result
+        assert "dusk" in result[kind] and "dawn" in result[kind], result
+    assert 0.0 <= result["moon_illumination"] <= 1.0, result

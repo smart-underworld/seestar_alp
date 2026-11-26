@@ -12,13 +12,24 @@ Horizon page makes one from a 360-degree panorama, in the browser.
 """
 
 import bisect
+import datetime
 import json
 import logging
 import math
 import os
 import threading
+from collections.abc import Callable
+from zoneinfo import ZoneInfo
 
-from astropy.coordinates import FK5, SkyCoord
+import numpy as np
+from astropy import units as u
+from astropy.coordinates import (
+    FK5,
+    GeocentricTrueEcliptic,
+    SkyCoord,
+    get_body,
+    get_sun,
+)
 from astropy.time import Time
 
 from device.config import Config, stage_file, write_file_atomic
@@ -220,10 +231,23 @@ def altaz(coord: SkyCoord, latitude, longitude, when: Time):
     so the check errs on the hidden side.
     """
     of_date = coord.transform_to(FK5(equinox=when))
-    days = when.utc.jd - 2451545.0
+    return _topocentric_altaz(
+        of_date.ra.deg, of_date.dec.deg, latitude, longitude, when.utc.jd
+    )
+
+
+def _topocentric_altaz(ra_deg, dec_deg, latitude, longitude, jd):
+    """Altitude and azimuth (degrees) of of-date ``ra_deg``/``dec_deg`` at ``jd``.
+
+    The mean-sidereal-time hour-angle math shared by ``altaz`` and the cheap
+    per-sample samplers below; no Earth-orientation (IERS) tables, no
+    refraction. Taking RA/Dec already of the date lets a sweep precess its
+    target once instead of at every sample.
+    """
+    days = jd - 2451545.0
     sidereal = (280.46061837 + 360.98564736629 * days + longitude) % 360.0
-    hour_angle = math.radians(sidereal - of_date.ra.deg)
-    dec, lat = of_date.dec.radian, math.radians(latitude)
+    hour_angle = math.radians(sidereal - ra_deg)
+    dec, lat = math.radians(dec_deg), math.radians(latitude)
     altitude = math.asin(
         math.sin(dec) * math.sin(lat)
         + math.cos(dec) * math.cos(lat) * math.cos(hour_angle)
@@ -234,6 +258,104 @@ def altaz(coord: SkyCoord, latitude, longitude, when: Time):
         - math.cos(dec) * math.sin(lat) * math.cos(hour_angle),
     )
     return math.degrees(altitude), math.degrees(azimuth) % 360.0
+
+
+def _fixed_altaz_fn(coord: SkyCoord, latitude, longitude, epoch: Time):
+    """A cheap ``alt_az_fn(when)`` that precesses ``coord`` only once.
+
+    Precession over a 24-hour window is about 0.014 degree, negligible for a
+    horizon check, so the target is transformed to coordinates of ``epoch``
+    once and each sample then costs only the sidereal-time and hour-angle trig
+    on that fixed RA/Dec. ``altaz`` itself keeps its per-call transform, for
+    ``visibility``.
+    """
+    of_date = coord.transform_to(FK5(equinox=epoch))
+    ra_deg, dec_deg = of_date.ra.deg, of_date.dec.deg
+
+    def alt_az_fn(when: Time):
+        return _topocentric_altaz(ra_deg, dec_deg, latitude, longitude, when.utc.jd)
+
+    return alt_az_fn
+
+
+def _direction(body: SkyCoord) -> SkyCoord:
+    """The body's geocentric direction on the sky, at infinity.
+
+    astropy returns the Sun and Moon as finite-distance GCRS positions;
+    transforming those to the barycentric FK5 frame would shift them by the
+    Earth's orbital offset (some 19 degrees for the Sun). Dropping the
+    distance keeps the direction as seen from the Earth.
+    """
+    return SkyCoord(ra=body.ra, dec=body.dec, frame="icrs")
+
+
+def sun_alt_az(when: Time, latitude, longitude):
+    """Altitude and azimuth of the Sun at ``when``, in degrees (no IERS tables)."""
+    return altaz(_direction(get_sun(when)), latitude, longitude, when)
+
+
+def moon_alt_az(when: Time, latitude, longitude):
+    """Altitude and azimuth of the Moon at ``when``, in degrees (no IERS tables).
+
+    Geocentric position: the Moon's parallax (up to about a degree) is left
+    out, fine for deciding when it is up or down.
+    """
+    return altaz(_direction(get_body("moon", when)), latitude, longitude, when)
+
+
+def moon_illumination(when: Time) -> float:
+    """Illuminated fraction of the Moon's disc at ``when``, from 0 to 1."""
+    elongation = get_sun(when).separation(get_body("moon", when)).radian
+    return (1.0 - math.cos(elongation)) / 2.0
+
+
+def moon_is_waxing(when: Time) -> bool:
+    """Whether the Moon leads the Sun in ecliptic longitude (new to full)."""
+    sun = get_sun(when).transform_to(GeocentricTrueEcliptic(equinox=when))
+    moon = get_body("moon", when).transform_to(GeocentricTrueEcliptic(equinox=when))
+    return bool((moon.lon.deg - sun.lon.deg) % 360.0 < 180.0)
+
+
+def moon_phase_name(illumination: float, waxing: bool) -> str:
+    """Human name of the phase for an illuminated fraction and direction."""
+    if illumination < 0.03:
+        return "new moon"
+    if illumination > 0.97:
+        return "full moon"
+    if 0.45 <= illumination <= 0.55:
+        return "first quarter" if waxing else "last quarter"
+    if illumination < 0.5:
+        return "waxing crescent" if waxing else "waning crescent"
+    return "waxing gibbous" if waxing else "waning gibbous"
+
+
+def _body_altaz_fn(name, anchor: Time, latitude, longitude, span_hours=24.0):
+    """A cheap ``alt_az_fn(when)`` for the Sun (``"sun"``) or Moon (``"moon"``).
+
+    ``get_sun``/``get_body`` are the per-sample cost of a sweep, so they are
+    called once each on an hourly grid spanning the window (with one node of
+    margin on each side so bisection never samples past the ends), transformed
+    to of-date coordinates with a single equinox, then their RA/Dec are
+    interpolated linearly at the sampled times -- arcsecond-level error at
+    hourly nodes, even for the Moon's motion. RA is unwrapped before
+    interpolation so a node pair straddling 0h does not sweep backwards. The
+    public ``sun_alt_az``/``moon_alt_az`` keep their exact per-call path.
+    """
+    offsets = np.arange(-60.0, span_hours * 60.0 + 60.0 + 1e-6, 60.0)
+    nodes = anchor + offsets * u.min
+    body = get_sun(nodes) if name == "sun" else get_body("moon", nodes)
+    of_date = _direction(body).transform_to(FK5(equinox=anchor))
+    node_jd = np.asarray(nodes.utc.jd, dtype=float)
+    ra_deg = np.degrees(np.unwrap(np.radians(np.asarray(of_date.ra.deg, dtype=float))))
+    dec_deg = np.asarray(of_date.dec.deg, dtype=float)
+
+    def alt_az_fn(when: Time):
+        jd = when.utc.jd
+        ra = float(np.interp(jd, node_jd, ra_deg))
+        dec = float(np.interp(jd, node_jd, dec_deg))
+        return _topocentric_altaz(ra, dec, latitude, longitude, jd)
+
+    return alt_az_fn
 
 
 def visibility(coord: SkyCoord, profile, margin=0.0, when=None):
@@ -256,6 +378,94 @@ def visibility(coord: SkyCoord, profile, margin=0.0, when=None):
         "margin": margin,
         "visible": altitude > horizon + margin,
     }
+
+
+# Bracket width, in minutes, at which a crossing found by bisection is reported.
+_CROSSING_RESOLUTION_MIN = 1.0
+
+
+def find_crossings(
+    alt_az_fn: Callable[[Time], tuple[float, float]],
+    threshold_fn: Callable[[float], float],
+    start: Time,
+    span_hours: float = 24.0,
+    step_min: float = 4.0,
+) -> list[tuple[Time, str]]:
+    """Times in the window when a target crosses a threshold altitude.
+
+    ``alt_az_fn(when)`` gives ``(altitude, azimuth)`` in degrees;
+    ``threshold_fn(azimuth)`` gives the altitude to cross at that azimuth (a
+    flat horizon is ``lambda az: 0.0``). The window ``[start, start + span]``
+    is sampled every ``step_min`` minutes; each sign change of
+    ``altitude - threshold`` is then narrowed by bisection to a minute.
+    Returns ``(time, "up" | "down")`` in time order, ``"up"`` when the target
+    rises above the threshold. A target that stays on one side gives ``[]``.
+
+    The default 4 minute step is short enough that a target grazing the
+    horizon, above it for under an hour, is still bracketed; a window shorter
+    than one step is only sampled at its ends.
+    """
+
+    def margin(when):
+        altitude, azimuth = alt_az_fn(when)
+        return altitude - threshold_fn(azimuth)
+
+    step = max(float(step_min), 1e-3)
+    count = max(int(math.ceil(span_hours * 60.0 / step)), 1)
+    offsets = [min(k * step, span_hours * 60.0) for k in range(count + 1)]
+    times = [start + m * u.min for m in offsets]
+    margins = [margin(t) for t in times]
+    crossings = []
+    for i in range(count):
+        before, after = margins[i], margins[i + 1]
+        if (before > 0) == (after > 0):
+            continue
+        low, high = offsets[i], offsets[i + 1]
+        rising = after > 0
+        while high - low > _CROSSING_RESOLUTION_MIN:
+            middle = (low + high) / 2.0
+            if (margin(start + middle * u.min) > 0) == rising:
+                high = middle
+            else:
+                low = middle
+        crossings.append(
+            (start + (low + high) / 2.0 * u.min, "up" if rising else "down")
+        )
+    return crossings
+
+
+def transit(
+    alt_az_fn: Callable[[Time], tuple[float, float]],
+    start: Time,
+    span_hours: float = 24.0,
+    step_min: float = 4.0,
+) -> tuple[Time, float]:
+    """Time and altitude of the highest point of a target in the window.
+
+    The highest of the samples taken every ``step_min`` minutes, refined to
+    about a second between its two neighbours (the altitude curve is smooth
+    and has one peak there).
+    """
+    step = max(float(step_min), 1e-3)
+    total = span_hours * 60.0
+    count = max(int(math.ceil(total / step)), 1)
+    offsets = [min(k * step, total) for k in range(count + 1)]
+    altitudes = [alt_az_fn(start + m * u.min)[0] for m in offsets]
+    best = max(range(len(offsets)), key=altitudes.__getitem__)
+    low = offsets[max(best - 1, 0)]
+    high = offsets[min(best + 1, count)]
+    while high - low > 1.0 / 60.0:
+        a = low + (high - low) / 3.0
+        b = high - (high - low) / 3.0
+        if alt_az_fn(start + a * u.min)[0] < alt_az_fn(start + b * u.min)[0]:
+            low = a
+        else:
+            high = b
+    when = start + (low + high) / 2.0 * u.min
+    altitude = alt_az_fn(when)[0]
+    if altitude < altitudes[best]:  # the peak is at a window edge
+        return start + offsets[best] * u.min, altitudes[best]
+    return when, altitude
 
 
 def describe():
@@ -298,6 +508,187 @@ def check_target(params):
     if result is None:
         raise SiteLocationUnknown("site location not set: latitude and longitude are 0")
     result["horizon_error"] = error
+    return result
+
+
+def local_times(when: Time) -> dict:
+    """``when`` as site-local ``{"local": "HH:MM", "iso": <local ISO>}``.
+
+    Uses ``[seestar_initialization] timezone`` (an IANA name); the host's
+    local zone when that is empty. ``iso`` carries the date, so the day is
+    unambiguous across midnight.
+    """
+    moment = when.utc.to_datetime(timezone=datetime.timezone.utc)
+    name = (Config.init_timezone or "").strip()
+    if name:
+        moment = moment.astimezone(ZoneInfo(name))
+    else:
+        moment = moment.astimezone()
+    return {"local": moment.strftime("%H:%M"), "iso": moment.isoformat()}
+
+
+def target_window(params, now: Time | None = None) -> dict:
+    """The ``target_visibility_window`` action.
+
+    ``params``: ``ra``, ``dec``, ``is_j2000`` (default true) and
+    ``min_altitude`` (degrees, default 0). Looks 24 hours ahead of ``now``
+    for when the target is above the higher of the configured horizon
+    profile (flat 0 when none) and ``min_altitude``.
+
+    ``state`` is ``rises_and_sets``, ``up_now``, ``circumpolar`` or
+    ``never_up``. Raises InvalidTarget and SiteLocationUnknown like
+    ``check_target``.
+
+    For an ``up_now`` target the 24-hour window reaches past the current
+    apparition, so ``transit`` may be the *next* day's culmination rather than
+    the one in progress; ``max_altitude`` (the window maximum) is unaffected.
+    """
+    params = params or {}
+    missing = [name for name in ("ra", "dec") if params.get(name) in (None, "")]
+    if missing:
+        raise InvalidTarget(f"missing parameter(s): {', '.join(missing)}")
+    try:
+        coord = Util.parse_coordinate(
+            params.get("is_j2000", True), params["ra"], params["dec"]
+        )
+    except Exception as e:  # astropy raises several kinds on a bad angle
+        raise InvalidTarget(
+            f"unreadable coordinates ra={params['ra']!r}, dec={params['dec']!r}: {e}"
+        ) from None
+    try:
+        min_altitude = float(params.get("min_altitude", 0.0) or 0.0)
+    except (TypeError, ValueError, OverflowError) as e:
+        raise InvalidTarget(
+            f"unreadable min_altitude {params.get('min_altitude')!r}: {e}"
+        ) from None
+    if not math.isfinite(min_altitude):
+        raise InvalidTarget("min_altitude must be a finite number")
+    site = site_location()
+    if site is None:
+        raise SiteLocationUnknown("site location not set: latitude and longitude are 0")
+    lat, lon = site
+    now = Time.now() if now is None else now
+    profile, _error = configured_profile()
+
+    # One precession of the target, then only sidereal-time trig per sample:
+    # the find_crossings and transit sweeps below each cost a full 24h scan.
+    alt_az_fn = _fixed_altaz_fn(coord, lat, lon, now)
+
+    def threshold_fn(azimuth):
+        floor = profile.altitude_at(azimuth) if profile is not None else 0.0
+        return max(floor, min_altitude)
+
+    altitude, azimuth = alt_az_fn(now)
+    above = altitude > threshold_fn(azimuth)
+    crossings = find_crossings(alt_az_fn, threshold_fn, now, span_hours=24, step_min=4)
+    peak_time, peak_altitude = transit(alt_az_fn, now, span_hours=24, step_min=4)
+
+    def stamp(when):
+        return local_times(when) if when is not None else None
+
+    rises = sets = next_rises = None
+    if not crossings:
+        state = "circumpolar" if above else "never_up"
+    elif above:
+        state = "up_now"
+        sets = crossings[0][0]
+        next_rises = next((t for t, tag in crossings[1:] if tag == "up"), None)
+    else:
+        state = "rises_and_sets"
+        up_index = next(i for i, (_, tag) in enumerate(crossings) if tag == "up")
+        rises = crossings[up_index][0]
+        sets = next((t for t, tag in crossings[up_index + 1 :] if tag == "down"), None)
+
+    result = {
+        "state": state,
+        "rises": stamp(rises),
+        "sets": stamp(sets),
+        "transit": stamp(peak_time),
+        "max_altitude": round(peak_altitude, 1),
+        "min_altitude_floor": min_altitude,
+        "uses_horizon_profile": profile is not None,
+    }
+    if state == "up_now":
+        result["next_rises"] = stamp(next_rises)
+    return result
+
+
+_TWILIGHT_SUN_ALTITUDES = (
+    ("civil", -6.0),
+    ("nautical", -12.0),
+    ("astronomical", -18.0),
+)
+
+
+def _local_noon_anchor(now: Time) -> Time:
+    """The local noon that starts the noon-to-noon day containing ``now``.
+
+    Before 12:00 local that is yesterday's noon, so a call just after
+    midnight still reports the night that began the previous evening.
+    """
+    name = (Config.init_timezone or "").strip()
+    moment = now.utc.to_datetime(timezone=datetime.timezone.utc)
+    moment = moment.astimezone(ZoneInfo(name)) if name else moment.astimezone()
+    noon = moment.replace(hour=12, minute=0, second=0, microsecond=0)
+    if moment < noon:
+        noon -= datetime.timedelta(days=1)
+    return Time(
+        noon.astimezone(datetime.timezone.utc).replace(tzinfo=None), scale="utc"
+    )
+
+
+def night_events(now: Time | None = None) -> dict:
+    """The ``get_night_events`` action: twilight and Moon for tonight.
+
+    Searches the 24 hours from the local noon that starts ``now``'s
+    noon-to-noon day (yesterday's noon before 12:00 local), which brackets one
+    whole night. Per twilight kind (``civil``, ``nautical``, ``astronomical``)
+    ``dusk`` is the first Sun descent through -6/-12/-18 degrees and ``dawn``
+    the first ascent; ``moonrise``/``moonset`` are the first Moon crossings of
+    the geometric horizon. Absent events are ``None``. ``moon_illumination``
+    and ``moon_phase`` are sampled once, at the local-noon anchor. Raises
+    SiteLocationUnknown like ``check_target``.
+    """
+    site = site_location()
+    if site is None:
+        raise SiteLocationUnknown("site location not set: latitude and longitude are 0")
+    lat, lon = site
+    now = Time.now() if now is None else now
+    anchor = _local_noon_anchor(now)
+
+    def first(crossings, tag):
+        when = next((t for t, kind in crossings if kind == tag), None)
+        return local_times(when) if when is not None else None
+
+    sun_fn = _body_altaz_fn("sun", anchor, lat, lon)
+    sun_cache = {}
+
+    def sun_at(when):
+        # The three twilight searches sample the same grid; compute it once.
+        key = when.utc.jd
+        if key not in sun_cache:
+            sun_cache[key] = sun_fn(when)
+        return sun_cache[key]
+
+    result = {}
+    for kind, altitude in _TWILIGHT_SUN_ALTITUDES:
+        crossings = find_crossings(
+            sun_at,
+            lambda az, altitude=altitude: altitude,
+            anchor,
+            span_hours=24,
+        )
+        result[kind] = {
+            "dusk": first(crossings, "down"),
+            "dawn": first(crossings, "up"),
+        }
+    moon_fn = _body_altaz_fn("moon", anchor, lat, lon)
+    moon = find_crossings(moon_fn, lambda az: 0.0, anchor, span_hours=24)
+    illumination = moon_illumination(anchor)
+    result["moonrise"] = first(moon, "up")
+    result["moonset"] = first(moon, "down")
+    result["moon_illumination"] = illumination
+    result["moon_phase"] = moon_phase_name(illumination, moon_is_waxing(anchor))
     return result
 
 

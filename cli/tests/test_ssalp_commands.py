@@ -6,6 +6,7 @@ Each test verifies that the correct Alpaca action/method name is sent on the wir
 from __future__ import annotations
 
 import json
+import urllib.parse
 
 import pytest
 
@@ -316,6 +317,25 @@ class TestMountMixinCoverage:
         body = _body(httpx_mock)
         assert "00%3A42%3A44" in body
         assert "is_j2000" in body
+
+    async def test_target_visibility_window(self, client, httpx_mock):
+        await _check_action(
+            httpx_mock,
+            client.target_visibility_window(
+                "00:42:44", "+41:16:09", is_j2000=False, min_altitude=15.0
+            ),
+            "target_visibility_window",
+        )
+        body = urllib.parse.unquote_plus(_body(httpx_mock))
+        assert '"ra": "00:42:44"' in body
+        assert '"dec": "+41:16:09"' in body
+        assert '"is_j2000": false' in body
+        assert '"min_altitude": 15.0' in body
+
+    async def test_get_night_events(self, client, httpx_mock):
+        await _check_action(httpx_mock, client.get_night_events(), "get_night_events")
+        body = urllib.parse.unquote_plus(_body(httpx_mock))
+        assert "Parameters={}" in body
 
     async def test_set_dither(self, client, httpx_mock):
         await _check_method(httpx_mock, client.set_dither(50, 10), "set_setting")

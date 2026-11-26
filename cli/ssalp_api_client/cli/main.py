@@ -532,6 +532,39 @@ def mount_visibility(ctx: click.Context, ra: str, dec: str, j2000: bool) -> None
     )
 
 
+@mount.command("window")
+@click.option("--ra", required=True, help="RA (decimal hours or sexagesimal string).")
+@click.option(
+    "--dec", required=True, help="Dec (decimal degrees or sexagesimal string)."
+)
+@click.option("--j2000/--no-j2000", default=True, help="Treat coordinates as J2000.")
+@click.option(
+    "--min-altitude",
+    type=float,
+    default=0.0,
+    show_default=True,
+    help="Minimum altitude in degrees.",
+)
+@click.pass_context
+def mount_window(
+    ctx: click.Context, ra: str, dec: str, j2000: bool, min_altitude: float
+) -> None:
+    """Show when a target is visible above the horizon tonight."""
+    _run(
+        ctx,
+        ctx.obj["client"].target_visibility_window(
+            ra=ra, dec=dec, is_j2000=j2000, min_altitude=min_altitude
+        ),
+    )
+
+
+@mount.command("night-events")
+@click.pass_context
+def mount_night_events(ctx: click.Context) -> None:
+    """Show sunset/twilight/sunrise and moon events for tonight."""
+    _run(ctx, ctx.obj["client"].get_night_events())
+
+
 @mount.command("set-dither")
 @click.option("--pix", required=True, type=int, help="Dither pixels.")
 @click.option("--interval", required=True, type=int, help="Dither interval (frames).")

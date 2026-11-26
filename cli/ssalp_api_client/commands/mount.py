@@ -140,6 +140,34 @@ class MountMixin:
             "check_target_visibility", {"ra": ra, "dec": dec, "is_j2000": is_j2000}
         )
 
+    async def target_visibility_window(
+        self,
+        ra: str | float,
+        dec: str | float,
+        is_j2000: bool = True,
+        min_altitude: float = 0.0,
+    ) -> dict:
+        logger.info(
+            "target_visibility_window ra=%s dec=%s is_j2000=%s min_altitude=%s",
+            ra,
+            dec,
+            is_j2000,
+            min_altitude,
+        )
+        return await self.action(
+            "target_visibility_window",
+            {
+                "ra": ra,
+                "dec": dec,
+                "is_j2000": is_j2000,
+                "min_altitude": min_altitude,
+            },
+        )
+
+    async def get_night_events(self) -> dict:
+        logger.info("get_night_events")
+        return await self.action("get_night_events", {})
+
     async def set_dither(self, pix: int, interval: int, enable: bool = True) -> dict:
         logger.info("set_dither pix=%s interval=%s enable=%s", pix, interval, enable)
         return await self.method_sync(
