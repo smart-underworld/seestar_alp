@@ -552,3 +552,33 @@ def test_action_non_dict_params_skip_callbacks_without_error():
 
     payload = json.loads(resp.text)
     assert payload["ErrorNumber"] == 0
+
+
+def test_action_target_visibility_window(horizon_file):
+    value = _put_action(
+        "target_visibility_window",
+        {"ra": "00:42:44", "dec": "+41:16:09", "is_j2000": True},
+    )
+    assert value["state"] in {"rises_and_sets", "up_now", "circumpolar", "never_up"}
+    assert value["uses_horizon_profile"] is True
+    assert value["min_altitude_floor"] == 0.0
+
+
+def test_action_target_visibility_window_without_location(horizon_file, monkeypatch):
+    from device.config import Config
+
+    monkeypatch.setattr(Config, "init_lat", 0)
+    monkeypatch.setattr(Config, "init_long", 0)
+    number, message = _put_action_error(
+        "target_visibility_window", {"ra": 0.7122, "dec": 41.269}
+    )
+    assert number == 0x402  # ValueNotSet
+    assert "site location not set" in message
+
+
+def test_action_target_visibility_window_invalid_target(horizon_file):
+    number, message = _put_action_error(
+        "target_visibility_window", {"ra": "north", "dec": "+41:16:09"}
+    )
+    assert number == 0x401  # InvalidValue
+    assert "unreadable" in message

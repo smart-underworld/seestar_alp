@@ -703,3 +703,100 @@ def test_sun_moon_need_no_earth_orientation_table(astaffort, monkeypatch):
         assert math.isfinite(azimuth) and 0 <= azimuth < 360
     assert 0 <= horizon.moon_illumination(when) <= 1
     assert isinstance(horizon.moon_is_waxing(when), bool)
+
+
+def _window(ra, dec, **extra):
+    params = {"ra": ra, "dec": dec, "is_j2000": True, **extra}
+    return horizon.target_window(params, now=START)
+
+
+def test_target_window_rises_and_sets(astaffort):
+    result = _window("12:00:00", "+00:00:00")
+    assert result["state"] == "rises_and_sets"
+    assert result["rises"]["iso"] < result["sets"]["iso"]
+    assert result["rises"]["local"] != result["sets"]["local"]
+    assert result["transit"] is not None
+    assert result["rises"]["iso"] < result["transit"]["iso"] < result["sets"]["iso"]
+    assert result["max_altitude"] == pytest.approx(45.9, abs=0.5)
+    assert result["min_altitude_floor"] == 0.0
+    assert "next_rises" not in result
+
+
+def test_target_window_circumpolar(astaffort):
+    result = _window("02:31:49.09", "+89:15:50.8")
+    assert result["state"] == "circumpolar"
+    assert result["rises"] is None and result["sets"] is None
+    assert result["transit"] is not None
+    assert result["max_altitude"] > 40
+
+
+def test_target_window_never_up(astaffort):
+    result = _window("03:00:00", "-70:00:00")
+    assert result["state"] == "never_up"
+    assert result["rises"] is None and result["sets"] is None
+
+
+def test_target_window_up_now(astaffort):
+    result = _window("22:00:00", "+00:00:00")
+    assert result["state"] == "up_now"
+    assert result["rises"] is None
+    assert result["sets"] is not None
+    assert result["next_rises"] is not None
+    assert result["sets"]["iso"] < result["next_rises"]["iso"]
+
+
+def test_target_window_min_altitude_floor_raises_the_effective_horizon(astaffort):
+    low = _window("22:00:00", "+00:00:00")
+    assert low["state"] == "up_now"
+    high = _window("22:00:00", "+00:00:00", min_altitude=30)
+    assert high["min_altitude_floor"] == 30
+    assert high["state"] == "up_now"
+    assert high["sets"]["iso"] < low["sets"]["iso"]
+    too_high = _window("22:00:00", "+00:00:00", min_altitude=80)
+    assert too_high["state"] == "never_up"
+
+
+def test_target_window_without_profile_uses_flat_floor(astaffort, monkeypatch):
+    monkeypatch.setattr(Config, "horizon_file", "")
+    result = _window("12:00:00", "+00:00:00")
+    assert result["uses_horizon_profile"] is False
+
+
+def test_target_window_uses_the_horizon_profile(astaffort, monkeypatch, tmp_path):
+    path = tmp_path / "wall.hrz"
+    path.write_text("0 90\n")
+    monkeypatch.setattr(Config, "horizon_file", str(path))
+    result = _window("22:00:00", "+00:00:00")
+    assert result["uses_horizon_profile"] is True
+    assert result["state"] == "never_up"
+
+
+def test_target_window_raises_SiteLocationUnknown_at_zero_location(monkeypatch):
+    monkeypatch.setattr(Config, "init_lat", 0)
+    monkeypatch.setattr(Config, "init_long", 0)
+    with pytest.raises(horizon.SiteLocationUnknown):
+        _window("12:00:00", "+00:00:00")
+
+
+def test_target_window_raises_InvalidTarget_on_bad_coordinates(astaffort):
+    with pytest.raises(horizon.InvalidTarget):
+        _window("north", "+00:00:00")
+    with pytest.raises(horizon.InvalidTarget):
+        horizon.target_window({"dec": 1.0}, now=START)
+
+
+def test_local_times_render_in_configured_timezone(monkeypatch):
+    monkeypatch.setattr(Config, "init_timezone", "Asia/Tokyo")
+    assert horizon.local_times(START) == {
+        "local": "03:00",
+        "iso": "2026-11-26T03:00:00+09:00",
+    }
+    monkeypatch.setattr(Config, "init_timezone", "UTC")
+    assert horizon.local_times(START)["local"] == "18:00"
+
+
+def test_local_times_fall_back_to_host_timezone(monkeypatch):
+    monkeypatch.setattr(Config, "init_timezone", "")
+    result = horizon.local_times(START)
+    assert len(result["local"]) == 5
+    assert result["iso"].startswith("2026-11-2")

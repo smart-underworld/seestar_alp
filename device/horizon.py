@@ -12,12 +12,14 @@ Horizon page makes one from a 360-degree panorama, in the browser.
 """
 
 import bisect
+import datetime
 import json
 import logging
 import math
 import os
 import threading
 from collections.abc import Callable
+from zoneinfo import ZoneInfo
 
 from astropy import units as u
 from astropy.coordinates import (
@@ -445,6 +447,96 @@ def check_target(params):
     if result is None:
         raise SiteLocationUnknown("site location not set: latitude and longitude are 0")
     result["horizon_error"] = error
+    return result
+
+
+def local_times(when: Time) -> dict:
+    """``when`` as site-local ``{"local": "HH:MM", "iso": <local ISO>}``.
+
+    Uses ``[seestar_initialization] timezone`` (an IANA name); the host's
+    local zone when that is empty. ``iso`` carries the date, so the day is
+    unambiguous across midnight.
+    """
+    moment = when.utc.to_datetime(timezone=datetime.timezone.utc)
+    name = (Config.init_timezone or "").strip()
+    if name:
+        moment = moment.astimezone(ZoneInfo(name))
+    else:
+        moment = moment.astimezone()
+    return {"local": moment.strftime("%H:%M"), "iso": moment.isoformat()}
+
+
+def target_window(params, now: Time | None = None) -> dict:
+    """The ``target_visibility_window`` action.
+
+    ``params``: ``ra``, ``dec``, ``is_j2000`` (default true) and
+    ``min_altitude`` (degrees, default 0). Looks 24 hours ahead of ``now``
+    for when the target is above the higher of the configured horizon
+    profile (flat 0 when none) and ``min_altitude``.
+
+    ``state`` is ``rises_and_sets``, ``up_now``, ``circumpolar`` or
+    ``never_up``. Raises InvalidTarget and SiteLocationUnknown like
+    ``check_target``.
+    """
+    params = params or {}
+    missing = [name for name in ("ra", "dec") if params.get(name) in (None, "")]
+    if missing:
+        raise InvalidTarget(f"missing parameter(s): {', '.join(missing)}")
+    try:
+        coord = Util.parse_coordinate(
+            params.get("is_j2000", True), params["ra"], params["dec"]
+        )
+        min_altitude = float(params.get("min_altitude", 0.0) or 0.0)
+    except Exception as e:  # astropy raises several kinds on a bad angle
+        raise InvalidTarget(
+            f"unreadable parameters ra={params['ra']!r}, dec={params['dec']!r}: {e}"
+        ) from None
+    site = site_location()
+    if site is None:
+        raise SiteLocationUnknown("site location not set: latitude and longitude are 0")
+    lat, lon = site
+    now = Time.now() if now is None else now
+    profile, _error = configured_profile()
+
+    def alt_az_fn(when):
+        return altaz(coord, lat, lon, when)
+
+    def threshold_fn(azimuth):
+        floor = profile.altitude_at(azimuth) if profile is not None else 0.0
+        return max(floor, min_altitude)
+
+    altitude, azimuth = alt_az_fn(now)
+    above = altitude > threshold_fn(azimuth)
+    crossings = find_crossings(alt_az_fn, threshold_fn, now, span_hours=24, step_min=4)
+    peak_time, peak_altitude = transit(alt_az_fn, now, span_hours=24, step_min=4)
+
+    def stamp(when):
+        return local_times(when) if when is not None else None
+
+    rises = sets = next_rises = None
+    if not crossings:
+        state = "circumpolar" if above else "never_up"
+    elif above:
+        state = "up_now"
+        sets = crossings[0][0]
+        next_rises = next((t for t, tag in crossings[1:] if tag == "up"), None)
+    else:
+        state = "rises_and_sets"
+        up_index = next(i for i, (_, tag) in enumerate(crossings) if tag == "up")
+        rises = crossings[up_index][0]
+        sets = next((t for t, tag in crossings[up_index + 1 :] if tag == "down"), None)
+
+    result = {
+        "state": state,
+        "rises": stamp(rises),
+        "sets": stamp(sets),
+        "transit": stamp(peak_time),
+        "max_altitude": round(peak_altitude, 1),
+        "min_altitude_floor": min_altitude,
+        "uses_horizon_profile": profile is not None,
+    }
+    if state == "up_now":
+        result["next_rises"] = stamp(next_rises)
     return result
 
 

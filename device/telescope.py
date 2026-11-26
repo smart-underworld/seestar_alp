@@ -340,6 +340,16 @@ class action:
                 except horizon.SiteLocationUnknown as e:
                     result = f"check_target_visibility: {e}"
                     resp.text = MethodResponse(req, ValueNotSetException(result)).json
+            elif action_name == "target_visibility_window":
+                try:
+                    result = horizon.target_window(params)
+                    resp.text = MethodResponse(req, value=result).json
+                except horizon.InvalidTarget as e:
+                    result = f"target_visibility_window: {e}"
+                    resp.text = MethodResponse(req, InvalidValueException(result)).json
+                except horizon.SiteLocationUnknown as e:
+                    result = f"target_visibility_window: {e}"
+                    resp.text = MethodResponse(req, ValueNotSetException(result)).json
             else:
                 # Unknown/misspelled action: ASCOM expects ActionNotImplemented,
                 # not an empty 200 body with no Alpaca JSON for the client.
