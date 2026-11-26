@@ -5,6 +5,7 @@ import threading
 
 import pytest
 import tomlkit
+from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 from astropy.utils import iers
@@ -290,6 +291,66 @@ def test_visibility_needs_no_earth_orientation_table(astaffort, monkeypatch):
     # Any time of day: Polaris circles within 0.74 degree of the pole, whose
     # altitude is the latitude, 44.06.
     assert result["altitude"] == pytest.approx(44.06, abs=0.8)
+
+
+# ---------------------------------------------------------------------------
+# find_crossings / transit
+# ---------------------------------------------------------------------------
+
+START = Time("2026-11-25T18:00:00", scale="utc")
+SITE = (44.06, 0.65)
+
+
+def _track(ra, dec):
+    coord = SkyCoord(ra=ra, dec=dec, frame="icrs")
+    return lambda when: horizon.altaz(coord, *SITE, when)
+
+
+def test_find_crossings_reports_one_up_and_one_down_for_an_equatorial_target(astaffort):
+    track = _track("12h00m00s", "+00d00m00s")
+    crossings = horizon.find_crossings(track, lambda az: 0.0, START)
+    assert [tag for _, tag in crossings] == ["up", "down"]
+    assert crossings[0][0] < crossings[1][0]
+    # Each reported time sits on the threshold, to within the 1 minute bracket.
+    for when, _ in crossings:
+        assert abs(track(when)[0]) < 0.25
+
+
+def test_find_crossings_empty_for_circumpolar_target(astaffort):
+    track = _track("02h31m49.09s", "+89d15m50.8s")
+    assert horizon.find_crossings(track, lambda az: 0.0, START) == []
+
+
+def test_find_crossings_empty_for_never_up_target(astaffort):
+    track = _track("03h00m00s", "-70d00m00s")
+    assert horizon.find_crossings(track, lambda az: 0.0, START) == []
+
+
+def test_find_crossings_does_not_skip_a_fast_meridian_crossing(astaffort):
+    # Dec -45.8 culminates at 0.25 degree: up for about an hour only.
+    track = _track("03h00m00s", "-45d48m00s")
+    fine = [START + (k * 0.5) * u.min for k in range(2881)]
+    above = [track(t)[0] > 0 for t in fine]
+    first_up = next(t for t, a, b in zip(fine[1:], above, above[1:]) if b and not a)
+    crossings = horizon.find_crossings(track, lambda az: 0.0, START)
+    assert [tag for _, tag in crossings] == ["up", "down"]
+    assert abs((crossings[0][0] - first_up).to_value("min")) < 1.0
+
+
+def test_find_crossings_follows_an_azimuth_dependent_threshold(astaffort):
+    track = _track("12h00m00s", "+00d00m00s")
+    crossings = horizon.find_crossings(track, lambda az: 20.0, START)
+    assert [tag for _, tag in crossings] == ["up", "down"]
+    for when, _ in crossings:
+        assert abs(track(when)[0] - 20.0) < 0.5
+
+
+def test_transit_finds_the_meridian_maximum(astaffort):
+    track = _track("03h00m00s", "+20d00m00s")
+    when, altitude = horizon.transit(track, START)
+    reference = max(track(START + k * u.min)[0] for k in range(1441))
+    assert altitude == pytest.approx(reference, abs=0.1)
+    assert track(when)[0] == pytest.approx(altitude, abs=1e-6)
 
 
 # ---------------------------------------------------------------------------

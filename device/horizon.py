@@ -17,7 +17,9 @@ import logging
 import math
 import os
 import threading
+from collections.abc import Callable
 
+from astropy import units as u
 from astropy.coordinates import FK5, SkyCoord
 from astropy.time import Time
 
@@ -256,6 +258,94 @@ def visibility(coord: SkyCoord, profile, margin=0.0, when=None):
         "margin": margin,
         "visible": altitude > horizon + margin,
     }
+
+
+# Bracket width, in minutes, at which a crossing found by bisection is reported.
+_CROSSING_RESOLUTION_MIN = 1.0
+
+
+def find_crossings(
+    alt_az_fn: Callable[[Time], tuple[float, float]],
+    threshold_fn: Callable[[float], float],
+    start: Time,
+    span_hours: float = 24.0,
+    step_min: float = 4.0,
+) -> list[tuple[Time, str]]:
+    """Times in the window when a target crosses a threshold altitude.
+
+    ``alt_az_fn(when)`` gives ``(altitude, azimuth)`` in degrees;
+    ``threshold_fn(azimuth)`` gives the altitude to cross at that azimuth (a
+    flat horizon is ``lambda az: 0.0``). The window ``[start, start + span]``
+    is sampled every ``step_min`` minutes; each sign change of
+    ``altitude - threshold`` is then narrowed by bisection to a minute.
+    Returns ``(time, "up" | "down")`` in time order, ``"up"`` when the target
+    rises above the threshold. A target that stays on one side gives ``[]``.
+
+    The default 4 minute step is short enough that a target grazing the
+    horizon, above it for under an hour, is still bracketed; a window shorter
+    than one step is only sampled at its ends.
+    """
+
+    def margin(when):
+        altitude, azimuth = alt_az_fn(when)
+        return altitude - threshold_fn(azimuth)
+
+    step = max(float(step_min), 1e-3)
+    count = max(int(math.ceil(span_hours * 60.0 / step)), 1)
+    offsets = [min(k * step, span_hours * 60.0) for k in range(count + 1)]
+    times = [start + m * u.min for m in offsets]
+    margins = [margin(t) for t in times]
+    crossings = []
+    for i in range(count):
+        before, after = margins[i], margins[i + 1]
+        if (before > 0) == (after > 0):
+            continue
+        low, high = offsets[i], offsets[i + 1]
+        rising = after > 0
+        while high - low > _CROSSING_RESOLUTION_MIN:
+            middle = (low + high) / 2.0
+            if (margin(start + middle * u.min) > 0) == rising:
+                high = middle
+            else:
+                low = middle
+        crossings.append(
+            (start + (low + high) / 2.0 * u.min, "up" if rising else "down")
+        )
+    return crossings
+
+
+def transit(
+    alt_az_fn: Callable[[Time], tuple[float, float]],
+    start: Time,
+    span_hours: float = 24.0,
+    step_min: float = 4.0,
+) -> tuple[Time, float]:
+    """Time and altitude of the highest point of a target in the window.
+
+    The highest of the samples taken every ``step_min`` minutes, refined to
+    about a second between its two neighbours (the altitude curve is smooth
+    and has one peak there).
+    """
+    step = max(float(step_min), 1e-3)
+    total = span_hours * 60.0
+    count = max(int(math.ceil(total / step)), 1)
+    offsets = [min(k * step, total) for k in range(count + 1)]
+    altitudes = [alt_az_fn(start + m * u.min)[0] for m in offsets]
+    best = max(range(len(offsets)), key=altitudes.__getitem__)
+    low = offsets[max(best - 1, 0)]
+    high = offsets[min(best + 1, count)]
+    while high - low > 1.0 / 60.0:
+        a = low + (high - low) / 3.0
+        b = high - (high - low) / 3.0
+        if alt_az_fn(start + a * u.min)[0] < alt_az_fn(start + b * u.min)[0]:
+            low = a
+        else:
+            high = b
+    when = start + (low + high) / 2.0 * u.min
+    altitude = alt_az_fn(when)[0]
+    if altitude < altitudes[best]:  # the peak is at a window edge
+        return start + offsets[best] * u.min, altitudes[best]
+    return when, altitude
 
 
 def describe():
