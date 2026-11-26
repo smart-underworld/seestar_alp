@@ -20,7 +20,13 @@ import threading
 from collections.abc import Callable
 
 from astropy import units as u
-from astropy.coordinates import FK5, SkyCoord
+from astropy.coordinates import (
+    FK5,
+    GeocentricTrueEcliptic,
+    SkyCoord,
+    get_body,
+    get_sun,
+)
 from astropy.time import Time
 
 from device.config import Config, stage_file, write_file_atomic
@@ -236,6 +242,46 @@ def altaz(coord: SkyCoord, latitude, longitude, when: Time):
         - math.cos(dec) * math.sin(lat) * math.cos(hour_angle),
     )
     return math.degrees(altitude), math.degrees(azimuth) % 360.0
+
+
+def sun_alt_az(when: Time, latitude, longitude):
+    """Altitude and azimuth of the Sun at ``when``, in degrees (no IERS tables)."""
+    return altaz(get_sun(when), latitude, longitude, when)
+
+
+def moon_alt_az(when: Time, latitude, longitude):
+    """Altitude and azimuth of the Moon at ``when``, in degrees (no IERS tables).
+
+    Geocentric position: the Moon's parallax (up to about a degree) is left
+    out, fine for deciding when it is up or down.
+    """
+    return altaz(get_body("moon", when), latitude, longitude, when)
+
+
+def moon_illumination(when: Time) -> float:
+    """Illuminated fraction of the Moon's disc at ``when``, from 0 to 1."""
+    elongation = get_sun(when).separation(get_body("moon", when)).radian
+    return (1.0 - math.cos(elongation)) / 2.0
+
+
+def moon_is_waxing(when: Time) -> bool:
+    """Whether the Moon leads the Sun in ecliptic longitude (new to full)."""
+    sun = get_sun(when).transform_to(GeocentricTrueEcliptic(equinox=when))
+    moon = get_body("moon", when).transform_to(GeocentricTrueEcliptic(equinox=when))
+    return bool((moon.lon.deg - sun.lon.deg) % 360.0 < 180.0)
+
+
+def moon_phase_name(illumination: float, waxing: bool) -> str:
+    """Human name of the phase for an illuminated fraction and direction."""
+    if illumination < 0.03:
+        return "new moon"
+    if illumination > 0.97:
+        return "full moon"
+    if 0.45 <= illumination <= 0.55:
+        return "first quarter" if waxing else "last quarter"
+    if illumination < 0.5:
+        return "waxing crescent" if waxing else "waning crescent"
+    return "waxing gibbous" if waxing else "waning gibbous"
 
 
 def visibility(coord: SkyCoord, profile, margin=0.0, when=None):

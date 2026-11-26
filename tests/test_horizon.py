@@ -620,3 +620,73 @@ def test_a_record_that_cannot_be_removed_leaves_the_save_in_place(
     assert horizon.configured_profile()[0].points == profile.points
     assert any("still describes the former photo" in r.message for r in caplog.records)
     assert _no_temporary_file_left(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# sun / moon
+# ---------------------------------------------------------------------------
+
+# Real lunations: new moon 2026-11-09 ~21:02 UTC, full moon 2026-11-24 ~14:53 UTC.
+NEW_MOON = Time("2026-11-09T21:02:00", scale="utc")
+FULL_MOON = Time("2026-11-24T14:53:00", scale="utc")
+
+
+def test_sun_altitude_is_negative_at_local_midnight(astaffort):
+    # Astaffort (0.65 E) is on UTC time within a few minutes: 00:00 UTC.
+    midnight = Time("2026-11-25T00:00:00", scale="utc")
+    altitude, azimuth = horizon.sun_alt_az(midnight, 44.06, 0.65)
+    assert altitude < 0
+    assert 0 <= azimuth < 360
+
+
+def test_sun_altitude_is_positive_at_local_noon(astaffort):
+    noon = Time("2026-11-25T12:00:00", scale="utc")
+    altitude, _ = horizon.sun_alt_az(noon, 44.06, 0.65)
+    assert 15 < altitude < 25  # 90 - 44.06 - 20.5 declination ~ 25 at most
+
+
+def test_moon_illumination_near_zero_at_a_known_new_moon():
+    assert horizon.moon_illumination(NEW_MOON) < 0.05
+
+
+def test_moon_illumination_near_one_at_a_known_full_moon():
+    assert horizon.moon_illumination(FULL_MOON) > 0.95
+
+
+def test_moon_is_waxing_between_new_and_full():
+    assert horizon.moon_is_waxing(Time("2026-11-17T12:00:00", scale="utc")) is True
+    assert horizon.moon_is_waxing(Time("2026-12-01T12:00:00", scale="utc")) is False
+
+
+@pytest.mark.parametrize(
+    "illumination, waxing, name",
+    [
+        (0.01, True, "new moon"),
+        (0.01, False, "new moon"),
+        (0.25, True, "waxing crescent"),
+        (0.25, False, "waning crescent"),
+        (0.5, True, "first quarter"),
+        (0.5, False, "last quarter"),
+        (0.75, True, "waxing gibbous"),
+        (0.75, False, "waning gibbous"),
+        (0.99, True, "full moon"),
+        (0.99, False, "full moon"),
+    ],
+)
+def test_moon_phase_name_buckets(illumination, waxing, name):
+    assert horizon.moon_phase_name(illumination, waxing) == name
+
+
+def test_sun_moon_need_no_earth_orientation_table(astaffort, monkeypatch):
+    def stale(*args, **kwargs):
+        raise ValueError("interpolating from IERS_Auto using predictive values")
+
+    monkeypatch.setattr(iers.IERS_Auto, "open", stale)
+    monkeypatch.setattr(iers.IERS, "open", stale)
+    when = Time.now()
+    for fn in (horizon.sun_alt_az, horizon.moon_alt_az):
+        altitude, azimuth = fn(when, 44.06, 0.65)
+        assert math.isfinite(altitude) and -90 <= altitude <= 90
+        assert math.isfinite(azimuth) and 0 <= azimuth < 360
+    assert 0 <= horizon.moon_illumination(when) <= 1
+    assert isinstance(horizon.moon_is_waxing(when), bool)
