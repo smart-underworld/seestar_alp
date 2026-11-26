@@ -46,3 +46,4 @@ device/*.tmp
 # superpowers planning/spec docs are kept local, not checked in
 docs/superpowers/plans/
 docs/superpowers/specs/
+device/config.toml.bak

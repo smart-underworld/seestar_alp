@@ -639,10 +639,23 @@ def test_sun_altitude_is_negative_at_local_midnight(astaffort):
     assert 0 <= azimuth < 360
 
 
-def test_sun_altitude_is_positive_at_local_noon(astaffort):
-    noon = Time("2026-11-25T12:00:00", scale="utc")
-    altitude, _ = horizon.sun_alt_az(noon, 44.06, 0.65)
-    assert 15 < altitude < 25  # 90 - 44.06 - 20.5 declination ~ 25 at most
+def _az_gap(a, b):
+    return abs((a - b + 180) % 360 - 180)
+
+
+@pytest.mark.parametrize("hour", [0, 12, 20])
+@pytest.mark.parametrize("body", ["sun", "moon"])
+def test_sun_moon_match_astropy_altaz(astaffort, body, hour):
+    from astropy.coordinates import AltAz, EarthLocation, get_body
+
+    when = Time(f"2026-11-25T{hour:02d}:00:00", scale="utc")
+    site = EarthLocation(lat=44.06 * u.deg, lon=0.65 * u.deg)
+    truth = get_body(body, when).transform_to(AltAz(obstime=when, location=site))
+    fn = horizon.sun_alt_az if body == "sun" else horizon.moon_alt_az
+    altitude, azimuth = fn(when, 44.06, 0.65)
+    # The Moon is geocentric here: parallax of up to about a degree.
+    assert altitude == pytest.approx(truth.alt.deg, abs=1.0)
+    assert _az_gap(azimuth, truth.az.deg) < 1.0
 
 
 def test_moon_illumination_near_zero_at_a_known_new_moon():
@@ -683,7 +696,7 @@ def test_sun_moon_need_no_earth_orientation_table(astaffort, monkeypatch):
 
     monkeypatch.setattr(iers.IERS_Auto, "open", stale)
     monkeypatch.setattr(iers.IERS, "open", stale)
-    when = Time.now()
+    when = Time("2026-11-25T20:00:00", scale="utc")
     for fn in (horizon.sun_alt_az, horizon.moon_alt_az):
         altitude, azimuth = fn(when, 44.06, 0.65)
         assert math.isfinite(altitude) and -90 <= altitude <= 90

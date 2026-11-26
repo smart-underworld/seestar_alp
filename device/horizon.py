@@ -244,9 +244,20 @@ def altaz(coord: SkyCoord, latitude, longitude, when: Time):
     return math.degrees(altitude), math.degrees(azimuth) % 360.0
 
 
+def _direction(body: SkyCoord) -> SkyCoord:
+    """The body's geocentric direction on the sky, at infinity.
+
+    astropy returns the Sun and Moon as finite-distance GCRS positions;
+    transforming those to the barycentric FK5 frame would shift them by the
+    Earth's orbital offset (some 19 degrees for the Sun). Dropping the
+    distance keeps the direction as seen from the Earth.
+    """
+    return SkyCoord(ra=body.ra, dec=body.dec, frame="icrs")
+
+
 def sun_alt_az(when: Time, latitude, longitude):
     """Altitude and azimuth of the Sun at ``when``, in degrees (no IERS tables)."""
-    return altaz(get_sun(when), latitude, longitude, when)
+    return altaz(_direction(get_sun(when)), latitude, longitude, when)
 
 
 def moon_alt_az(when: Time, latitude, longitude):
@@ -255,7 +266,7 @@ def moon_alt_az(when: Time, latitude, longitude):
     Geocentric position: the Moon's parallax (up to about a degree) is left
     out, fine for deciding when it is up or down.
     """
-    return altaz(get_body("moon", when), latitude, longitude, when)
+    return altaz(_direction(get_body("moon", when)), latitude, longitude, when)
 
 
 def moon_illumination(when: Time) -> float:
