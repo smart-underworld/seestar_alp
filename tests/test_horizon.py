@@ -327,11 +327,16 @@ def test_find_crossings_empty_for_never_up_target(astaffort):
 
 
 def test_find_crossings_does_not_skip_a_fast_meridian_crossing(astaffort):
-    # Dec -45.8 culminates at 0.25 degree: up for about an hour only.
-    track = _track("03h00m00s", "-45d48m00s")
+    # Dec -45.99 culminates at about 0.05 degree: up for only ~25 minutes.
+    track = _track("03h00m00s", "-45d59m24s")
     fine = [START + (k * 0.5) * u.min for k in range(2881)]
     above = [track(t)[0] > 0 for t in fine]
     first_up = next(t for t, a, b in zip(fine[1:], above, above[1:]) if b and not a)
+    window = 0.5 * sum(above)
+    # The grazing window is a few default steps, and shorter than a
+    # coarse one: a step_min of 60 would sample right over it.
+    assert 5 <= window <= 8 * 4.0
+    assert horizon.find_crossings(track, lambda az: 0.0, START, step_min=60.0) == []
     crossings = horizon.find_crossings(track, lambda az: 0.0, START)
     assert [tag for _, tag in crossings] == ["up", "down"]
     assert abs((crossings[0][0] - first_up).to_value("min")) < 1.0
