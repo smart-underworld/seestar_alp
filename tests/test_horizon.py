@@ -800,3 +800,66 @@ def test_local_times_fall_back_to_host_timezone(monkeypatch):
     result = horizon.local_times(START)
     assert len(result["local"]) == 5
     assert result["iso"].startswith("2026-11-2")
+
+
+# 2026-10-29 Astaffort (Europe/Paris, CET): the local noon-to-noon window
+# has a moonrise but no moonset.
+NIGHT_EVENING = Time("2026-10-29T17:00:00", scale="utc")  # 18:00 local
+NIGHT_PAST_MIDNIGHT = Time("2026-10-29T23:30:00", scale="utc")  # 00:30 on the 30th
+NIGHT_MORNING = Time(
+    "2026-10-30T09:00:00", scale="utc"
+)  # 10:00 local, still the 29th's night
+
+
+@pytest.fixture
+def paris(astaffort, monkeypatch):
+    monkeypatch.setattr(Config, "init_timezone", "Europe/Paris")
+
+
+def test_night_events_returns_ordered_twilight_times(paris):
+    result = horizon.night_events(now=NIGHT_EVENING)
+    for key in ("astronomical", "nautical", "civil"):
+        assert result[key]["dusk"] is not None
+        assert result[key]["dawn"] is not None
+    # Going into night: civil, then nautical, then astronomical dusk.
+    assert (
+        result["civil"]["dusk"]["iso"]
+        < result["nautical"]["dusk"]["iso"]
+        < result["astronomical"]["dusk"]["iso"]
+    )
+    # Mirrored towards dawn.
+    assert (
+        result["astronomical"]["dawn"]["iso"]
+        < result["nautical"]["dawn"]["iso"]
+        < result["civil"]["dawn"]["iso"]
+    )
+    assert result["astronomical"]["dusk"]["iso"] < result["astronomical"]["dawn"]["iso"]
+
+
+def test_night_events_moon_illumination_in_unit_range(paris):
+    result = horizon.night_events(now=NIGHT_EVENING)
+    assert 0.0 <= result["moon_illumination"] <= 1.0
+    assert isinstance(result["moon_phase"], str) and result["moon_phase"]
+
+
+def test_night_events_null_when_no_moonset_in_window(paris):
+    result = horizon.night_events(now=NIGHT_EVENING)
+    assert result["moonset"] is None
+    assert result["moonrise"] is not None
+
+
+def test_night_events_same_result_before_and_after_midnight(paris):
+    evening = horizon.night_events(now=NIGHT_EVENING)
+    past_midnight = horizon.night_events(now=NIGHT_PAST_MIDNIGHT)
+    morning = horizon.night_events(now=NIGHT_MORNING)
+    for other in (past_midnight, morning):
+        for key in ("astronomical", "nautical", "civil"):
+            assert other[key] == evening[key]
+        assert other["moonrise"] == evening["moonrise"]
+
+
+def test_night_events_raises_SiteLocationUnknown_at_zero_location(monkeypatch):
+    monkeypatch.setattr(Config, "init_lat", 0)
+    monkeypatch.setattr(Config, "init_long", 0)
+    with pytest.raises(horizon.SiteLocationUnknown):
+        horizon.night_events(now=NIGHT_EVENING)

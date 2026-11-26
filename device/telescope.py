@@ -350,6 +350,13 @@ class action:
                 except horizon.SiteLocationUnknown as e:
                     result = f"target_visibility_window: {e}"
                     resp.text = MethodResponse(req, ValueNotSetException(result)).json
+            elif action_name == "get_night_events":
+                try:
+                    result = horizon.night_events()
+                    resp.text = MethodResponse(req, value=result).json
+                except horizon.SiteLocationUnknown as e:
+                    result = f"get_night_events: {e}"
+                    resp.text = MethodResponse(req, ValueNotSetException(result)).json
             else:
                 # Unknown/misspelled action: ASCOM expects ActionNotImplemented,
                 # not an empty 200 body with no Alpaca JSON for the client.

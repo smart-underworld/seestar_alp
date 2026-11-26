@@ -540,6 +540,84 @@ def target_window(params, now: Time | None = None) -> dict:
     return result
 
 
+_TWILIGHT_SUN_ALTITUDES = (
+    ("civil", -6.0),
+    ("nautical", -12.0),
+    ("astronomical", -18.0),
+)
+
+
+def _local_noon_anchor(now: Time) -> Time:
+    """The local noon that starts the noon-to-noon day containing ``now``.
+
+    Before 12:00 local that is yesterday's noon, so a call just after
+    midnight still reports the night that began the previous evening.
+    """
+    name = (Config.init_timezone or "").strip()
+    moment = now.utc.to_datetime(timezone=datetime.timezone.utc)
+    moment = moment.astimezone(ZoneInfo(name)) if name else moment.astimezone()
+    noon = moment.replace(hour=12, minute=0, second=0, microsecond=0)
+    if moment < noon:
+        noon -= datetime.timedelta(days=1)
+    return Time(
+        noon.astimezone(datetime.timezone.utc).replace(tzinfo=None), scale="utc"
+    )
+
+
+def night_events(now: Time | None = None) -> dict:
+    """The ``get_night_events`` action: twilight and Moon for tonight.
+
+    Searches the 24 hours from the local noon that starts ``now``'s
+    noon-to-noon day (yesterday's noon before 12:00 local), which brackets one
+    whole night. Per twilight kind (``civil``, ``nautical``, ``astronomical``)
+    ``dusk`` is the first Sun descent through -6/-12/-18 degrees and ``dawn``
+    the first ascent; ``moonrise``/``moonset`` are the first Moon crossings of
+    the geometric horizon. Absent events are ``None``. Raises
+    SiteLocationUnknown like ``check_target``.
+    """
+    site = site_location()
+    if site is None:
+        raise SiteLocationUnknown("site location not set: latitude and longitude are 0")
+    lat, lon = site
+    now = Time.now() if now is None else now
+    anchor = _local_noon_anchor(now)
+
+    def first(crossings, tag):
+        when = next((t for t, kind in crossings if kind == tag), None)
+        return local_times(when) if when is not None else None
+
+    sun_cache = {}
+
+    def sun_at(when):
+        # The three twilight searches sample the same grid; compute it once.
+        key = when.utc.jd
+        if key not in sun_cache:
+            sun_cache[key] = sun_alt_az(when, lat, lon)
+        return sun_cache[key]
+
+    result = {}
+    for kind, altitude in _TWILIGHT_SUN_ALTITUDES:
+        crossings = find_crossings(
+            sun_at,
+            lambda az, altitude=altitude: altitude,
+            anchor,
+            span_hours=24,
+        )
+        result[kind] = {
+            "dusk": first(crossings, "down"),
+            "dawn": first(crossings, "up"),
+        }
+    moon = find_crossings(
+        lambda w: moon_alt_az(w, lat, lon), lambda az: 0.0, anchor, span_hours=24
+    )
+    illumination = moon_illumination(anchor)
+    result["moonrise"] = first(moon, "up")
+    result["moonset"] = first(moon, "down")
+    result["moon_illumination"] = illumination
+    result["moon_phase"] = moon_phase_name(illumination, moon_is_waxing(anchor))
+    return result
+
+
 # Profile made from a panorama on the Horizon page, saved next to config.toml.
 PANORAMA_HRZ = "horizon.hrz"
 PANORAMA_JSON = "horizon.horizon.json"

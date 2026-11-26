@@ -582,3 +582,27 @@ def test_action_target_visibility_window_invalid_target(horizon_file):
     )
     assert number == 0x401  # InvalidValue
     assert "unreadable" in message
+
+
+def test_action_get_night_events(horizon_file):
+    value = _put_action("get_night_events", {})
+    assert set(value) >= {
+        "astronomical",
+        "nautical",
+        "civil",
+        "moonrise",
+        "moonset",
+        "moon_illumination",
+        "moon_phase",
+    }
+    assert 0.0 <= value["moon_illumination"] <= 1.0
+
+
+def test_action_get_night_events_without_location(horizon_file, monkeypatch):
+    from device.config import Config
+
+    monkeypatch.setattr(Config, "init_lat", 0)
+    monkeypatch.setattr(Config, "init_long", 0)
+    number, message = _put_action_error("get_night_events", {})
+    assert number == 0x402  # ValueNotSet
+    assert "site location not set" in message
