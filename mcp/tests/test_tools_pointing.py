@@ -5,6 +5,7 @@ import pytest
 from seestar_mcp.tools.pointing import (
     check_target_visibility_tool,
     get_horizon_tool,
+    get_night_events_tool,
     get_pa_error_tool,
     get_solve_result_tool,
     goto_target_tool,
@@ -14,6 +15,7 @@ from seestar_mcp.tools.pointing import (
     set_3ppa_calibration_tool,
     start_solve_tool,
     stop_goto_target_tool,
+    target_visibility_window_tool,
 )
 from seestar_mcp.tools.state import get_device_state_tool, get_view_state_tool
 
@@ -102,3 +104,40 @@ async def test_check_target_visibility_accepts_sexagesimal(
     mock_client.check_target_visibility.assert_awaited_once_with(
         "00:42:44", "+41:16:09", True
     )
+
+
+async def test_target_visibility_window_forwards_args(make_client_spy, mock_client):
+    await target_visibility_window_tool(
+        ra="00:42:44", dec="+41:16:09", is_j2000=False, min_altitude=20.0
+    )
+    mock_client.target_visibility_window.assert_awaited_once_with(
+        "00:42:44", "+41:16:09", False, 20.0
+    )
+
+
+async def test_target_visibility_window_defaults(make_client_spy, mock_client):
+    await target_visibility_window_tool(ra=0.7, dec=41.3)
+    mock_client.target_visibility_window.assert_awaited_once_with(0.7, 41.3, True, 0.0)
+
+
+async def test_get_night_events_forwards(make_client_spy, mock_client):
+    await get_night_events_tool()
+    mock_client.get_night_events.assert_awaited_once_with()
+
+
+def test_time_aware_tools_registered():
+    registered = {}
+
+    class FakeMCP:
+        def tool(self, name):
+            def deco(fn):
+                registered[name] = fn
+                return fn
+
+            return deco
+
+    from seestar_mcp.tools.pointing import register
+
+    register(FakeMCP())
+    assert registered["target_visibility_window"] is target_visibility_window_tool
+    assert registered["get_night_events"] is get_night_events_tool

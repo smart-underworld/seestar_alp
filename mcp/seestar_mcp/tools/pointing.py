@@ -81,6 +81,33 @@ async def check_target_visibility_tool(
     )
 
 
+async def target_visibility_window_tool(
+    ra: str | float,
+    dec: str | float,
+    is_j2000: bool = True,
+    min_altitude: float = 0.0,
+    telescope_id: int = 1,
+) -> Any:
+    """Time-aware visibility: when a target is up tonight. Returns its
+    rise/set/transit in SITE-LOCAL time (HH:MM, usable directly in a
+    `wait_until` local_time), against an altitude floor (`min_altitude`,
+    degrees) combined with the configured horizon profile. `state` is one of
+    rises_and_sets, circumpolar, never_up or up_now. Use it to anchor schedule
+    items to when the target clears the horizon."""
+    return await call(
+        telescope_id,
+        lambda c: c.target_visibility_window(ra, dec, is_j2000, min_altitude),
+    )
+
+
+async def get_night_events_tool(telescope_id: int = 1) -> Any:
+    """Tonight's dark window and moon, in site-local time: civil, nautical and
+    astronomical dusk and dawn, plus moonrise, moonset, illumination and phase.
+    Call it when a request involves darkness or the moon (e.g. "after
+    moonset", "avoid the moon")."""
+    return await call(telescope_id, lambda c: c.get_night_events())
+
+
 def register(mcp: Any) -> None:
     for fn in (
         goto_target_tool,
@@ -94,5 +121,7 @@ def register(mcp: Any) -> None:
         set_3ppa_calibration_tool,
         get_horizon_tool,
         check_target_visibility_tool,
+        target_visibility_window_tool,
+        get_night_events_tool,
     ):
         mcp.tool(name=fn.__name__.removesuffix("_tool"))(fn)
