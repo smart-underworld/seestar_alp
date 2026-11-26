@@ -358,6 +358,51 @@ def test_transit_finds_the_meridian_maximum(astaffort):
     assert track(when)[0] == pytest.approx(altitude, abs=1e-6)
 
 
+def test_fixed_altaz_fn_matches_altaz_within_the_precession_bound(astaffort):
+    # The cheap target sampler precesses once at the epoch; altaz precesses per
+    # sample. Over 24h the only difference is that one precession, ~0.014 deg.
+    coord = SkyCoord(ra="12h00m00s", dec="+20d00m00s", frame="icrs")
+    fn = horizon._fixed_altaz_fn(coord, *SITE, START)
+    worst = 0.0
+    for k in range(0, 24 * 4 + 1):  # every 15 minutes over 24h
+        when = START + (k * 15) * u.min
+        alt, az = fn(when)
+        ref_alt, ref_az = horizon.altaz(coord, *SITE, when)
+        worst = max(worst, abs(alt - ref_alt))
+        assert _az_gap(az, ref_az) * math.cos(math.radians(alt)) < 0.05
+    assert worst < 0.02
+
+
+@pytest.mark.parametrize(
+    "body, anchor",
+    [
+        # The Moon crosses RA 0h on the night of 2026-11-19; 2026-03-20 brackets
+        # the Sun's RA 0h. A broken RA unwrap would blow the interpolation up.
+        ("moon", Time("2026-11-19T12:00:00", scale="utc")),
+        ("sun", Time("2026-03-20T00:00:00", scale="utc")),
+    ],
+)
+def test_body_altaz_fn_interpolation_matches_exact_position(astaffort, body, anchor):
+    from astropy.coordinates import FK5, get_body, get_sun
+
+    def exact(when):
+        src = get_sun(when) if body == "sun" else get_body("moon", when)
+        of_date = horizon._direction(src).transform_to(FK5(equinox=anchor))
+        return horizon._topocentric_altaz(
+            of_date.ra.deg, of_date.dec.deg, *SITE, when.utc.jd
+        )
+
+    fn = horizon._body_altaz_fn(body, anchor, *SITE)
+    worst = 0.0
+    for k in range(0, 24 * 4 + 1):  # every 15 minutes over the window
+        when = anchor + (k * 15) * u.min
+        alt, az = fn(when)
+        ref_alt, ref_az = exact(when)
+        worst = max(worst, abs(alt - ref_alt))
+        assert _az_gap(az, ref_az) * math.cos(math.radians(alt)) < 0.05
+    assert worst < 0.01  # interpolation error only, not a wrapped RA
+
+
 # ---------------------------------------------------------------------------
 # save_panorama_profile
 # ---------------------------------------------------------------------------
@@ -792,6 +837,12 @@ def test_target_window_rejects_non_finite_min_altitude(astaffort, bad):
         _window("12:00:00", "+00:00:00", min_altitude=bad)
 
 
+def test_target_window_rejects_unconvertible_min_altitude(astaffort):
+    # A huge JSON integer overflows float(); must map to InvalidTarget, not 500.
+    with pytest.raises(horizon.InvalidTarget):
+        _window("12:00:00", "+00:00:00", min_altitude=10**400)
+
+
 def test_local_times_render_in_configured_timezone(monkeypatch):
     monkeypatch.setattr(Config, "init_timezone", "Asia/Tokyo")
     assert horizon.local_times(START) == {
@@ -870,3 +921,21 @@ def test_night_events_raises_SiteLocationUnknown_at_zero_location(monkeypatch):
     monkeypatch.setattr(Config, "init_long", 0)
     with pytest.raises(horizon.SiteLocationUnknown):
         horizon.night_events(now=NIGHT_EVENING)
+
+
+def test_tools_need_no_earth_orientation_table(paris, monkeypatch):
+    # The coarse-grid get_sun/get_body array path must also run on a srvastro-like
+    # install with stale IERS tables and no way to download fresh ones.
+    def stale(*args, **kwargs):
+        raise ValueError("interpolating from IERS_Auto using predictive values")
+
+    monkeypatch.setattr(iers.IERS_Auto, "open", stale)
+    monkeypatch.setattr(iers.IERS, "open", stale)
+    events = horizon.night_events(now=NIGHT_EVENING)
+    assert 0.0 <= events["moon_illumination"] <= 1.0
+    assert events["astronomical"]["dusk"] is not None
+    window = horizon.target_window(
+        {"ra": "12:00:00", "dec": "+20:00:00", "is_j2000": True}, now=START
+    )
+    assert window["state"] in {"rises_and_sets", "up_now", "circumpolar", "never_up"}
+    assert math.isfinite(window["max_altitude"])

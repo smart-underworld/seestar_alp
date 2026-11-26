@@ -557,7 +557,7 @@ def target_window(params, now: Time | None = None) -> dict:
         ) from None
     try:
         min_altitude = float(params.get("min_altitude", 0.0) or 0.0)
-    except (TypeError, ValueError) as e:
+    except (TypeError, ValueError, OverflowError) as e:
         raise InvalidTarget(
             f"unreadable min_altitude {params.get('min_altitude')!r}: {e}"
         ) from None
