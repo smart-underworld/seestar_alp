@@ -195,6 +195,40 @@ class TestMountCommands:
             ra="00:42:44", dec="+41:16:09", is_j2000=True
         )
 
+    def test_window(self, runner):
+        with patch("ssalp_api_client.cli.main.SSAlpApiClient") as MockClient:
+            client = MockClient.return_value = _mock_client()
+            client.target_visibility_window = AsyncMock(return_value={"windows": []})
+            result = runner.invoke(
+                cli,
+                [
+                    "mount", "window", "--ra", "00:42:44", "--dec", "+41:16:09",
+                    "--no-j2000", "--min-altitude", "10",
+                ],
+            )  # fmt: skip
+        assert result.exit_code == 0
+        client.target_visibility_window.assert_awaited_once_with(
+            ra="00:42:44", dec="+41:16:09", is_j2000=False, min_altitude=10.0
+        )
+
+    def test_window_defaults(self, runner):
+        with patch("ssalp_api_client.cli.main.SSAlpApiClient") as MockClient:
+            client = MockClient.return_value = _mock_client()
+            client.target_visibility_window = AsyncMock(return_value={})
+            result = runner.invoke(cli, ["mount", "window", "--ra", "1", "--dec", "2"])
+        assert result.exit_code == 0
+        client.target_visibility_window.assert_awaited_once_with(
+            ra="1", dec="2", is_j2000=True, min_altitude=0.0
+        )
+
+    def test_night_events(self, runner):
+        with patch("ssalp_api_client.cli.main.SSAlpApiClient") as MockClient:
+            client = MockClient.return_value = _mock_client()
+            client.get_night_events = AsyncMock(return_value={"sunset": "x"})
+            result = runner.invoke(cli, ["mount", "night-events"])
+        assert result.exit_code == 0
+        client.get_night_events.assert_awaited_once_with()
+
 
 # ── camera subcommands ─────────────────────────────────────────────────────
 
