@@ -785,6 +785,13 @@ def test_target_window_raises_InvalidTarget_on_bad_coordinates(astaffort):
         horizon.target_window({"dec": 1.0}, now=START)
 
 
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_target_window_rejects_non_finite_min_altitude(astaffort, bad):
+    # Reachable from the CLI (--min-altitude nan) and from JSON NaN/Infinity.
+    with pytest.raises(horizon.InvalidTarget, match="min_altitude must be a finite"):
+        _window("12:00:00", "+00:00:00", min_altitude=bad)
+
+
 def test_local_times_render_in_configured_timezone(monkeypatch):
     monkeypatch.setattr(Config, "init_timezone", "Asia/Tokyo")
     assert horizon.local_times(START) == {

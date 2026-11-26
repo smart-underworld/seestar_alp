@@ -551,11 +551,18 @@ def target_window(params, now: Time | None = None) -> dict:
         coord = Util.parse_coordinate(
             params.get("is_j2000", True), params["ra"], params["dec"]
         )
-        min_altitude = float(params.get("min_altitude", 0.0) or 0.0)
     except Exception as e:  # astropy raises several kinds on a bad angle
         raise InvalidTarget(
-            f"unreadable parameters ra={params['ra']!r}, dec={params['dec']!r}: {e}"
+            f"unreadable coordinates ra={params['ra']!r}, dec={params['dec']!r}: {e}"
         ) from None
+    try:
+        min_altitude = float(params.get("min_altitude", 0.0) or 0.0)
+    except (TypeError, ValueError) as e:
+        raise InvalidTarget(
+            f"unreadable min_altitude {params.get('min_altitude')!r}: {e}"
+        ) from None
+    if not math.isfinite(min_altitude):
+        raise InvalidTarget("min_altitude must be a finite number")
     site = site_location()
     if site is None:
         raise SiteLocationUnknown("site location not set: latitude and longitude are 0")
